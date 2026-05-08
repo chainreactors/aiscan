@@ -66,8 +66,8 @@ func runAgentMode(ctx context.Context, option *Option) error {
 		Skills:      application.Skills.Skills,
 	})
 	logger.Debugf("system prompt length: %d chars", len(systemPrompt))
-	logger.Importantf("starting aiscan agent (max_turns=%d, timeout=%ds)", option.MaxTurns, option.Timeout)
-	logger.Importantf("task: %s", task)
+	logger.Importantf("agent status=starting max_turns=%d timeout=%ds", option.MaxTurns, option.Timeout)
+	logger.Importantf("agent task=%q", task)
 
 	result, err := agent.Run(ctx, task, application.Tools,
 		agent.WithProvider(application.Provider),
@@ -81,10 +81,7 @@ func runAgentMode(ctx context.Context, option *Option) error {
 		return err
 	}
 	if result != "" {
-		fmt.Println("\n" + strings.Repeat("=", 60))
-		fmt.Println("FINAL REPORT")
-		fmt.Println(strings.Repeat("=", 60))
-		fmt.Println(result)
+		printResultBlock("final_report", result)
 	}
 	return nil
 }
@@ -140,11 +137,7 @@ func runDirectScannerMode(ctx context.Context, option *Option, rest []string) er
 			return err
 		}
 		if strings.TrimSpace(result) != "" {
-			fmt.Println()
-			fmt.Println(strings.Repeat("=", 60))
-			fmt.Println("AI RESULT")
-			fmt.Println(strings.Repeat("=", 60))
-			fmt.Println(result)
+			printResultBlock("ai_result", result)
 		}
 	}
 	return nil
@@ -184,8 +177,8 @@ func runScannerAgentMode(ctx context.Context, option *Option, application *app.A
 	}
 
 	logger.Debugf("system prompt length: %d chars", len(systemPrompt))
-	logger.Importantf("starting %s agent mode (max_turns=%d)", command, maxTurns)
-	logger.Importantf("task: %s", prompt)
+	logger.Importantf("agent mode=scanner scanner=%s status=starting max_turns=%d", command, maxTurns)
+	logger.Importantf("agent task=%q", prompt)
 
 	result, err := agent.Run(ctx, prompt, toolReg,
 		agent.WithProvider(application.Provider),
@@ -199,10 +192,7 @@ func runScannerAgentMode(ctx context.Context, option *Option, application *app.A
 		return err
 	}
 	if result != "" {
-		fmt.Println("\n" + strings.Repeat("=", 60))
-		fmt.Println("AGENT RESULT")
-		fmt.Println(strings.Repeat("=", 60))
-		fmt.Println(result)
+		printResultBlock("agent_result", result)
 	}
 	return nil
 }
@@ -237,8 +227,16 @@ func runScannerAIProcess(ctx context.Context, option *Option, application *app.A
 		agent.WithMaxTurns(resolvedDefaultInt(DefaultVerifyTurns, 3)),
 		agent.WithMaxTokens(1600),
 		agent.WithSystemPrompt(scannerAIProcessSystemPrompt(command)),
-		agent.WithLogger(logger),
+		agent.WithLogger(telemetry.NopLogger()),
 	)
+}
+
+func printResultBlock(name, content string) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return
+	}
+	fmt.Printf("\n[%s]\n%s\n", name, content)
 }
 
 func resolveScannerAIIntent(option *Option, store *skills.Store, command string) (string, error) {

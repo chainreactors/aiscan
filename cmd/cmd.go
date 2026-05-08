@@ -786,10 +786,10 @@ func setupSignalHandler(cancel context.CancelFunc, logger telemetry.Logger) {
 		for range sigChan {
 			sigCount++
 			if sigCount == 1 {
-				logger.Warnf("received shutdown signal, finishing current turn...")
+				logger.Warnf("signal=shutdown action=finish_current_turn")
 				cancel()
 			} else {
-				logger.Warnf("forcing exit...")
+				logger.Warnf("signal=shutdown action=force_exit")
 				os.Exit(1)
 			}
 		}

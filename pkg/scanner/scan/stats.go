@@ -90,7 +90,7 @@ func cloneCounts(values map[string]int) map[string]int {
 }
 
 func metricLine(name string, values map[string]int) string {
-	return fmt.Sprintf("[scan] metric %s %s\n", name, joinCounts(values))
+	return fmt.Sprintf("[scan] metrics kind=%s %s\n", name, joinCounts(values))
 }
 
 func joinCounts(values map[string]int) string {

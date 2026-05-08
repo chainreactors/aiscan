@@ -31,13 +31,13 @@ func (c *Command) buildCapabilities(flags flags, opts scanOptions, profile profi
 		}
 	}
 	if opts.hasDiscoveryOverrides() && !gogoBuilt {
-		c.logger.Warnf("[scan:%s] --port ignored because discovery capability is not enabled or gogo engine is unavailable", capGogoPortscan)
+		c.logger.Warnf("scan capability=%s option=port action=ignored reason=unavailable", capGogoPortscan)
 	}
 	if opts.hasWebOverrides() && !sprayBuilt {
-		c.logger.Warnf("[scan:web] --dict/--rule/--word/--default-dict/--advance ignored because web probe capabilities are not enabled or spray engine is unavailable")
+		c.logger.Warnf("scan capability=web_probe options=dict,rule,word,default-dict,advance action=ignored reason=unavailable")
 	}
 	if opts.hasWeakpassOverrides() && !weakpassBuilt {
-		c.logger.Warnf("[scan:%s] --user/--pwd ignored because weakpass capability is not enabled or zombie engine is unavailable", capZombieWeakpass)
+		c.logger.Warnf("scan capability=%s options=user,pwd action=ignored reason=unavailable", capZombieWeakpass)
 	}
 	if verificationEnabled(flags.Verify) {
 		if cap, ok := c.agentVerifyCapability(flags); ok {

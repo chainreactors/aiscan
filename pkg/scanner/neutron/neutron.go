@@ -200,7 +200,7 @@ func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
 		return c.writeOrReturn(flags.OutputFile, renderTemplateList(selected, flags.JSON || flags.JSONL))
 	}
 
-	c.logger.Infof("[neutron] testing targets=%d templates=%d concurrency=%d rate_limit=%d", len(targets), len(selected), flags.Concurrency, flags.RateLimit)
+	c.logger.Infof("neutron action=testing targets=%d templates=%d concurrency=%d rate_limit=%d", len(targets), len(selected), flags.Concurrency, flags.RateLimit)
 	summary := neutronSummary{Targets: len(targets), Templates: len(selected)}
 	var sb strings.Builder
 	jsonOutput := flags.JSON || flags.JSONL
@@ -238,7 +238,7 @@ func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
 	}
 
 	if statsEnabled && !flags.Silent && !jsonOutput {
-		sb.WriteString(fmt.Sprintf("[neutron] scan completed: targets=%d templates=%d executed=%d matched=%d errors=%d\n",
+		sb.WriteString(fmt.Sprintf("[neutron] completed targets=%d templates=%d executed=%d matched=%d errors=%d\n",
 			summary.Targets, summary.Templates, summary.Executed, summary.Matched, summary.Errors))
 	}
 	return c.writeOrReturn(flags.OutputFile, sb.String())

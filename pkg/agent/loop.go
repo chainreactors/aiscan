@@ -148,13 +148,13 @@ func runLoop(ctx context.Context, prompts []provider.ChatMessage, agentCtx Conte
 				return end(nil, err)
 			}
 			if stop {
-				cfg.Logger.Importantf("Agent stopped after %d turns", turn)
+				cfg.Logger.Importantf("agent status=stopped turns=%d", turn)
 				return end(transcript.result(messageContent(assistantMsg), turn, nil), nil)
 			}
 		}
 
 		if len(assistantMsg.ToolCalls) == 0 || terminate {
-			cfg.Logger.Importantf("Agent completed in %d turns", turn)
+			cfg.Logger.Importantf("agent status=completed turns=%d", turn)
 			return end(transcript.result(messageContent(assistantMsg), turn, nil), nil)
 		}
 	}
@@ -287,7 +287,7 @@ func executeToolCalls(ctx context.Context, agentCtx Context, assistantMsg provid
 	results := make([]provider.ChatMessage, 0, len(assistantMsg.ToolCalls))
 	terminations := 0
 	for _, tc := range assistantMsg.ToolCalls {
-		cfg.Logger.Infof("[tool_call] %s(%s)", tc.Function.Name, preview(tc.Function.Arguments, 200))
+		cfg.Logger.Infof("tool_call name=%s args=%q", tc.Function.Name, preview(tc.Function.Arguments, 200))
 
 		if err := emit(ctx, cfg.Emit, Event{
 			Type:       EventToolExecutionStart,
@@ -313,7 +313,7 @@ func executeToolCalls(ctx context.Context, agentCtx Context, assistantMsg provid
 		}); err != nil {
 			return toolBatchResult{}, err
 		}
-		cfg.Logger.Debugf("[tool_result] %s -> %d bytes", tc.Function.Name, len(execution.result))
+		cfg.Logger.Debugf("tool_result name=%s bytes=%d", tc.Function.Name, len(execution.result))
 		toolMsg := provider.NewToolResultMessage(tc.ID, execution.result)
 		if err := emitMessage(ctx, cfg.Emit, turn, toolMsg); err != nil {
 			return toolBatchResult{}, err
@@ -345,7 +345,7 @@ func runToolCall(ctx context.Context, agentCtx Context, assistantMsg provider.Ch
 		execution.isError = execErr != nil
 		if execErr != nil {
 			execution.result = fmt.Sprintf("error: %s", execErr.Error())
-			cfg.Logger.Warnf("[tool_error] %s: %s", tc.Function.Name, execErr.Error())
+			cfg.Logger.Warnf("tool_error name=%s error=%q", tc.Function.Name, execErr.Error())
 		}
 	}
 	execution.result = truncateResult(execution.result)
@@ -448,12 +448,16 @@ func messageContent(msg provider.ChatMessage) string {
 
 func logAssistantAndUsage(logger telemetry.Logger, msg provider.ChatMessage, usage *provider.Usage) {
 	if content := messageContent(msg); content != "" {
-		logger.Infof("[assistant] %s", content)
+		logger.Infof("assistant output=%q", preview(compactLogContent(content), 500))
 	}
 	if usage != nil {
-		logger.Debugf("[usage] prompt=%d, completion=%d, total=%d",
+		logger.Debugf("usage prompt=%d completion=%d total=%d",
 			usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens)
 	}
+}
+
+func compactLogContent(value string) string {
+	return strings.Join(strings.Fields(value), " ")
 }
 
 func newConfig(opts ...Option) Config {

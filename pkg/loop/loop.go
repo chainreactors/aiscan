@@ -75,7 +75,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		r.cfg.Logger.Infof("registered acp node %s (%s)", node.ID, node.Name)
+		r.cfg.Logger.Infof("acp node=%s name=%q status=registered", node.ID, node.Name)
 	}
 	if strings.TrimSpace(r.cfg.SpaceName) == "" {
 		return fmt.Errorf("loop space name is required")
@@ -84,7 +84,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	r.cfg.Logger.Importantf("aiscan loop listening on acp space %s (%s) as node %s", space.ID, space.Name, r.cfg.Client.NodeID())
+	r.cfg.Logger.Importantf("loop status=listening space=%s name=%q node=%s", space.ID, space.Name, r.cfg.Client.NodeID())
 
 	if err := r.announceProfile(ctx, space); err != nil {
 		return err
@@ -177,7 +177,7 @@ func (r *Runner) handleMessage(ctx context.Context, spaceID string, msg acp.Mess
 	if !r.markProcessed(msg.ID) {
 		return nil
 	}
-	r.cfg.Logger.Importantf("loop task received message=%s", msg.ID)
+	r.cfg.Logger.Importantf("loop task=received message=%s", msg.ID)
 
 	started, err := r.cfg.Client.Send(ctx, spaceID, map[string]any{
 		"type":    "status",

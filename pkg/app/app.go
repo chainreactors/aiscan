@@ -117,7 +117,7 @@ func initProvider(cfg provider.ProviderConfig, logger telemetry.Logger) (provide
 	if err != nil {
 		return nil, nil, err
 	}
-	logger.Infof("initializing provider: %s model: %s", resolved.Provider, resolved.Model)
+	logger.Infof("provider init provider=%s model=%s", resolved.Provider, resolved.Model)
 	llmProvider, err := provider.NewProvider(resolved)
 	if err != nil {
 		return nil, nil, err
@@ -133,7 +133,7 @@ func initScannerRegistry(ctx context.Context, cfg ScannerConfig, llmProvider pro
 		Mode:        cfg.CyberhubMode,
 	}, logger)
 	if err != nil {
-		logger.Warnf("init scanner engines failed: %s, continuing without scanners", err)
+		logger.Warnf("scanner engines init error=%q action=continue_without_scanners", err)
 		return scannerReg, nil
 	}
 	var opts []scan.Option

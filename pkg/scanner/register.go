@@ -43,6 +43,6 @@ func RegisterAllWithLogger(reg *ScannerRegistry, engineSet *engines.Set, logger 
 	for _, name := range reg.order {
 		names = append(names, name)
 	}
-	logger.Infof("registered scanner commands: %s", fmt.Sprintf("%v", names))
+	logger.Infof("scanner commands=%s", fmt.Sprintf("%v", names))
 	return nil
 }

@@ -87,36 +87,36 @@ func InitWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 	}
 	set.Resources = resourceSet
 	if resourceSet.RemoteEnabled {
-		logger.Infof("cyberhub resources loaded mode=%s fingers=%d neutron=%d", resourceSet.Mode, resourceSet.RemoteFingers, resourceSet.RemoteNeutron)
+		logger.Infof("resources source=cyberhub mode=%s fingers=%d neutron=%d", resourceSet.Mode, resourceSet.RemoteFingers, resourceSet.RemoteNeutron)
 		if resourceSet.RemoteFingersErr != nil {
-			logger.Warnf("load cyberhub fingers failed: %v, using local resources", resourceSet.RemoteFingersErr)
+			logger.Warnf("resources source=cyberhub type=fingers error=%q fallback=local", resourceSet.RemoteFingersErr)
 		} else if resourceSet.RemoteFingers == 0 {
-			logger.Warnf("cyberhub returned no fingers, using local resources")
+			logger.Warnf("resources source=cyberhub type=fingers count=0 fallback=local")
 		}
 		if resourceSet.RemoteNeutronErr != nil {
-			logger.Warnf("load cyberhub neutron templates failed: %v, using local resources", resourceSet.RemoteNeutronErr)
+			logger.Warnf("resources source=cyberhub type=neutron error=%q fallback=local", resourceSet.RemoteNeutronErr)
 		} else if resourceSet.RemoteNeutron == 0 {
-			logger.Warnf("cyberhub returned no neutron templates, using local resources")
+			logger.Warnf("resources source=cyberhub type=neutron count=0 fallback=local")
 		}
 	}
 
 	fEngine := resourceSet.Fingers
 	if fEngine == nil {
-		logger.Warnf("fingers engine has no templates, continuing without fingers")
+		logger.Warnf("engine=fingers templates=0 action=disable")
 	} else if fEngine.Count() > 0 {
 		set.Fingers = fEngine
-		logger.Infof("fingers engine initialized with %d templates", fEngine.Count())
+		logger.Infof("engine=fingers status=ready templates=%d", fEngine.Count())
 	} else {
-		logger.Warnf("fingers engine has no templates, continuing without fingers")
+		logger.Warnf("engine=fingers templates=0 action=disable")
 		_ = fEngine.Close()
 	}
 
 	nEngine := resourceSet.Neutron
 	if nEngine != nil && nEngine.Count() > 0 {
 		set.Neutron = nEngine
-		logger.Infof("neutron engine initialized with %d templates", nEngine.Count())
+		logger.Infof("engine=neutron status=ready templates=%d", nEngine.Count())
 	} else {
-		logger.Warnf("neutron engine has no templates, continuing without neutron")
+		logger.Warnf("engine=neutron templates=0 action=disable")
 		if nEngine != nil {
 			_ = nEngine.Close()
 		}
@@ -126,7 +126,7 @@ func InitWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 		set.Index = association.NewFingerPOCIndex()
 		set.Index.BuildFromTemplates(set.Neutron.Get())
 		fingerCount, pocCount := set.Index.Count()
-		logger.Infof("finger-poc index built: %d fingers, %d pocs", fingerCount, pocCount)
+		logger.Infof("index=finger_poc status=ready fingers=%d pocs=%d", fingerCount, pocCount)
 	}
 
 	gogoConfig := gogo.NewConfig()
@@ -141,7 +141,7 @@ func InitWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 		gogoConfig.WithCapacity(caps.Gogo)
 	}
 	set.Gogo = gogo.NewEngine(gogoConfig)
-	logger.Infof("gogo engine initialized")
+	logger.Infof("engine=gogo status=ready")
 
 	sprayConfig := spray.NewConfig()
 	sprayConfig.WithResourceProvider(resourceSet.SprayConfig)
@@ -152,7 +152,7 @@ func InitWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 		sprayConfig.WithCapacity(caps.Spray)
 	}
 	set.Spray = spray.NewEngine(sprayConfig)
-	logger.Infof("spray engine initialized")
+	logger.Infof("engine=spray status=ready")
 
 	zombieConfig := sdkzombie.NewConfig()
 	if caps.Zombie > 0 {
@@ -160,10 +160,10 @@ func InitWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 	}
 	set.Zombie = sdkzombie.NewEngine(zombieConfig)
 	if err := set.Zombie.Init(); err != nil {
-		logger.Warnf("init zombie engine failed: %v, continuing without zombie", err)
+		logger.Warnf("engine=zombie status=disabled error=%q", err)
 		set.Zombie = nil
 	} else {
-		logger.Infof("zombie engine initialized")
+		logger.Infof("engine=zombie status=ready")
 	}
 
 	if set.Neutron != nil && caps.Neutron > 0 {

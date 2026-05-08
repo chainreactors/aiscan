@@ -17,7 +17,7 @@ func (c *Command) runPortDiscoveryCapability(ctx context.Context, discovery disc
 	if target.Ports != "" {
 		ports = target.Ports
 	}
-	c.logger.Infof("[scan:%s] scanning %s ports=%s", capGogoPortscan, target.Target, ports)
+	c.logger.Infof("scan capability=%s target=%s ports=%s", capGogoPortscan, target.Target, ports)
 	resultCh, err := gogoScanStream(ctx, c.engines.Gogo, gogoScanOptions{
 		Target:       target.Target,
 		Ports:        ports,

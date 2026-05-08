@@ -175,7 +175,7 @@ func TestScanWarnsWhenDiscoveryFlagsCannotAffectGogoCapability(t *testing.T) {
 	if len(caps) != 0 {
 		t.Fatalf("capabilities = %d, want 0 without gogo engine", len(caps))
 	}
-	if !strings.Contains(logBuf.String(), "--port ignored") {
+	if !strings.Contains(logBuf.String(), "option=port action=ignored") {
 		t.Fatalf("warning log missing discovery ignore message: %q", logBuf.String())
 	}
 }
@@ -188,7 +188,7 @@ func TestScanWarnsWhenCredentialFlagsCannotAffectWeakpassCapability(t *testing.T
 	if len(caps) != 0 {
 		t.Fatalf("capabilities = %d, want 0 without zombie engine", len(caps))
 	}
-	if !strings.Contains(logBuf.String(), "--user/--pwd ignored") {
+	if !strings.Contains(logBuf.String(), "options=user,pwd action=ignored") {
 		t.Fatalf("warning log missing credential ignore message: %q", logBuf.String())
 	}
 }
@@ -201,7 +201,7 @@ func TestScanWarnsWhenWebFlagsCannotAffectSprayCapability(t *testing.T) {
 	if len(caps) != 0 {
 		t.Fatalf("capabilities = %d, want 0 without spray engine", len(caps))
 	}
-	if !strings.Contains(logBuf.String(), "--dict/--rule/--word/--default-dict/--advance ignored") {
+	if !strings.Contains(logBuf.String(), "options=dict,rule,word,default-dict,advance action=ignored") {
 		t.Fatalf("warning log missing web ignore message: %q", logBuf.String())
 	}
 }
@@ -1010,7 +1010,7 @@ func TestScanPlainTextStripsANSI(t *testing.T) {
 	if hasANSI(out) {
 		t.Fatalf("plain text output contains ANSI: %q", out)
 	}
-	if !strings.Contains(out, "sim:1") {
+	if !strings.Contains(out, "sim=1") {
 		t.Fatalf("plain text output missing parser content: %q", out)
 	}
 }
@@ -1041,7 +1041,7 @@ func TestScanOutputFileWritesPlainTextWithoutChangingStdout(t *testing.T) {
 	if strings.Contains(out, "[scan] web ") {
 		t.Fatalf("stdout output should not repeat streamed events: %q", out)
 	}
-	if !strings.Contains(stripANSI(stream.String()), "web http://127.0.0.1:1") {
+	if !strings.Contains(stripANSI(stream.String()), "http://127.0.0.1:1 type=web") {
 		t.Fatalf("stream output missing event line: %q", stream.String())
 	}
 }

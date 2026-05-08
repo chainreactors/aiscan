@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
+	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tool"
 	"github.com/chainreactors/parsers"
 )
@@ -84,10 +85,10 @@ func (c *Command) runAgentVerifyCapability(ctx context.Context, flags flags, eve
 		agent.WithMaxTurns(maxTurns),
 		agent.WithMaxTokens(1200),
 		agent.WithSystemPrompt(systemPrompt),
-		agent.WithLogger(c.logger),
+		agent.WithLogger(telemetry.NopLogger()),
 	)
 	if err != nil {
-		c.logger.Warnf("[scan:%s] verification failed: %s", capAgentVerify, err)
+		c.logger.Warnf("scan capability=%s status=failed error=%q", capAgentVerify, err)
 		emit(findingEvent(capAgentVerify, verificationFinding{
 			OriginalKey:      findingKey(event.Finding),
 			OriginalKind:     findingKindOf(event.Finding),

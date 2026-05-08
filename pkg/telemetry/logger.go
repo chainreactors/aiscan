@@ -39,6 +39,13 @@ func NewLogger(cfg LogConfig) Logger {
 	} else {
 		base.SetOutput(os.Stderr)
 	}
+	base.SetFormatter(map[logs.Level]string{
+		logs.DebugLevel:     "[debug] %s\n",
+		logs.InfoLevel:      "[info] %s\n",
+		logs.WarnLevel:      "[warn] %s\n",
+		logs.ErrorLevel:     "[error] %s\n",
+		logs.ImportantLevel: "[info] %s\n",
+	})
 	base.SetColor(cfg.Color)
 	return logsLogger{base: base}
 }
