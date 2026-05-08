@@ -90,6 +90,41 @@ func recuLoadPoc(dir string) string {
 	return encode(content)
 }
 
+// loadZombieTemplates collects neutron POCs whose info.zombie field is non-empty
+// and emits them as a yaml-encoded template list — the format expected by
+// zombie/pkg/loader.go LoadTemplates which calls yaml.Unmarshal into
+// []*templates.Template.
+func loadZombieTemplates(dir string) string {
+	var pocs []interface{}
+	for _, file := range walkFiles(dir) {
+		bs, err := os.ReadFile(file)
+		if err != nil {
+			panic(err)
+		}
+		var tmp map[string]interface{}
+		if err := yaml.Unmarshal(bs, &tmp); err != nil {
+			panic(fmt.Sprintf("%s: %v", file, err))
+		}
+		if tmp == nil {
+			continue
+		}
+		info, ok := tmp["info"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		zombie, _ := info["zombie"].(string)
+		if strings.TrimSpace(zombie) == "" {
+			continue
+		}
+		pocs = append(pocs, tmp)
+	}
+	content, err := yaml.Marshal(pocs)
+	if err != nil {
+		panic(err)
+	}
+	return encode(content)
+}
+
 func recuLoadFinger(dir string) string {
 	var items []interface{}
 	for _, file := range walkFiles(dir) {
@@ -158,6 +193,14 @@ func parser(key string) string {
 		return loadRawFiles("spray/dict")
 	case "extract":
 		return loadYAMLFile("extract.yaml")
+	case "zombie_common":
+		return loadYAMLFile("zombie/keywords.yaml")
+	case "zombie_default":
+		return loadYAMLFile("zombie/default.yaml")
+	case "zombie_rule":
+		return loadRawFiles("zombie/rule")
+	case "zombie_template":
+		return loadZombieTemplates("neutron")
 	default:
 		panic("illegal key: " + key)
 	}
@@ -175,6 +218,7 @@ func main() {
 			"http", "socket", "fingerprinthub_web", "fingerprinthub_service",
 			"port", "extract", "workflow", "neutron",
 			"spray_rule", "spray_dict", "spray_common",
+			"zombie_common", "zombie_default", "zombie_rule", "zombie_template",
 		}
 	} else {
 		needs = strings.Split(*need, ",")

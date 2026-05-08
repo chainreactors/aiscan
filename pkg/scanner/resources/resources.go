@@ -43,6 +43,7 @@ type Set struct {
 	Neutron          *neutron.Engine
 	gogoConfigs      map[string][]byte
 	sprayConfigs     map[string][]byte
+	zombieConfigs    map[string][]byte
 }
 
 // Init loads scanner resources once for aiscan and prepares SDK configs.
@@ -68,6 +69,7 @@ func Init(ctx context.Context, opts Options) (*Set, error) {
 		RemoteEnabled: opts.CyberhubURL != "" && opts.APIKey != "",
 		gogoConfigs:   defaultGogoConfigs(),
 		sprayConfigs:  defaultSprayConfigs(),
+		zombieConfigs: defaultZombieConfigs(),
 	}
 
 	if set.RemoteEnabled {
@@ -102,6 +104,8 @@ func Init(ctx context.Context, opts Options) (*Set, error) {
 	set.gogoConfigs["neutron"] = marshalTemplates(finalTemplates)
 	set.sprayConfigs["http"] = marshalJSON(httpFingers)
 	set.sprayConfigs["socket"] = marshalJSON(socketFingers)
+	set.zombieConfigs["http"] = marshalJSON(httpFingers)
+	set.zombieConfigs["socket"] = marshalJSON(socketFingers)
 
 	set.FingersConfig = fingers.NewConfig().WithFingers(finalFingers)
 	set.NeutronConfig = neutron.NewConfig().WithTemplates(finalTemplates)
@@ -152,6 +156,18 @@ func defaultSprayConfigs() map[string][]byte {
 		"spray_dict":   embeddedOrDefault(loadEmbeddedConfig, "spray_dict", []byte("{}")),
 		"spray_common": embeddedOrDefault(loadEmbeddedConfig, "spray_common", []byte("{}")),
 		"extract":      embeddedOrDefault(loadEmbeddedConfig, "extract", []byte("[]")),
+	}
+}
+
+func defaultZombieConfigs() map[string][]byte {
+	return map[string][]byte{
+		"http":            embeddedOrDefault(loadEmbeddedConfig, "http", []byte("[]")),
+		"socket":          embeddedOrDefault(loadEmbeddedConfig, "socket", []byte("[]")),
+		"port":            embeddedOrDefault(loadEmbeddedConfig, "port", []byte("[]")),
+		"zombie_common":   embeddedOrDefault(loadEmbeddedConfig, "zombie_common", []byte("{}")),
+		"zombie_default":  embeddedOrDefault(loadEmbeddedConfig, "zombie_default", []byte("[]")),
+		"zombie_rule":     embeddedOrDefault(loadEmbeddedConfig, "zombie_rule", []byte("{}")),
+		"zombie_template": embeddedOrDefault(loadEmbeddedConfig, "zombie_template", []byte("[]")),
 	}
 }
 
@@ -327,6 +343,14 @@ func (s *Set) SprayConfig(name string) []byte {
 		return nil
 	}
 	return cloneBytes(s.sprayConfigs[name])
+}
+
+// ZombieConfig returns zombie config bytes by logical template name.
+func (s *Set) ZombieConfig(name string) []byte {
+	if s == nil {
+		return nil
+	}
+	return cloneBytes(s.zombieConfigs[name])
 }
 
 func cloneBytes(data []byte) []byte {

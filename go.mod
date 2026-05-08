@@ -15,6 +15,7 @@ require (
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/ncruces/go-sqlite3 v0.29.1
 	gopkg.in/yaml.v3 v3.0.1
+	sigs.k8s.io/yaml v1.4.0
 )
 
 require (
@@ -107,7 +108,6 @@ require (
 	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
-	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
 replace (

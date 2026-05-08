@@ -155,6 +155,7 @@ func InitWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 	logger.Infof("engine=spray status=ready")
 
 	zombieConfig := sdkzombie.NewConfig()
+	zombieConfig.WithResourceProvider(resourceSet.ZombieConfig)
 	if caps.Zombie > 0 {
 		zombieConfig.WithCapacity(caps.Zombie)
 	}
