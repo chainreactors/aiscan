@@ -3,15 +3,15 @@ module github.com/chainreactors/aiscan
 go 1.24.0
 
 require (
-	github.com/chainreactors/fingers v1.1.2-0.20260203043619-4f90dd60c787
-	github.com/chainreactors/gogo/v2 v2.14.2-0.20260110190827-a2c3000f54be
-	github.com/chainreactors/logs v0.0.0-20250312104344-9f30fa69d3c9
-	github.com/chainreactors/neutron v0.0.0-20260203032004-95c9e8431214
-	github.com/chainreactors/parsers v0.0.0-20251202162218-4b2258465d0a
-	github.com/chainreactors/sdk v0.0.0
-	github.com/chainreactors/spray v1.2.4-0.20260121025911-4f08ee9640d7
-	github.com/chainreactors/utils v0.0.0-20251216161625-70054cf04e88
-	github.com/chainreactors/zombie v0.0.0
+	github.com/chainreactors/fingers v1.2.1-0.20260508113754-7e42ea56a879
+	github.com/chainreactors/gogo/v2 v2.14.2-0.20260508165113-815356852650
+	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
+	github.com/chainreactors/neutron v0.0.0-20260416083914-f95401f2b79c
+	github.com/chainreactors/parsers v0.0.0-20260507101643-d7674bb89ba4
+	github.com/chainreactors/sdk v0.1.1-0.20260509062633-1190663288a6
+	github.com/chainreactors/spray v1.2.6-0.20260508171256-e55ab50be33e
+	github.com/chainreactors/utils v0.0.0-20260507101628-fd69d955ae21
+	github.com/chainreactors/zombie v1.2.3-0.20260509062300-b10f008fb8a5
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/ncruces/go-sqlite3 v0.29.1
 	gopkg.in/yaml.v3 v3.0.1
@@ -67,7 +67,6 @@ require (
 	github.com/jlaffaye/ftp v0.0.0-20201112195030-9aae4d151126 // indirect
 	github.com/klauspost/compress v1.17.8 // indirect
 	github.com/knadh/go-pop3 v0.3.0 // indirect
-	github.com/lcvvvv/kscan/grdp v0.0.0-00010101000000-000000000000 // indirect
 	github.com/lib/pq v1.9.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/lunixbochs/struc v0.0.0-20200707160740-784aaebc1d40 // indirect
@@ -108,18 +107,4 @@ require (
 	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
-)
-
-replace (
-	github.com/chainreactors/gogo/v2 => ../gogo/v2
-	github.com/chainreactors/logs => ../logs
-	github.com/chainreactors/neutron => ../neutron
-	github.com/chainreactors/parsers => ../parsers
-	github.com/chainreactors/proxyclient => ../proxyclient
-	github.com/chainreactors/rem => ../rem
-	github.com/chainreactors/sdk => ../sdk
-	github.com/chainreactors/spray => ../spray
-	github.com/chainreactors/utils => ../utils
-	github.com/chainreactors/zombie => ../zombie
-	github.com/lcvvvv/kscan/grdp => ../zombie/external/github.com/lcvvvv/grdp
 )
