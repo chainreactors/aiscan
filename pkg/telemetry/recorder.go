@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/chainreactors/aiscan/pkg/util"
 )
 
 type Recorder interface {
@@ -103,7 +105,7 @@ func (r *MemoryRecorder) Event(_ context.Context, event Event) {
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
-	event.Labels = cloneLabels(event.Labels)
+	event.Labels = util.CloneMap(event.Labels)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.events = append(r.events, event)
@@ -113,8 +115,8 @@ func (r *MemoryRecorder) Snapshot() Snapshot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return Snapshot{
-		Counters:  cloneIntMap(r.counters),
-		Gauges:    cloneIntMap(r.gauges),
+		Counters:  util.CloneMap(r.counters),
+		Gauges:    util.CloneMap(r.gauges),
 		Durations: cloneDurations(r.durations),
 		Events:    cloneEvents(r.events),
 	}
@@ -162,25 +164,6 @@ func metricKey(name string, labels map[string]string) string {
 	return strings.Join(parts, "|")
 }
 
-func cloneLabels(labels map[string]string) map[string]string {
-	if len(labels) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(labels))
-	for key, value := range labels {
-		out[key] = value
-	}
-	return out
-}
-
-func cloneIntMap(values map[string]int) map[string]int {
-	out := make(map[string]int, len(values))
-	for key, value := range values {
-		out[key] = value
-	}
-	return out
-}
-
 func cloneDurations(values map[string][]time.Duration) map[string][]time.Duration {
 	out := make(map[string][]time.Duration, len(values))
 	for key, value := range values {
@@ -192,7 +175,7 @@ func cloneDurations(values map[string][]time.Duration) map[string][]time.Duratio
 func cloneEvents(events []Event) []Event {
 	out := append([]Event(nil), events...)
 	for i := range out {
-		out[i].Labels = cloneLabels(out[i].Labels)
+		out[i].Labels = util.CloneMap(out[i].Labels)
 	}
 	return out
 }

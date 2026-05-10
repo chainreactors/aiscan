@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/chainreactors/aiscan/pkg/util"
 )
 
 type statsSnapshot struct {
@@ -65,11 +67,11 @@ func (s *statsCollector) Finish() {
 
 func (s *statsCollector) Snapshot() statsSnapshot {
 	out := s.summary
-	out.Accepted = cloneCounts(out.Accepted)
-	out.CapabilityRuns = cloneCounts(out.CapabilityRuns)
-	out.CapabilityOutput = cloneCounts(out.CapabilityOutput)
-	out.SprayByCapability = cloneCounts(out.SprayByCapability)
-	out.ErrorsBySource = cloneCounts(out.ErrorsBySource)
+	out.Accepted = util.CloneMap(out.Accepted)
+	out.CapabilityRuns = util.CloneMap(out.CapabilityRuns)
+	out.CapabilityOutput = util.CloneMap(out.CapabilityOutput)
+	out.SprayByCapability = util.CloneMap(out.SprayByCapability)
+	out.ErrorsBySource = util.CloneMap(out.ErrorsBySource)
 	return out
 }
 
@@ -81,16 +83,10 @@ func (s statsSnapshot) Duration() time.Duration {
 	return finished.Sub(s.StartedAt)
 }
 
-func cloneCounts(values map[string]int) map[string]int {
-	out := make(map[string]int, len(values))
-	for key, value := range values {
-		out[key] = value
-	}
-	return out
-}
+
 
 func metricLine(name string, values map[string]int) string {
-	return fmt.Sprintf("[scan] metrics kind=%s %s\n", name, joinCounts(values))
+	return fmt.Sprintf("[scan] metrics %s %s\n", name, joinCounts(values))
 }
 
 func joinCounts(values map[string]int) string {
@@ -103,7 +99,7 @@ func joinCounts(values map[string]int) string {
 	sort.Strings(keys)
 	parts := make([]string, 0, len(keys))
 	for _, key := range keys {
-		parts = append(parts, fmt.Sprintf("%s=%d", key, values[key]))
+		parts = append(parts, key, fmt.Sprintf("%d", values[key]))
 	}
 	return strings.Join(parts, " ")
 }

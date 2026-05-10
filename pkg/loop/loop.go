@@ -2,9 +2,11 @@ package loop
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,18 +24,19 @@ type Config struct {
 	Tools        *tool.ToolRegistry
 	SystemPrompt string
 	Model        string
-	MaxTurns     int
 	Stream       bool
 
-	NodeName         string
-	SpaceName        string
-	SpaceDescription string
-	PollInterval     time.Duration
-	Prompt           string
-	Intent           string
-	Skills           []string
-	Network          map[string]any
-	Logger           telemetry.Logger
+	NodeName              string
+	SpaceName             string
+	SpaceDescription      string
+	PollInterval          time.Duration
+	HeartbeatInterval     time.Duration
+	HeartbeatContextLimit int
+	Prompt                string
+	Intent                string
+	Skills                []string
+	Network               map[string]any
+	Logger                telemetry.Logger
 }
 
 type Runner struct {
@@ -42,11 +45,11 @@ type Runner struct {
 }
 
 func New(cfg Config) *Runner {
-	if cfg.MaxTurns <= 0 {
-		cfg.MaxTurns = 50
-	}
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = 2 * time.Second
+	}
+	if cfg.HeartbeatContextLimit <= 0 {
+		cfg.HeartbeatContextLimit = 50
 	}
 	if cfg.NodeName == "" {
 		cfg.NodeName = "aiscan-loop"
@@ -102,6 +105,12 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	ticker := time.NewTicker(r.cfg.PollInterval)
 	defer ticker.Stop()
+	var heartbeat *time.Ticker
+	if r.cfg.HeartbeatInterval > 0 {
+		heartbeat = time.NewTicker(r.cfg.HeartbeatInterval)
+		defer heartbeat.Stop()
+		r.cfg.Logger.Importantf("loop heartbeat=enabled interval=%s context_limit=%d", r.cfg.HeartbeatInterval, r.cfg.HeartbeatContextLimit)
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -120,6 +129,10 @@ func (r *Runner) Run(ctx context.Context) error {
 		case <-ticker.C:
 			if err := r.catchUp(ctx, space.ID); err != nil {
 				r.cfg.Logger.Warnf("loop catch-up failed: %s", err)
+			}
+		case <-heartbeatC(heartbeat):
+			if err := r.runHeartbeat(ctx, space); err != nil {
+				r.cfg.Logger.Warnf("loop heartbeat failed: %s", err)
 			}
 		}
 	}
@@ -163,6 +176,93 @@ func (r *Runner) catchUp(ctx context.Context, spaceID string) error {
 	return nil
 }
 
+func (r *Runner) runHeartbeat(ctx context.Context, space acp.SpaceInfo) error {
+	messages, err := r.cfg.Client.Read(ctx, space.ID, acp.ReadOptions{All: true, Limit: r.cfg.HeartbeatContextLimit})
+	if err != nil {
+		return err
+	}
+	r.cfg.Logger.Importantf("loop heartbeat=running space=%s", space.ID)
+	started, err := r.cfg.Client.Send(ctx, space.ID, map[string]any{
+		"type":             "heartbeat",
+		"status":           "started",
+		"node_id":          r.cfg.Client.NodeID(),
+		"node_name":        r.cfg.NodeName,
+		"space_id":         space.ID,
+		"space_name":       space.Name,
+		"interval_seconds": int(r.cfg.HeartbeatInterval.Seconds()),
+		"created_at":       time.Now().UTC().Format(time.RFC3339),
+	}, nil)
+	if err != nil {
+		return err
+	}
+
+	task := r.heartbeatPrompt(space, messages)
+	result, runErr := agent.Run(ctx, task, r.cfg.Tools,
+		agent.WithProvider(r.cfg.Provider),
+		agent.WithSystemPrompt(r.cfg.SystemPrompt),
+		agent.WithModel(r.cfg.Model),
+		agent.WithStream(r.cfg.Stream),
+		agent.WithLogger(r.cfg.Logger),
+	)
+	content := map[string]any{
+		"type":         "heartbeat_result",
+		"status":       "done",
+		"output":       result,
+		"node_id":      r.cfg.Client.NodeID(),
+		"node_name":    r.cfg.NodeName,
+		"space_id":     space.ID,
+		"space_name":   space.Name,
+		"completed_at": time.Now().UTC().Format(time.RFC3339),
+	}
+	if runErr != nil {
+		content["status"] = "error"
+		content["error"] = runErr.Error()
+	}
+	_, sendErr := r.cfg.Client.Send(ctx, space.ID, content, &acp.Ref{Messages: []string{started.ID}})
+	if runErr != nil {
+		return runErr
+	}
+	if sendErr == nil {
+		r.cfg.Logger.Importantf("loop heartbeat=completed space=%s", space.ID)
+	}
+	return sendErr
+}
+
+func (r *Runner) heartbeatPrompt(space acp.SpaceInfo, messages []acp.Message) string {
+	contextJSON, err := json.MarshalIndent(messages, "", "  ")
+	if err != nil {
+		contextJSON = []byte("[]")
+	}
+	intent := strings.TrimSpace(r.cfg.Prompt)
+	if intent == "" {
+		intent = strings.TrimSpace(r.cfg.Intent)
+	}
+	if intent == "" {
+		intent = "No explicit worker intent was configured."
+	}
+	return fmt.Sprintf(`This is an ACP heartbeat turn for an aiscan loop worker.
+
+Space:
+- id: %s
+- name: %s
+
+This node:
+- id: %s
+- name: %s
+- intent: %s
+- skills: %s
+
+Review the recent ACP context below and decide the next useful step.
+Use ACP tools when you need to read more context, send coordination messages, or assign tasks to other nodes.
+If this worker should act now, use the available local tools directly in this heartbeat turn.
+If no action is needed, say that briefly and do not repeat completed work.
+Do not send heartbeat, status, result, or node_profile messages as new tasks.
+When creating ACP tasks for other nodes, use content like {"type":"task","task":"..."} and target refs.nodes when a specific node should handle it.
+
+Recent ACP messages, oldest to newest:
+%s`, space.ID, space.Name, r.cfg.Client.NodeID(), r.cfg.NodeName, intent, strings.Join(cleanStrings(r.cfg.Skills), ", "), string(contextJSON))
+}
+
 func (r *Runner) handleMessage(ctx context.Context, spaceID string, msg acp.Message) error {
 	task, ok := taskFromMessage(msg)
 	if !ok {
@@ -193,7 +293,6 @@ func (r *Runner) handleMessage(ctx context.Context, spaceID string, msg acp.Mess
 		agent.WithProvider(r.cfg.Provider),
 		agent.WithSystemPrompt(r.cfg.SystemPrompt),
 		agent.WithModel(r.cfg.Model),
-		agent.WithMaxTurns(r.cfg.MaxTurns),
 		agent.WithStream(r.cfg.Stream),
 		agent.WithLogger(r.cfg.Logger),
 	)
@@ -228,10 +327,13 @@ func isTaskForNode(msg acp.Message, nodeID string) bool {
 	if len(msg.Refs.Nodes) == 0 {
 		return len(msg.Refs.Messages) == 0
 	}
-	return contains(msg.Refs.Nodes, nodeID)
+	return slices.Contains(msg.Refs.Nodes, nodeID)
 }
 
 func taskFromMessage(msg acp.Message) (string, bool) {
+	if typ, ok := msg.Content["type"].(string); ok && typ != "" && typ != "task" {
+		return "", false
+	}
 	if value, ok := msg.Content["task"].(string); ok && strings.TrimSpace(value) != "" {
 		return strings.TrimSpace(value), true
 	}
@@ -246,13 +348,11 @@ func taskFromMessage(msg acp.Message) (string, bool) {
 	return "", false
 }
 
-func contains(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
+func heartbeatC(ticker *time.Ticker) <-chan time.Time {
+	if ticker == nil {
+		return nil
 	}
-	return false
+	return ticker.C
 }
 
 func cleanStrings(values []string) []string {

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chainreactors/aiscan/pkg/util"
 	"github.com/chainreactors/parsers"
 )
 
@@ -65,21 +66,21 @@ func formatEventLine(event event, opts outputOptions) string {
 			if target.Result == nil {
 				return ""
 			}
-			return sanitizeOutputLine(fmt.Sprintf("%s %s", prefix, formatServiceResult(target.Result)), opts)
+			return sanitizeOutputLine(fmt.Sprintf("%s %s", prefix, formatServiceResult(target.Result, opts)), opts)
 		case webTarget:
 			if target.URL == "" {
 				return ""
 			}
-			line := fmt.Sprintf("%s %s %s", prefix, target.URL, colorize(opts.Color, ansiGreen, "type=web"))
+			parts := []string{prefix, colorize(opts.Color, ansiBold+ansiGreen, target.URL)}
 			if target.HostHeader != "" {
-				line += " " + colorize(opts.Color, ansiDim, formatKV("host", target.HostHeader))
+				parts = append(parts, colorize(opts.Color, ansiDim, "("+target.HostHeader+")"))
 			}
-			return sanitizeOutputLine(line, opts)
+			return sanitizeOutputLine(strings.Join(parts, " "), opts)
 		case webProbeTarget:
 			if !reportableSprayResult(target.Result) {
 				return ""
 			}
-			return sanitizeOutputLine(fmt.Sprintf("%s %s", prefix, formatSprayResult(target.Result)), opts)
+			return sanitizeOutputLine(fmt.Sprintf("%s %s", prefix, formatSprayResult(target.Result, opts)), opts)
 		}
 	case eventFinding:
 		switch finding := event.Finding.(type) {
@@ -89,7 +90,7 @@ func formatEventLine(event event, opts outputOptions) string {
 				return ""
 			}
 			return formatPriorityLine(prefix, finding.Priority(), "fingerprint", finding.Target, []string{
-				formatKV("names", strings.Join(names, ",")),
+				colorize(opts.Color, ansiCyan, strings.Join(names, ",")),
 			}, opts)
 		case weakpassFinding:
 			if finding.Result == nil {
@@ -101,7 +102,7 @@ func formatEventLine(event event, opts outputOptions) string {
 				return ""
 			}
 			return formatPriorityLine(prefix, finding.Priority(), "vuln", vulnTarget(finding.Message), []string{
-				formatKV("evidence", finding.Message),
+				util.FormatValue(finding.Message),
 			}, opts)
 		case verificationFinding:
 			return formatPriorityLine(prefix, finding.Priority(), "verify", finding.Target, verificationFields(finding), opts)
@@ -110,7 +111,7 @@ func formatEventLine(event event, opts outputOptions) string {
 		if event.Error.Message == "" {
 			return ""
 		}
-		return sanitizeOutputLine(fmt.Sprintf("%s %s", prefix, colorize(opts.Color, ansiRed, "type=error")+" "+formatKV("message", event.Error.Message)), opts)
+		return sanitizeOutputLine(fmt.Sprintf("%s %s %s", prefix, colorize(opts.Color, ansiRed, "error"), util.FormatValue(event.Error.Message)), opts)
 	}
 	return ""
 }
@@ -122,11 +123,11 @@ func formatPriorityLine(prefix string, priority priority, label, target string, 
 	}
 	parts := []string{prefix}
 	if target != "" {
-		parts = append(parts, target)
+		parts = append(parts, colorize(opts.Color, ansiBold+ansiGreen, target))
 	}
 	parts = append(parts,
-		colorize(opts.Color, colorForPriority(priority), "type="+label),
-		colorize(opts.Color, colorForPriority(priority), "level="+strings.ToLower(priorityText)),
+		colorize(opts.Color, colorForPriority(priority), label),
+		colorize(opts.Color, colorForPriority(priority), strings.ToLower(priorityText)),
 	)
 	parts = append(parts, fields...)
 	return sanitizeOutputLine(strings.Join(parts, " "), opts)
@@ -140,102 +141,137 @@ func sanitizeOutputLine(line string, opts outputOptions) string {
 	return line
 }
 
-func formatServiceResult(result *parsers.GOGOResult) string {
+func formatServiceResult(result *parsers.GOGOResult, opts outputOptions) string {
 	target := result.GetTarget()
 	if result.IsHttp() {
 		target = result.GetBaseURL()
 	}
-	parts := []string{target, "type=service"}
-	parts = appendNonEmptyKV(parts, "proto", result.Protocol)
-	parts = appendNonEmptyKV(parts, "status", result.Status)
-	parts = appendNonEmptyKV(parts, "midware", result.Midware)
-	parts = appendNonEmptyKV(parts, "host", result.Host)
-	parts = appendNonEmptyKV(parts, "title", result.Title)
-	if frameworks := strings.Trim(result.Frameworks.String(), "|"); frameworks != "" {
-		parts = append(parts, formatKV("frameworks", frameworks))
-	}
-	if vulns := strings.TrimSpace(result.Vulns.String()); vulns != "" {
-		parts = append(parts, formatKV("vulns", vulns))
-	}
-	if extract := strings.TrimSpace(result.GetExtractStat()); extract != "" {
-		parts = append(parts, formatKV("extracts", extract))
+	parts := []string{
+		colorize(opts.Color, ansiBold+ansiGreen, target),
 	}
 	if result.Timing > 0 {
-		parts = append(parts, formatKV("time", fmt.Sprintf("%dms", result.Timing)))
+		parts = append(parts, colorize(opts.Color, ansiYellow, fmt.Sprintf("%dms", result.Timing)))
+	}
+	parts = appendNonEmptyColoredValue(parts, result.Protocol, ansiDim, opts)
+	parts = appendNonEmptyColoredValue(parts, result.Status, colorForStatus(result.Status), opts)
+	parts = appendNonEmptyColoredValue(parts, result.Midware, ansiCyan, opts)
+	parts = appendNonEmptyColoredValue(parts, result.Host, ansiDim, opts)
+	parts = appendNonEmptyColoredValue(parts, result.Title, ansiGreen, opts)
+	if frameworks := strings.Trim(result.Frameworks.String(), "|"); frameworks != "" {
+		parts = append(parts, colorize(opts.Color, colorForFrameworks(result.Frameworks.IsFocus()), util.FormatValue(frameworks)))
+	}
+	if vulns := strings.TrimSpace(result.Vulns.String()); vulns != "" {
+		parts = append(parts, colorize(opts.Color, ansiRed, util.FormatValue(vulns)))
+	}
+	if extract := strings.TrimSpace(result.GetExtractStat()); extract != "" {
+		parts = append(parts, colorize(opts.Color, ansiCyan, util.FormatValue(extract)))
 	}
 	return strings.Join(parts, " ")
 }
 
-func formatSprayResult(result *parsers.SprayResult) string {
-	parts := []string{result.UrlString, "type=web_probe"}
-	parts = appendNonEmptyKV(parts, "probe", result.Source.Name())
-	if result.Status > 0 {
-		parts = append(parts, formatKV("status", strconv.Itoa(result.Status)))
+func formatSprayResult(result *parsers.SprayResult, opts outputOptions) string {
+	parts := []string{
+		colorize(opts.Color, ansiCyan, result.Source.Name()),
 	}
-	parts = append(parts, formatKV("length", strconv.Itoa(result.BodyLength)))
+	if result.Status > 0 {
+		status := strconv.Itoa(result.Status)
+		parts = append(parts, colorize(opts.Color, colorForStatus(status), status))
+	}
+	parts = append(parts, colorize(opts.Color, ansiYellow, strconv.Itoa(result.BodyLength)))
 	if result.ExceedLength {
-		parts = append(parts, "exceed=true")
+		parts = append(parts, colorize(opts.Color, ansiRed, "exceed"))
 	}
 	if result.Spended > 0 {
-		parts = append(parts, formatKV("time", fmt.Sprintf("%dms", result.Spended)))
+		parts = append(parts, colorize(opts.Color, ansiYellow, fmt.Sprintf("%dms", result.Spended)))
 	}
-	parts = appendNonEmptyKV(parts, "host", result.Host)
-	parts = appendNonEmptyKV(parts, "redirect", result.RedirectURL)
-	parts = appendNonEmptyKV(parts, "title", result.Title)
+	parts = append(parts, colorize(opts.Color, ansiBold+ansiGreen, result.UrlString))
+	if result.Host != "" {
+		parts = append(parts, colorize(opts.Color, ansiDim, "("+result.Host+")"))
+	}
+	if result.RedirectURL != "" {
+		parts = append(parts, colorize(opts.Color, ansiCyan, "->"), colorize(opts.Color, ansiCyan, result.RedirectURL))
+	}
+	parts = appendNonEmptyColoredValue(parts, result.Title, ansiGreen, opts)
 	if result.Distance != 0 {
-		parts = append(parts, formatKV("sim", strconv.Itoa(int(result.Distance))))
+		parts = append(parts, colorize(opts.Color, ansiGreen, strconv.Itoa(int(result.Distance))))
 	}
-	parts = appendNonEmptyKV(parts, "reason", result.Reason)
+	parts = appendNonEmptyColoredValue(parts, result.Reason, ansiYellow, opts)
 	if frameworks := strings.TrimSpace(result.Get("frame")); frameworks != "" {
-		parts = append(parts, formatKV("frameworks", frameworks))
+		parts = append(parts, colorize(opts.Color, colorForFrameworks(result.Frameworks.IsFocus()), strings.TrimSpace(frameworks)))
 	}
 	if extracts := strings.TrimSpace(result.Extracteds.String()); extracts != "" {
-		parts = append(parts, formatKV("extracts", extracts))
+		parts = append(parts, colorize(opts.Color, ansiCyan, util.FormatValue(extracts)))
 	}
 	return strings.Join(parts, " ")
+}
+
+func colorForStatus(status string) string {
+	status = strings.TrimSpace(status)
+	if status == "" {
+		return ansiDim
+	}
+	code, err := strconv.Atoi(status)
+	if err != nil {
+		if strings.EqualFold(status, "open") || strings.EqualFold(status, "tcp") {
+			return ansiGreen
+		}
+		return ansiDim
+	}
+	switch {
+	case code >= 200 && code < 300:
+		return ansiGreen
+	case code >= 300 && code < 400:
+		return ansiCyan
+	case code >= 400 && code < 500:
+		return ansiYellow
+	case code >= 500:
+		return ansiRed
+	default:
+		return ansiDim
+	}
+}
+
+func colorForFrameworks(hasFocus bool) string {
+	if hasFocus {
+		return ansiBold + ansiRed
+	}
+	return ansiCyan
 }
 
 func weakpassFields(result *parsers.ZombieResult) []string {
 	fields := make([]string, 0, 4)
-	fields = appendNonEmptyKV(fields, "user", result.Username)
-	fields = appendNonEmptyKV(fields, "pass", result.Password)
-	fields = appendNonEmptyKV(fields, "service", result.Service)
-	fields = append(fields, formatKV("mod", result.Mod.String()))
+	fields = appendNonEmptyValue(fields, result.Username)
+	fields = appendNonEmptyValue(fields, result.Password)
+	fields = appendNonEmptyValue(fields, result.Service)
+	fields = appendNonEmptyValue(fields, result.Mod.String())
 	return fields
 }
 
 func verificationFields(finding verificationFinding) []string {
-	parts := []string{formatKV("status", string(finding.Status))}
+	parts := []string{util.FormatValue(string(finding.Status))}
 	if finding.OriginalPriority != "" {
-		parts = append(parts, formatKV("priority", string(finding.OriginalPriority)))
+		parts = append(parts, util.FormatValue(string(finding.OriginalPriority)))
 	}
 	if finding.OriginalKind != "" {
-		parts = append(parts, formatKV("finding", string(finding.OriginalKind)))
+		parts = append(parts, util.FormatValue(string(finding.OriginalKind)))
 	}
-	parts = appendNonEmptyKV(parts, "summary", finding.Summary)
-	parts = appendNonEmptyKV(parts, "evidence", finding.Evidence)
+	parts = appendNonEmptyValue(parts, finding.Summary)
+	parts = appendNonEmptyValue(parts, finding.Evidence)
 	return parts
 }
 
-func appendNonEmptyKV(parts []string, key, value string) []string {
+func appendNonEmptyValue(parts []string, value string) []string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return parts
 	}
-	return append(parts, formatKV(key, value))
+	return append(parts, util.FormatValue(value))
 }
 
-func formatKV(key, value string) string {
+func appendNonEmptyColoredValue(parts []string, value, code string, opts outputOptions) []string {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return key + "="
+		return parts
 	}
-	if needsQuoting(value) {
-		return key + "=" + strconv.Quote(value)
-	}
-	return key + "=" + value
-}
-
-func needsQuoting(value string) bool {
-	return strings.ContainsAny(value, " \t\r\n\"")
+	return append(parts, colorize(opts.Color, code, util.FormatValue(value)))
 }
