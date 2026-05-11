@@ -23,6 +23,7 @@ type flags struct {
 	Inputs          []string `short:"i" long:"input" description:"Input target: URL, IP, IP:port, or CIDR"`
 	ListFile        string   `short:"l" long:"list" description:"File containing input targets, one per line"`
 	Mode            string   `long:"mode" description:"Scan profile: quick or full" default:"quick"`
+	Thread          int      `long:"thread" description:"Total concurrency budget distributed across engines" default:"1000"`
 	Debug           bool     `long:"debug" description:"Print event pipeline trace to stderr"`
 	JSON            bool     `short:"j" long:"json" description:"Output raw gogo and spray results as JSON Lines"`
 	Report          bool     `long:"report" description:"Output a concise final markdown report"`
@@ -30,15 +31,15 @@ type flags struct {
 	NoColor         bool     `long:"no-color" description:"Disable ANSI colors in terminal output"`
 	Ports           string   `long:"ports" description:"Ports for gogo scanning; defaults to all in quick and - in full"`
 	Port            string   `long:"port" description:"Ports for discovery scanning; overrides --ports when set"`
-	Threads         int      `long:"threads" description:"Gogo scan threads" default:"500"`
-	Timeout         int      `long:"timeout" description:"Per-probe timeout in seconds" default:"5"`
-	SprayThreads    int      `long:"spray-threads" description:"Spray request threads" default:"20"`
+	Threads         int // derived from Thread; not a CLI flag
+	Timeout         int `long:"timeout" description:"Per-probe timeout in seconds" default:"5"`
+	SprayThreads    int // derived from Thread; not a CLI flag
 	Dictionaries    []string `long:"dict" description:"Dictionary file for spray word-based discovery. Can specify multiple."`
 	Rules           []string `long:"rule" description:"Rule file for spray word mutation. Can specify multiple."`
 	Word            string   `long:"word" description:"Spray word-generation DSL"`
 	DefaultDict     bool     `long:"default-dict" description:"Use spray default dictionary for word-based discovery"`
 	Advance         bool     `long:"advance" description:"Enable spray advance plugin behavior for enabled web capabilities"`
-	ZombieThreads   int      `long:"zombie-threads" description:"Zombie weakpass threads" default:"100"`
+	ZombieThreads   int // derived from Thread; not a CLI flag
 	ZombieTop       int      `long:"zombie-top" description:"Use top N default weakpass words"`
 	Users           []string `long:"user" description:"Weakpass usernames. Can specify multiple."`
 	Passwords       []string `long:"pwd" description:"Weakpass passwords. Can specify multiple."`
@@ -72,6 +73,7 @@ Inputs:
   -l, --list        File containing inputs, one per line. CIDR is allowed.
 Options:
       --mode        Scan profile: quick or full (default: quick)
+      --thread      Total concurrency budget (default: 1000); auto-distributed across engines
       --debug       Print event pipeline trace to stderr
   -j, --json        Output raw gogo and spray results as JSON Lines
       --report      Output a concise final markdown report
@@ -79,15 +81,12 @@ Options:
       --no-color    Disable ANSI colors in terminal output
       --ports       Ports for gogo scanning (default: all in quick, - in full)
       --port        Ports for discovery scanning; overrides --ports when set
-      --threads     Gogo scan threads (default: 500)
       --timeout     Timeout in seconds (default: 5)
-      --spray-threads     Spray threads (default: 20)
       --dict        Dictionary file for spray word-based discovery. Can specify multiple.
       --rule        Rule file for spray word mutation. Can specify multiple.
       --word        Spray word-generation DSL
       --default-dict  Use spray default dictionary for word-based discovery
       --advance     Enable spray advance plugin behavior for enabled web capabilities
-      --zombie-threads    Zombie threads (default: 100)
       --zombie-top        Use top N default weakpass words
       --user        Weakpass username. Can specify multiple.
       --pwd         Weakpass password. Can specify multiple.

@@ -16,6 +16,7 @@ type VerificationConfig struct {
 	MinPriority  string
 	SystemPrompt string
 	Timeout      int
+	Workers      int
 }
 
 func WithVerificationConfig(config VerificationConfig) Option {

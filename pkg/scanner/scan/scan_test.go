@@ -114,7 +114,7 @@ func TestScanOptionsResolveDiscoveryFlags(t *testing.T) {
 		Mode:    scanModeFull,
 		Ports:   "top100",
 		Port:    "80,443",
-		Threads: 77,
+		Threads: 77, // set internally by derivePerInvocationThreads
 		Timeout: 6,
 	}
 	opts = resolveScanOptions(flagValues)
@@ -213,14 +213,15 @@ func TestSprayCapabilityAppliesWebStrategyOptions(t *testing.T) {
 		DefaultDict:  true,
 		Advance:      true,
 	}
-	cap := sprayCapability(flags{SprayThreads: 7, Timeout: 9}, web, capSprayCommon, 1, sprayCheckOptions{CommonPlugin: true}, func(_ context.Context, flags flags, gotWeb webOptions, input target, source string, opts sprayCheckOptions, emit emitFunc) {
+	cmd := &Command{engines: &engines.Set{Capacity: distributeCapacity(1000)}}
+	cap := sprayCapability(cmd, flags{SprayThreads: 7, Timeout: 9}, web, capSprayCommon, sprayCheckOptions{CommonPlugin: true}, func(_ context.Context, f flags, gotWeb webOptions, input target, source string, opts sprayCheckOptions, emit emitFunc) {
 		target, ok := input.(webTarget)
 		if !ok {
 			t.Fatalf("input = %#v, want webTarget", input)
 		}
 		opts.URLs = []string{target.URL}
-		opts.Threads = flags.SprayThreads
-		opts.Timeout = flags.Timeout
+		opts.Threads = f.SprayThreads
+		opts.Timeout = f.Timeout
 		opts.Dictionaries = gotWeb.Dictionaries
 		opts.Rules = gotWeb.Rules
 		opts.Word = gotWeb.Word
@@ -270,7 +271,7 @@ func TestApplyWebStrategyOptionsEnablesReconAndPreservesCapabilityDefaults(t *te
 	}
 }
 
-func TestScanBuildCapabilitiesKeepsSprayAndGogoConcurrent(t *testing.T) {
+func TestScanBuildCapabilitiesUsesCapacityDrivenWorkers(t *testing.T) {
 	cmd := New(&engines.Set{
 		Gogo:  sdkgogo.NewEngine(nil),
 		Spray: spray.NewEngine(nil),
@@ -286,26 +287,83 @@ func TestScanBuildCapabilitiesKeepsSprayAndGogoConcurrent(t *testing.T) {
 		capSprayBrute,
 	)}
 
-	caps := cmd.buildCapabilities(flags{}, scanOptions{}, profile)
+	// --thread 1000 distributes: gogo=800, spray=100
+	// per-invocation auto-derived: gogo=500, spray=20
+	f := flags{Thread: 1000}
+	caps := cmd.buildCapabilities(f, scanOptions{}, profile)
 	workers := make(map[string]int, len(caps))
 	for _, cap := range caps {
 		workers[cap.Name] = cap.Worker
 	}
 
+	// gogo: 800/500 = 1, spray: 100/20 = 5
 	want := map[string]int{
-		capGogoPortscan: 4,
-		capSprayCheck:   4,
-		capSprayFinger:  4,
-		capSprayCommon:  2,
-		capSprayBackup:  2,
-		capSprayActive:  2,
-		capSprayCrawl:   2,
-		capSprayBrute:   2,
+		capGogoPortscan: 1,
+		capSprayCheck:   5,
+		capSprayFinger:  5,
+		capSprayCommon:  5,
+		capSprayBackup:  5,
+		capSprayActive:  5,
+		capSprayCrawl:   5,
+		capSprayBrute:   5,
 	}
 	for name, wantWorkers := range want {
 		if got := workers[name]; got != wantWorkers {
 			t.Fatalf("%s workers = %d, want %d", name, got, wantWorkers)
 		}
+	}
+}
+
+func TestScanBuildCapabilitiesAdaptsToHighThread(t *testing.T) {
+	cmd := New(&engines.Set{
+		Gogo:  sdkgogo.NewEngine(nil),
+		Spray: spray.NewEngine(nil),
+	})
+	profile := profile{Capabilities: capabilitySet(capGogoPortscan, capSprayCheck)}
+
+	// --thread 2000 distributes: gogo=1600, spray=200
+	// per-invocation auto-derived: gogo=500, spray=20
+	f := flags{Thread: 2000}
+	caps := cmd.buildCapabilities(f, scanOptions{}, profile)
+	workers := make(map[string]int, len(caps))
+	for _, cap := range caps {
+		workers[cap.Name] = cap.Worker
+	}
+
+	// gogo: 1600/500 = 3, spray: 200/20 = 10
+	if got := workers[capGogoPortscan]; got != 3 {
+		t.Fatalf("gogo workers = %d, want 3", got)
+	}
+	if got := workers[capSprayCheck]; got != 10 {
+		t.Fatalf("spray_check workers = %d, want 10", got)
+	}
+	if cmd.engines.Capacity.Gogo != 1600 {
+		t.Fatalf("gogo capacity = %d, want 1600", cmd.engines.Capacity.Gogo)
+	}
+}
+
+func TestScanBuildCapabilitiesLowThreadCapsPerInvocation(t *testing.T) {
+	cmd := New(&engines.Set{
+		Gogo:  sdkgogo.NewEngine(nil),
+		Spray: spray.NewEngine(nil),
+	})
+	profile := profile{Capabilities: capabilitySet(capGogoPortscan, capSprayCheck)}
+
+	// --thread 100 distributes: gogo=80, spray=10
+	// per-invocation capped: gogo=min(500,80)=80, spray=min(20,10)=10
+	f := flags{Thread: 100}
+	caps := cmd.buildCapabilities(f, scanOptions{}, profile)
+	workers := make(map[string]int, len(caps))
+	for _, cap := range caps {
+		workers[cap.Name] = cap.Worker
+	}
+
+	// gogo: 80/80 = 1, spray: 10/10 = 1
+	if got := workers[capGogoPortscan]; got != 1 {
+		t.Fatalf("gogo workers = %d, want 1", got)
+	}
+	if got := workers[capSprayCheck]; got != 1 {
+		t.Fatalf("spray_check workers = %d, want 1", got)
 	}
 }
 

@@ -20,8 +20,9 @@ const (
 	EventMessageStart       EventType = "message_start"
 	EventMessageUpdate      EventType = "message_update"
 	EventMessageEnd         EventType = "message_end"
-	EventToolExecutionStart EventType = "tool_execution_start"
-	EventToolExecutionEnd   EventType = "tool_execution_end"
+	EventToolExecutionStart  EventType = "tool_execution_start"
+	EventToolExecutionEnd    EventType = "tool_execution_end"
+	EventTokenBudgetWarning  EventType = "token_budget_warning"
 )
 
 type Event struct {
@@ -79,10 +80,11 @@ type Config struct {
 	Provider            provider.Provider
 	Model               string
 	SystemPrompt        string
-	MaxTurns            int
 	MaxTokens           int
 	Temperature         *float64
 	Stream              bool
+	MaxRetries          int
+	TokenBudget         int
 	Logger              telemetry.Logger
 	TransformContext    TransformContextFunc
 	Emit                EventHandler
@@ -104,6 +106,7 @@ type Result struct {
 	NewMessages []provider.ChatMessage
 	Messages    []provider.ChatMessage
 	Turns       int
+	TotalUsage  provider.Usage
 	Err         error
 }
 
@@ -128,10 +131,6 @@ func WithModel(model string) Option {
 
 func WithSystemPrompt(prompt string) Option {
 	return func(c *Config) { c.SystemPrompt = prompt }
-}
-
-func WithMaxTurns(maxTurns int) Option {
-	return func(c *Config) { c.MaxTurns = maxTurns }
 }
 
 func WithMaxTokens(maxTokens int) Option {
@@ -168,4 +167,12 @@ func WithAfterToolCall(fn func(context.Context, AfterToolCallContext) (*AfterToo
 
 func WithShouldStopAfterTurn(fn func(context.Context, ShouldStopAfterTurnContext) (bool, error)) Option {
 	return func(c *Config) { c.ShouldStopAfterTurn = fn }
+}
+
+func WithMaxRetries(n int) Option {
+	return func(c *Config) { c.MaxRetries = n }
+}
+
+func WithTokenBudget(budget int) Option {
+	return func(c *Config) { c.TokenBudget = budget }
 }

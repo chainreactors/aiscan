@@ -14,9 +14,13 @@ func (c *Command) agentVerifyCapability(flags flags) (capability, bool) {
 	if err != nil {
 		minPriority = priorityHigh
 	}
+	workers := c.verification.Workers
+	if workers <= 0 {
+		workers = 3
+	}
 	return capability{
 		Name:   capAgentVerify,
-		Worker: 1,
+		Worker: workers,
 		Accept: func(e event) bool {
 			if e.Kind != eventFinding || e.Finding == nil {
 				return false
@@ -83,6 +87,23 @@ func (c *Command) runAgentVerifyCapability(ctx context.Context, flags flags, eve
 	}
 
 	status, summary, evidence := parseVerificationOutput(result)
+
+	if status == verificationInconclusive && !strings.Contains(strings.ToLower(result), "status:") {
+		rawPreview := result
+		if len(rawPreview) > 200 {
+			rawPreview = rawPreview[:200]
+		}
+		c.logger.Warnf("scan %s parse unclear, retrying once (raw=%q)", capAgentVerify, rawPreview)
+		retryPrompt := prompt + "\n\nPlease follow the exact output format with status:/summary:/evidence: lines."
+		retryResult, retryErr := c.verifyFunc(verifyCtx, retryPrompt, systemPrompt, model, 1200)
+		if retryErr == nil {
+			status, summary, evidence = parseVerificationOutput(retryResult)
+		}
+	}
+	if status == verificationInconclusive {
+		c.logger.Warnf("scan %s inconclusive for %s %s", capAgentVerify, findingKindOf(event.Finding), findingKey(event.Finding))
+	}
+
 	emit(findingEvent(capAgentVerify, verificationFinding{
 		OriginalKey:      findingKey(event.Finding),
 		OriginalKind:     findingKindOf(event.Finding),
@@ -109,7 +130,23 @@ Finding:
 Return only this plain text format:
 status: confirmed|not_confirmed|inconclusive
 summary: one concise sentence
-evidence: short evidence from the provided finding or why it is insufficient`,
+evidence: short evidence from the provided finding or why it is insufficient
+
+Examples:
+
+Example 1 (confirmed):
+Finding: source=neutron_poc kind=vuln-finding priority=high target=10.0.0.1 evidence=[vuln] 10.0.0.1 CVE-2021-44228 critical Apache Log4j RCE
+Response:
+status: confirmed
+summary: Log4j RCE (CVE-2021-44228) confirmed by matched POC template with critical severity.
+evidence: Neutron template matched CVE-2021-44228 on target, severity=critical.
+
+Example 2 (not_confirmed):
+Finding: source=spray_finger kind=fingerprint priority=low target=10.0.0.2 evidence=fingerprint jquery
+Response:
+status: not_confirmed
+summary: jQuery fingerprint alone does not indicate a security risk without a specific CVE.
+evidence: Fingerprint detection only; no vulnerability evidence provided.`,
 		event.Source,
 		findingKindOf(finding),
 		findingPriority(finding),

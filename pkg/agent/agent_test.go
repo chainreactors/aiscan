@@ -374,44 +374,6 @@ func TestShouldStopAfterTurnStopsBeforeNextModelCall(t *testing.T) {
 	}
 }
 
-func TestMaxTurnsReportsCompletedTurnCount(t *testing.T) {
-	tools := tool.NewToolRegistry()
-	tools.Register(&recordingTool{name: "echo", output: "tool output"})
-	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.ChatMessage{
-				Role: "assistant",
-				ToolCalls: []provider.ToolCall{{
-					ID:   "call-1",
-					Type: "function",
-					Function: provider.FunctionCall{
-						Name:      "echo",
-						Arguments: `{"value":"x"}`,
-					},
-				}},
-			}),
-		},
-	}
-
-	result, err := RunWithEvents(context.Background(), "use tool", tools, nil,
-		WithProvider(llm),
-		WithModel("test"),
-		WithMaxTurns(1),
-	)
-	if err == nil {
-		t.Fatal("RunWithEvents() error = nil, want max turns error")
-	}
-	if result == nil {
-		t.Fatal("result = nil")
-	}
-	if result.Turns != 1 {
-		t.Fatalf("turns = %d, want 1", result.Turns)
-	}
-	if !strings.Contains(err.Error(), "exceeded max turns") {
-		t.Fatalf("error = %v, want max turns", err)
-	}
-}
-
 func TestStreamingProviderEmitsMessageUpdates(t *testing.T) {
 	tools := tool.NewToolRegistry()
 	llm := &scriptedProvider{
@@ -824,4 +786,187 @@ func lastEvent(events []Event) Event {
 
 func strPtr(s string) *string {
 	return &s
+}
+
+func TestRetryOnTransientError(t *testing.T) {
+	tools := tool.NewToolRegistry()
+	callCount := 0
+	llm := &callbackProvider{
+		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+			callCount++
+			if callCount == 1 {
+				return nil, fmt.Errorf("API error (502): bad gateway")
+			}
+			return chatResponse(provider.NewTextMessage("assistant", "recovered")), nil
+		},
+	}
+
+	result, err := Run(context.Background(), "hello", tools,
+		WithProvider(llm),
+		WithModel("test"),
+		WithMaxRetries(2),
+	)
+	if err != nil {
+		t.Fatalf("Run() error = %v, want success after retry", err)
+	}
+	if result != "recovered" {
+		t.Fatalf("result = %q, want recovered", result)
+	}
+	if callCount != 2 {
+		t.Fatalf("call count = %d, want 2", callCount)
+	}
+}
+
+func TestNoRetryOnAuthError(t *testing.T) {
+	tools := tool.NewToolRegistry()
+	callCount := 0
+	llm := &callbackProvider{
+		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+			callCount++
+			return nil, fmt.Errorf("API error (401): invalid_api_key")
+		},
+	}
+
+	_, err := Run(context.Background(), "hello", tools,
+		WithProvider(llm),
+		WithModel("test"),
+		WithMaxRetries(3),
+	)
+	if err == nil {
+		t.Fatal("Run() error = nil, want auth error")
+	}
+	if callCount != 1 {
+		t.Fatalf("call count = %d, want 1 (no retry for auth errors)", callCount)
+	}
+}
+
+func TestRetryExhaustedReturnsLastError(t *testing.T) {
+	tools := tool.NewToolRegistry()
+	callCount := 0
+	llm := &callbackProvider{
+		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+			callCount++
+			return nil, fmt.Errorf("API error (503): service unavailable")
+		},
+	}
+
+	_, err := Run(context.Background(), "hello", tools,
+		WithProvider(llm),
+		WithModel("test"),
+		WithMaxRetries(2),
+	)
+	if err == nil {
+		t.Fatal("Run() error = nil, want error after retries exhausted")
+	}
+	if callCount != 3 {
+		t.Fatalf("call count = %d, want 3 (1 initial + 2 retries)", callCount)
+	}
+}
+
+func TestTokenBudgetWarning(t *testing.T) {
+	tools := tool.NewToolRegistry()
+	llm := &callbackProvider{
+		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+			return &provider.ChatCompletionResponse{
+				Choices: []provider.Choice{{Message: provider.NewTextMessage("assistant", "done")}},
+				Usage:   &provider.Usage{PromptTokens: 700, CompletionTokens: 200, TotalTokens: 900},
+			}, nil
+		},
+	}
+
+	var sawWarning bool
+	_, err := RunWithEvents(context.Background(), "hello", tools, func(_ context.Context, event Event) error {
+		if event.Type == EventTokenBudgetWarning {
+			sawWarning = true
+		}
+		return nil
+	}, WithProvider(llm), WithModel("test"), WithTokenBudget(1000))
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !sawWarning {
+		t.Fatal("expected token_budget_warning event at 90% usage")
+	}
+}
+
+func TestTokenBudgetExceeded(t *testing.T) {
+	tools := tool.NewToolRegistry()
+	turn := 0
+	llm := &callbackProvider{
+		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+			turn++
+			if turn == 1 {
+				return &provider.ChatCompletionResponse{
+					Choices: []provider.Choice{{Message: provider.ChatMessage{
+						Role: "assistant",
+						ToolCalls: []provider.ToolCall{{
+							ID:       "call-1",
+							Type:     "function",
+							Function: provider.FunctionCall{Name: "echo", Arguments: `{}`},
+						}},
+					}}},
+					Usage: &provider.Usage{TotalTokens: 600},
+				}, nil
+			}
+			return &provider.ChatCompletionResponse{
+				Choices: []provider.Choice{{Message: provider.NewTextMessage("assistant", "done")}},
+				Usage:   &provider.Usage{TotalTokens: 500},
+			}, nil
+		},
+	}
+	tools.Register(&recordingTool{name: "echo", output: "ok"})
+
+	result, err := RunWithEvents(context.Background(), "hello", tools, nil,
+		WithProvider(llm), WithModel("test"), WithTokenBudget(1000))
+	if err == nil {
+		t.Fatal("Run() error = nil, want budget exceeded error")
+	}
+	if !strings.Contains(err.Error(), "token budget exhausted") {
+		t.Fatalf("error = %v, want token budget exhausted", err)
+	}
+	if result == nil || result.TotalUsage.TotalTokens == 0 {
+		t.Fatal("result should contain accumulated usage")
+	}
+}
+
+func TestTruncateResultIncludesSize(t *testing.T) {
+	large := strings.Repeat("x", maxResultSize+100)
+	truncated := truncateResult(large)
+	if !strings.Contains(truncated, "truncated:") {
+		t.Fatalf("truncated result missing size info: %s", truncated[len(truncated)-100:])
+	}
+	if !strings.Contains(truncated, fmt.Sprintf("%d of %d bytes", maxResultSize, len(large))) {
+		t.Fatalf("truncated result missing byte counts: %s", truncated[len(truncated)-120:])
+	}
+}
+
+func TestResultIncludesTotalUsage(t *testing.T) {
+	tools := tool.NewToolRegistry()
+	llm := &callbackProvider{
+		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+			return &provider.ChatCompletionResponse{
+				Choices: []provider.Choice{{Message: provider.NewTextMessage("assistant", "done")}},
+				Usage:   &provider.Usage{PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150},
+			}, nil
+		},
+	}
+
+	result, err := RunWithEvents(context.Background(), "hello", tools, nil,
+		WithProvider(llm), WithModel("test"))
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.TotalUsage.TotalTokens != 150 {
+		t.Fatalf("TotalUsage.TotalTokens = %d, want 150", result.TotalUsage.TotalTokens)
+	}
+}
+
+type callbackProvider struct {
+	fn func(context.Context, *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error)
+}
+
+func (p *callbackProvider) Name() string { return "callback" }
+
+func (p *callbackProvider) ChatCompletion(ctx context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+	return p.fn(ctx, req)
 }

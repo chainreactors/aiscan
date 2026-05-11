@@ -21,6 +21,7 @@ type Set struct {
 	Zombie    *sdkzombie.Engine
 	Index     *association.FingerPOCIndex
 	Resources *resources.Set
+	Capacity  CapacityConfig
 }
 
 // CapacityConfig holds per-engine capacity limits. Zero means unlimited.
@@ -34,10 +35,10 @@ type CapacityConfig struct {
 // DefaultCapacity returns sensible capacity defaults.
 func DefaultCapacity() CapacityConfig {
 	return CapacityConfig{
-		Gogo:    5000,
-		Spray:   200,
-		Zombie:  500,
-		Neutron: 10,
+		Gogo:    800,
+		Spray:   100,
+		Zombie:  100,
+		Neutron: 100,
 	}
 }
 
@@ -171,5 +172,6 @@ func InitWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 		set.Neutron.SetCapacity(caps.Neutron)
 	}
 
+	set.Capacity = caps
 	return set, nil
 }

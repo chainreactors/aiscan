@@ -77,7 +77,9 @@ func runLoop(ctx context.Context, prompts []provider.ChatMessage, agentCtx Conte
 		return result, err
 	}
 
-	for turn = 1; turn <= cfg.MaxTurns; turn++ {
+	var totalUsage provider.Usage
+
+	for turn = 1; ; turn++ {
 		if err := ctx.Err(); err != nil {
 			failure := provider.NewTextMessage("assistant", "")
 			transcript.append(failure)
@@ -98,9 +100,14 @@ func runLoop(ctx context.Context, prompts []provider.ChatMessage, agentCtx Conte
 		}
 
 		reqMessages := requestMessages(agentCtx.SystemPrompt, transcript.messages, cfg.TransformContext)
-		cfg.Logger.Debugf("[turn %d/%d] sending %d messages to LLM", turn, cfg.MaxTurns, len(reqMessages))
+		cfg.Logger.Debugf("[turn %d] sending %d messages to LLM", turn, len(reqMessages))
 
-		assistantMsg, err := requestAssistantMessage(ctx, cfg, reqMessages, agentCtx.Tools.Definitions(), turn)
+		assistantMsg, usage, err := requestWithRetry(ctx, cfg, reqMessages, agentCtx.Tools.Definitions(), turn)
+		if usage != nil {
+			totalUsage.PromptTokens += usage.PromptTokens
+			totalUsage.CompletionTokens += usage.CompletionTokens
+			totalUsage.TotalTokens += usage.TotalTokens
+		}
 		if err != nil {
 			failure := provider.NewTextMessage("assistant", "")
 			transcript.append(failure)
@@ -114,6 +121,19 @@ func runLoop(ctx context.Context, prompts []provider.ChatMessage, agentCtx Conte
 			return end(nil, err)
 		}
 		transcript.append(assistantMsg)
+
+		if cfg.TokenBudget > 0 {
+			if totalUsage.TotalTokens >= cfg.TokenBudget {
+				cfg.Logger.Warnf("token budget exhausted: %d/%d", totalUsage.TotalTokens, cfg.TokenBudget)
+				result := transcript.result(messageContent(assistantMsg), turn, fmt.Errorf("token budget exhausted: %d/%d", totalUsage.TotalTokens, cfg.TokenBudget))
+				result.TotalUsage = totalUsage
+				return end(result, result.Err)
+			}
+			if totalUsage.TotalTokens >= cfg.TokenBudget*80/100 {
+				_ = emit(ctx, emitFn, Event{Type: EventTokenBudgetWarning, Turn: turn})
+				cfg.Logger.Warnf("token budget warning: %d/%d (80%%)", totalUsage.TotalTokens, cfg.TokenBudget)
+			}
+		}
 
 		var toolResults []provider.ChatMessage
 		terminate := false
@@ -148,18 +168,21 @@ func runLoop(ctx context.Context, prompts []provider.ChatMessage, agentCtx Conte
 				return end(nil, err)
 			}
 			if stop {
-				cfg.Logger.Importantf("agent status=stopped turns=%d", turn)
-				return end(transcript.result(messageContent(assistantMsg), turn, nil), nil)
+				cfg.Logger.Importantf("agent status=stopped turns=%d tokens=%d", turn, totalUsage.TotalTokens)
+				result := transcript.result(messageContent(assistantMsg), turn, nil)
+				result.TotalUsage = totalUsage
+				return end(result, nil)
 			}
 		}
 
 		if len(assistantMsg.ToolCalls) == 0 || terminate {
-			cfg.Logger.Importantf("agent status=completed turns=%d", turn)
-			return end(transcript.result(messageContent(assistantMsg), turn, nil), nil)
+			cfg.Logger.Importantf("agent status=completed turns=%d tokens=%d", turn, totalUsage.TotalTokens)
+			result := transcript.result(messageContent(assistantMsg), turn, nil)
+			result.TotalUsage = totalUsage
+			return end(result, nil)
 		}
 	}
 
-	return end(nil, fmt.Errorf("agent exceeded max turns (%d)", cfg.MaxTurns))
 }
 
 type transcript struct {
@@ -202,81 +225,6 @@ func emitMessage(ctx context.Context, emitFn EventHandler, turn int, msg provide
 	return emit(ctx, emitFn, Event{Type: EventMessageEnd, Turn: turn, Message: msg})
 }
 
-func requestAssistantMessage(ctx context.Context, cfg Config, messages []provider.ChatMessage, tools []provider.ToolDefinition, turn int) (provider.ChatMessage, error) {
-	req := &provider.ChatCompletionRequest{
-		Model:       cfg.Model,
-		Messages:    messages,
-		Tools:       tools,
-		MaxTokens:   cfg.MaxTokens,
-		Temperature: cfg.Temperature,
-	}
-	if cfg.Stream {
-		if streaming, ok := cfg.Provider.(provider.StreamingProvider); ok {
-			return streamAssistantMessage(ctx, streaming, req, cfg.Emit, cfg.Logger, turn)
-		}
-	}
-
-	resp, err := cfg.Provider.ChatCompletion(ctx, req)
-	if err != nil {
-		return provider.ChatMessage{}, fmt.Errorf("LLM call failed at turn %d: %w", turn, err)
-	}
-	if len(resp.Choices) == 0 {
-		return provider.ChatMessage{}, fmt.Errorf("empty response from LLM at turn %d", turn)
-	}
-	msg := resp.Choices[0].Message
-	if err := emit(ctx, cfg.Emit, Event{Type: EventMessageStart, Turn: turn, Message: msg}); err != nil {
-		return provider.ChatMessage{}, err
-	}
-	if err := emit(ctx, cfg.Emit, Event{Type: EventMessageEnd, Turn: turn, Message: msg}); err != nil {
-		return provider.ChatMessage{}, err
-	}
-	logAssistantAndUsage(cfg.Logger, msg, resp.Usage)
-	return msg, nil
-}
-
-func streamAssistantMessage(ctx context.Context, p provider.StreamingProvider, req *provider.ChatCompletionRequest, emitFn EventHandler, logger telemetry.Logger, turn int) (provider.ChatMessage, error) {
-	events, err := p.ChatCompletionStream(ctx, req)
-	if err != nil {
-		return provider.ChatMessage{}, fmt.Errorf("LLM stream failed at turn %d: %w", turn, err)
-	}
-
-	builder := newMessageBuilder()
-	started := false
-	var usage *provider.Usage
-	for event := range events {
-		if event.Err != nil {
-			return provider.ChatMessage{}, fmt.Errorf("LLM stream failed at turn %d: %w", turn, event.Err)
-		}
-		if event.Usage != nil {
-			usage = event.Usage
-		}
-		if event.Done {
-			break
-		}
-		updated := builder.Apply(event.Delta)
-		if !started {
-			started = true
-			if err := emit(ctx, emitFn, Event{Type: EventMessageStart, Turn: turn, Message: updated}); err != nil {
-				return provider.ChatMessage{}, err
-			}
-		}
-		if err := emit(ctx, emitFn, Event{Type: EventMessageUpdate, Turn: turn, Message: updated}); err != nil {
-			return provider.ChatMessage{}, err
-		}
-	}
-
-	msg := builder.Message()
-	if !started {
-		if err := emit(ctx, emitFn, Event{Type: EventMessageStart, Turn: turn, Message: msg}); err != nil {
-			return provider.ChatMessage{}, err
-		}
-	}
-	if err := emit(ctx, emitFn, Event{Type: EventMessageEnd, Turn: turn, Message: msg}); err != nil {
-		return provider.ChatMessage{}, err
-	}
-	logAssistantAndUsage(logger, msg, usage)
-	return msg, nil
-}
 
 type toolBatchResult struct {
 	messages  []provider.ChatMessage
@@ -411,7 +359,9 @@ func truncateResult(result string) string {
 	if len(result) <= maxResultSize {
 		return result
 	}
-	return result[:maxResultSize] + "\n... (truncated)"
+	return result[:maxResultSize] + fmt.Sprintf(
+		"\n\n[truncated: showing %d of %d bytes. Refine your query or use filter/parse tools to access specific parts.]",
+		maxResultSize, len(result))
 }
 
 func preview(value string, limit int) string {
@@ -470,12 +420,14 @@ func newConfig(opts ...Option) Config {
 	return normalizeConfig(cfg)
 }
 
+const defaultMaxRetries = 2
+
 func normalizeConfig(cfg Config) Config {
-	if cfg.MaxTurns <= 0 {
-		cfg.MaxTurns = 50
-	}
 	if cfg.Logger == nil {
 		cfg.Logger = telemetry.NopLogger()
+	}
+	if cfg.MaxRetries == 0 {
+		cfg.MaxRetries = defaultMaxRetries
 	}
 	return cfg
 }

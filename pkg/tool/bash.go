@@ -45,7 +45,7 @@ func (t *BashTool) Name() string { return "bash" }
 func (t *BashTool) Description() string {
 	desc := "Execute a shell command and return its output."
 	if t.interceptor != nil {
-		desc += " Also supports scanner pseudo-commands (scan, gogo, spray, zombie, neutron) - use them like normal CLI tools."
+		desc += " Also supports scanner pseudo-commands (scan, cyberhub, gogo, spray, zombie, neutron) - use them like normal CLI tools."
 	}
 	return desc
 }
@@ -61,7 +61,7 @@ func (t *BashTool) Definition() provider.ToolDefinition {
 				"properties": map[string]any{
 					"command": map[string]any{
 						"type":        "string",
-						"description": "The shell command to execute, or a scanner pseudo-command (e.g., 'scan -i 192.168.1.0/24', 'gogo -i 192.168.1.0/24 -p top100', 'spray -u http://target', 'zombie -i ssh://root@10.0.0.1:22 -p password')",
+						"description": "The shell command to execute, or a scanner pseudo-command (e.g., 'scan -i 192.168.1.0/24', 'cyberhub search poc nginx', 'gogo -i 192.168.1.0/24 -p top100', 'spray -u http://target', 'zombie -i ssh://root@10.0.0.1:22 -p password')",
 					},
 				},
 				"required": []string{"command"},
@@ -129,7 +129,9 @@ func (t *BashTool) execShell(ctx context.Context, cmdLine string) (string, error
 
 	output := sb.String()
 	if len(output) > maxOutputSize {
-		output = output[:maxOutputSize] + "\n... (output truncated)"
+		original := len(output)
+		output = output[:maxOutputSize] + fmt.Sprintf(
+			"\n\n[truncated: showing %d of %d bytes]", maxOutputSize, original)
 	}
 
 	if err != nil {
