@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chainreactors/ioa"
-	acpclient "github.com/chainreactors/ioa/client"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/provider"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tool"
+	"github.com/chainreactors/ioa"
+	acpclient "github.com/chainreactors/ioa/client"
 )
 
 type Config struct {
@@ -152,7 +152,7 @@ func (r *Runner) announceProfile(ctx context.Context, space ioa.SpaceInfo) error
 		"network":     r.networkProfile(),
 		"created_at":  time.Now().UTC().Format(time.RFC3339),
 	}
-	_, err := r.cfg.Client.Send(ctx, space.ID, content, nil)
+	_, err := r.cfg.Client.Send(ctx, space.ID, ioa.SendMessage{Content: content})
 	return err
 }
 
@@ -182,16 +182,18 @@ func (r *Runner) runHeartbeat(ctx context.Context, space ioa.SpaceInfo) error {
 		return err
 	}
 	r.cfg.Logger.Importantf("loop heartbeat=running space=%s", space.ID)
-	started, err := r.cfg.Client.Send(ctx, space.ID, map[string]any{
-		"type":             "heartbeat",
-		"status":           "started",
-		"node_id":          r.cfg.Client.NodeID(),
-		"node_name":        r.cfg.NodeName,
-		"space_id":         space.ID,
-		"space_name":       space.Name,
-		"interval_seconds": int(r.cfg.HeartbeatInterval.Seconds()),
-		"created_at":       time.Now().UTC().Format(time.RFC3339),
-	}, nil)
+	started, err := r.cfg.Client.Send(ctx, space.ID, ioa.SendMessage{
+		Content: map[string]any{
+			"type":             "heartbeat",
+			"status":           "started",
+			"node_id":          r.cfg.Client.NodeID(),
+			"node_name":        r.cfg.NodeName,
+			"space_id":         space.ID,
+			"space_name":       space.Name,
+			"interval_seconds": int(r.cfg.HeartbeatInterval.Seconds()),
+			"created_at":       time.Now().UTC().Format(time.RFC3339),
+		},
+	})
 	if err != nil {
 		return err
 	}
@@ -218,7 +220,10 @@ func (r *Runner) runHeartbeat(ctx context.Context, space ioa.SpaceInfo) error {
 		content["status"] = "error"
 		content["error"] = runErr.Error()
 	}
-	_, sendErr := r.cfg.Client.Send(ctx, space.ID, content, &ioa.Ref{Messages: []string{started.ID}})
+	_, sendErr := r.cfg.Client.Send(ctx, space.ID, ioa.SendMessage{
+		Content: content,
+		Refs:    &ioa.Ref{Messages: []string{started.ID}},
+	})
 	if runErr != nil {
 		return runErr
 	}
@@ -279,12 +284,15 @@ func (r *Runner) handleMessage(ctx context.Context, spaceID string, msg ioa.Mess
 	}
 	r.cfg.Logger.Importantf("loop task=received message=%s", msg.ID)
 
-	started, err := r.cfg.Client.Send(ctx, spaceID, map[string]any{
-		"type":    "status",
-		"status":  "started",
-		"task":    task,
-		"node_id": r.cfg.Client.NodeID(),
-	}, &ioa.Ref{Messages: []string{msg.ID}})
+	started, err := r.cfg.Client.Send(ctx, spaceID, ioa.SendMessage{
+		Content: map[string]any{
+			"type":    "status",
+			"status":  "started",
+			"task":    task,
+			"node_id": r.cfg.Client.NodeID(),
+		},
+		Refs: &ioa.Ref{Messages: []string{msg.ID}},
+	})
 	if err != nil {
 		return err
 	}
@@ -308,7 +316,10 @@ func (r *Runner) handleMessage(ctx context.Context, spaceID string, msg ioa.Mess
 	} else {
 		content["status"] = "done"
 	}
-	_, sendErr := r.cfg.Client.Send(ctx, spaceID, content, &ioa.Ref{Messages: []string{msg.ID, started.ID}})
+	_, sendErr := r.cfg.Client.Send(ctx, spaceID, ioa.SendMessage{
+		Content: content,
+		Refs:    &ioa.Ref{Messages: []string{msg.ID, started.ID}},
+	})
 	if runErr != nil {
 		return runErr
 	}

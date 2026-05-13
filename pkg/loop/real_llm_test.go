@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chainreactors/aiscan/pkg/provider"
+	"github.com/chainreactors/aiscan/pkg/tool"
 	"github.com/chainreactors/ioa"
 	acpclient "github.com/chainreactors/ioa/client"
 	ioaserver "github.com/chainreactors/ioa/server"
-	"github.com/chainreactors/aiscan/pkg/provider"
-	"github.com/chainreactors/aiscan/pkg/tool"
 )
 
 func TestRealLLMLoopRepliesThroughACP(t *testing.T) {
@@ -88,10 +88,12 @@ func TestRealLLMLoopRepliesThroughACP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hello, err := controller.Send(ctx, space.ID, map[string]any{
-		"type": "task",
-		"task": "Reply with exactly one word: loop",
-	}, nil)
+	hello, err := controller.Send(ctx, space.ID, ioa.SendMessage{
+		Content: map[string]any{
+			"type": "task",
+			"task": "Reply with exactly one word: loop",
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

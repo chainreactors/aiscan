@@ -33,7 +33,6 @@ func appConfig(option *Option, features runtimeFeatures, logger telemetry.Logger
 			CyberhubMode:        option.CyberhubMode,
 			VerificationEnabled: features.VerificationEnabled,
 			VerifyMinPriority:   verifyMinPriority(features.VerifyMinPriority),
-			VerifyMaxTurns:      defaultInt(DefaultVerifyTurns, 3),
 			VerifyTimeout:       defaultInt(DefaultVerifyTimeout, 120),
 		},
 		Tools: app.ToolConfig{

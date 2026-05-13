@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,9 +78,7 @@ func formatMarkdown(d *scanData) string {
 		for _, result := range sortedCopy(d.gogoResults, func(a, b *parsers.GOGOResult) bool {
 			return a.GetTarget() < b.GetTarget()
 		}) {
-			sb.WriteString("- ")
-			sb.WriteString(stripANSI(strings.TrimSpace(result.String())))
-			sb.WriteString("\n")
+			writeMarkdownEventLine(&sb, targetEvent(capGogoPortscan, "", newServiceTarget("", result)))
 		}
 	}
 
@@ -91,17 +90,7 @@ func formatMarkdown(d *scanData) string {
 			}
 			return a.URL < b.URL
 		}) {
-			sb.WriteString("- ")
-			sb.WriteString(endpoint.URL)
-			if endpoint.HostHeader != "" {
-				sb.WriteString(" host=")
-				sb.WriteString(endpoint.HostHeader)
-			}
-			if endpoint.Source != "" {
-				sb.WriteString(" source=")
-				sb.WriteString(endpoint.Source)
-			}
-			sb.WriteString("\n")
+			writeMarkdownEventLine(&sb, targetEvent(endpoint.Source, "", newWebTarget("", endpoint.URL, endpoint.HostHeader)))
 		}
 	}
 
@@ -113,11 +102,7 @@ func formatMarkdown(d *scanData) string {
 			if item.Result == nil {
 				continue
 			}
-			sb.WriteString("- ")
-			sb.WriteString(item.Capability)
-			sb.WriteString(" ")
-			sb.WriteString(stripANSI(strings.TrimSpace(item.Result.String())))
-			sb.WriteString("\n")
+			writeMarkdownEventLine(&sb, targetEvent(item.Capability, "", newWebProbeTarget("", item.Capability, "", item.Result)))
 		}
 	}
 
@@ -129,30 +114,24 @@ func formatMarkdown(d *scanData) string {
 			}
 			return a.Target < b.Target
 		}) {
-			sb.WriteString(fmt.Sprintf("- %s %s", finger.Target, finger.Name))
-			if finger.Source != "" {
-				sb.WriteString(" source=")
-				sb.WriteString(finger.Source)
-			}
-			sb.WriteString("\n")
+			writeMarkdownEventLine(&sb, findingEvent(finger.Source, fingerprintFinding{
+				Target:  finger.Target,
+				Fingers: []string{finger.Name},
+			}))
 		}
 	}
 
 	if len(d.zombieResults) > 0 {
 		sb.WriteString("\n## Weakpass Findings\n\n")
 		for _, result := range d.zombieResults {
-			sb.WriteString("- ")
-			sb.WriteString(stripANSI(strings.TrimSpace(result.Format(parsers.ZombieFormatWeakpassFinding))))
-			sb.WriteString("\n")
+			writeMarkdownEventLine(&sb, findingEvent(capZombieWeakpass, weakpassFinding{Result: result}))
 		}
 	}
 
 	if len(d.neutronMatches) > 0 {
 		sb.WriteString("\n## Vulnerability Findings\n\n")
 		for _, line := range sortedCopy(d.neutronMatches, func(a, b string) bool { return a < b }) {
-			sb.WriteString("- ")
-			sb.WriteString(line)
-			sb.WriteString("\n")
+			writeMarkdownEventLine(&sb, findingEvent(capNeutronPOC, vulnFinding{Message: line}))
 		}
 	}
 
@@ -163,41 +142,14 @@ func formatMarkdown(d *scanData) string {
 			right := b.Finding
 			return string(left.Status)+"|"+left.Target+"|"+left.OriginalKey < string(right.Status)+"|"+right.Target+"|"+right.OriginalKey
 		}) {
-			finding := item.Finding
-			sb.WriteString("- ")
-			sb.WriteString(string(finding.Status))
-			sb.WriteString(" priority=")
-			sb.WriteString(string(finding.OriginalPriority))
-			if finding.Target != "" {
-				sb.WriteString(" target=")
-				sb.WriteString(finding.Target)
-			}
-			if finding.OriginalKind != "" {
-				sb.WriteString(" finding=")
-				sb.WriteString(string(finding.OriginalKind))
-			}
-			if finding.Summary != "" {
-				sb.WriteString(" summary=")
-				sb.WriteString(finding.Summary)
-			}
-			if finding.Evidence != "" {
-				sb.WriteString(" evidence=")
-				sb.WriteString(finding.Evidence)
-			}
-			if item.Source != "" {
-				sb.WriteString(" source=")
-				sb.WriteString(item.Source)
-			}
-			sb.WriteString("\n")
+			writeMarkdownEventLine(&sb, findingEvent(item.Source, item.Finding))
 		}
 	}
 
 	if len(d.errors) > 0 {
 		sb.WriteString("\n## Errors\n\n")
 		for _, line := range sortedCopy(d.errors, func(a, b string) bool { return a < b }) {
-			sb.WriteString("- ")
-			sb.WriteString(line)
-			sb.WriteString("\n")
+			writeMarkdownEventLine(&sb, errorEventOf("scan", line))
 		}
 	}
 
@@ -242,7 +194,7 @@ func formatPlainText(d *scanData, fileLines []string) string {
 }
 
 func summaryLine(d *scanData, stats statsSnapshot) string {
-	return fmt.Sprintf("[scan] completed inputs=%d open=%d web=%d probes=%d fingerprints=%d weakpass=%d vulns=%d verified=%d errors=%d duration=%s\n",
+	return fmt.Sprintf("[scan] completed %d %d %d %d %d %d %d %d %d %s\n",
 		stats.Inputs,
 		len(d.gogoResults),
 		len(d.webEndpoints),
@@ -269,45 +221,61 @@ func sprayResultSortKey(item sprayObservation) string {
 }
 
 func formatTraceEvent(event pipelineEvent) string {
-	line := fmt.Sprintf("[scan:debug] action=%s", event.Action)
+	parts := []string{"[scan:debug]", string(event.Action)}
 	if event.Capability != "" {
-		line += " capability=" + event.Capability
+		parts = append(parts, event.Capability)
 	}
-	line += fmt.Sprintf(" kind=%s key=%q source=%s", event.Event.label(), event.Event.key(), event.Event.Source)
+	parts = append(parts, string(event.Event.label()))
+	if key := event.Event.key(); key != "" {
+		parts = append(parts, strconv.Quote(key))
+	}
+	if event.Event.Source != "" {
+		parts = append(parts, event.Event.Source)
+	}
 	switch target := event.Event.Target.(type) {
 	case scanTarget:
 		if target.Target != "" {
-			line += " target=" + target.Target
+			parts = append(parts, target.Target)
 		}
 	case serviceTarget:
 		if target.Result != nil {
-			line += " target=" + target.Result.GetTarget()
+			parts = append(parts, target.Result.GetTarget())
 		}
 	case webTarget:
 		if target.URL != "" {
-			line += " url=" + target.URL
+			parts = append(parts, target.URL)
 		}
 		if target.HostHeader != "" {
-			line += " host=" + target.HostHeader
+			parts = append(parts, target.HostHeader)
 		}
 	case webProbeTarget:
 		if target.Result != nil && target.Result.UrlString != "" {
-			line += " url=" + target.Result.UrlString
+			parts = append(parts, target.Result.UrlString)
 		}
 		if target.HostHeader != "" {
-			line += " host=" + target.HostHeader
+			parts = append(parts, target.HostHeader)
 		}
 	case pocTarget:
 		if target.Target != "" {
-			line += " target=" + target.Target
+			parts = append(parts, target.Target)
 		}
 	case weakpassTarget:
 		if target.Target.Address() != ":" {
-			line += " target=" + target.Target.Address()
+			parts = append(parts, target.Target.Address())
 		}
 	}
 	if event.Event.Kind == eventError && event.Event.Error.Message != "" {
-		line += " message=" + event.Event.Error.Message
+		parts = append(parts, event.Event.Error.Message)
 	}
-	return line
+	return strings.Join(parts, " ")
+}
+
+func writeMarkdownEventLine(sb *strings.Builder, event event) {
+	line := formatEventLine(event, outputOptions{})
+	if line == "" {
+		return
+	}
+	sb.WriteString("- ")
+	sb.WriteString(line)
+	sb.WriteString("\n")
 }

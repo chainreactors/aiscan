@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/chainreactors/parsers"
 	sdkzombie "github.com/chainreactors/sdk/zombie"
@@ -17,7 +18,7 @@ func (c *Command) runPortDiscoveryCapability(ctx context.Context, discovery disc
 	if target.Ports != "" {
 		ports = target.Ports
 	}
-	c.logger.Infof("scan capability=%s target=%s ports=%s", capGogoPortscan, target.Target, ports)
+	c.logger.Infof("scan %s %s %s", capGogoPortscan, target.Target, ports)
 	resultCh, err := gogoScanStream(ctx, c.engines.Gogo, gogoScanOptions{
 		Target:       target.Target,
 		Ports:        ports,
@@ -153,8 +154,12 @@ func (c *Command) runPOCCapability(ctx context.Context, flags flags, input targe
 			severity = tmpl.Info.Severity
 			name = tmpl.Info.Name
 		}
+		fields := []string{"[vuln]", target.Target}
+		fields = appendNonEmptyValue(fields, templateID)
+		fields = appendNonEmptyValue(fields, severity)
+		fields = appendNonEmptyValue(fields, name)
 		emit(findingEvent(capNeutronPOC, vulnFinding{
-			Message: fmt.Sprintf("[vuln] %s template=%s severity=%s name=%q", target.Target, templateID, severity, name),
+			Message: strings.Join(fields, " "),
 		}))
 	}
 }

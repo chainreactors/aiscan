@@ -15,8 +15,11 @@
 # vendor/
 .idea/
 bin/
+.tmp/
 *.stat
 *.db
 *.db-*
+*.sock.lock
+aiscan
 spray
 /pkg/scanner/resources/template.go

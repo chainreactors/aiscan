@@ -14,7 +14,6 @@ var (
 	DefaultCyberhubMode = "merge"
 
 	DefaultVerify        = "auto"
-	DefaultVerifyTurns   = ""
 	DefaultVerifyTimeout = ""
 
 	DefaultACPURL      = ""

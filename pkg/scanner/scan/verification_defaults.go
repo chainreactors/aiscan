@@ -13,9 +13,6 @@ func (c *Command) applyVerificationDefaults(flags *flags, args []string) {
 		}
 		flags.Verify = minPriority
 	}
-	if !hasFlag(args, "--verify-turns") && c.verification.MaxTurns > 0 {
-		flags.VerifyTurns = c.verification.MaxTurns
-	}
 	if !hasFlag(args, "--verify-timeout") && c.verification.Timeout > 0 {
 		flags.VerifyTimeout = c.verification.Timeout
 	}

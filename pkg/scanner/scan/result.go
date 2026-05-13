@@ -18,7 +18,7 @@ type webProbeResult struct {
 }
 
 func reportableSprayResult(result *parsers.SprayResult) bool {
-	return result != nil && result.ErrString == ""
+	return result != nil && result.IsValid && strings.TrimSpace(result.ErrString) == ""
 }
 
 type weakpassResult struct {

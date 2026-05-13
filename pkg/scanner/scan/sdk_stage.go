@@ -144,6 +144,9 @@ func sprayCheckStream(ctx context.Context, engine *spray.SprayEngine, opts spray
 			if result == nil {
 				continue
 			}
+			if !result.Success() {
+				continue
+			}
 			sprayResult, ok := result.Data().(*parsers.SprayResult)
 			if !ok || sprayResult == nil {
 				continue

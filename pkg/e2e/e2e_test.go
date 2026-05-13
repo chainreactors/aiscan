@@ -112,7 +112,6 @@ func TestAgentAutomaticWorkflowUsesScan(t *testing.T) {
 		ScannerDocs: reg.UsageDocs(),
 	})
 	a := agent.New(llm, tools,
-		agent.WithMaxTurns(3),
 		agent.WithSystemPrompt(systemPrompt),
 		agent.WithModel("test-model"),
 	)

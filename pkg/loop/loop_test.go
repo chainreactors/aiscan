@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chainreactors/aiscan/pkg/provider"
+	"github.com/chainreactors/aiscan/pkg/tool"
 	"github.com/chainreactors/ioa"
 	acpclient "github.com/chainreactors/ioa/client"
 	ioaserver "github.com/chainreactors/ioa/server"
-	"github.com/chainreactors/aiscan/pkg/provider"
-	"github.com/chainreactors/aiscan/pkg/tool"
 )
 
 func TestThreeLoopClientsCollaborateThroughACP(t *testing.T) {
@@ -78,10 +78,13 @@ func TestThreeLoopClientsCollaborateThroughACP(t *testing.T) {
 	}
 
 	for i, node := range workerNodes {
-		_, err := controller.Send(ctx, space.ID, map[string]any{
-			"type": "task",
-			"task": fmt.Sprintf("task-%d", i+1),
-		}, &ioa.Ref{Nodes: []string{node.ID}})
+		_, err := controller.Send(ctx, space.ID, ioa.SendMessage{
+			Content: map[string]any{
+				"type": "task",
+				"task": fmt.Sprintf("task-%d", i+1),
+			},
+			Refs: &ioa.Ref{Nodes: []string{node.ID}},
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,10 +166,12 @@ func TestThreeLoopClientsReplyToBroadcastHello(t *testing.T) {
 		}()
 	}
 
-	hello, err := controller.Send(ctx, space.ID, map[string]any{
-		"type": "task",
-		"task": "hello",
-	}, nil)
+	hello, err := controller.Send(ctx, space.ID, ioa.SendMessage{
+		Content: map[string]any{
+			"type": "task",
+			"task": "hello",
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,10 +298,12 @@ func TestLoopHeartbeatRunsAgentWithACPContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	note, err := controller.Send(ctx, space.ID, map[string]any{
-		"type": "note",
-		"text": "existing context",
-	}, nil)
+	note, err := controller.Send(ctx, space.ID, ioa.SendMessage{
+		Content: map[string]any{
+			"type": "note",
+			"text": "existing context",
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +356,7 @@ func TestLoopHeartbeatRunsAgentWithACPContext(t *testing.T) {
 				t.Fatal("provider did not receive heartbeat prompt")
 			}
 			prompt := tasks[len(tasks)-1]
-			for _, want := range []string{"ACP heartbeat", space.ID, note.ID, "existing context", "watch the case"} {
+			for _, want := range []string{"IOA heartbeat", space.ID, note.ID, "existing context", "watch the case"} {
 				if !strings.Contains(prompt, want) {
 					t.Fatalf("heartbeat prompt missing %q:\n%s", want, prompt)
 				}

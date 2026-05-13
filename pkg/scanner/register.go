@@ -3,6 +3,7 @@ package scanner
 import (
 	"fmt"
 
+	cyberhubcmd "github.com/chainreactors/aiscan/pkg/scanner/cyberhub"
 	"github.com/chainreactors/aiscan/pkg/scanner/engines"
 	gogocmd "github.com/chainreactors/aiscan/pkg/scanner/gogo"
 	neutroncmd "github.com/chainreactors/aiscan/pkg/scanner/neutron"
@@ -22,6 +23,9 @@ func RegisterAllWithLogger(reg *ScannerRegistry, engineSet *engines.Set, logger 
 	}
 	if engineSet == nil {
 		engineSet = &engines.Set{}
+	}
+	if engineSet.Resources != nil {
+		reg.Register(cyberhubcmd.New(engineSet.Resources))
 	}
 	if engineSet.Gogo != nil && engineSet.Spray != nil {
 		reg.Register(scan.New(engineSet, opts...))

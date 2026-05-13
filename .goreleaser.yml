@@ -37,6 +37,34 @@ builds:
     gcflags:
       - all=-trimpath={{.Env.GOPATH}}
 
+  - id: acp
+    main: ./cmd/acp
+    binary: "acp"
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    tags:
+      - forceposix
+      - osusergo
+      - netgo
+    ldflags:
+      - -s -w
+    asmflags:
+      - all=-trimpath={{.Env.GOPATH}}
+    gcflags:
+      - all=-trimpath={{.Env.GOPATH}}
+
 upx:
   - enabled: true
     goos: [linux, windows]
@@ -44,7 +72,15 @@ upx:
       - amd64
 
 archives:
-  - name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+  - id: aiscan
+    builds: [aiscan]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - binary
+
+  - id: acp
+    builds: [acp]
+    name_template: "acp_{{ .Os }}_{{ .Arch }}"
     formats:
       - binary
 

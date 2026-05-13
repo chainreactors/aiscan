@@ -125,6 +125,28 @@ func TestParseCLICyberhubModeRootAndPassthrough(t *testing.T) {
 	}
 }
 
+func TestParseCLICyberhubCommandPassthrough(t *testing.T) {
+	parsed, err := parseCLI([]string{
+		"--cyberhub-url", "http://hub:8080",
+		"cyberhub",
+		"search", "poc", "spring",
+		"--cyberhub-key", "HUBKEY",
+	})
+	if err != nil {
+		t.Fatalf("parseCLI() error = %v", err)
+	}
+	if parsed.Mode != runModeScanner {
+		t.Fatalf("mode = %s, want %s", parsed.Mode, runModeScanner)
+	}
+	wantArgs := []string{"cyberhub", "search", "poc", "spring"}
+	if !reflect.DeepEqual(parsed.ScannerArgs, wantArgs) {
+		t.Fatalf("scanner args = %#v, want %#v", parsed.ScannerArgs, wantArgs)
+	}
+	if parsed.Option.CyberhubURL != "http://hub:8080" || parsed.Option.CyberhubKey != "HUBKEY" {
+		t.Fatalf("scanner options = %#v", parsed.Option.ScannerOptions)
+	}
+}
+
 func TestParseCLIScannerRootArgsAfterPassthroughCommand(t *testing.T) {
 	parsed, err := parseCLI([]string{
 		"gogo",
@@ -203,6 +225,7 @@ func TestParseCLIAgentLoopFlag(t *testing.T) {
 		"-p", "scan localhost",
 		"-s", "aiscan",
 		"--space", "case-1",
+		"--heartbeat", "5",
 		"--llm-model", "gpt-4o",
 	})
 	if err != nil {
@@ -212,7 +235,7 @@ func TestParseCLIAgentLoopFlag(t *testing.T) {
 		t.Fatalf("mode = %s, want %s", parsed.Mode, runModeAgent)
 	}
 	opt := parsed.Option
-	if !opt.Debug || !opt.Loop || opt.Prompt != "scan localhost" || opt.Space != "case-1" || opt.Model != "gpt-4o" || opt.CyberhubMode != "override" {
+	if !opt.Debug || !opt.Loop || opt.Prompt != "scan localhost" || opt.Space != "case-1" || opt.Heartbeat != 5 || opt.Model != "gpt-4o" || opt.CyberhubMode != "override" {
 		t.Fatalf("option = %#v", opt)
 	}
 	if !reflect.DeepEqual(opt.Skills, []string{"aiscan"}) {
@@ -284,7 +307,7 @@ func TestAgentConsolePromptCommandRunsAgent(t *testing.T) {
 		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
 	llm := &fakeConsoleProvider{}
-	session := agent.New(llm, tool.NewToolRegistry(), agent.WithMaxTurns(1))
+	session := agent.New(llm, tool.NewToolRegistry())
 	repl := newAgentConsole(context.Background(), &Option{}, &app.App{Skills: store}, session)
 
 	if err := repl.executeArgs(context.Background(), []string{agentPromptCommandName, "hello"}); err != nil {
@@ -355,7 +378,6 @@ func TestAppConfigUsesCompiledDefaults(t *testing.T) {
 		DefaultCyberhubURL = "http://hub:8080"
 		DefaultCyberhubKey = "HUBKEY"
 		DefaultCyberhubMode = "override"
-		DefaultVerifyTurns = "7"
 		DefaultVerifyTimeout = "77"
 		DefaultACPURL = "http://acp:8765"
 		DefaultACPNodeID = "node-1"
@@ -373,7 +395,7 @@ func TestAppConfigUsesCompiledDefaults(t *testing.T) {
 		if cfg.Scanner.CyberhubURL != DefaultCyberhubURL || cfg.Scanner.CyberhubKey != DefaultCyberhubKey || cfg.Scanner.CyberhubMode != DefaultCyberhubMode {
 			t.Fatalf("scanner cyberhub config = %#v", cfg.Scanner)
 		}
-		if !cfg.Scanner.VerificationEnabled || cfg.Scanner.VerifyMinPriority != "critical" || cfg.Scanner.VerifyMaxTurns != 7 || cfg.Scanner.VerifyTimeout != 77 {
+		if !cfg.Scanner.VerificationEnabled || cfg.Scanner.VerifyMinPriority != "critical" || cfg.Scanner.VerifyTimeout != 77 {
 			t.Fatalf("scanner verification config = %#v", cfg.Scanner)
 		}
 		if !cfg.Provider.Enabled || !cfg.Provider.Optional {
@@ -396,7 +418,6 @@ func withDefaults(t *testing.T, fn func()) {
 	savedCyberhubKey := DefaultCyberhubKey
 	savedCyberhubMode := DefaultCyberhubMode
 	savedVerify := DefaultVerify
-	savedVerifyTurns := DefaultVerifyTurns
 	savedVerifyTimeout := DefaultVerifyTimeout
 	savedACPURL := DefaultACPURL
 	savedACPNodeID := DefaultACPNodeID
@@ -412,7 +433,6 @@ func withDefaults(t *testing.T, fn func()) {
 		DefaultCyberhubKey = savedCyberhubKey
 		DefaultCyberhubMode = savedCyberhubMode
 		DefaultVerify = savedVerify
-		DefaultVerifyTurns = savedVerifyTurns
 		DefaultVerifyTimeout = savedVerifyTimeout
 		DefaultACPURL = savedACPURL
 		DefaultACPNodeID = savedACPNodeID
