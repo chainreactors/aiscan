@@ -19,13 +19,13 @@ llm:
   # 访问 LLM API 的 HTTP proxy
   proxy: ""
 
-# 独立 Vision Provider 配置
+# Vision 配置
 vision:
-  enabled: true
-  provider: openai
-  base_url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+  enabled: false
+  provider: ""
+  base_url: ""
   api_key: ""
-  model: "qwen3.6-flash"
+  model: ""
   proxy: ""
 
 # Cyberhub 资源服务
