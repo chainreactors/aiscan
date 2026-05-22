@@ -12,6 +12,21 @@ import (
 
 const defaultConfigName = "config.yaml"
 
+func intOption(v int) *int           { return &v }
+func floatOption(v float64) *float64 { return &v }
+func intOptionValue(p *int) int {
+	if p != nil {
+		return *p
+	}
+	return 0
+}
+func floatOptionValue(p *float64) float64 {
+	if p != nil {
+		return *p
+	}
+	return 0
+}
+
 func newConfigLoader() *config.Config {
 	c := config.New("aiscan")
 	c.WithOptions(func(opt *config.Options) {
@@ -26,7 +41,27 @@ func LoadConfig(filename string, v interface{}) error {
 	if err := c.LoadFiles(filename); err != nil {
 		return err
 	}
-	return c.Decode(v)
+	if err := c.Decode(v); err != nil {
+		return err
+	}
+	applyExplicitReconNumericOptions(c, v)
+	return nil
+}
+
+func applyExplicitReconNumericOptions(c *config.Config, v interface{}) {
+	opt, ok := v.(*Option)
+	if !ok || opt == nil {
+		return
+	}
+	if c.Exists("recon.limit") {
+		opt.ReconLimit = intOption(c.Int("recon.limit"))
+	}
+	if c.Exists("recon.ani_depth") {
+		opt.AniDepth = intOption(c.Int("recon.ani_depth"))
+	}
+	if c.Exists("recon.ani_percent") {
+		opt.AniPercent = floatOption(c.Float("recon.ani_percent"))
+	}
 }
 
 func findDefaultConfigFile() string {
@@ -42,33 +77,36 @@ func findDefaultConfigFile() string {
 	return ""
 }
 
-func loadAndApplyConfig(option *Option) string {
+func loadAndApplyConfig(option *Option) (string, error) {
 	configPath := option.ConfigFile
 	if configPath == "" {
 		configPath = findDefaultConfigFile()
 	}
 	if configPath == "" {
-		return ""
+		return "", nil
 	}
 	if _, err := os.Stat(configPath); err != nil {
-		if option.ConfigFile != "" {
-			fmt.Fprintf(os.Stderr, "warning: config file not found: %s\n", configPath)
+		if option.ConfigFile == "" && os.IsNotExist(err) {
+			return "", nil
 		}
-		return ""
+		return "", fmt.Errorf("config file %s: %w", configPath, err)
 	}
 
 	var loaded Option
-	if err := LoadConfig(configPath, &loaded); err == nil {
-		mergeOption(option, &loaded)
-		loadScanDefaults(configPath)
+	if err := LoadConfig(configPath, &loaded); err != nil {
+		return configPath, fmt.Errorf("load config %s: %w", configPath, err)
 	}
-	return configPath
+	mergeOption(option, &loaded)
+	if err := loadScanDefaults(configPath); err != nil {
+		return configPath, fmt.Errorf("load scan defaults %s: %w", configPath, err)
+	}
+	return configPath, nil
 }
 
-func loadScanDefaults(filename string) {
+func loadScanDefaults(filename string) error {
 	c := newConfigLoader()
 	if err := c.LoadFiles(filename); err != nil {
-		return
+		return err
 	}
 	if v := c.String("scan.verify"); v != "" {
 		DefaultVerify = v
@@ -76,6 +114,7 @@ func loadScanDefaults(filename string) {
 	if v := c.Int("scan.verify_timeout"); v > 0 {
 		DefaultVerifyTimeout = strconv.Itoa(v)
 	}
+	return nil
 }
 
 func mergeOption(dst, src *Option) {
@@ -88,6 +127,24 @@ func mergeOption(dst, src *Option) {
 	dst.CyberhubURL = resolveString(dst.CyberhubURL, src.CyberhubURL)
 	dst.CyberhubKey = resolveString(dst.CyberhubKey, src.CyberhubKey)
 	dst.CyberhubMode = resolveString(dst.CyberhubMode, src.CyberhubMode)
+	dst.FofaEmail = resolveString(dst.FofaEmail, src.FofaEmail)
+	dst.FofaKey = resolveString(dst.FofaKey, src.FofaKey)
+	dst.HunterToken = resolveString(dst.HunterToken, src.HunterToken)
+	dst.HunterAPIKey = resolveString(dst.HunterAPIKey, src.HunterAPIKey)
+	dst.ReconProxy = resolveString(dst.ReconProxy, src.ReconProxy)
+	if dst.ReconLimit == nil && src.ReconLimit != nil {
+		dst.ReconLimit = src.ReconLimit
+	}
+	if dst.AniDepth == nil && src.AniDepth != nil {
+		dst.AniDepth = src.AniDepth
+	}
+	if dst.AniPercent == nil && src.AniPercent != nil {
+		dst.AniPercent = src.AniPercent
+	}
+	dst.AniProxy = resolveString(dst.AniProxy, src.AniProxy)
+	dst.AniTycToken = resolveString(dst.AniTycToken, src.AniTycToken)
+	dst.AniQccCookie = resolveString(dst.AniQccCookie, src.AniQccCookie)
+	dst.AniAqcCookie = resolveString(dst.AniAqcCookie, src.AniAqcCookie)
 	dst.ScannerOptions.Proxy = resolveString(dst.ScannerOptions.Proxy, src.ScannerOptions.Proxy)
 	dst.IOAURL = resolveString(dst.IOAURL, src.IOAURL)
 	dst.IOANodeName = resolveString(dst.IOANodeName, src.IOANodeName)
@@ -161,6 +218,24 @@ ioa:
   db: ""
   node_name: ""
   space: ""
+
+# 资产测绘 (Ina / Ani, 通过 ina-go / ani-go SDK)
+# FOFA 凭证从此处或环境变量 FOFA_EMAIL / FOFA_KEY 读取
+# Ani (aqc_unauth) 不需要凭证, depth/percent 控制投资链路递归
+recon:
+  fofa_email: ""
+  fofa_key: ""
+  hunter_token: ""    # 极少用; Hunter web 端 token
+  hunter_api_key: ""  # 华顺信安后台 API 管理生成的 64 位 hex key
+  proxy: ""           # 出站代理 (Hunter 屏蔽境外 IP, 中国 VPS 走 socks5://host:1080)
+  limit: 0            # 单次查询最多返回多少 asset, 0 = 不限
+  ani_depth: 1      # 子公司递归深度
+  ani_percent: 0.5  # 子公司入选最小持股比例 (0-1)
+  ani_proxy: ""     # Ani 的 HTTP proxy
+  # Phase 2 source 凭证 (留空时对应源不注册; aqc_unauth / tyc_unauth 不需要)
+  ani_tyc_token: ""    # 天眼查 auth_token JWT (用于 tyc 源, 也可设 env ANI_TYC_TOKEN)
+  ani_qcc_cookie: ""   # 企查查 QCCSESSID cookie (用于 qcc 源, 也可设 env ANI_QCC_COOKIE)
+  ani_aqc_cookie: ""   # 爱企查 BAIDUID cookie (用于 aqc 源, 也可设 env ANI_AQC_COOKIE)
 
 # 扫描默认值
 scan:

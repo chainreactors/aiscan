@@ -3,6 +3,7 @@ package cmd
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -33,17 +34,32 @@ func appConfig(option *Option, features runtimeFeatures, logger telemetry.Logger
 			Config:  visionProviderConfig(option),
 		},
 		Scanner: app.ScannerConfig{
-			CyberhubURL:  option.CyberhubURL,
-			CyberhubKey:  option.CyberhubKey,
-			CyberhubMode: option.CyberhubMode,
-			AIEnabled:    features.AIEnabled,
-			AITimeout:    defaultInt(DefaultVerifyTimeout, 120),
-			Proxy:        option.ScannerOptions.Proxy,
+			CyberhubURL:   option.CyberhubURL,
+			CyberhubKey:   option.CyberhubKey,
+			CyberhubMode:  option.CyberhubMode,
+			AIEnabled:     features.AIEnabled,
+			AITimeout:     defaultInt(DefaultVerifyTimeout, 120),
+			Proxy:         option.ScannerOptions.Proxy,
+			FofaEmail:     resolveString(option.FofaEmail, os.Getenv("FOFA_EMAIL")),
+			FofaKey:       resolveString(option.FofaKey, os.Getenv("FOFA_KEY")),
+			HunterToken:   resolveString(option.HunterToken, os.Getenv("HUNTER_TOKEN")),
+			HunterAPIKey:  resolveString(option.HunterAPIKey, os.Getenv("HUNTER_API_KEY")),
+			ReconProxy:    resolveString(option.ReconProxy, os.Getenv("RECON_PROXY")),
+			ReconLimit:    intOptionValue(option.ReconLimit),
+			AniDepth:      intOptionValue(option.AniDepth),
+			AniDepthSet:   option.AniDepth != nil,
+			AniPercent:    floatOptionValue(option.AniPercent),
+			AniPercentSet: option.AniPercent != nil,
+			AniProxy:      option.AniProxy,
+			AniTycToken:   resolveString(option.AniTycToken, os.Getenv("ANI_TYC_TOKEN")),
+			AniQccCookie:  resolveString(option.AniQccCookie, os.Getenv("ANI_QCC_COOKIE")),
+			AniAqcCookie:  resolveString(option.AniAqcCookie, os.Getenv("ANI_AQC_COOKIE")),
 		},
 		Tools: app.ToolConfig{
 			Enabled:       features.ToolsEnabled,
 			BashTimeout:   300,
 			VisionEnabled: visionEnabled(option),
+			TavilyKeys:    DefaultTavilyKeys,
 		},
 		Logger: logger,
 	}

@@ -3,7 +3,10 @@ package tools
 import (
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
+	anicmd "github.com/chainreactors/aiscan/pkg/tools/ani"
 	gogocmd "github.com/chainreactors/aiscan/pkg/tools/gogo"
+	inacmd "github.com/chainreactors/aiscan/pkg/tools/ina"
+	katanacmd "github.com/chainreactors/aiscan/pkg/tools/katana"
 	neutroncmd "github.com/chainreactors/aiscan/pkg/tools/neutron"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
@@ -15,6 +18,8 @@ func init() {
 	command.RegisterFactory(command.Factory{
 		Group: "scanner",
 		Build: func(deps *command.Deps, reg *command.CommandRegistry) {
+			reg.Register(katanacmd.New(), "scanner")
+
 			es, _ := deps.EngineSet.(*engine.Set)
 			if es == nil {
 				return
@@ -24,6 +29,22 @@ func init() {
 				logger = telemetry.NopLogger()
 			}
 			proxy := deps.ScannerProxy
+
+			if es.Ani != nil {
+				reg.Register(anicmd.New(es.Ani).WithLogger(logger).WithDefaults(anicmd.Defaults{
+					Depth:      es.Recon.AniDepth,
+					DepthSet:   es.Recon.AniDepthSet,
+					Percent:    es.Recon.AniPercent,
+					PercentSet: es.Recon.AniPercentSet,
+					Proxy:      es.Recon.AniProxy,
+					TycToken:   es.Recon.AniTycToken,
+					QccCookie:  es.Recon.AniQccCookie,
+					AqcCookie:  es.Recon.AniAqcCookie,
+				}), "scanner")
+			}
+			if es.Ina != nil {
+				reg.Register(inacmd.New(es.Ina).WithLogger(logger), "scanner")
+			}
 
 			var scanOpts []scan.Option
 			for _, o := range deps.ScanOpts {

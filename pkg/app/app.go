@@ -37,18 +37,33 @@ type ProviderConfig struct {
 }
 
 type ScannerConfig struct {
-	CyberhubURL  string
-	CyberhubKey  string
-	CyberhubMode string
-	AIEnabled    bool
-	AITimeout    int
-	Proxy        string
+	CyberhubURL   string
+	CyberhubKey   string
+	CyberhubMode  string
+	AIEnabled     bool
+	AITimeout     int
+	Proxy         string
+	FofaEmail     string
+	FofaKey       string
+	HunterToken   string
+	HunterAPIKey  string
+	ReconProxy    string
+	ReconLimit    int
+	AniDepth      int
+	AniDepthSet   bool
+	AniPercent    float64
+	AniPercentSet bool
+	AniProxy      string
+	AniTycToken   string
+	AniQccCookie  string
+	AniAqcCookie  string
 }
 
 type ToolConfig struct {
 	Enabled       bool
 	BashTimeout   int
 	VisionEnabled bool
+	TavilyKeys    string // comma-separated Tavily API keys (build-time fallback)
 }
 
 type IOAConfig struct {
@@ -171,6 +186,24 @@ func initEngines(ctx context.Context, cfg ScannerConfig, logger telemetry.Logger
 		logger.Warnf("scanner engines init error=%q action=continue_without_scanners", err)
 		return nil
 	}
+	recon := engine.ReconOptions{
+		FofaEmail:     cfg.FofaEmail,
+		FofaKey:       cfg.FofaKey,
+		HunterToken:   cfg.HunterToken,
+		HunterAPIKey:  cfg.HunterAPIKey,
+		IngressProxy:  cfg.ReconProxy,
+		Limit:         cfg.ReconLimit,
+		AniDepth:      cfg.AniDepth,
+		AniDepthSet:   cfg.AniDepthSet,
+		AniPercent:    cfg.AniPercent,
+		AniPercentSet: cfg.AniPercentSet,
+		AniProxy:      cfg.AniProxy,
+		AniTycToken:   cfg.AniTycToken,
+		AniQccCookie:  cfg.AniQccCookie,
+		AniAqcCookie:  cfg.AniAqcCookie,
+	}
+	engineSet.SetupIna(recon, logger)
+	engineSet.SetupAni(recon, logger)
 	return engineSet
 }
 
@@ -222,6 +255,7 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 		ScanOpts:     scanOpts,
 		Logger:       logger,
 		Model:        model,
+		TavilyKeys:   toolCfg.TavilyKeys,
 	}
 	if engineSet != nil {
 		deps.Resources = engineSet.Resources
@@ -290,7 +324,7 @@ func scanVerifyBlocksCommand(commandLine string) bool {
 
 func isScanVerifyBlockedCommand(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "scan", "gogo", "spray", "zombie", "neutron":
+	case "scan", "ani", "ina", "gogo", "spray", "zombie", "neutron":
 		return true
 	default:
 		return false
@@ -329,4 +363,3 @@ func newIOAClient(cfg IOAConfig) (ioaclient.API, error) {
 	}
 	return ioaclient.NewClient(cfg.URL, cfg.NodeID)
 }
-

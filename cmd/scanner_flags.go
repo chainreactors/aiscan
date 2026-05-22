@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"strings"
 
+	anicmd "github.com/chainreactors/aiscan/pkg/tools/ani"
 	cyberhubcmd "github.com/chainreactors/aiscan/pkg/tools/cyberhub"
+	inacmd "github.com/chainreactors/aiscan/pkg/tools/ina"
+	katanacmd "github.com/chainreactors/aiscan/pkg/tools/katana"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
 )
 
@@ -24,12 +27,18 @@ func staticScannerUsage(name string) (string, bool) {
 	switch name {
 	case "scan":
 		return scan.Usage(), true
+	case "ani":
+		return anicmd.New(nil).Usage(), true
+	case "ina":
+		return inacmd.New(nil).Usage(), true
 	case "cyberhub":
 		return cyberhubcmd.Usage(), true
 	case "gogo":
 		return "gogo - host, port, service, and banner discovery\nUsage: gogo [options]\n", true
 	case "spray":
 		return "spray - web probing, fingerprints, common files, and crawl checks\nUsage: spray [options]\n", true
+	case "katana":
+		return katanacmd.New().Usage(), true
 	case "zombie":
 		return "zombie - weak credential checks for supported services\nUsage: zombie [options]\n", true
 	case "neutron":

@@ -25,7 +25,23 @@ type Option struct {
 	ScannerOptions `group:"Scanner Options" config:"cyberhub"`
 	AgentOptions   `group:"Agent Options" config:"agent"`
 	IOAOptions     `group:"IOA Options" config:"ioa"`
+	ReconOptions   `group:"Recon Options" config:"recon"`
 	MiscOptions    `group:"Miscellaneous Options" config:"misc"`
+}
+
+type ReconOptions struct {
+	FofaEmail    string   `long:"fofa-email" config:"fofa_email" description:"FOFA account email for ina recon (or set env FOFA_EMAIL)"`
+	FofaKey      string   `long:"fofa-key" config:"fofa_key" description:"FOFA API key for ina recon (or set env FOFA_KEY)"`
+	HunterToken  string   `long:"hunter-token" config:"hunter_token" description:"Hunter web token (rarely needed; prefer hunter-api-key)"`
+	HunterAPIKey string   `long:"hunter-api-key" config:"hunter_api_key" description:"Hunter API key (64-hex from console) (or env HUNTER_API_KEY)"`
+	ReconProxy   string   `long:"recon-proxy" config:"proxy" description:"Outbound proxy for ina recon (socks5://host:port for hunter via mainland)"`
+	ReconLimit   *int     `long:"recon-limit" config:"limit" description:"Per-query asset limit for ina recon (0 = unlimited)"`
+	AniDepth     *int     `long:"ani-depth" config:"ani_depth" description:"Subsidiary recursion depth for ani recon"`
+	AniPercent   *float64 `long:"ani-percent" config:"ani_percent" description:"Min ownership ratio to follow subsidiaries (0-1)"`
+	AniProxy     string   `long:"ani-proxy" config:"ani_proxy" description:"HTTP proxy for ani recon"`
+	AniTycToken  string   `long:"ani-tyc-token" config:"ani_tyc_token" description:"Tianyancha auth_token JWT for ani tyc source"`
+	AniQccCookie string   `long:"ani-qcc-cookie" config:"ani_qcc_cookie" description:"Qichacha QCCSESSID cookie for ani qcc source"`
+	AniAqcCookie string   `long:"ani-aqc-cookie" config:"ani_aqc_cookie" description:"Aiqicha BAIDUID cookie for ani aqc auth source"`
 }
 
 type LLMOptions struct {
@@ -54,13 +70,14 @@ type ScannerOptions struct {
 }
 
 type AgentOptions struct {
-	Prompt    string   `short:"p" long:"prompt" description:"Natural language task for the agent"`
-	Inputs    []string `short:"i" long:"input" description:"Target input: IP, URL, IP:port, or CIDR. Can specify multiple"`
-	Skills    []string `short:"s" long:"skill" description:"Embedded skill to apply. Can specify multiple"`
-	TaskFile  string   `long:"task-file" description:"File containing task description"`
-	Loop      bool     `long:"loop" description:"Run as an IOA loop worker instead of local agent mode"`
-	Heartbeat int      `long:"heartbeat" description:"Run an IOA heartbeat agent turn every N minutes in agent --loop (0 disables)" default:"0"`
-	Timeout   int      `long:"timeout" config:"timeout" description:"Overall timeout in seconds" default:"3600"`
+	Prompt     string   `short:"p" long:"prompt" description:"Natural language task for the agent"`
+	Inputs     []string `short:"i" long:"input" description:"Target input: IP, URL, IP:port, or CIDR. Can specify multiple"`
+	Skills     []string `short:"s" long:"skill" description:"Embedded skill to apply. Can specify multiple"`
+	TaskFile   string   `long:"task-file" description:"File containing task description"`
+	Loop       bool     `long:"loop" description:"Run as an IOA loop worker instead of local agent mode"`
+	Heartbeat  int      `long:"heartbeat" description:"Run an IOA heartbeat agent turn every N minutes in agent --loop (0 disables)" default:"0"`
+	Timeout    int      `long:"timeout" config:"timeout" description:"Overall timeout in seconds" default:"3600"`
+	EventsFile string   `long:"events-file" description:"Write agent events to JSONL file"`
 }
 
 type IOAOptions struct {
@@ -92,8 +109,11 @@ type cliOptions struct {
 	Cyberhub struct{}   `command:"cyberhub" description:"Search Cyberhub fingerprints and POCs"`
 	Gogo     struct{}   `command:"gogo" description:"Run gogo scanner"`
 	Spray    struct{}   `command:"spray" description:"Run spray scanner"`
+	Katana   struct{}   `command:"katana" description:"Run katana web crawler"`
 	Zombie   struct{}   `command:"zombie" description:"Run zombie weakpass scanner"`
 	Neutron  struct{}   `command:"neutron" description:"Run neutron POC scanner"`
+	Ina      struct{}   `command:"ina" description:"Run ina asset recon"`
+	Ani      struct{}   `command:"ani" description:"Run ani enterprise recon"`
 }
 
 type ioaCommand struct {
@@ -180,17 +200,31 @@ func AiScan() {
 		return
 	}
 	if parsed.Mode == runModeNoCommand {
-		fmt.Fprintln(os.Stderr, "error: missing subcommand: use agent, ioa serve, scan, cyberhub, gogo, spray, zombie, or neutron")
+		fmt.Fprintln(os.Stderr, "error: missing subcommand: use agent, ioa serve, scan, cyberhub, gogo, spray, katana, zombie, neutron, ina, or ani")
 		os.Exit(1)
 	}
 
-	if cfgPath := loadAndApplyConfig(&option); cfgPath != "" && option.Debug {
+	cfgPath, err := loadAndApplyConfig(&option)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		os.Exit(1)
+	}
+	if cfgPath != "" && option.Debug {
 		fmt.Fprintf(os.Stderr, "loaded config: %s\n", cfgPath)
 	}
 	applyDefaults(&option)
 	logger := telemetry.GlobalLogger(telemetry.LogConfig{Debug: option.Debug, Quiet: option.Quiet, Output: os.Stderr, Color: !option.NoColor})
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(option.Timeout)*time.Second)
+	var (
+		ctx    context.Context
+		cancel context.CancelFunc
+	)
+	if parsed.Mode == runModeIOAServe {
+		// ioa serve is a long-running daemon; do not inherit the agent timeout.
+		ctx, cancel = context.WithCancel(context.Background())
+	} else {
+		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(option.Timeout)*time.Second)
+	}
 	defer cancel()
 
 	setupSignalHandler(cancel, logger)
@@ -322,6 +356,7 @@ func mergeManualScannerOptions(option *Option, manual Option) {
 	option.CyberhubURL = resolveString(manual.CyberhubURL, option.CyberhubURL)
 	option.CyberhubKey = resolveString(manual.CyberhubKey, option.CyberhubKey)
 	option.CyberhubMode = resolveString(manual.CyberhubMode, option.CyberhubMode)
+	mergeReconOptions(option, &manual)
 	option.ScannerOptions.Proxy = resolveString(manual.ScannerOptions.Proxy, option.ScannerOptions.Proxy)
 	if manual.NoColor {
 		option.NoColor = true
@@ -331,6 +366,27 @@ func mergeManualScannerOptions(option *Option, manual Option) {
 	if len(manual.Skills) > 0 {
 		option.Skills = append(option.Skills, manual.Skills...)
 	}
+}
+
+func mergeReconOptions(option, manual *Option) {
+	option.FofaEmail = resolveString(manual.FofaEmail, option.FofaEmail)
+	option.FofaKey = resolveString(manual.FofaKey, option.FofaKey)
+	option.HunterToken = resolveString(manual.HunterToken, option.HunterToken)
+	option.HunterAPIKey = resolveString(manual.HunterAPIKey, option.HunterAPIKey)
+	option.ReconProxy = resolveString(manual.ReconProxy, option.ReconProxy)
+	if manual.ReconLimit != nil {
+		option.ReconLimit = manual.ReconLimit
+	}
+	if manual.AniDepth != nil {
+		option.AniDepth = manual.AniDepth
+	}
+	if manual.AniPercent != nil {
+		option.AniPercent = manual.AniPercent
+	}
+	option.AniProxy = resolveString(manual.AniProxy, option.AniProxy)
+	option.AniTycToken = resolveString(manual.AniTycToken, option.AniTycToken)
+	option.AniQccCookie = resolveString(manual.AniQccCookie, option.AniQccCookie)
+	option.AniAqcCookie = resolveString(manual.AniAqcCookie, option.AniAqcCookie)
 }
 
 func newCLIParser(cli *cliOptions, options goflags.Options) *goflags.Parser {
@@ -347,8 +403,11 @@ Commands:
 Advanced scanners:
   gogo           Run gogo directly
   spray          Run spray directly
+  katana         Run katana web crawler
   zombie         Run zombie directly
   neutron        Run neutron directly
+  ina            Run ina asset recon
+  ani            Run ani enterprise recon
 
 Infrastructure:
   cyberhub       Search Cyberhub fingerprints and POCs
@@ -463,6 +522,30 @@ var scannerKnownFlags = []knownFlag{
 	{names: []string{"--vision-api-key"}, arity: 1, apply: func(o *Option, v string) { o.VisionAPIKey = v }},
 	{names: []string{"--vision-model"}, arity: 1, apply: func(o *Option, v string) { o.VisionModel = v }},
 	{names: []string{"--vision-proxy"}, arity: 1, apply: func(o *Option, v string) { o.VisionProxy = v }},
+	{names: []string{"--fofa-email"}, arity: 1, apply: func(o *Option, v string) { o.FofaEmail = v }},
+	{names: []string{"--fofa-key"}, arity: 1, apply: func(o *Option, v string) { o.FofaKey = v }},
+	{names: []string{"--hunter-token"}, arity: 1, apply: func(o *Option, v string) { o.HunterToken = v }},
+	{names: []string{"--hunter-api-key"}, arity: 1, apply: func(o *Option, v string) { o.HunterAPIKey = v }},
+	{names: []string{"--recon-proxy"}, arity: 1, apply: func(o *Option, v string) { o.ReconProxy = v }},
+	{names: []string{"--recon-limit"}, arity: 1, apply: func(o *Option, v string) {
+		if n, e := strconv.Atoi(v); e == nil {
+			o.ReconLimit = &n
+		}
+	}},
+	{names: []string{"--ani-depth"}, arity: 1, apply: func(o *Option, v string) {
+		if n, e := strconv.Atoi(v); e == nil {
+			o.AniDepth = &n
+		}
+	}},
+	{names: []string{"--ani-percent"}, arity: 1, apply: func(o *Option, v string) {
+		if f, e := strconv.ParseFloat(v, 64); e == nil {
+			o.AniPercent = &f
+		}
+	}},
+	{names: []string{"--ani-proxy"}, arity: 1, apply: func(o *Option, v string) { o.AniProxy = v }},
+	{names: []string{"--ani-tyc-token"}, arity: 1, apply: func(o *Option, v string) { o.AniTycToken = v }},
+	{names: []string{"--ani-qcc-cookie"}, arity: 1, apply: func(o *Option, v string) { o.AniQccCookie = v }},
+	{names: []string{"--ani-aqc-cookie"}, arity: 1, apply: func(o *Option, v string) { o.AniAqcCookie = v }},
 	{names: []string{"--heartbeat"}, arity: 1, apply: func(o *Option, v string) {
 		if n, e := strconv.Atoi(v); e == nil && n >= 0 {
 			o.Heartbeat = n
@@ -507,7 +590,7 @@ func argsAfterCommand(args []string, command string) []string {
 
 func isScannerCommandName(name string) bool {
 	switch name {
-	case "scan", "cyberhub", "gogo", "spray", "zombie", "neutron":
+	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "ina", "ani":
 		return true
 	}
 	return false
@@ -537,7 +620,7 @@ func selectedMode(parser *goflags.Parser) runMode {
 		return runModeAgent
 	case "serve":
 		return runModeIOAServe
-	case "scan", "cyberhub", "gogo", "spray", "zombie", "neutron":
+	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "ina", "ani":
 		return runModeScanner
 	}
 	return runModeNoCommand
@@ -564,7 +647,7 @@ func selectedScanner(parser *goflags.Parser) string {
 		return ""
 	}
 	switch active.Name {
-	case "scan", "cyberhub", "gogo", "spray", "zombie", "neutron":
+	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "ina", "ani":
 		return active.Name
 	}
 	return ""
@@ -715,7 +798,7 @@ func isDirectScannerCommand(rest []string) bool {
 		return false
 	}
 	switch rest[0] {
-	case "scan", "cyberhub", "gogo", "spray", "zombie", "neutron":
+	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "ina", "ani":
 		return true
 	}
 	return false

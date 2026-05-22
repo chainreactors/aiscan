@@ -134,6 +134,54 @@ ioa:
 	}
 }
 
+func TestLoadConfigReconNumericZeroIsExplicit(t *testing.T) {
+	dir := t.TempDir()
+	writeTestConfig(t, dir, `
+recon:
+  limit: 0
+  ani_depth: 0
+  ani_percent: 0
+`)
+
+	var opt Option
+	if err := LoadConfig(filepath.Join(dir, "config.yaml"), &opt); err != nil {
+		t.Fatal(err)
+	}
+	if opt.ReconLimit == nil || *opt.ReconLimit != 0 {
+		t.Fatalf("ReconLimit = %#v, want explicit 0", opt.ReconLimit)
+	}
+	if opt.AniDepth == nil || *opt.AniDepth != 0 {
+		t.Fatalf("AniDepth = %#v, want explicit 0", opt.AniDepth)
+	}
+	if opt.AniPercent == nil || *opt.AniPercent != 0 {
+		t.Fatalf("AniPercent = %#v, want explicit 0", opt.AniPercent)
+	}
+}
+
+func TestMergeOptionReconExplicitZeroWins(t *testing.T) {
+	zeroInt := 0
+	zeroFloat := 0.0
+	cfgLimit := 10
+	cfgDepth := 2
+	cfgPercent := 0.5
+	dst := Option{ReconOptions: ReconOptions{
+		ReconLimit: &zeroInt,
+		AniDepth:   &zeroInt,
+		AniPercent: &zeroFloat,
+	}}
+	src := Option{ReconOptions: ReconOptions{
+		ReconLimit: &cfgLimit,
+		AniDepth:   &cfgDepth,
+		AniPercent: &cfgPercent,
+	}}
+
+	mergeOption(&dst, &src)
+
+	if *dst.ReconLimit != 0 || *dst.AniDepth != 0 || *dst.AniPercent != 0 {
+		t.Fatalf("explicit zero was overwritten: %#v", dst.ReconOptions)
+	}
+}
+
 // TestLoadConfigEmptyFieldsAreZero verifies empty YAML values don't produce
 // non-empty Go strings.
 func TestLoadConfigEmptyFieldsAreZero(t *testing.T) {
@@ -351,7 +399,9 @@ scan:
 		DefaultVerifyTimeout = origTimeout
 	}()
 
-	loadScanDefaults(filepath.Join(dir, "config.yaml"))
+	if err := loadScanDefaults(filepath.Join(dir, "config.yaml")); err != nil {
+		t.Fatal(err)
+	}
 
 	if DefaultVerify != "critical" {
 		t.Errorf("DefaultVerify: got %q, want %q", DefaultVerify, "critical")
@@ -375,7 +425,10 @@ llm:
 	defer os.Chdir(origDir)
 
 	option := Option{}
-	path := loadAndApplyConfig(&option)
+	path, err := loadAndApplyConfig(&option)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if path == "" {
 		t.Fatal("expected config.yaml to be found")
@@ -408,7 +461,10 @@ llm:
 
 	option := Option{}
 	option.ConfigFile = customPath
-	path := loadAndApplyConfig(&option)
+	path, err := loadAndApplyConfig(&option)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if path != customPath {
 		t.Errorf("path: got %q, want %q", path, customPath)
@@ -419,6 +475,41 @@ llm:
 	// model not in custom config → stays empty (default config NOT loaded)
 	if option.Model != "" {
 		t.Errorf("Model: got %q, want empty (-c replaces default config, not merges)", option.Model)
+	}
+}
+
+func TestLoadAndApplyConfigRejectsMalformedFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("llm:\n  provider: [\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	option := Option{}
+	option.ConfigFile = path
+	gotPath, err := loadAndApplyConfig(&option)
+	if err == nil {
+		t.Fatal("expected malformed config to return an error")
+	}
+	if gotPath != path {
+		t.Errorf("path: got %q, want %q", gotPath, path)
+	}
+	if option.Provider != "" {
+		t.Errorf("Provider: got %q, want empty after failed config load", option.Provider)
+	}
+}
+
+func TestLoadAndApplyConfigRejectsMissingExplicitFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing.yaml")
+	option := Option{}
+	option.ConfigFile = path
+
+	gotPath, err := loadAndApplyConfig(&option)
+	if err == nil {
+		t.Fatal("expected missing explicit config to return an error")
+	}
+	if gotPath != "" {
+		t.Errorf("path: got %q, want empty", gotPath)
 	}
 }
 
@@ -474,7 +565,9 @@ cyberhub:
 	option.Provider = "cli-provider"
 
 	// Step 1: config loading
-	loadAndApplyConfig(&option)
+	if _, err := loadAndApplyConfig(&option); err != nil {
+		t.Fatal(err)
+	}
 	// Step 2: apply build defaults
 	applyDefaults(&option)
 

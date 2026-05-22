@@ -1,17 +1,19 @@
 module github.com/chainreactors/aiscan
 
-go 1.24.0
+go 1.26.3
 
 require (
+	github.com/chainreactors/ani-go v0.0.0-00010101000000-000000000000
 	github.com/chainreactors/fingers v1.2.1-0.20260520032008-600244212842
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260508165113-815356852650
+	github.com/chainreactors/ina-go v0.0.0-00010101000000-000000000000
 	github.com/chainreactors/ioa v0.0.0-20260513035847-c8c38592b651
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
-	github.com/chainreactors/neutron v0.0.0-20260416083914-f95401f2b79c
+	github.com/chainreactors/neutron v0.0.0-20260519161201-b0482d8bb58b
 	github.com/chainreactors/parsers v0.0.0-20260516032912-27875cfb3372
 	github.com/chainreactors/proxyclient v1.0.4-0.20260218115902-74a84a4535b0
 	github.com/chainreactors/sdk v0.1.1-0.20260516033200-1c5d96f7cfb6
-	github.com/chainreactors/spray v1.2.6-0.20260516033251-c7466ebfc406
+	github.com/chainreactors/spray v1.2.6-0.20260520030531-482ea7dea1f3
 	github.com/chainreactors/utils v0.0.0-20260520013422-17d44b97430a
 	github.com/chainreactors/zombie v1.2.3-0.20260509062300-b10f008fb8a5
 	github.com/charmbracelet/glamour v0.8.0
@@ -23,9 +25,9 @@ require (
 	github.com/reeflective/console v0.0.0-00010101000000-000000000000
 	github.com/spf13/cobra v1.9.1
 	github.com/ysmood/gson v0.7.3
-	golang.org/x/term v0.37.0
+	golang.org/x/term v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
-	sigs.k8s.io/yaml v1.4.0
+	sigs.k8s.io/yaml v1.6.0
 )
 
 require (
@@ -36,7 +38,7 @@ require (
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
-	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
@@ -84,7 +86,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jlaffaye/ftp v0.0.0-20201112195030-9aae4d151126 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
-	github.com/klauspost/compress v1.17.8 // indirect
+	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/knadh/go-pop3 v0.3.0 // indirect
 	github.com/lib/pq v1.9.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
@@ -98,6 +100,8 @@ require (
 	github.com/montanaflynn/stats v0.0.0-20171201202039-1bf9dbcd8cbe // indirect
 	github.com/mozillazg/go-pinyin v0.20.0 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
+	github.com/ncruces/go-sqlite3 v0.29.1 // indirect
+	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/panjf2000/ants/v2 v2.9.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/reeflective/readline v1.1.3 // indirect
@@ -110,10 +114,13 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/streadway/amqp v1.1.0 // indirect
+	github.com/tetratelabs/wazero v1.9.0 // indirect
 	github.com/twmb/murmur3 v1.1.8 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.53.0 // indirect
 	github.com/vbauerster/mpb/v8 v8.7.3 // indirect
+	github.com/wasilibs/go-re2 v1.10.0 // indirect
+	github.com/wasilibs/wazero-helpers v0.0.0-20240620070341-3dff1577cd52 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
@@ -127,20 +134,22 @@ require (
 	github.com/yuin/goldmark v1.7.4 // indirect
 	github.com/yuin/goldmark-emoji v1.0.3 // indirect
 	go.mongodb.org/mongo-driver v1.12.0 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
+	go.yaml.in/yaml/v2 v2.4.2 // indirect
+	go.yaml.in/yaml/v3 v3.0.3 // indirect
+	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
-	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	mvdan.cc/sh/v3 v3.7.0 // indirect
 )
 
 replace (
+	github.com/chainreactors/ani-go => ./third_party/ani-go
+	github.com/chainreactors/ina-go => ./third_party/ina-go
 	github.com/reeflective/console => github.com/chainreactors/malice-network/external/console v0.0.0-20260422184128-e856ed004d32
 	github.com/reeflective/readline => github.com/chainreactors/malice-network/external/readline v0.0.0-20260422184128-e856ed004d32
 )
-
-replace github.com/chainreactors/ioa => /mnt/chainreactors/internet-of-agent

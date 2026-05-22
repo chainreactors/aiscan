@@ -20,12 +20,18 @@ All pseudo-commands run through the `bash` tool. They are **not** system binarie
 
 Scanner commands:
 
+- `ani`: company name → subsidiary tree + ICP-registered domains (Tianyancha/Aiqicha scrapers). Entry point when the seed is a Chinese company.
+- `ina`: domain or ICP seed → IPs / CIDRs / domains via multi-engine cyberspace search (FOFA/ZoomEye/Hunter). Runs after `ani`, before `gogo`.
 - `scan`: multi-stage orchestration across discovery, web probing, weakpass, POC, and verification.
 - `gogo`: host, port, service, and banner discovery.
 - `spray`: web probing, fingerprints, common files, crawl, and focused path checks.
+- `katana`: deep web crawling with full parameter discovery (query strings, form targets, JS endpoints).
 - `zombie`: authorized weak credential checks for supported services.
 - `neutron`: template-based POC checks when templates are available.
 - `cyberhub`: search loaded fingerprints and POC templates.
+
+Recon chain when the seed is a company name (not a domain or IP):
+`ani` → `ina` → `gogo` / `spray` / `katana` → `neutron` / `fuzz`. Skip `ani` if the user already has domains, skip `ina` if they already have IPs.
 
 Utility commands:
 
@@ -53,6 +59,21 @@ When moving data off a target, prefer in order:
 3. Write to file, retrieve separately
 4. Base64-encode into command output
 5. Start a listener with `background: true` as last resort
+
+## Post-Scan Analysis
+
+After `scan` or `spray --crawl` finishes, don't stop at the summary. Review discovered web endpoints for parameters worth fuzzing — query strings, dynamic path segments, form targets, API bodies. Load `aiscan://skills/fuzz/SKILL.md` for the methodology. The scanner pipeline finds surfaces; your job as an agent is to test them for injection vulnerabilities that template-based scanning misses.
+
+## Verification Discipline
+
+Scanner tools produce leads, not confirmed vulnerabilities. Before reporting any finding as confirmed:
+
+- Verify independently: reproduce the behavior with a unique canary payload, not generic strings.
+- Compare against baseline: same endpoint, normal parameter value. Measure the difference.
+- Distinguish tool artifacts from real findings: neutron "no templates selected" is not a vulnerability. zombie HTTP 200 on a login page is normal. spray fingerprints are informational.
+- Include evidence: exact payload, response fragment, and baseline diff. Without all three, label as "potential/unverified".
+
+Load `aiscan://skills/fuzz/SKILL.md` for the full verification protocol.
 
 ## Operating Rules
 
