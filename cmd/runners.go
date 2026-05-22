@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"os"
@@ -11,7 +13,10 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
+	cmdpkg "github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/provider"
 	"github.com/chainreactors/aiscan/pkg/swarm"
+	"github.com/chainreactors/aiscan/pkg/task"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
 	"github.com/chainreactors/aiscan/skills"
@@ -85,12 +90,23 @@ func runAgentOneShotMode(ctx context.Context, option *Option, logger telemetry.L
 	output := newAgentOutput(option)
 	output.Start("task", displayTask)
 
-	result, err := agent.RunWithEvents(ctx, task, application.Commands, output.HandleEvent,
+	events, err := newEventsWriter(option.EventsFile)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := events.Close(); cerr != nil {
+			logger.Warnf("close events file: %s", cerr)
+		}
+	}()
+	handler := combineEventHandlers(output.HandleEvent, events.HandleEvent)
+
+	result, err := agent.RunWithEvents(ctx, task, application.Commands, handler,
 		agent.WithProvider(application.Provider),
 		agent.WithSystemPrompt(runtime.systemPrompt),
 		agent.WithModel(option.Model),
 		agent.WithStream(false),
-		agent.WithLogger(telemetry.NopLogger()),
+		agent.WithLogger(logger),
 	)
 	if err != nil {
 		return err
@@ -258,24 +274,58 @@ func runLoop(ctx context.Context, option *Option, logger telemetry.Logger) error
 		return fmt.Errorf("loop requires streaming IOA client")
 	}
 
+	events, err := newEventsWriter(option.EventsFile)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := events.Close(); cerr != nil {
+			logger.Warnf("close events file: %s", cerr)
+		}
+	}()
+
+	loopOpts := []agent.Option{
+		agent.WithProvider(application.Provider),
+		agent.WithSystemPrompt(systemPrompt),
+		agent.WithModel(option.Model),
+		agent.WithStream(true),
+		agent.WithLogger(logger),
+	}
+	if events != nil {
+		loopOpts = append(loopOpts, agent.WithEventHandler(events.HandleEvent))
+	}
+
+	// Locate the bash tool's task manager so we can route its completion
+	// notifications into the same inbox the swarm uses for peer chatter.
+	taskMgr := bashTaskManager(application.Commands)
+
 	taskHandler := func(ctx context.Context, task swarm.Task) (string, error) {
-		return agent.Run(ctx, task.Content, application.Commands,
-			agent.WithProvider(application.Provider),
-			agent.WithSystemPrompt(systemPrompt),
-			agent.WithModel(option.Model),
-			agent.WithStream(true),
-			agent.WithLogger(logger),
-		)
+		opts := loopOpts
+		var inbox chan provider.ChatMessage
+		if task.Peers != nil {
+			inbox = make(chan provider.ChatMessage, 64)
+			bridgeCtx, cancelBridge := context.WithCancel(ctx)
+			defer cancelBridge()
+			go forwardPeersToInbox(bridgeCtx, task.Peers, inbox, logger)
+			opts = append(append([]agent.Option(nil), loopOpts...), agent.WithInbox(inbox))
+		}
+		if taskMgr != nil {
+			// Tie background task completions to this swarm task's inbox; tear
+			// down on return so leftover scans from this company don't leak
+			// into the next dispatched task.
+			if inbox != nil {
+				taskMgr.SetSink(inbox)
+			}
+			defer func() {
+				taskMgr.ClearSink()
+				taskMgr.KillAll()
+			}()
+		}
+		return agent.Run(ctx, task.Content, application.Commands, opts...)
 	}
 
 	heartbeatFunc := func(ctx context.Context, prompt string) (string, error) {
-		return agent.Run(ctx, prompt, application.Commands,
-			agent.WithProvider(application.Provider),
-			agent.WithSystemPrompt(systemPrompt),
-			agent.WithModel(option.Model),
-			agent.WithStream(true),
-			agent.WithLogger(logger),
-		)
+		return agent.Run(ctx, prompt, application.Commands, loopOpts...)
 	}
 
 	node := swarm.NewNode(swarm.NodeConfig{
@@ -300,9 +350,16 @@ func runLoop(ctx context.Context, option *Option, logger telemetry.Logger) error
 }
 
 func runIOAServe(ctx context.Context, option *Option, logger telemetry.Logger) error {
+	store, closeStore, err := openIOAStore(option, logger)
+	if err != nil {
+		return err
+	}
+	if closeStore != nil {
+		defer func() { _ = closeStore() }()
+	}
 	return ioaserver.RunServer(ctx, ioaserver.ServerOptions{
 		URL:    option.IOAURL,
-		DB:     option.IOADB,
+		Store:  store,
 		Logger: logger,
 	})
 }
@@ -324,4 +381,87 @@ func registerIOATools(ctx context.Context, application *app.App, option *Option)
 		cfg.NodeName = defaultIOANodeName(option)
 	}
 	return application.InitIOA(ctx, cfg)
+}
+
+// forwardPeersToInbox bridges swarm peer messages into an agent inbox channel,
+// formatting each peer as a user-role chat message the LLM will see at the
+// next turn boundary. Exits when peers is closed (Node finished the task) or
+// when ctx is cancelled (agent.Run returned and the parent cancelled bridge).
+func forwardPeersToInbox(ctx context.Context, peers <-chan swarm.PeerMessage, inbox chan<- provider.ChatMessage, logger telemetry.Logger) {
+	defer close(inbox)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case peer, ok := <-peers:
+			if !ok {
+				return
+			}
+			msg := provider.NewTextMessage("user", formatPeerForLLM(peer))
+			select {
+			case inbox <- msg:
+			case <-ctx.Done():
+				return
+			default:
+				logger.Warnf("swarm inbox=full dropping peer msg=%s sender=%s", peer.MessageID, peer.Sender)
+			}
+		}
+	}
+}
+
+func formatPeerForLLM(peer swarm.PeerMessage) string {
+	var sb strings.Builder
+	sb.WriteString("<swarm_peer")
+	if peer.Sender != "" {
+		writeXMLAttr(&sb, "sender", peer.Sender)
+	}
+	if peer.MessageID != "" {
+		writeXMLAttr(&sb, "message_id", peer.MessageID)
+	}
+	sb.WriteString(">\n")
+	_ = xml.EscapeText(&sb, []byte(peerPayloadForLLM(peer)))
+	sb.WriteString("\n</swarm_peer>")
+	return sb.String()
+}
+
+func writeXMLAttr(sb *strings.Builder, name, value string) {
+	sb.WriteByte(' ')
+	sb.WriteString(name)
+	sb.WriteString("=\"")
+	_ = xml.EscapeText(sb, []byte(value))
+	sb.WriteByte('"')
+}
+
+func peerPayloadForLLM(peer swarm.PeerMessage) string {
+	if strings.TrimSpace(peer.Content) != "" {
+		return peer.Content
+	}
+	if len(peer.RawContent) == 0 {
+		return ""
+	}
+	data, err := json.MarshalIndent(peer.RawContent, "", "  ")
+	if err != nil {
+		return fmt.Sprint(peer.RawContent)
+	}
+	return string(data)
+}
+
+// bashTaskManager fetches the task.Manager owned by the bash tool inside the
+// shared command registry. Returns nil if the registry has no bash tool
+// (which only happens in test setups without the core tool factory).
+func bashTaskManager(reg interface {
+	GetTool(string) (cmdpkg.AgentTool, bool)
+}) *task.Manager {
+	if reg == nil {
+		return nil
+	}
+	tool, ok := reg.GetTool("bash")
+	if !ok {
+		return nil
+	}
+	bt, ok := tool.(*cmdpkg.BashTool)
+	if !ok {
+		return nil
+	}
+	return bt.Manager()
 }

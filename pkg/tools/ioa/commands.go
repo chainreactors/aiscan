@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/chainreactors/aiscan/pkg/command"
@@ -115,7 +116,5 @@ func argsToJSON(args []string) (string, error) {
 }
 
 func parseInt(s string) (int, error) {
-	var n int
-	_, err := fmt.Sscanf(s, "%d", &n)
-	return n, err
+	return strconv.Atoi(s)
 }
