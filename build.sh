@@ -38,6 +38,7 @@ OPT_IOA_NODE_NAME=""
 OPT_IOA_SPACE=""
 OPT_VERIFY=""
 OPT_VERIFY_TIMEOUT=""
+OPT_TAVILY_KEYS=""
 
 MODULE="github.com/chainreactors/aiscan/cmd"
 
@@ -85,6 +86,7 @@ while [[ $# -gt 0 ]]; do
         --space)            OPT_IOA_SPACE="$2"; shift 2 ;;
         --verify)           OPT_VERIFY="$2"; shift 2 ;;
         --verify-timeout)   OPT_VERIFY_TIMEOUT="$2"; shift 2 ;;
+        --tavily-keys)      OPT_TAVILY_KEYS="$2"; shift 2 ;;
         -h|--help)
             cat <<'HELP'
 aiscan 构建脚本
@@ -118,6 +120,9 @@ IOA 覆盖:
   --ioa-url URL
   --ioa-node-name NAME
   --space NAME
+
+Web Search:
+  --tavily-keys KEYS    Comma-separated Tavily API keys (rotation)
 
 扫描覆盖:
   --verify MODE         auto, off, low, medium, high, critical
@@ -167,6 +172,8 @@ CFG_IOA_SPACE=$(resolve "$OPT_IOA_SPACE" "$(yaml_val "$CONFIG_FILE" ioa space)")
 CFG_VERIFY=$(resolve "$OPT_VERIFY" "$(yaml_val "$CONFIG_FILE" scan verify)")
 CFG_VERIFY_TIMEOUT=$(resolve "$OPT_VERIFY_TIMEOUT" "$(yaml_val "$CONFIG_FILE" scan verify_timeout)")
 
+CFG_TAVILY_KEYS=$(resolve "$OPT_TAVILY_KEYS" "$(yaml_val "$CONFIG_FILE" websearch tavily_keys)")
+
 # build 段仅从 config.yaml 读取（不做 CLI 覆盖）
 if [ -z "$OSARCH" ]; then
     OSARCH=$(yaml_val "$CONFIG_FILE" build osarch)
@@ -203,6 +210,7 @@ add_ldflag DefaultIOANodeName  "$CFG_IOA_NODE_NAME"
 add_ldflag DefaultSpace        "$CFG_IOA_SPACE"
 add_ldflag DefaultVerify       "$CFG_VERIFY"
 add_ldflag DefaultVerifyTimeout "$CFG_VERIFY_TIMEOUT"
+add_ldflag DefaultTavilyKeys   "$CFG_TAVILY_KEYS"
 
 # ─── 仅打印 ldflags ─────────────────────────────────────────────
 
@@ -224,7 +232,7 @@ echo "=== aiscan build ==="
 
 # ─── Build tags ──────────────────────────────────────────────────
 
-TAGS="forceposix osusergo netgo"
+TAGS="forceposix osusergo netgo sqlite"
 if [ "$EMBED_RESOURCES" != true ]; then
     TAGS="$TAGS emptytemplates noembed"
 fi
