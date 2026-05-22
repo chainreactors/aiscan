@@ -44,12 +44,25 @@ func runInteractiveAgentMode(ctx context.Context, option *Option, logger telemet
 		return err
 	}
 
+	events, err := newEventsWriter(option.EventsFile)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cerr := events.Close(); cerr != nil {
+			logger.Warnf("close events file: %s", cerr)
+		}
+	}()
+
 	session := agent.New(application.Provider, application.Commands,
 		agent.WithSystemPrompt(runtime.systemPrompt),
 		agent.WithModel(option.Model),
 		agent.WithStream(false),
-		agent.WithLogger(telemetry.NopLogger()),
+		agent.WithLogger(logger),
 	)
+	if events != nil {
+		session.Subscribe(events.HandleEvent)
+	}
 
 	repl := newAgentConsole(ctx, option, application, session)
 	return repl.start()

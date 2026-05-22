@@ -21,6 +21,8 @@ var (
 	DefaultIOANodeID   = ""
 	DefaultIOANodeName = ""
 	DefaultSpace       = ""
+
+	DefaultTavilyKeys = "" // comma-separated Tavily API keys, injected at build time
 )
 
 func defaultProviderConfig() provider.ProviderConfig {

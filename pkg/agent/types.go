@@ -92,6 +92,12 @@ type Config struct {
 	BeforeToolCall      func(context.Context, BeforeToolCallContext) (*BeforeToolCallResult, error)
 	AfterToolCall       func(context.Context, AfterToolCallContext) (*AfterToolCallResult, error)
 	ShouldStopAfterTurn func(context.Context, ShouldStopAfterTurnContext) (bool, error)
+	// Inbox receives external messages that runLoop drains (non-blocking) at the
+	// start of every turn and appends to the transcript. Used by the swarm bridge
+	// to inject peer chatter into the LLM's next reasoning step without restarting
+	// the agent. A closed inbox is treated as "no more external input"; nil
+	// disables the mechanism entirely.
+	Inbox <-chan provider.ChatMessage
 }
 
 type Option func(*Config)
@@ -180,4 +186,8 @@ func WithTokenBudget(budget int) Option {
 
 func WithResponseFormat(rf *provider.ResponseFormat) Option {
 	return func(c *Config) { c.ResponseFormat = rf }
+}
+
+func WithInbox(ch <-chan provider.ChatMessage) Option {
+	return func(c *Config) { c.Inbox = ch }
 }

@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/provider"
 	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/provider"
+	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/skills"
 )
 
@@ -64,7 +65,7 @@ func TestBuildSystemPromptIncludesSkills(t *testing.T) {
 			t.Fatalf("prompt missing %q:\n%s", want, prompt)
 		}
 	}
-	for _, internal := range []string{"scan", "gogo", "spray", "zombie", "neutron"} {
+	for _, internal := range []string{"scan", "gogo", "spray", "katana", "fuzz", "zombie", "neutron"} {
 		if strings.Contains(prompt, "<name>"+internal+"</name>") {
 			t.Fatalf("prompt includes internal skill %q:\n%s", internal, prompt)
 		}
@@ -863,6 +864,40 @@ func TestRetryExhaustedReturnsLastError(t *testing.T) {
 	}
 }
 
+func TestRetryableProviderTimeoutAndStallErrors(t *testing.T) {
+	if !isRetryableError(fmt.Errorf("wrapped: %w", provider.ErrCallTimeout)) {
+		t.Fatal("ErrCallTimeout should be retryable")
+	}
+	if !isRetryableError(fmt.Errorf("wrapped: %w", provider.ErrStreamStalled)) {
+		t.Fatal("ErrStreamStalled should be retryable")
+	}
+	if !isRetryableError(retryableTimeoutError{}) {
+		t.Fatal("network timeout should be retryable")
+	}
+	if isRetryableError(fmt.Errorf("wrapped: %w", context.Canceled)) {
+		t.Fatal("context.Canceled should not be retryable")
+	}
+	if isRetryableError(fmt.Errorf("wrapped: %w", context.DeadlineExceeded)) {
+		t.Fatal("context.DeadlineExceeded should not be retryable")
+	}
+}
+
+func TestStreamAssistantMessageReturnsContextErrorOnClosedCanceledStream(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, _, err := streamAssistantMessageWithUsage(ctx,
+		&scriptedProvider{},
+		&provider.ChatCompletionRequest{Model: "test"},
+		nil,
+		telemetry.NopLogger(),
+		1,
+	)
+	if err != context.Canceled {
+		t.Fatalf("streamAssistantMessageWithUsage() error = %v, want context.Canceled", err)
+	}
+}
+
 func TestTokenBudgetWarning(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &callbackProvider{
@@ -970,3 +1005,9 @@ func (p *callbackProvider) Name() string { return "callback" }
 func (p *callbackProvider) ChatCompletion(ctx context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	return p.fn(ctx, req)
 }
+
+type retryableTimeoutError struct{}
+
+func (retryableTimeoutError) Error() string   { return "timeout awaiting response headers" }
+func (retryableTimeoutError) Timeout() bool   { return true }
+func (retryableTimeoutError) Temporary() bool { return true }

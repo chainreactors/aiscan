@@ -2,10 +2,12 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestResolveUsesBaseURL(t *testing.T) {
@@ -86,5 +88,71 @@ func TestOpenAIProviderChatCompletionStream(t *testing.T) {
 	}
 	if !done {
 		t.Fatal("missing done event")
+	}
+}
+
+func TestOpenAIProviderChatCompletionBodyTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":`)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	p, err := NewOpenAIProvider(&ProviderConfig{
+		Provider: "test",
+		BaseURL:  server.URL + "/v1",
+		Timeout:  1,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenAIProvider() error = %v", err)
+	}
+
+	start := time.Now()
+	_, err = p.ChatCompletion(context.Background(), &ChatCompletionRequest{Model: "test"})
+	if err == nil {
+		t.Fatal("ChatCompletion() error = nil, want timeout")
+	}
+	if !errors.Is(err, ErrCallTimeout) {
+		t.Fatalf("ChatCompletion() error = %v, want ErrCallTimeout", err)
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Fatalf("ChatCompletion() took %s, want timeout near 1s", elapsed)
+	}
+}
+
+func TestOpenAIProviderChatCompletionStreamErrorBodyTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, "partial error")
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	p, err := NewOpenAIProvider(&ProviderConfig{
+		Provider: "test",
+		BaseURL:  server.URL + "/v1",
+		Timeout:  1,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenAIProvider() error = %v", err)
+	}
+
+	start := time.Now()
+	_, err = p.ChatCompletionStream(context.Background(), &ChatCompletionRequest{Model: "test"})
+	if err == nil {
+		t.Fatal("ChatCompletionStream() error = nil, want timeout")
+	}
+	if !errors.Is(err, ErrCallTimeout) {
+		t.Fatalf("ChatCompletionStream() error = %v, want ErrCallTimeout", err)
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Fatalf("ChatCompletionStream() took %s, want timeout near 1s", elapsed)
 	}
 }
