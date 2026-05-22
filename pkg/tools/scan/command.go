@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -30,7 +31,10 @@ type Command struct {
 	recorder   *recorder
 	logger     telemetry.Logger
 	proxy      string
+	workDir    string
 }
+
+func (c *Command) SetWorkDir(dir string) { c.workDir = dir }
 
 type flags struct {
 	Inputs          []string `short:"i" long:"input" description:"Input target: URL, IP, IP:port, or CIDR"`
@@ -137,11 +141,11 @@ Examples:
 }
 
 func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
-	return c.execute(ctx, args, nil)
+	return c.execute(ctx, c.resolveRelativePaths(args), nil)
 }
 
 func (c *Command) ExecuteStreaming(ctx context.Context, args []string, stream io.Writer) (string, error) {
-	return c.execute(ctx, args, stream)
+	return c.execute(ctx, c.resolveRelativePaths(args), stream)
 }
 
 func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) (string, error) {
@@ -159,6 +163,8 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		defer restoreDebug()
 		c.logger.Debugf("scan debug enabled")
 	}
+	restoreProxy := c.installProxy()
+	defer restoreProxy()
 	if c.aiConfig.Enable {
 		flags.AI = true
 	}
@@ -179,9 +185,6 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		}
 	}
 	options := resolveScanOptions(flags)
-
-	restoreProxy := c.installProxy()
-	defer restoreProxy()
 
 	rawInputs, err := readInputs(flags.Inputs, flags.ListFile)
 	if err != nil {
@@ -247,7 +250,9 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 	}
 	if flags.OutputFile != "" && !flags.JSON {
 		plainOut := coll.TerminalString(false)
-		_ = os.WriteFile(flags.OutputFile, []byte(plainOut), 0644)
+		if err := writeOutputFile(flags.OutputFile, plainOut); err != nil {
+			c.logger.Errorf("%s", err.Error())
+		}
 	}
 	return out, nil
 }
@@ -311,4 +316,67 @@ func (c *Command) installProxy() func() {
 		neutronhttp.DefaultTransport.DialContext = prevNeutronDial
 		zombiepkg.ProxyDialTimeout = prevZombieProxy
 	}
+}
+
+func (c *Command) resolveRelativePaths(args []string) []string {
+	if c.workDir == "" {
+		return args
+	}
+	fileFlags := map[string]bool{
+		"-l": true, "--list": true,
+		"-f": true, "--file": true,
+		"--dict": true, "--rule": true,
+	}
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if key, value, ok := strings.Cut(arg, "="); ok {
+			if fileFlags[key] {
+				out = append(out, key+"="+c.resolvePath(value))
+				continue
+			}
+			out = append(out, arg)
+			continue
+		}
+		if fileFlags[arg] && i+1 < len(args) {
+			out = append(out, arg)
+			i++
+			out = append(out, c.resolvePath(args[i]))
+			continue
+		}
+		out = append(out, arg)
+	}
+	return out
+}
+
+func (c *Command) resolvePath(value string) string {
+	if value == "" || filepath.IsAbs(value) || strings.HasPrefix(value, "-") {
+		return value
+	}
+	return filepath.Join(c.workDir, value)
+}
+
+func writeOutputFile(path, content string) error {
+	path = filepath.Clean(path)
+	if dir := filepath.Dir(path); dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("scan output file: create directory: %w", err)
+		}
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("scan output file: %w", err)
+	}
+	if _, err := io.WriteString(f, content); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("scan output file: write: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("scan output file: sync: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("scan output file: close: %w", err)
+	}
+	return nil
 }

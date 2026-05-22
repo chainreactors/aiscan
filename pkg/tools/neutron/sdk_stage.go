@@ -31,6 +31,7 @@ type neutronExecuteOptions struct {
 	MaxPerFinger        int
 	Concurrency         int
 	RateLimit           int
+	TemplateList        bool
 	Debug               bool
 }
 
@@ -220,6 +221,15 @@ func selectNeutronTemplates(engine *sdkneutron.Engine, index *association.Finger
 			if _, ok := allowedByFinger[id]; !ok && !templateHasAnyFinger(tmpl, allowedFingers) {
 				continue
 			}
+		} else if len(tmpl.Fingers) > 0 && !hasIDFilter && !opts.TemplateList {
+			// Template declares required fingerprints (e.g. shiro-brute-key
+			// needs "shiro"). Without --finger context the caller has no
+			// fingerprint evidence for the target, so running these templates
+			// produces false positives (e.g. shiro matcher hitting a generic
+			// nginx 200). Skip unless the user explicitly selects by --id.
+			// The scan pipeline always provides --finger from gogo/spray
+			// fingerprint results, so this only affects the neutron CLI path.
+			continue
 		}
 		if hasTagFilter && !templateHasAnyTag(tmpl, allowedTags) {
 			continue
