@@ -3,11 +3,10 @@ package tools
 import (
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
-	anicmd "github.com/chainreactors/aiscan/pkg/tools/ani"
 	gogocmd "github.com/chainreactors/aiscan/pkg/tools/gogo"
-	inacmd "github.com/chainreactors/aiscan/pkg/tools/ina"
 	katanacmd "github.com/chainreactors/aiscan/pkg/tools/katana"
 	neutroncmd "github.com/chainreactors/aiscan/pkg/tools/neutron"
+	passivecmd "github.com/chainreactors/aiscan/pkg/tools/passive"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	spraycmd "github.com/chainreactors/aiscan/pkg/tools/spray"
@@ -30,8 +29,8 @@ func init() {
 			}
 			proxy := deps.ScannerProxy
 
-			if es.Ani != nil {
-				reg.Register(anicmd.New(es.Ani).WithLogger(logger).WithDefaults(anicmd.Defaults{
+			if es.Ani != nil || es.Ina != nil {
+				reg.Register(passivecmd.New(es.Ani, es.Ina).WithLogger(logger).WithDefaults(passivecmd.AniDefaults{
 					Depth:      es.Recon.AniDepth,
 					DepthSet:   es.Recon.AniDepthSet,
 					Percent:    es.Recon.AniPercent,
@@ -41,9 +40,6 @@ func init() {
 					QccCookie:  es.Recon.AniQccCookie,
 					AqcCookie:  es.Recon.AniAqcCookie,
 				}), "scanner")
-			}
-			if es.Ina != nil {
-				reg.Register(inacmd.New(es.Ina).WithLogger(logger), "scanner")
 			}
 
 			var scanOpts []scan.Option

@@ -110,6 +110,8 @@ github.com/census-instrumentation/opencensus-proto v0.3.0/go.mod h1:f6KPmirojxKA
 github.com/cespare/xxhash v1.1.0/go.mod h1:XrSqR1VqqWfGrhpAt58auRo0WTKS1nRRg3ghfAqPWnc=
 github.com/cespare/xxhash/v2 v2.1.1/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/cespare/xxhash/v2 v2.1.2/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
+github.com/chainreactors/ani-go v0.0.0-20260522195554-f7466011f34a h1:EvousFHqfIa1/y5DeMv/Cf8HlVUdMoWDwqrUeBpbrIA=
+github.com/chainreactors/ani-go v0.0.0-20260522195554-f7466011f34a/go.mod h1:51kwLnPvAf2rUrU3w5Omk572TDo7I8NnZjct3Hjn7jM=
 github.com/chainreactors/files v0.0.0-20231102192550-a652458cee26/go.mod h1:/Xa9YXhjBlaC33JTD6ZTJFig6pcplak2IDcovf42/6A=
 github.com/chainreactors/files v0.0.0-20231123083421-cea5b4ad18a8/go.mod h1:/Xa9YXhjBlaC33JTD6ZTJFig6pcplak2IDcovf42/6A=
 github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0 h1:cU3sGEODXZsUZGBXfnz0nyxF6+37vA+ZGDx6L/FKN4o=
@@ -120,6 +122,8 @@ github.com/chainreactors/fingers v1.2.1-0.20260520032008-600244212842 h1:I5Ibtyz
 github.com/chainreactors/fingers v1.2.1-0.20260520032008-600244212842/go.mod h1:p6jmXHsGo6HInUJLaPPk0RRQdJzXa/fQ8E+hFljkxR0=
 github.com/chainreactors/gogo/v2 v2.14.2-0.20260508165113-815356852650 h1:pxYnAFaXeEsClwhNvahHTiwCsGYT8qxXkrHKLhEdJ00=
 github.com/chainreactors/gogo/v2 v2.14.2-0.20260508165113-815356852650/go.mod h1:vsEKUa+GIaM+dVRG+Bw2s4ljsB8xOrVCltMfwRV2Usc=
+github.com/chainreactors/ina-go v0.0.0-20260522195554-837ef24375da h1:8lV2TivEHpUkP5NTFAVJVwwF6aoKGf38lzMw4fYF5Ag=
+github.com/chainreactors/ina-go v0.0.0-20260522195554-837ef24375da/go.mod h1:bl0Io4Xn1B/asSz7cU+cH2UQ5Wzt+LlubLSvzFpXiyM=
 github.com/chainreactors/ioa v0.0.0-20260513035847-c8c38592b651 h1:chPDdPPotp0xtyEj2UolVTabE+j8kUWInmjkK6mAeac=
 github.com/chainreactors/ioa v0.0.0-20260513035847-c8c38592b651/go.mod h1:TVfTmyJTDTBez68chS74HVxQtnB6E7iIRT7C8q6gxW0=
 github.com/chainreactors/logs v0.0.0-20240207121836-c946f072f81f/go.mod h1:6Mv6W70JrtL6VClulZhmMRZnoYpcTahcDTKLMNEjK0o=

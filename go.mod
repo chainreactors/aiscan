@@ -3,10 +3,10 @@ module github.com/chainreactors/aiscan
 go 1.26.3
 
 require (
-	github.com/chainreactors/ani-go v0.0.0-00010101000000-000000000000
+	github.com/chainreactors/ani-go v0.0.0-20260522195554-f7466011f34a
 	github.com/chainreactors/fingers v1.2.1-0.20260520032008-600244212842
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260508165113-815356852650
-	github.com/chainreactors/ina-go v0.0.0-00010101000000-000000000000
+	github.com/chainreactors/ina-go v0.0.0-20260522195554-837ef24375da
 	github.com/chainreactors/ioa v0.0.0-20260513035847-c8c38592b651
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
 	github.com/chainreactors/neutron v0.0.0-20260519161201-b0482d8bb58b
@@ -148,8 +148,6 @@ require (
 )
 
 replace (
-	github.com/chainreactors/ani-go => ./third_party/ani-go
-	github.com/chainreactors/ina-go => ./third_party/ina-go
 	github.com/reeflective/console => github.com/chainreactors/malice-network/external/console v0.0.0-20260422184128-e856ed004d32
 	github.com/reeflective/readline => github.com/chainreactors/malice-network/external/readline v0.0.0-20260422184128-e856ed004d32
 )

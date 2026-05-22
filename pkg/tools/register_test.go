@@ -31,15 +31,12 @@ func TestRegisterAllTreatsNeutronAsOptional(t *testing.T) {
 	if reg.Has("neutron") {
 		t.Fatal("neutron should not be registered without templates")
 	}
-	if reg.Has("ina") {
-		t.Fatal("ina should not be registered without recon credentials")
-	}
-	if reg.Has("ani") {
-		t.Fatal("ani should not be registered when engineSet.Ani is nil")
+	if reg.Has("passive") {
+		t.Fatal("passive should not be registered without recon engines")
 	}
 }
 
-func TestRegisterAllRegistersInaWhenConfigured(t *testing.T) {
+func TestRegisterAllRegistersPassiveWithIna(t *testing.T) {
 	reg := NewScannerRegistry()
 	engineSet := &engine.Set{
 		Ina: inago.NewEngine(inago.NewConfig().WithFofa("test@example.com", "deadbeef")),
@@ -47,12 +44,12 @@ func TestRegisterAllRegistersInaWhenConfigured(t *testing.T) {
 	if err := RegisterAll(reg, engineSet); err != nil {
 		t.Fatalf("RegisterAll() error = %v", err)
 	}
-	if !reg.Has("ina") {
-		t.Fatal("expected ina to be registered when engineSet.Ina is non-nil")
+	if !reg.Has("passive") {
+		t.Fatal("expected passive to be registered when engineSet.Ina is non-nil")
 	}
 }
 
-func TestRegisterAllRegistersAniWhenConfigured(t *testing.T) {
+func TestRegisterAllRegistersPassiveWithAni(t *testing.T) {
 	reg := NewScannerRegistry()
 	engineSet := &engine.Set{
 		Ani: anigo.NewEngine(nil),
@@ -60,8 +57,8 @@ func TestRegisterAllRegistersAniWhenConfigured(t *testing.T) {
 	if err := RegisterAll(reg, engineSet); err != nil {
 		t.Fatalf("RegisterAll() error = %v", err)
 	}
-	if !reg.Has("ani") {
-		t.Fatal("expected ani to be registered when engineSet.Ani is non-nil")
+	if !reg.Has("passive") {
+		t.Fatal("expected passive to be registered when engineSet.Ani is non-nil")
 	}
 }
 

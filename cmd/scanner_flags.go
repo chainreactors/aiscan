@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	anicmd "github.com/chainreactors/aiscan/pkg/tools/ani"
 	cyberhubcmd "github.com/chainreactors/aiscan/pkg/tools/cyberhub"
-	inacmd "github.com/chainreactors/aiscan/pkg/tools/ina"
 	katanacmd "github.com/chainreactors/aiscan/pkg/tools/katana"
+	passivecmd "github.com/chainreactors/aiscan/pkg/tools/passive"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
 )
 
@@ -27,10 +26,8 @@ func staticScannerUsage(name string) (string, bool) {
 	switch name {
 	case "scan":
 		return scan.Usage(), true
-	case "ani":
-		return anicmd.New(nil).Usage(), true
-	case "ina":
-		return inacmd.New(nil).Usage(), true
+	case "passive":
+		return passivecmd.New(nil, nil).Usage(), true
 	case "cyberhub":
 		return cyberhubcmd.Usage(), true
 	case "gogo":

@@ -4,12 +4,11 @@ import (
 	"fmt"
 
 	"github.com/chainreactors/aiscan/pkg/telemetry"
-	anicmd "github.com/chainreactors/aiscan/pkg/tools/ani"
 	cyberhubcmd "github.com/chainreactors/aiscan/pkg/tools/cyberhub"
 	gogocmd "github.com/chainreactors/aiscan/pkg/tools/gogo"
-	inacmd "github.com/chainreactors/aiscan/pkg/tools/ina"
 	katanacmd "github.com/chainreactors/aiscan/pkg/tools/katana"
 	neutroncmd "github.com/chainreactors/aiscan/pkg/tools/neutron"
+	passivecmd "github.com/chainreactors/aiscan/pkg/tools/passive"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	spraycmd "github.com/chainreactors/aiscan/pkg/tools/spray"
@@ -29,8 +28,8 @@ func RegisterAllWithLogger(reg *ScannerRegistry, engineSet *engine.Set, logger t
 	}
 	scanOpts := append([]scan.Option{scan.WithLogger(logger)}, opts...)
 	reg.Register(katanacmd.New())
-	if engineSet.Ani != nil {
-		reg.Register(anicmd.New(engineSet.Ani).WithLogger(logger).WithDefaults(anicmd.Defaults{
+	if engineSet.Ani != nil || engineSet.Ina != nil {
+		reg.Register(passivecmd.New(engineSet.Ani, engineSet.Ina).WithLogger(logger).WithDefaults(passivecmd.AniDefaults{
 			Depth:      engineSet.Recon.AniDepth,
 			DepthSet:   engineSet.Recon.AniDepthSet,
 			Percent:    engineSet.Recon.AniPercent,
@@ -40,9 +39,6 @@ func RegisterAllWithLogger(reg *ScannerRegistry, engineSet *engine.Set, logger t
 			QccCookie:  engineSet.Recon.AniQccCookie,
 			AqcCookie:  engineSet.Recon.AniAqcCookie,
 		}))
-	}
-	if engineSet.Ina != nil {
-		reg.Register(inacmd.New(engineSet.Ina).WithLogger(logger))
 	}
 	if engineSet.Resources != nil {
 		reg.Register(cyberhubcmd.New(engineSet.Resources))
