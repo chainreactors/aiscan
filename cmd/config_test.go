@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/chainreactors/aiscan/pkg/provider"
 )
 
 func writeTestConfig(t *testing.T, dir, content string) string {
@@ -216,13 +218,17 @@ func TestAppConfigUsesIndependentVisionProvider(t *testing.T) {
 	if !cfg.Vision.Enabled {
 		t.Fatal("independent vision provider config should be enabled")
 	}
-	if cfg.Vision.Config.Provider != "openrouter" {
-		t.Fatalf("vision provider = %q, want openrouter", cfg.Vision.Config.Provider)
-	}
 	if cfg.Vision.Config.BaseURL != "https://openrouter.ai/api/v1" ||
 		cfg.Vision.Config.APIKey != "vision-key" ||
 		cfg.Vision.Config.Model != "qwen/qwen3.6-flash" {
 		t.Fatalf("vision config = %#v", cfg.Vision.Config)
+	}
+	resolved, err := provider.Resolve(&cfg.Vision.Config)
+	if err != nil {
+		t.Fatalf("resolve vision config: %v", err)
+	}
+	if resolved.Provider != "openrouter" {
+		t.Fatalf("resolved vision provider = %q, want openrouter", resolved.Provider)
 	}
 }
 

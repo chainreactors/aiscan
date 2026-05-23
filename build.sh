@@ -23,6 +23,8 @@ GENERATE_ONLY=false
 EMBED_RESOURCES=false
 BUILD_IOA=false
 QUICK_TARGET=""
+PROFILE="mini"
+AISCAN_BIN="aiscan"
 
 # CLI 覆盖（优先级高于 config.yaml）
 OPT_PROVIDER=""
@@ -73,6 +75,7 @@ while [[ $# -gt 0 ]]; do
         -g|--ldflags)       GENERATE_ONLY=true; shift ;;
         --embed)            EMBED_RESOURCES=true; shift ;;
         --ioa)              BUILD_IOA=true; shift ;;
+        --profile)          PROFILE="$2"; shift 2 ;;
         --llm-provider)     OPT_PROVIDER="$2"; shift 2 ;;
         --llm-base-url)     OPT_BASE_URL="$2"; shift 2 ;;
         --llm-api-key)      OPT_API_KEY="$2"; shift 2 ;;
@@ -103,6 +106,7 @@ aiscan 构建脚本
   --output DIR          输出目录 (默认: dist)
   --embed               嵌入扫描资源（不加 emptytemplates/noembed tag）
   --ioa                 同时编译 ioa server 二进制
+  --profile PROFILE     构建配置: mini (默认, 核心工具) 或 full (包含 katana/uncover/ioa)
 
 LLM 覆盖（优先级高于 config.yaml）:
   --llm-provider NAME
@@ -137,6 +141,7 @@ Web Search:
   ./build.sh --embed                            # 嵌入资源的完整构建
   ./build.sh -g                                 # 打印 ldflags（用于自定义构建命令）
   ./build.sh --ioa -o linux/amd64               # 同时编译 ioa server
+  ./build.sh --profile full -o linux/amd64      # full 构建 (含 katana/uncover/ioa)
 HELP
             exit 0
             ;;
@@ -222,6 +227,7 @@ fi
 # ─── 打印配置摘要 ────────────────────────────────────────────────
 
 echo "=== aiscan build ==="
+echo "profile:  $PROFILE"
 [ -f "$CONFIG_FILE" ] && echo "config:   $CONFIG_FILE" || echo "config:   (none)"
 [ -n "$CFG_PROVIDER" ]     && echo "provider: $CFG_PROVIDER"
 [ -n "$CFG_MODEL" ]        && echo "model:    $CFG_MODEL"
@@ -230,9 +236,27 @@ echo "=== aiscan build ==="
 [ -n "$CFG_IOA_URL" ]      && echo "ioa:      $CFG_IOA_URL"
 [ -n "$CFG_VERIFY" ]       && echo "verify:   $CFG_VERIFY"
 
+# ─── Profile ────────────────────────────────────────────────────
+
+case "$PROFILE" in
+    mini) ;;
+    full)
+        EXTRA_TAGS="full${EXTRA_TAGS:+,$EXTRA_TAGS}"
+        BUILD_IOA=true
+        AISCAN_BIN="aiscan-full"
+        ;;
+    *)
+        echo "未知 profile: $PROFILE (可选: mini, full)" >&2
+        exit 1
+        ;;
+esac
+
 # ─── Build tags ──────────────────────────────────────────────────
 
-TAGS="forceposix osusergo netgo sqlite"
+TAGS="forceposix osusergo netgo"
+if [ "$BUILD_IOA" = true ]; then
+    TAGS="$TAGS sqlite"
+fi
 if [ "$EMBED_RESOURCES" != true ]; then
     TAGS="$TAGS emptytemplates noembed"
 fi
@@ -279,7 +303,7 @@ read -ra TARGETS <<< "$OSARCH_NORMALIZED"
 echo "编译 aiscan..."
 for target in "${TARGETS[@]}"; do
     IFS='/' read -ra PARTS <<< "$target"
-    build_one "${PARTS[0]}" "${PARTS[1]}" ./cmd/aiscan aiscan
+    build_one "${PARTS[0]}" "${PARTS[1]}" ./cmd/aiscan "$AISCAN_BIN"
 done
 
 if [ "$BUILD_IOA" = true ]; then
@@ -295,5 +319,5 @@ fi
 
 echo ""
 echo "构建完成:"
-ls -lh "$OUTPUT_DIR"/aiscan_* 2>/dev/null || true
+ls -lh "$OUTPUT_DIR"/aiscan* 2>/dev/null || true
 [ "$BUILD_IOA" = true ] && ls -lh "$OUTPUT_DIR"/ioa_* 2>/dev/null || true

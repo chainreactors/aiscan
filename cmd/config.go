@@ -143,9 +143,6 @@ func mergeOption(dst, src *Option) {
 	if (dst.Space == "" || dst.Space == "default") && src.Space != "" {
 		dst.Space = src.Space
 	}
-	if (dst.IOADB == "" || dst.IOADB == "./ioa.db") && src.IOADB != "" {
-		dst.IOADB = src.IOADB
-	}
 }
 
 func mergeVisionOptions(dst, src *Option) {

@@ -1,7 +1,5 @@
 package cmd
 
-import "github.com/chainreactors/aiscan/pkg/provider"
-
 var (
 	DefaultProvider = "deepseek"
 	DefaultBaseURL  = ""
@@ -24,12 +22,3 @@ var (
 
 	DefaultTavilyKeys = "" // comma-separated Tavily API keys, injected at build time
 )
-
-func defaultProviderConfig() provider.ProviderConfig {
-	return provider.ProviderConfig{
-		Provider: DefaultProvider,
-		BaseURL:  DefaultBaseURL,
-		APIKey:   DefaultAPIKey,
-		Model:    DefaultModel,
-	}
-}

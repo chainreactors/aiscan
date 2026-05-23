@@ -1,3 +1,5 @@
+//go:build full
+
 // Package passive wraps uncover for cyberspace recon as the "passive" command.
 package passive
 

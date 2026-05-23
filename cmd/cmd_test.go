@@ -143,8 +143,15 @@ func TestParseCLIAgentAcceptsLLMFlags(t *testing.T) {
 		t.Fatalf("llm options = %#v", opt.LLMOptions)
 	}
 	cfg := providerConfig(&opt)
-	if cfg.Provider != "deepseek" {
-		t.Fatalf("provider = %q, want deepseek", cfg.Provider)
+	if cfg.Provider != "" {
+		t.Fatalf("provider should be unresolved before provider.Resolve, got %q", cfg.Provider)
+	}
+	resolved, err := provider.Resolve(&cfg)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if resolved.Provider != "deepseek" {
+		t.Fatalf("resolved provider = %q, want deepseek", resolved.Provider)
 	}
 }
 
@@ -169,8 +176,15 @@ func TestParseCLIScanExtractsLLMFlags(t *testing.T) {
 		t.Fatalf("llm options = %#v", opt.LLMOptions)
 	}
 	cfg := providerConfig(&opt)
-	if cfg.Provider != "deepseek" {
-		t.Fatalf("provider = %q, want deepseek", cfg.Provider)
+	if cfg.Provider != "" {
+		t.Fatalf("provider should be unresolved before provider.Resolve, got %q", cfg.Provider)
+	}
+	resolved, err := provider.Resolve(&cfg)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if resolved.Provider != "deepseek" {
+		t.Fatalf("resolved provider = %q, want deepseek", resolved.Provider)
 	}
 }
 
@@ -251,36 +265,6 @@ func TestParseCLICyberhubCommandPassthrough(t *testing.T) {
 	if parsed.Option.CyberhubURL != "http://hub:8080" || parsed.Option.CyberhubKey != "HUBKEY" {
 		t.Fatalf("scanner options = %#v", parsed.Option.ScannerOptions)
 	}
-}
-
-func TestParseCLIReconCommandsAndFlags(t *testing.T) {
-	parsed, err := parseCLI([]string{
-		"--fofa-email", "ops@example.com",
-		"--fofa-key", "FOFAKEY",
-		"--hunter-api-key", "HUNTERKEY",
-		"--recon-proxy", "socks5://127.0.0.1:1080",
-		"--recon-limit", "0",
-		"passive",
-		`domain="example.com"`,
-		"-s", "fofa",
-	})
-	if err != nil {
-		t.Fatalf("parseCLI() error = %v", err)
-	}
-	if parsed.Mode != runModeScanner {
-		t.Fatalf("mode = %s, want %s", parsed.Mode, runModeScanner)
-	}
-	wantArgs := []string{"passive", `domain="example.com"`, "-s", "fofa"}
-	if !reflect.DeepEqual(parsed.ScannerArgs, wantArgs) {
-		t.Fatalf("scanner args = %#v, want %#v", parsed.ScannerArgs, wantArgs)
-	}
-	if parsed.Option.FofaEmail != "ops@example.com" || parsed.Option.FofaKey != "FOFAKEY" || parsed.Option.HunterAPIKey != "HUNTERKEY" || parsed.Option.ReconProxy != "socks5://127.0.0.1:1080" {
-		t.Fatalf("recon options = %#v", parsed.Option.ReconOptions)
-	}
-	if parsed.Option.ReconLimit == nil || *parsed.Option.ReconLimit != 0 {
-		t.Fatalf("recon limit = %#v, want explicit 0", parsed.Option.ReconLimit)
-	}
-
 }
 
 func TestParseCLINonScanScannerKeepsPostRootArgsIsolated(t *testing.T) {
@@ -534,7 +518,6 @@ func TestParseCLIIOAServeCommandUsesURL(t *testing.T) {
 		"ioa",
 		"serve",
 		"--ioa-url", "http://127.0.0.1:9999",
-		"--ioa-db", "./test.db",
 		"--timeout", "10",
 	})
 	if err != nil {
@@ -544,7 +527,7 @@ func TestParseCLIIOAServeCommandUsesURL(t *testing.T) {
 		t.Fatalf("mode = %s, want %s", parsed.Mode, runModeIOAServe)
 	}
 	opt := parsed.Option
-	if opt.IOAURL != "http://127.0.0.1:9999" || opt.IOADB != "./test.db" || opt.Timeout != 10 {
+	if opt.IOAURL != "http://127.0.0.1:9999" || opt.Timeout != 10 {
 		t.Fatalf("option = %#v", opt)
 	}
 }

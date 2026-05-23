@@ -10,7 +10,7 @@ func TestLoadEmbeddedSkills(t *testing.T) {
 	if len(diagnostics) != 0 {
 		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
-	expected := []string{"aiscan", "passive", "ioa", "browser", "scan", "gogo", "spray", "katana", "fuzz", "zombie", "neutron", "sniper", "swarm", "verify", "report", "web_search", "web_fetch", "vision", "parse_results", "filter_results"}
+	expected := expectedEmbeddedSkillNames()
 	if len(loaded) != len(expected) {
 		t.Fatalf("skills = %d, want %d: %#v", len(loaded), len(expected), loaded)
 	}
@@ -49,7 +49,7 @@ func TestFormatForPrompt(t *testing.T) {
 			t.Fatalf("prompt missing %q:\n%s", want, prompt)
 		}
 	}
-	for _, internal := range []string{"browser", "scan", "gogo", "spray", "katana", "fuzz", "zombie", "neutron", "web_search", "web_fetch", "vision", "parse_results", "filter_results"} {
+	for _, internal := range internalPromptSkillNames() {
 		if strings.Contains(prompt, "<name>"+internal+"</name>") {
 			t.Fatalf("prompt includes internal skill %q:\n%s", internal, prompt)
 		}

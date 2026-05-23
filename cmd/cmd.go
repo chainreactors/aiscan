@@ -29,15 +29,6 @@ type Option struct {
 	MiscOptions    `group:"Miscellaneous Options" config:"misc"`
 }
 
-type ReconOptions struct {
-	FofaEmail    string   `long:"fofa-email" config:"fofa_email" description:"FOFA account email for passive recon (or set env FOFA_EMAIL)"`
-	FofaKey      string   `long:"fofa-key" config:"fofa_key" description:"FOFA API key for passive recon (or set env FOFA_KEY)"`
-	HunterToken  string   `long:"hunter-token" config:"hunter_token" description:"Hunter web token (rarely needed; prefer hunter-api-key)"`
-	HunterAPIKey string   `long:"hunter-api-key" config:"hunter_api_key" description:"Hunter API key (64-hex from console) (or env HUNTER_API_KEY)"`
-	ReconProxy   string   `long:"recon-proxy" config:"proxy" description:"Outbound proxy for passive recon (socks5://host:port for hunter via mainland)"`
-	ReconLimit   *int     `long:"recon-limit" config:"limit" description:"Per-query asset limit for passive recon (0 = unlimited)"`
-}
-
 type LLMOptions struct {
 	Provider string `long:"provider" config:"provider" description:"LLM provider name (openai, deepseek, openrouter, ollama, etc.)"`
 	BaseURL  string `long:"base-url" config:"base_url" description:"LLM API base URL"`
@@ -78,7 +69,6 @@ type IOAOptions struct {
 	IOAURL      string `long:"ioa-url" config:"url" description:"IOA server URL for agent tools"`
 	IOANodeID   string `long:"ioa-node-id" description:"Existing IOA node id for agent tools"`
 	IOANodeName string `long:"ioa-node-name" config:"node_name" description:"IOA node name when auto-registering"`
-	IOADB       string `long:"ioa-db" config:"db" description:"IOA SQLite database path for 'aiscan ioa serve'" default:"./ioa.db"`
 	Space       string `long:"space" config:"space" description:"IOA space name for 'aiscan agent --loop'" default:"default"`
 	IOAJSON     bool   `long:"json" description:"Output IOA query results in JSON format"`
 }
@@ -97,16 +87,9 @@ type MiscOptions struct {
 
 type cliOptions struct {
 	Option
-	Agent    struct{}   `command:"agent" description:"Run the LLM agent"`
-	IOA      ioaCommand `command:"ioa" description:"IOA server commands"`
-	Scan     struct{}   `command:"scan" description:"Run the scan pipeline"`
-	Cyberhub struct{}   `command:"cyberhub" description:"Search Cyberhub fingerprints and POCs"`
-	Gogo     struct{}   `command:"gogo" description:"Run gogo scanner"`
-	Spray    struct{}   `command:"spray" description:"Run spray scanner"`
-	Katana   struct{}   `command:"katana" description:"Run katana web crawler"`
-	Zombie   struct{}   `command:"zombie" description:"Run zombie weakpass scanner"`
-	Neutron  struct{}   `command:"neutron" description:"Run neutron POC scanner"`
-	Passive  struct{}   `command:"passive" description:"Run passive cyberspace recon"`
+	Agent struct{}   `command:"agent" description:"Run the LLM agent"`
+	IOA   ioaCommand `command:"ioa" description:"IOA server commands"`
+	scannerCommands
 }
 
 type ioaCommand struct {
@@ -193,7 +176,7 @@ func AiScan() {
 		return
 	}
 	if parsed.Mode == runModeNoCommand {
-		fmt.Fprintln(os.Stderr, "error: missing subcommand: use agent, ioa serve, scan, cyberhub, gogo, spray, katana, zombie, neutron, or passive")
+		fmt.Fprintf(os.Stderr, "error: missing subcommand: use %s\n", cliCommandSummary())
 		os.Exit(1)
 	}
 
@@ -375,7 +358,7 @@ func mergeReconOptions(option, manual *Option) {
 func newCLIParser(cli *cliOptions, options goflags.Options) *goflags.Parser {
 	parser := goflags.NewParser(cli, options)
 	parser.SubcommandsOptional = true
-	parser.Usage = `[OPTIONS] <command>
+	parser.Usage = fmt.Sprintf(`[OPTIONS] <command>
 
 aiscan - AI-assisted security scanner
 
@@ -384,12 +367,7 @@ Commands:
   agent          Run the natural-language agent
 
 Advanced scanners:
-  gogo           Run gogo directly
-  spray          Run spray directly
-  katana         Run katana web crawler
-  zombie         Run zombie directly
-  neutron        Run neutron directly
-  passive        Run passive cyberspace recon
+%s
 
 Infrastructure:
   cyberhub       Search Cyberhub fingerprints and POCs
@@ -410,7 +388,7 @@ Examples:
   aiscan ioa spaces --ioa-url http://127.0.0.1:8765
   aiscan ioa messages default --ioa-url http://127.0.0.1:8765
   aiscan agent --loop -p "localhost web scanner" -s aiscan --space case-1
-  aiscan agent --loop --heartbeat 5 --space case-1 -p "coordinate next scan steps"`
+  aiscan agent --loop --heartbeat 5 --space case-1 -p "coordinate next scan steps"`, scannerUsageLines())
 	return parser
 }
 
@@ -557,11 +535,7 @@ func argsAfterCommand(args []string, command string) []string {
 }
 
 func isScannerCommandName(name string) bool {
-	switch name {
-	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "passive":
-		return true
-	}
-	return false
+	return scannerCommandAvailable(name)
 }
 
 func selectedMode(parser *goflags.Parser) runMode {
@@ -588,10 +562,23 @@ func selectedMode(parser *goflags.Parser) runMode {
 		return runModeAgent
 	case "serve":
 		return runModeIOAServe
-	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "passive":
-		return runModeScanner
+	default:
+		if scannerCommandAvailable(active.Name) {
+			return runModeScanner
+		}
 	}
 	return runModeNoCommand
+}
+
+func selectedScanner(parser *goflags.Parser) string {
+	active := parser.Active
+	if active == nil {
+		return ""
+	}
+	if scannerCommandAvailable(active.Name) {
+		return active.Name
+	}
+	return ""
 }
 
 func extractIOAArgs(cli *cliOptions, mode runMode) ioaClientArgs {
@@ -607,18 +594,6 @@ func extractIOAArgs(cli *cliOptions, mode runMode) ioaClientArgs {
 		return ioaClientArgs{Space: cli.IOA.Nodes.Positional.Space}
 	}
 	return ioaClientArgs{}
-}
-
-func selectedScanner(parser *goflags.Parser) string {
-	active := parser.Active
-	if active == nil {
-		return ""
-	}
-	switch active.Name {
-	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "passive":
-		return active.Name
-	}
-	return ""
 }
 
 func applyScannerRootArgs(args []string, option *Option) ([]string, error) {
@@ -765,11 +740,7 @@ func isDirectScannerCommand(rest []string) bool {
 	if len(rest) == 0 {
 		return false
 	}
-	switch rest[0] {
-	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "passive":
-		return true
-	}
-	return false
+	return scannerCommandAvailable(rest[0])
 }
 
 func shouldStreamScannerOutput(rest []string) bool {

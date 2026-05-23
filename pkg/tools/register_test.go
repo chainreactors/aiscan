@@ -30,29 +30,13 @@ func TestRegisterAllTreatsNeutronAsOptional(t *testing.T) {
 	}
 	reg := buildRegistry(engineSet)
 
-	for _, name := range []string{"katana", "scan", "gogo", "spray"} {
+	for _, name := range []string{"scan", "gogo", "spray"} {
 		if !reg.Has(name) {
 			t.Fatalf("expected %q to be registered", name)
 		}
 	}
 	if reg.Has("neutron") {
 		t.Fatal("neutron should not be registered without templates")
-	}
-	if reg.Has("passive") {
-		t.Fatal("passive should not be registered without recon engines")
-	}
-}
-
-func TestRegisterAllRegistersPassiveWithUncover(t *testing.T) {
-	engineSet := &engine.Set{}
-	engineSet.SetupUncover(engine.ReconOptions{
-		FofaEmail: "test@example.com",
-		FofaKey:   "deadbeef",
-	}, nil)
-	reg := buildRegistry(engineSet)
-
-	if !reg.Has("passive") {
-		t.Fatal("expected passive to be registered when engineSet.Uncover is non-nil")
 	}
 }
 
