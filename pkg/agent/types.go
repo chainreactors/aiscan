@@ -76,6 +76,13 @@ type ShouldStopAfterTurnContext struct {
 	NewMessages []provider.ChatMessage
 }
 
+type ShouldWaitAfterTurnContext struct {
+	Message     provider.ChatMessage
+	ToolResults []provider.ChatMessage
+	Context     Context
+	NewMessages []provider.ChatMessage
+}
+
 type Config struct {
 	Provider            provider.Provider
 	Model               string
@@ -92,6 +99,7 @@ type Config struct {
 	BeforeToolCall      func(context.Context, BeforeToolCallContext) (*BeforeToolCallResult, error)
 	AfterToolCall       func(context.Context, AfterToolCallContext) (*AfterToolCallResult, error)
 	ShouldStopAfterTurn func(context.Context, ShouldStopAfterTurnContext) (bool, error)
+	ShouldWaitAfterTurn func(context.Context, ShouldWaitAfterTurnContext) (bool, error)
 	// Inbox receives external messages that runLoop drains and renders at the
 	// start of every turn. Used by the swarm bridge and task manager to inject
 	// events into the LLM's next reasoning step. A closed inbox is treated as
@@ -173,6 +181,10 @@ func WithAfterToolCall(fn func(context.Context, AfterToolCallContext) (*AfterToo
 
 func WithShouldStopAfterTurn(fn func(context.Context, ShouldStopAfterTurnContext) (bool, error)) Option {
 	return func(c *Config) { c.ShouldStopAfterTurn = fn }
+}
+
+func WithShouldWaitAfterTurn(fn func(context.Context, ShouldWaitAfterTurnContext) (bool, error)) Option {
+	return func(c *Config) { c.ShouldWaitAfterTurn = fn }
 }
 
 func WithMaxRetries(n int) Option {

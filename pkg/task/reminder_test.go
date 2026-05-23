@@ -85,6 +85,52 @@ func TestPeekSinceIncremental(t *testing.T) {
 	}
 }
 
+func TestPeekSinceLimitPagesWithoutSkipping(t *testing.T) {
+	dir := t.TempDir()
+	mgr := NewManager(filepath.Join(dir, "tasks"))
+
+	payload := strings.Repeat("a", 12)
+	fn := func(ctx context.Context, out io.Writer) error {
+		_, _ = io.WriteString(out, payload)
+		return nil
+	}
+	info, err := mgr.SpawnInProcess("peek-limit", "peek-limit-cmd", 10*time.Second, fn)
+	if err != nil {
+		t.Fatalf("SpawnInProcess: %v", err)
+	}
+	final, err := mgr.Wait(context.Background(), info.ID, 3*time.Second)
+	if err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+	if final.State != StateCompleted {
+		t.Fatalf("state = %s, want completed", final.State)
+	}
+
+	out1, off1, more1, err := mgr.PeekSinceLimit(info.ID, 0, 5)
+	if err != nil {
+		t.Fatalf("PeekSinceLimit first: %v", err)
+	}
+	if out1 != strings.Repeat("a", 5) || off1 != 5 || !more1 {
+		t.Fatalf("first page = (%q, %d, %t), want 5 bytes, offset 5, more", out1, off1, more1)
+	}
+
+	out2, off2, more2, err := mgr.PeekSinceLimit(info.ID, off1, 5)
+	if err != nil {
+		t.Fatalf("PeekSinceLimit second: %v", err)
+	}
+	if out2 != strings.Repeat("a", 5) || off2 != 10 || !more2 {
+		t.Fatalf("second page = (%q, %d, %t), want 5 bytes, offset 10, more", out2, off2, more2)
+	}
+
+	out3, off3, more3, err := mgr.PeekSinceLimit(info.ID, off2, 5)
+	if err != nil {
+		t.Fatalf("PeekSinceLimit third: %v", err)
+	}
+	if out3 != strings.Repeat("a", 2) || off3 != 12 || more3 {
+		t.Fatalf("third page = (%q, %d, %t), want 2 bytes, offset 12, no more", out3, off3, more3)
+	}
+}
+
 func TestPeekSinceUnknownTask(t *testing.T) {
 	dir := t.TempDir()
 	mgr := NewManager(filepath.Join(dir, "tasks"))

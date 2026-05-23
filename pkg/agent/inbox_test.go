@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"context"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestBufferedInboxPushAndDrain(t *testing.T) {
@@ -68,6 +70,51 @@ func TestBufferedInboxClose(t *testing.T) {
 	msgs := inbox.Drain()
 	if len(msgs) != 1 || msgs[0].Content != "before" {
 		t.Fatalf("Drain after Close should return buffered messages, got %v", msgs)
+	}
+}
+
+func TestBufferedInboxWaitWakesOnPush(t *testing.T) {
+	inbox := NewBufferedInbox(1)
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		inbox.Push(InboxMessage{Content: "ready"})
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if !inbox.Wait(ctx) {
+		t.Fatal("Wait() = false, want true after push")
+	}
+}
+
+func TestBufferedInboxCoalescesTaskReminders(t *testing.T) {
+	inbox := NewBufferedInbox(2)
+	if !inbox.PushMessage("task", "reminder", "old", nil) {
+		t.Fatal("first reminder should enqueue")
+	}
+	if !inbox.PushMessage("task", "reminder", "new", nil) {
+		t.Fatal("second reminder should coalesce")
+	}
+	if inbox.Len() != 1 {
+		t.Fatalf("Len() = %d, want 1", inbox.Len())
+	}
+	msgs := inbox.Drain()
+	if len(msgs) != 1 || msgs[0].Content != "new" {
+		t.Fatalf("Drain() = %#v, want latest reminder only", msgs)
+	}
+}
+
+func TestBufferedInboxCompletionDropsPendingReminderWhenFull(t *testing.T) {
+	inbox := NewBufferedInbox(1)
+	if !inbox.PushMessage("task", "reminder", "reminder", nil) {
+		t.Fatal("reminder should enqueue")
+	}
+	if !inbox.PushMessage("task", "completion", "completion", nil) {
+		t.Fatal("completion should replace pending reminder")
+	}
+	msgs := inbox.Drain()
+	if len(msgs) != 1 || msgs[0].Kind != "completion" || msgs[0].Content != "completion" {
+		t.Fatalf("Drain() = %#v, want completion", msgs)
 	}
 }
 

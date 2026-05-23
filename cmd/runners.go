@@ -113,6 +113,7 @@ func runAgentOneShotMode(ctx context.Context, option *Option, logger telemetry.L
 	if taskMgr != nil {
 		taskMgr.SetSink(inbox)
 		taskMgr.StartReminder(30 * time.Second)
+		opts = append(opts, waitForBackgroundTasksOption(taskMgr))
 		defer func() {
 			taskMgr.StopReminder()
 			taskMgr.ClearSink()
@@ -324,6 +325,7 @@ func runLoop(ctx context.Context, option *Option, logger telemetry.Logger) error
 		if taskMgr != nil {
 			taskMgr.SetSink(inbox)
 			taskMgr.StartReminder(30 * time.Second)
+			opts = append(opts, waitForBackgroundTasksOption(taskMgr))
 			defer func() {
 				taskMgr.StopReminder()
 				taskMgr.ClearSink()
@@ -470,6 +472,12 @@ func inboxRefsFromPeer(peer swarm.PeerMessage) map[string][]string {
 		return nil
 	}
 	return refs
+}
+
+func waitForBackgroundTasksOption(taskMgr *task.Manager) agent.Option {
+	return agent.WithShouldWaitAfterTurn(func(context.Context, agent.ShouldWaitAfterTurnContext) (bool, error) {
+		return taskMgr.RunningCount() > 0, nil
+	})
 }
 
 // bashTaskManager fetches the task.Manager owned by the bash tool inside the
