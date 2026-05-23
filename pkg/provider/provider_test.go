@@ -37,6 +37,54 @@ func TestResolvePreservesExplicitBaseURL(t *testing.T) {
 	}
 }
 
+func TestInferFromBaseURL(t *testing.T) {
+	tests := []struct {
+		baseURL string
+		want    string
+	}{
+		{"https://api.openai.com/v1", "openai"},
+		{"https://api.anthropic.com/v1", "anthropic"},
+		{"https://api.deepseek.com/v1", "deepseek"},
+		{"https://openrouter.ai/api/v1", "openrouter"},
+		{"https://api.groq.com/openai/v1", "groq"},
+		{"https://api.moonshot.cn/v1", "moonshot"},
+		{"http://localhost:11434/v1", "ollama"},
+		{"https://llm.example.com/v1", ""},
+	}
+
+	for _, tt := range tests {
+		if got := InferFromBaseURL(tt.baseURL); got != tt.want {
+			t.Fatalf("InferFromBaseURL(%q) = %q, want %q", tt.baseURL, got, tt.want)
+		}
+	}
+}
+
+func TestResolveInfersProviderFromBaseURL(t *testing.T) {
+	cfg, err := Resolve(&ProviderConfig{
+		BaseURL: "https://api.anthropic.com/v1",
+		APIKey:  "test-key",
+	})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if cfg.Provider != "anthropic" {
+		t.Fatalf("Provider = %q, want anthropic", cfg.Provider)
+	}
+}
+
+func TestNewProviderUsesInferredAnthropicProvider(t *testing.T) {
+	p, err := NewProvider(&ProviderConfig{
+		BaseURL: "https://api.anthropic.com/v1",
+		APIKey:  "test-key",
+	})
+	if err != nil {
+		t.Fatalf("NewProvider() error = %v", err)
+	}
+	if _, ok := p.(*AnthropicProvider); !ok {
+		t.Fatalf("provider type = %T, want *AnthropicProvider", p)
+	}
+}
+
 func TestAnthropicProviderChatCompletion(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/messages" {
@@ -90,14 +138,14 @@ func TestAnthropicProviderChatCompletion(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p, err := NewOpenAIProvider(&ProviderConfig{
+	p, err := NewAnthropicProvider(&ProviderConfig{
 		Provider: "anthropic",
 		BaseURL:  server.URL + "/v1",
 		APIKey:   "test-key",
 		Timeout:  5,
 	})
 	if err != nil {
-		t.Fatalf("NewOpenAIProvider() error = %v", err)
+		t.Fatalf("NewAnthropicProvider() error = %v", err)
 	}
 
 	resp, err := p.ChatCompletion(context.Background(), &ChatCompletionRequest{
@@ -228,14 +276,14 @@ func TestAnthropicProviderChatCompletionStream(t *testing.T) {
 	}))
 	defer server.Close()
 
-	p, err := NewOpenAIProvider(&ProviderConfig{
+	p, err := NewAnthropicProvider(&ProviderConfig{
 		Provider: "anthropic",
 		BaseURL:  server.URL + "/v1",
 		APIKey:   "test-key",
 		Timeout:  5,
 	})
 	if err != nil {
-		t.Fatalf("NewOpenAIProvider() error = %v", err)
+		t.Fatalf("NewAnthropicProvider() error = %v", err)
 	}
 
 	ch, err := p.ChatCompletionStream(context.Background(), &ChatCompletionRequest{
