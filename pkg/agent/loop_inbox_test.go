@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/chainreactors/aiscan/pkg/command"
@@ -16,8 +17,21 @@ func TestInboxDrainedBeforeFirstTurnLLMCall(t *testing.T) {
 		},
 	}
 	inbox := NewBufferedInbox(4)
-	inbox.Push(provider.NewTextMessage("user", "[peer] hello"))
-	inbox.Push(provider.NewTextMessage("user", "[peer] status?"))
+	inbox.Push(InboxMessage{
+		Source:    "ioa",
+		Kind:      "peer_message",
+		Sender:    "node-a",
+		MessageID: "msg-1",
+		Content:   "[peer] hello",
+	})
+	inbox.Push(InboxMessage{
+		Source:    "ioa",
+		Kind:      "peer_message",
+		Sender:    "node-b",
+		MessageID: "msg-2",
+		Content:   "[peer] status?",
+		Targets:   []string{"example.com"},
+	})
 
 	result, err := Run(context.Background(), "main task", tools,
 		WithProvider(llm),
@@ -43,11 +57,16 @@ func TestInboxDrainedBeforeFirstTurnLLMCall(t *testing.T) {
 	if msgs[0].Role != "system" {
 		t.Fatalf("msg[0].Role = %q, want system", msgs[0].Role)
 	}
-	if got := contentOf(msgs[1]); got != "[peer] hello" {
-		t.Fatalf("msg[1] = %q, want [peer] hello", got)
+	if got := contentOf(msgs[1]); !strings.Contains(got, `<swarm_peer`) ||
+		!strings.Contains(got, `sender="node-a"`) ||
+		!strings.Contains(got, `message_id="msg-1"`) ||
+		!strings.Contains(got, "[peer] hello") {
+		t.Fatalf("msg[1] does not render peer metadata: %q", got)
 	}
-	if got := contentOf(msgs[2]); got != "[peer] status?" {
-		t.Fatalf("msg[2] = %q, want [peer] status?", got)
+	if got := contentOf(msgs[2]); !strings.Contains(got, `sender="node-b"`) ||
+		!strings.Contains(got, "[peer] status?") ||
+		!strings.Contains(got, "<targets>") {
+		t.Fatalf("msg[2] does not render peer metadata: %q", got)
 	}
 	if got := contentOf(msgs[3]); got != "main task" {
 		t.Fatalf("msg[3] = %q, want main task", got)
@@ -85,7 +104,7 @@ type pushingProvider struct {
 	inner  provider.Provider
 	inbox  *BufferedInbox
 	pushed bool
-	push   provider.ChatMessage
+	push   InboxMessage
 }
 
 func (p *pushingProvider) Name() string { return "pushing" }
@@ -120,7 +139,13 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 	pushing := &pushingProvider{
 		inner: scripted,
 		inbox: inbox,
-		push:  provider.NewTextMessage("user", "[peer] watch out for example.com"),
+		push: InboxMessage{
+			Source:    "ioa",
+			Kind:      "peer_message",
+			Sender:    "node-a",
+			MessageID: "msg-3",
+			Content:   "[peer] watch out for example.com",
+		},
 	}
 
 	result, err := Run(context.Background(), "scan things", tools,
@@ -144,7 +169,7 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 	// Turn 1 should NOT have the peer message yet — it was pushed during this very call.
 	turn1Msgs := requests[0].Messages
 	for _, m := range turn1Msgs {
-		if contentOf(m) == "[peer] watch out for example.com" {
+		if strings.Contains(contentOf(m), "[peer] watch out for example.com") {
 			t.Fatalf("turn 1 unexpectedly contains peer message: %#v", turn1Msgs)
 		}
 	}
@@ -153,7 +178,7 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 	turn2Msgs := requests[1].Messages
 	found := false
 	for _, m := range turn2Msgs {
-		if contentOf(m) == "[peer] watch out for example.com" {
+		if strings.Contains(contentOf(m), "[peer] watch out for example.com") {
 			found = true
 			break
 		}

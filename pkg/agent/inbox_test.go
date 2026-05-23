@@ -3,21 +3,19 @@ package agent
 import (
 	"sync"
 	"testing"
-
-	"github.com/chainreactors/aiscan/pkg/provider"
 )
 
 func TestBufferedInboxPushAndDrain(t *testing.T) {
 	inbox := NewBufferedInbox(8)
-	inbox.Push(provider.NewTextMessage("user", "a"))
-	inbox.Push(provider.NewTextMessage("user", "b"))
-	inbox.Push(provider.NewTextMessage("user", "c"))
+	inbox.Push(InboxMessage{Content: "a"})
+	inbox.Push(InboxMessage{Content: "b"})
+	inbox.Push(InboxMessage{Content: "c"})
 
 	msgs := inbox.Drain()
 	if len(msgs) != 3 {
 		t.Fatalf("Drain() returned %d messages, want 3", len(msgs))
 	}
-	if *msgs[0].Content != "a" || *msgs[1].Content != "b" || *msgs[2].Content != "c" {
+	if msgs[0].Content != "a" || msgs[1].Content != "b" || msgs[2].Content != "c" {
 		t.Fatalf("unexpected message order: %v", msgs)
 	}
 
@@ -29,13 +27,13 @@ func TestBufferedInboxPushAndDrain(t *testing.T) {
 
 func TestBufferedInboxBackpressure(t *testing.T) {
 	inbox := NewBufferedInbox(2)
-	if !inbox.Push(provider.NewTextMessage("user", "1")) {
+	if !inbox.Push(InboxMessage{Content: "1"}) {
 		t.Fatal("Push 1 should succeed")
 	}
-	if !inbox.Push(provider.NewTextMessage("user", "2")) {
+	if !inbox.Push(InboxMessage{Content: "2"}) {
 		t.Fatal("Push 2 should succeed")
 	}
-	if inbox.Push(provider.NewTextMessage("user", "3")) {
+	if inbox.Push(InboxMessage{Content: "3"}) {
 		t.Fatal("Push 3 should fail (capacity=2)")
 	}
 	if inbox.Len() != 2 {
@@ -46,10 +44,10 @@ func TestBufferedInboxBackpressure(t *testing.T) {
 func TestBufferedInboxNonPositiveCapacity(t *testing.T) {
 	for _, capacity := range []int{0, -1} {
 		inbox := NewBufferedInbox(capacity)
-		if !inbox.Push(provider.NewTextMessage("user", "first")) {
+		if !inbox.Push(InboxMessage{Content: "first"}) {
 			t.Fatalf("Push with capacity %d should accept one message", capacity)
 		}
-		if inbox.Push(provider.NewTextMessage("user", "second")) {
+		if inbox.Push(InboxMessage{Content: "second"}) {
 			t.Fatalf("second Push with capacity %d should fail", capacity)
 		}
 	}
@@ -57,18 +55,18 @@ func TestBufferedInboxNonPositiveCapacity(t *testing.T) {
 
 func TestBufferedInboxClose(t *testing.T) {
 	inbox := NewBufferedInbox(8)
-	inbox.Push(provider.NewTextMessage("user", "before"))
+	inbox.Push(InboxMessage{Content: "before"})
 	inbox.Close()
 
 	if !inbox.Closed() {
 		t.Fatal("Closed() should be true after Close()")
 	}
-	if inbox.Push(provider.NewTextMessage("user", "after")) {
+	if inbox.Push(InboxMessage{Content: "after"}) {
 		t.Fatal("Push after Close should return false")
 	}
 
 	msgs := inbox.Drain()
-	if len(msgs) != 1 || *msgs[0].Content != "before" {
+	if len(msgs) != 1 || msgs[0].Content != "before" {
 		t.Fatalf("Drain after Close should return buffered messages, got %v", msgs)
 	}
 }
@@ -82,7 +80,7 @@ func TestBufferedInboxConcurrency(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 100; j++ {
-				inbox.Push(provider.NewTextMessage("user", "msg"))
+				inbox.Push(InboxMessage{Content: "msg"})
 			}
 		}()
 	}

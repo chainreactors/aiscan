@@ -95,15 +95,16 @@ func runLoop(ctx context.Context, prompts []provider.ChatMessage, agentCtx Conte
 		// transcript as user-role messages, so the LLM "sees" them when it
 		// makes the next completion call.
 		if inbox != nil {
-			messages := inbox.Drain()
-			for _, msg := range messages {
+			inboxMessages := inbox.Drain()
+			for _, inboxMsg := range inboxMessages {
+				msg := inboxMessageToChatMessage(inboxMsg)
 				transcript.append(msg)
 				if err := emitMessage(ctx, emitFn, turn, msg); err != nil {
 					return end(nil, err)
 				}
 			}
-			if len(messages) > 0 {
-				cfg.Logger.Debugf("[turn %d] drained %d inbox message(s)", turn, len(messages))
+			if len(inboxMessages) > 0 {
+				cfg.Logger.Debugf("[turn %d] drained %d inbox message(s)", turn, len(inboxMessages))
 			}
 			if inbox.Closed() {
 				inbox = nil

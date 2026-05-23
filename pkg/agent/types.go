@@ -92,10 +92,10 @@ type Config struct {
 	BeforeToolCall      func(context.Context, BeforeToolCallContext) (*BeforeToolCallResult, error)
 	AfterToolCall       func(context.Context, AfterToolCallContext) (*AfterToolCallResult, error)
 	ShouldStopAfterTurn func(context.Context, ShouldStopAfterTurnContext) (bool, error)
-	// Inbox receives external messages that runLoop drains at the start of every
-	// turn and appends to the transcript. Used by the swarm bridge and task
-	// manager to inject events into the LLM's next reasoning step. A closed
-	// inbox is treated as "no more external input"; nil disables the mechanism.
+	// Inbox receives external messages that runLoop drains and renders at the
+	// start of every turn. Used by the swarm bridge and task manager to inject
+	// events into the LLM's next reasoning step. A closed inbox is treated as
+	// "no more external input"; nil disables the mechanism.
 	Inbox Inbox
 }
 

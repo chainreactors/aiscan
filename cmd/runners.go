@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"os"
@@ -14,7 +13,6 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
 	cmdpkg "github.com/chainreactors/aiscan/pkg/command"
-	"github.com/chainreactors/aiscan/pkg/provider"
 	"github.com/chainreactors/aiscan/pkg/swarm"
 	"github.com/chainreactors/aiscan/pkg/task"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
@@ -101,13 +99,28 @@ func runAgentOneShotMode(ctx context.Context, option *Option, logger telemetry.L
 	}()
 	handler := combineEventHandlers(output.HandleEvent, events.HandleEvent)
 
-	result, err := agent.RunWithEvents(ctx, task, application.Commands, handler,
+	opts := []agent.Option{
 		agent.WithProvider(application.Provider),
 		agent.WithSystemPrompt(runtime.systemPrompt),
 		agent.WithModel(option.Model),
 		agent.WithStream(false),
 		agent.WithLogger(logger),
-	)
+	}
+
+	inbox := agent.NewBufferedInbox(64)
+	opts = append(opts, agent.WithInbox(inbox))
+	taskMgr := bashTaskManager(application.Commands)
+	if taskMgr != nil {
+		taskMgr.SetSink(inbox)
+		taskMgr.StartReminder(30 * time.Second)
+		defer func() {
+			taskMgr.StopReminder()
+			taskMgr.ClearSink()
+			taskMgr.KillAll()
+		}()
+	}
+
+	result, err := agent.RunWithEvents(ctx, task, application.Commands, handler, opts...)
 	if err != nil {
 		return err
 	}
@@ -310,12 +323,14 @@ func runLoop(ctx context.Context, option *Option, logger telemetry.Logger) error
 		opts = append(opts, agent.WithInbox(inbox))
 		if taskMgr != nil {
 			taskMgr.SetSink(inbox)
+			taskMgr.StartReminder(30 * time.Second)
 			defer func() {
+				taskMgr.StopReminder()
 				taskMgr.ClearSink()
 				taskMgr.KillAll()
 			}()
 		}
-		return agent.Run(ctx, task.Content, application.Commands, opts...)
+		return agent.Run(ctx, formatTaskPrompt(task), application.Commands, opts...)
 	}
 
 	heartbeatFunc := func(ctx context.Context, prompt string) (string, error) {
@@ -377,10 +392,40 @@ func registerIOATools(ctx context.Context, application *app.App, option *Option)
 	return application.InitIOA(ctx, cfg)
 }
 
-// forwardPeersToInbox bridges swarm peer messages into an agent Inbox,
-// formatting each peer as a user-role chat message the LLM will see at the
-// next turn boundary. Exits when peers is closed (Node finished the task) or
-// when ctx is cancelled (agent.Run returned and the parent cancelled bridge).
+// forwardPeersToInbox bridges swarm peer messages into an agent Inbox while
+// preserving IOA metadata. The agent loop renders them for the LLM at the next
+// turn boundary. Exits when peers is closed (Node finished the task) or when ctx
+// is cancelled (agent.Run returned and the parent cancelled bridge).
+func formatTaskPrompt(task swarm.Task) string {
+	var sb strings.Builder
+	sb.WriteString(task.Content)
+	if len(task.Targets) > 0 {
+		sb.WriteString("\n\nTargets:\n")
+		for _, t := range task.Targets {
+			sb.WriteString("- ")
+			sb.WriteString(t)
+			sb.WriteByte('\n')
+		}
+	}
+	if len(task.Meta) > 0 {
+		skip := true
+		for k := range task.Meta {
+			if k != "kind" {
+				skip = false
+				break
+			}
+		}
+		if !skip {
+			if data, err := json.MarshalIndent(task.Meta, "", "  "); err == nil {
+				sb.WriteString("\nContext:\n")
+				sb.Write(data)
+				sb.WriteByte('\n')
+			}
+		}
+	}
+	return sb.String()
+}
+
 func forwardPeersToInbox(ctx context.Context, peers <-chan swarm.PeerMessage, inbox agent.Inbox, logger telemetry.Logger) {
 	for {
 		select {
@@ -391,7 +436,7 @@ func forwardPeersToInbox(ctx context.Context, peers <-chan swarm.PeerMessage, in
 				inbox.Close()
 				return
 			}
-			msg := provider.NewTextMessage("user", formatPeerForLLM(peer))
+			msg := inboxMessageFromPeer(peer)
 			if !inbox.Push(msg) {
 				logger.Warnf("swarm inbox=full dropping peer msg=%s sender=%s", peer.MessageID, peer.Sender)
 			}
@@ -399,41 +444,32 @@ func forwardPeersToInbox(ctx context.Context, peers <-chan swarm.PeerMessage, in
 	}
 }
 
-func formatPeerForLLM(peer swarm.PeerMessage) string {
-	var sb strings.Builder
-	sb.WriteString("<swarm_peer")
-	if peer.Sender != "" {
-		writeXMLAttr(&sb, "sender", peer.Sender)
+func inboxMessageFromPeer(peer swarm.PeerMessage) agent.InboxMessage {
+	return agent.InboxMessage{
+		Source:     "ioa",
+		Kind:       "peer_message",
+		Sender:     peer.Sender,
+		MessageID:  peer.MessageID,
+		Content:    peer.Content,
+		Targets:    append([]string(nil), peer.Targets...),
+		Refs:       inboxRefsFromPeer(peer),
+		Meta:       peer.Meta,
+		RawContent: peer.RawContent,
 	}
-	if peer.MessageID != "" {
-		writeXMLAttr(&sb, "message_id", peer.MessageID)
-	}
-	sb.WriteString(">\n")
-	_ = xml.EscapeText(&sb, []byte(peerPayloadForLLM(peer)))
-	sb.WriteString("\n</swarm_peer>")
-	return sb.String()
 }
 
-func writeXMLAttr(sb *strings.Builder, name, value string) {
-	sb.WriteByte(' ')
-	sb.WriteString(name)
-	sb.WriteString("=\"")
-	_ = xml.EscapeText(sb, []byte(value))
-	sb.WriteByte('"')
-}
-
-func peerPayloadForLLM(peer swarm.PeerMessage) string {
-	if strings.TrimSpace(peer.Content) != "" {
-		return peer.Content
+func inboxRefsFromPeer(peer swarm.PeerMessage) map[string][]string {
+	refs := make(map[string][]string, 2)
+	if len(peer.Refs.Messages) > 0 {
+		refs["messages"] = append([]string(nil), peer.Refs.Messages...)
 	}
-	if len(peer.RawContent) == 0 {
-		return ""
+	if len(peer.Refs.Nodes) > 0 {
+		refs["nodes"] = append([]string(nil), peer.Refs.Nodes...)
 	}
-	data, err := json.MarshalIndent(peer.RawContent, "", "  ")
-	if err != nil {
-		return fmt.Sprint(peer.RawContent)
+	if len(refs) == 0 {
+		return nil
 	}
-	return string(data)
+	return refs
 }
 
 // bashTaskManager fetches the task.Manager owned by the bash tool inside the

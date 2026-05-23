@@ -42,6 +42,15 @@ func ParseSwarm(content map[string]any) (SwarmMessage, bool) {
 	if raw, ok := content["meta"].(map[string]any); ok {
 		msg.Meta = raw
 	}
+	for k, v := range content {
+		if k == "content" || k == "targets" || k == "meta" {
+			continue
+		}
+		if msg.Meta == nil {
+			msg.Meta = make(map[string]any)
+		}
+		msg.Meta[k] = v
+	}
 	return msg, true
 }
 

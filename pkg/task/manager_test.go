@@ -12,13 +12,18 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	"github.com/chainreactors/aiscan/pkg/provider"
 )
+
+type testSinkMessage struct {
+	Source     string
+	Kind       string
+	Content    string
+	Attributes map[string]string
+}
 
 type testSink struct {
 	mu   sync.Mutex
-	msgs []provider.ChatMessage
+	msgs []testSinkMessage
 	ch   chan struct{}
 }
 
@@ -26,9 +31,15 @@ func newTestSink() *testSink {
 	return &testSink{ch: make(chan struct{}, 8)}
 }
 
-func (s *testSink) Push(msg provider.ChatMessage) bool {
+func (s *testSink) PushMessage(source, kind, content string, attrs map[string]string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	msg := testSinkMessage{
+		Source:     source,
+		Kind:       kind,
+		Content:    content,
+		Attributes: attrs,
+	}
 	s.msgs = append(s.msgs, msg)
 	select {
 	case s.ch <- struct{}{}:
@@ -37,7 +48,7 @@ func (s *testSink) Push(msg provider.ChatMessage) bool {
 	return true
 }
 
-func (s *testSink) waitOne(t *testing.T, timeout time.Duration) provider.ChatMessage {
+func (s *testSink) waitOne(t *testing.T, timeout time.Duration) testSinkMessage {
 	t.Helper()
 	select {
 	case <-s.ch:
@@ -52,13 +63,13 @@ func (s *testSink) waitOne(t *testing.T, timeout time.Duration) provider.ChatMes
 // rejectSink always returns false, simulating a full/closed inbox.
 type rejectSink struct{}
 
-func (rejectSink) Push(provider.ChatMessage) bool { return false }
+func (rejectSink) PushMessage(string, string, string, map[string]string) bool { return false }
 
 type panicSink struct {
 	called chan struct{}
 }
 
-func (s panicSink) Push(provider.ChatMessage) bool {
+func (s panicSink) PushMessage(string, string, string, map[string]string) bool {
 	if s.called != nil {
 		close(s.called)
 	}
@@ -70,7 +81,7 @@ type blockingSink struct {
 	release <-chan struct{}
 }
 
-func (s blockingSink) Push(provider.ChatMessage) bool {
+func (s blockingSink) PushMessage(string, string, string, map[string]string) bool {
 	if s.started != nil {
 		close(s.started)
 	}
@@ -109,11 +120,17 @@ func TestSpawnCompletesAndNotifies(t *testing.T) {
 	}
 
 	msg := sink.waitOne(t, 5*time.Second)
-	if msg.Content == nil || !strings.Contains(*msg.Content, info.ID) {
+	if msg.Source != "task" || msg.Kind != "completion" {
+		t.Fatalf("completion message source/kind = %s/%s", msg.Source, msg.Kind)
+	}
+	if !strings.Contains(msg.Content, info.ID) {
 		t.Fatalf("completion message missing id: %v", msg)
 	}
-	if !strings.Contains(*msg.Content, "done") {
-		t.Fatalf("completion message missing stdout tail: %v", *msg.Content)
+	if msg.Attributes["task_id"] != info.ID {
+		t.Fatalf("completion message missing task_id attr: %v", msg.Attributes)
+	}
+	if !strings.Contains(msg.Content, "done") {
+		t.Fatalf("completion message missing stdout tail: %v", msg.Content)
 	}
 
 	final, ok := mgr.Get(info.ID)
@@ -324,11 +341,17 @@ func TestSpawnInProcessCompletesAndNotifies(t *testing.T) {
 	}
 
 	msg := sink.waitOne(t, 3*time.Second)
-	if msg.Content == nil || !strings.Contains(*msg.Content, info.ID) {
+	if msg.Source != "task" || msg.Kind != "completion" {
+		t.Fatalf("completion message source/kind = %s/%s", msg.Source, msg.Kind)
+	}
+	if !strings.Contains(msg.Content, info.ID) {
 		t.Fatalf("completion msg missing id: %v", msg)
 	}
-	if !strings.Contains(*msg.Content, "step 2") {
-		t.Fatalf("completion msg missing stdout: %v", *msg.Content)
+	if msg.Attributes["task_id"] != info.ID {
+		t.Fatalf("completion message missing task_id attr: %v", msg.Attributes)
+	}
+	if !strings.Contains(msg.Content, "step 2") {
+		t.Fatalf("completion msg missing stdout: %v", msg.Content)
 	}
 
 	final, _ := mgr.Get(info.ID)
