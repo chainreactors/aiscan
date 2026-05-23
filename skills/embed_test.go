@@ -10,7 +10,7 @@ func TestLoadEmbeddedSkills(t *testing.T) {
 	if len(diagnostics) != 0 {
 		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
-	expected := []string{"aiscan", "passive", "ioa", "browser", "scan", "gogo", "spray", "katana", "fuzz", "zombie", "neutron", "sniper", "verify", "report", "web_search", "web_fetch", "vision", "parse_results", "filter_results"}
+	expected := []string{"aiscan", "passive", "ioa", "browser", "scan", "gogo", "spray", "katana", "fuzz", "zombie", "neutron", "sniper", "swarm", "verify", "report", "web_search", "web_fetch", "vision", "parse_results", "filter_results"}
 	if len(loaded) != len(expected) {
 		t.Fatalf("skills = %d, want %d: %#v", len(loaded), len(expected), loaded)
 	}
