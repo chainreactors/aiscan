@@ -49,7 +49,7 @@ func runLoop(ctx context.Context, prompts []provider.ChatMessage, agentCtx Conte
 	turn := 0
 
 	emitFn := cfg.Emit
-	inbox := cfg.Inbox
+	var inbox Inbox = cfg.Inbox
 	if err := emit(ctx, emitFn, Event{Type: EventAgentStart}); err != nil {
 		return nil, err
 	}
@@ -90,31 +90,23 @@ func runLoop(ctx context.Context, prompts []provider.ChatMessage, agentCtx Conte
 			return end(nil, err)
 		}
 
-		// Drain any external messages (e.g. swarm peer chatter) that arrived
-		// since the previous turn ended. They appear in the transcript as
-		// user-role messages, so the LLM "sees" them when it makes the next
-		// completion call.
+		// Drain any external messages (e.g. swarm peer chatter, task completions)
+		// that arrived since the previous turn ended. They appear in the
+		// transcript as user-role messages, so the LLM "sees" them when it
+		// makes the next completion call.
 		if inbox != nil {
-			drained := 0
-		drain:
-			for {
-				select {
-				case msg, ok := <-inbox:
-					if !ok {
-						inbox = nil
-						break drain
-					}
-					transcript.append(msg)
-					if err := emitMessage(ctx, emitFn, turn, msg); err != nil {
-						return end(nil, err)
-					}
-					drained++
-				default:
-					break drain
+			messages := inbox.Drain()
+			for _, msg := range messages {
+				transcript.append(msg)
+				if err := emitMessage(ctx, emitFn, turn, msg); err != nil {
+					return end(nil, err)
 				}
 			}
-			if drained > 0 {
-				cfg.Logger.Debugf("[turn %d] drained %d inbox message(s)", turn, drained)
+			if len(messages) > 0 {
+				cfg.Logger.Debugf("[turn %d] drained %d inbox message(s)", turn, len(messages))
+			}
+			if inbox.Closed() {
+				inbox = nil
 			}
 		}
 

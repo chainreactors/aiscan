@@ -3,9 +3,9 @@ package agent
 import (
 	"context"
 
+	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/provider"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
-	"github.com/chainreactors/aiscan/pkg/command"
 )
 
 const maxResultSize = 50 * 1024
@@ -20,9 +20,9 @@ const (
 	EventMessageStart       EventType = "message_start"
 	EventMessageUpdate      EventType = "message_update"
 	EventMessageEnd         EventType = "message_end"
-	EventToolExecutionStart  EventType = "tool_execution_start"
-	EventToolExecutionEnd    EventType = "tool_execution_end"
-	EventTokenBudgetWarning  EventType = "token_budget_warning"
+	EventToolExecutionStart EventType = "tool_execution_start"
+	EventToolExecutionEnd   EventType = "tool_execution_end"
+	EventTokenBudgetWarning EventType = "token_budget_warning"
 )
 
 type Event struct {
@@ -92,12 +92,11 @@ type Config struct {
 	BeforeToolCall      func(context.Context, BeforeToolCallContext) (*BeforeToolCallResult, error)
 	AfterToolCall       func(context.Context, AfterToolCallContext) (*AfterToolCallResult, error)
 	ShouldStopAfterTurn func(context.Context, ShouldStopAfterTurnContext) (bool, error)
-	// Inbox receives external messages that runLoop drains (non-blocking) at the
-	// start of every turn and appends to the transcript. Used by the swarm bridge
-	// to inject peer chatter into the LLM's next reasoning step without restarting
-	// the agent. A closed inbox is treated as "no more external input"; nil
-	// disables the mechanism entirely.
-	Inbox <-chan provider.ChatMessage
+	// Inbox receives external messages that runLoop drains at the start of every
+	// turn and appends to the transcript. Used by the swarm bridge and task
+	// manager to inject events into the LLM's next reasoning step. A closed
+	// inbox is treated as "no more external input"; nil disables the mechanism.
+	Inbox Inbox
 }
 
 type Option func(*Config)
@@ -188,6 +187,6 @@ func WithResponseFormat(rf *provider.ResponseFormat) Option {
 	return func(c *Config) { c.ResponseFormat = rf }
 }
 
-func WithInbox(ch <-chan provider.ChatMessage) Option {
-	return func(c *Config) { c.Inbox = ch }
+func WithInbox(inbox Inbox) Option {
+	return func(c *Config) { c.Inbox = inbox }
 }

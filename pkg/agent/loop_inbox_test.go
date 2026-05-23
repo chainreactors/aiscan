@@ -15,9 +15,9 @@ func TestInboxDrainedBeforeFirstTurnLLMCall(t *testing.T) {
 			chatResponse(provider.NewTextMessage("assistant", "ack")),
 		},
 	}
-	inbox := make(chan provider.ChatMessage, 4)
-	inbox <- provider.NewTextMessage("user", "[peer] hello")
-	inbox <- provider.NewTextMessage("user", "[peer] status?")
+	inbox := NewBufferedInbox(4)
+	inbox.Push(provider.NewTextMessage("user", "[peer] hello"))
+	inbox.Push(provider.NewTextMessage("user", "[peer] status?"))
 
 	result, err := Run(context.Background(), "main task", tools,
 		WithProvider(llm),
@@ -61,8 +61,8 @@ func TestInboxClosedDoesNotBlock(t *testing.T) {
 			chatResponse(provider.NewTextMessage("assistant", "done")),
 		},
 	}
-	inbox := make(chan provider.ChatMessage)
-	close(inbox)
+	inbox := NewBufferedInbox(4)
+	inbox.Close()
 
 	result, err := Run(context.Background(), "task", tools,
 		WithProvider(llm),
@@ -83,7 +83,7 @@ func TestInboxClosedDoesNotBlock(t *testing.T) {
 // drain should then pick it up.
 type pushingProvider struct {
 	inner  provider.Provider
-	inbox  chan<- provider.ChatMessage
+	inbox  *BufferedInbox
 	pushed bool
 	push   provider.ChatMessage
 }
@@ -93,7 +93,7 @@ func (p *pushingProvider) Name() string { return "pushing" }
 func (p *pushingProvider) ChatCompletion(ctx context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 	if !p.pushed {
 		p.pushed = true
-		p.inbox <- p.push
+		p.inbox.Push(p.push)
 	}
 	return p.inner.ChatCompletion(ctx, req)
 }
@@ -116,7 +116,7 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 		},
 	}
 
-	inbox := make(chan provider.ChatMessage, 4)
+	inbox := NewBufferedInbox(4)
 	pushing := &pushingProvider{
 		inner: scripted,
 		inbox: inbox,
