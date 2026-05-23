@@ -300,22 +300,16 @@ func runLoop(ctx context.Context, option *Option, logger telemetry.Logger) error
 	taskMgr := bashTaskManager(application.Commands)
 
 	taskHandler := func(ctx context.Context, task swarm.Task) (string, error) {
-		opts := loopOpts
-		var inbox chan provider.ChatMessage
+		opts := append([]agent.Option(nil), loopOpts...)
+		inbox := agent.NewBufferedInbox(64)
 		if task.Peers != nil {
-			inbox = make(chan provider.ChatMessage, 64)
 			bridgeCtx, cancelBridge := context.WithCancel(ctx)
 			defer cancelBridge()
 			go forwardPeersToInbox(bridgeCtx, task.Peers, inbox, logger)
-			opts = append(append([]agent.Option(nil), loopOpts...), agent.WithInbox(inbox))
 		}
+		opts = append(opts, agent.WithInbox(inbox))
 		if taskMgr != nil {
-			// Tie background task completions to this swarm task's inbox; tear
-			// down on return so leftover scans from this company don't leak
-			// into the next dispatched task.
-			if inbox != nil {
-				taskMgr.SetSink(inbox)
-			}
+			taskMgr.SetSink(inbox)
 			defer func() {
 				taskMgr.ClearSink()
 				taskMgr.KillAll()
@@ -383,26 +377,22 @@ func registerIOATools(ctx context.Context, application *app.App, option *Option)
 	return application.InitIOA(ctx, cfg)
 }
 
-// forwardPeersToInbox bridges swarm peer messages into an agent inbox channel,
+// forwardPeersToInbox bridges swarm peer messages into an agent Inbox,
 // formatting each peer as a user-role chat message the LLM will see at the
 // next turn boundary. Exits when peers is closed (Node finished the task) or
 // when ctx is cancelled (agent.Run returned and the parent cancelled bridge).
-func forwardPeersToInbox(ctx context.Context, peers <-chan swarm.PeerMessage, inbox chan<- provider.ChatMessage, logger telemetry.Logger) {
-	defer close(inbox)
+func forwardPeersToInbox(ctx context.Context, peers <-chan swarm.PeerMessage, inbox agent.Inbox, logger telemetry.Logger) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case peer, ok := <-peers:
 			if !ok {
+				inbox.Close()
 				return
 			}
 			msg := provider.NewTextMessage("user", formatPeerForLLM(peer))
-			select {
-			case inbox <- msg:
-			case <-ctx.Done():
-				return
-			default:
+			if !inbox.Push(msg) {
 				logger.Warnf("swarm inbox=full dropping peer msg=%s sender=%s", peer.MessageID, peer.Sender)
 			}
 		}
