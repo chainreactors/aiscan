@@ -2,7 +2,7 @@
 // commands launched by the agent. Each task runs in its own process group
 // (so kill cascades to descendants), tees stdout+stderr to a persistent
 // file, and on completion pushes a follow-up ChatMessage onto an optional
-// sink channel so the next agent turn can react to the result.
+// MessageSink so the next agent turn can react to the result.
 //
 // Design follows pi-mono's tmux-bash extension (richardgill/pi-extensions)
 // but uses plain os/exec + a filesystem signal pattern instead of tmux.
@@ -72,7 +72,7 @@ type Manager struct {
 	mu     sync.Mutex
 	tasks  map[string]*task
 	outDir string
-	sink   chan<- provider.ChatMessage
+	sink   MessageSink
 }
 
 type task struct {
@@ -88,6 +88,13 @@ type task struct {
 // must respect ctx (used by Kill / Shutdown) and write progress to out.
 type InProcessFn func(ctx context.Context, out io.Writer) error
 
+// MessageSink accepts task-completion notifications. Satisfied by
+// agent.BufferedInbox or any type with a Push method. Push should be
+// best-effort; Manager isolates slow or panicking sinks from task cleanup.
+type MessageSink interface {
+	Push(msg provider.ChatMessage) bool
+}
+
 // NewManager returns an empty Manager. outDir is the base directory under
 // which each task's files are written (outDir/<id>/{cmd,stdout,signal,meta.json}).
 // The directory is created lazily on first Spawn.
@@ -98,13 +105,13 @@ func NewManager(outDir string) *Manager {
 	}
 }
 
-// SetSink configures the channel that receives task-completion notifications.
-// Pass nil to disable injection. Replaces any previous sink. Existing
-// in-flight tasks pick up the new sink when they complete.
-func (m *Manager) SetSink(c chan<- provider.ChatMessage) {
+// SetSink configures the MessageSink that receives task-completion
+// notifications. Pass nil to disable injection. Replaces any previous sink.
+// Existing in-flight tasks pick up the new sink when they complete.
+func (m *Manager) SetSink(s MessageSink) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.sink = c
+	m.sink = s
 }
 
 // ClearSink is shorthand for SetSink(nil).
@@ -660,18 +667,15 @@ func formatCompletion(info Info, killed bool, killCause string) string {
 	return sb.String()
 }
 
-func sendCompletion(sink chan<- provider.ChatMessage, info Info, killed bool, killCause string) {
+func sendCompletion(sink MessageSink, info Info, killed bool, killCause string) {
 	if sink == nil {
 		return
 	}
 	msg := provider.NewTextMessage("user", formatCompletion(info, killed, killCause))
-	defer func() {
-		_ = recover()
+	go func() {
+		defer func() {
+			_ = recover()
+		}()
+		sink.Push(msg)
 	}()
-	// Non-blocking send: if the inbox is full or has just been closed, the LLM
-	// can still discover completion via `task list` / `task wait`.
-	select {
-	case sink <- msg:
-	default:
-	}
 }

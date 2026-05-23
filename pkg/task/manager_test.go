@@ -8,12 +8,75 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/provider"
 )
+
+type testSink struct {
+	mu   sync.Mutex
+	msgs []provider.ChatMessage
+	ch   chan struct{}
+}
+
+func newTestSink() *testSink {
+	return &testSink{ch: make(chan struct{}, 8)}
+}
+
+func (s *testSink) Push(msg provider.ChatMessage) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.msgs = append(s.msgs, msg)
+	select {
+	case s.ch <- struct{}{}:
+	default:
+	}
+	return true
+}
+
+func (s *testSink) waitOne(t *testing.T, timeout time.Duration) provider.ChatMessage {
+	t.Helper()
+	select {
+	case <-s.ch:
+	case <-time.After(timeout):
+		t.Fatalf("no completion message received within %s", timeout)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.msgs[len(s.msgs)-1]
+}
+
+// rejectSink always returns false, simulating a full/closed inbox.
+type rejectSink struct{}
+
+func (rejectSink) Push(provider.ChatMessage) bool { return false }
+
+type panicSink struct {
+	called chan struct{}
+}
+
+func (s panicSink) Push(provider.ChatMessage) bool {
+	if s.called != nil {
+		close(s.called)
+	}
+	panic("boom")
+}
+
+type blockingSink struct {
+	started chan struct{}
+	release <-chan struct{}
+}
+
+func (s blockingSink) Push(provider.ChatMessage) bool {
+	if s.started != nil {
+		close(s.started)
+	}
+	<-s.release
+	return true
+}
 
 // waitUntil polls until predicate returns true or timeout elapses. Used in
 // place of fixed sleeps so tests stay fast and don't flake on slow CI.
@@ -34,7 +97,7 @@ func TestSpawnCompletesAndNotifies(t *testing.T) {
 	}
 	dir := t.TempDir()
 	mgr := NewManager(filepath.Join(dir, "tasks"))
-	sink := make(chan provider.ChatMessage, 1)
+	sink := newTestSink()
 	mgr.SetSink(sink)
 
 	info, err := mgr.Spawn(dir, "printf done; sleep 0.05", "demo", 10*time.Second)
@@ -45,16 +108,12 @@ func TestSpawnCompletesAndNotifies(t *testing.T) {
 		t.Fatalf("initial state = %s, want running", info.State)
 	}
 
-	select {
-	case msg := <-sink:
-		if msg.Content == nil || !strings.Contains(*msg.Content, info.ID) {
-			t.Fatalf("completion message missing id: %v", msg)
-		}
-		if !strings.Contains(*msg.Content, "done") {
-			t.Fatalf("completion message missing stdout tail: %v", *msg.Content)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatalf("no completion message received")
+	msg := sink.waitOne(t, 5*time.Second)
+	if msg.Content == nil || !strings.Contains(*msg.Content, info.ID) {
+		t.Fatalf("completion message missing id: %v", msg)
+	}
+	if !strings.Contains(*msg.Content, "done") {
+		t.Fatalf("completion message missing stdout tail: %v", *msg.Content)
 	}
 
 	final, ok := mgr.Get(info.ID)
@@ -251,7 +310,7 @@ func TestShutdownKillsRunning(t *testing.T) {
 func TestSpawnInProcessCompletesAndNotifies(t *testing.T) {
 	dir := t.TempDir()
 	mgr := NewManager(filepath.Join(dir, "tasks"))
-	sink := make(chan provider.ChatMessage, 1)
+	sink := newTestSink()
 	mgr.SetSink(sink)
 
 	fn := func(ctx context.Context, out io.Writer) error {
@@ -264,16 +323,12 @@ func TestSpawnInProcessCompletesAndNotifies(t *testing.T) {
 		t.Fatalf("SpawnInProcess: %v", err)
 	}
 
-	select {
-	case msg := <-sink:
-		if msg.Content == nil || !strings.Contains(*msg.Content, info.ID) {
-			t.Fatalf("completion msg missing id: %v", msg)
-		}
-		if !strings.Contains(*msg.Content, "step 2") {
-			t.Fatalf("completion msg missing stdout: %v", *msg.Content)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatalf("no completion message")
+	msg := sink.waitOne(t, 3*time.Second)
+	if msg.Content == nil || !strings.Contains(*msg.Content, info.ID) {
+		t.Fatalf("completion msg missing id: %v", msg)
+	}
+	if !strings.Contains(*msg.Content, "step 2") {
+		t.Fatalf("completion msg missing stdout: %v", *msg.Content)
 	}
 
 	final, _ := mgr.Get(info.ID)
@@ -316,18 +371,16 @@ func TestSpawnInProcessKillCancelsContext(t *testing.T) {
 	}
 }
 
-func TestCompletionToClosedSinkDoesNotPanic(t *testing.T) {
+func TestCompletionToFullSinkDoesNotPanic(t *testing.T) {
 	dir := t.TempDir()
 	mgr := NewManager(filepath.Join(dir, "tasks"))
-	sink := make(chan provider.ChatMessage)
-	mgr.SetSink(sink)
-	close(sink)
+	mgr.SetSink(rejectSink{})
 
 	fn := func(ctx context.Context, out io.Writer) error {
 		fmt.Fprintln(out, "done")
 		return nil
 	}
-	info, err := mgr.SpawnInProcess("closed-sink", "closed-sink", 5*time.Second, fn)
+	info, err := mgr.SpawnInProcess("full-sink", "full-sink", 5*time.Second, fn)
 	if err != nil {
 		t.Fatalf("SpawnInProcess: %v", err)
 	}
@@ -337,6 +390,53 @@ func TestCompletionToClosedSinkDoesNotPanic(t *testing.T) {
 	}
 	if final.State != StateCompleted {
 		t.Fatalf("state = %s, want completed", final.State)
+	}
+}
+
+func TestCompletionToPanicSinkDoesNotPanic(t *testing.T) {
+	called := make(chan struct{})
+	sendCompletion(panicSink{called: called}, Info{
+		ID:        "panic-sink",
+		Name:      "panic-sink",
+		StartedAt: time.Now(),
+		EndedAt:   time.Now(),
+		State:     StateCompleted,
+	}, false, "")
+
+	select {
+	case <-called:
+	case <-time.After(time.Second):
+		t.Fatal("panic sink was not called")
+	}
+}
+
+func TestCompletionToBlockingSinkDoesNotBlock(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+
+	started := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		sendCompletion(blockingSink{started: started, release: release}, Info{
+			ID:        "blocking-sink",
+			Name:      "blocking-sink",
+			StartedAt: time.Now(),
+			EndedAt:   time.Now(),
+			State:     StateCompleted,
+		}, false, "")
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("sendCompletion blocked on sink.Push")
+	}
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("blocking sink was not called")
 	}
 }
 
