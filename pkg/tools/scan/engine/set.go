@@ -5,14 +5,6 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/resources"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
-	anigo "github.com/chainreactors/ani-go"
-	_ "github.com/chainreactors/ani-go/aqc"        // register aqc_unauth + aqc (authed) sources
-	_ "github.com/chainreactors/ani-go/qcc"        // register qcc source (needs QCCSESSID cookie)
-	_ "github.com/chainreactors/ani-go/tyc"        // register tyc source (needs auth_token JWT)
-	_ "github.com/chainreactors/ani-go/tyc_unauth" // register tyc_unauth source
-	inago "github.com/chainreactors/ina-go"
-	_ "github.com/chainreactors/ina-go/fofa"   // register fofa source
-	_ "github.com/chainreactors/ina-go/hunter" // register hunter source
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/gogo"
 	"github.com/chainreactors/sdk/neutron"
@@ -21,29 +13,15 @@ import (
 	sdkzombie "github.com/chainreactors/sdk/zombie"
 )
 
-// ReconOptions 提供 ina-go / ani-go 资产测绘引擎所需的凭证与默认行为。
-// 任一 source 凭证非空就会让 ina engine 初始化对应 client; aqc_unauth/tyc_unauth 不需要凭证。
+// ReconOptions 提供 uncover 资产测绘引擎所需的凭证与默认行为。
 type ReconOptions struct {
-	FofaEmail     string
-	FofaKey       string
-	HunterToken   string // 极少用 — 抓包出来的 web 登录 cookie/JWT, Python 原版 token 模式
-	HunterAPIKey  string // 华顺信安后台 API 管理生成的 api-key (推荐, 64 位 hex)
-	Limit         int
-	IngressProxy  string // 给 ina-go 的全局出站代理 (http://, https://, socks5://, socks5h://)
-	AniDepth      int    // 投资链路递归深度, 默认 1
-	AniDepthSet   bool
-	AniPercent    float64 // 子公司入选最小持股比例, 默认 0.5
-	AniPercentSet bool
-	AniProxy      string
-	AniTycToken   string // 天眼查 auth_token JWT (Phase 2, tyc 源)
-	AniQccCookie  string // 企查查 QCCSESSID (Phase 2, qcc 源)
-	AniAqcCookie  string // 爱企查 BAIDUID (Phase 2, aqc authed 源)
+	FofaEmail    string
+	FofaKey      string
+	HunterToken  string // 极少用 — 抓包出来的 web 登录 cookie/JWT, Python 原版 token 模式
+	HunterAPIKey string // 华顺信安后台 API 管理生成的 api-key (推荐, 64 位 hex)
+	Limit        int
+	IngressProxy string // 给 uncover 的全局出站代理 (http://, https://, socks5://, socks5h://)
 }
-
-const (
-	DefaultAniDepth   = 1
-	DefaultAniPercent = 0.5
-)
 
 type Set struct {
 	Fingers   *sdkfingers.Engine
@@ -51,8 +29,7 @@ type Set struct {
 	Spray     *spray.SprayEngine
 	Neutron   *neutron.Engine
 	Zombie    *sdkzombie.Engine
-	Ina       *inago.Engine
-	Ani       *anigo.Engine
+	Ina       *UncoverEngine
 	Index     *association.FingerPOCIndex
 	Resources *resources.Set
 	Capacity  CapacityConfig
@@ -95,9 +72,6 @@ func (e *Set) Close() {
 	}
 	if e.Ina != nil {
 		_ = e.Ina.Close()
-	}
-	if e.Ani != nil {
-		_ = e.Ani.Close()
 	}
 }
 
@@ -217,84 +191,23 @@ func InitWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 	return set, nil
 }
 
-// SetupIna 在 InitWithOptions 之后追加 ina-go engine 初始化, 把 ReconOptions
-// 的凭证注入。任一 source 凭证非空就 init; 都为空时 Ina 留 nil 让 ina 工具不注册。
+// SetupIna 在 InitWithOptions 之后追加 uncover engine 初始化, 把 ReconOptions
+// 的凭证注入。任一 source 凭证非空就 init; 都为空时 Ina 留 nil 让 passive 工具不注册。
 // 可被反复调用: opts 的非零字段累加进 e.Recon, engine 基于合并后的全集重建。
 func (e *Set) SetupIna(opts ReconOptions, logger telemetry.Logger) {
 	if logger == nil {
 		logger = telemetry.NopLogger()
 	}
 	e.Recon = mergeReconOptions(e.Recon, opts)
-	eff := e.Recon
-	fofaOK := eff.FofaEmail != "" && eff.FofaKey != ""
-	hunterOK := eff.HunterToken != "" || eff.HunterAPIKey != ""
-	if !fofaOK && !hunterOK {
+	eng := NewUncoverEngine(e.Recon, logger)
+	if len(eng.Sources()) == 0 {
 		return
-	}
-	cfg := inago.NewConfig().
-		WithLimit(eff.Limit).
-		WithLogger(&inaLoggerAdapter{logger: logger})
-	if eff.IngressProxy != "" {
-		cfg.WithProxy(eff.IngressProxy)
-	}
-	if fofaOK {
-		cfg.WithFofa(eff.FofaEmail, eff.FofaKey)
-	}
-	if eff.HunterToken != "" {
-		cfg.WithHunterToken(eff.HunterToken)
-	}
-	if eff.HunterAPIKey != "" {
-		cfg.WithHunterAPIKey(eff.HunterAPIKey)
 	}
 	if e.Ina != nil {
 		_ = e.Ina.Close()
 	}
-	e.Ina = inago.NewEngine(cfg)
-	logger.Infof("engine=ina status=ready sources=%v", e.Ina.Sources())
-}
-
-// SetupAni 总是初始化 ani-go engine (aqc_unauth 不需要凭证)。
-// 与 SetupIna 一致: opts 的显式字段并入 e.Recon, engine 基于合并后的全集重建;
-// 未提供的 depth/percent 退回默认, 但**不**污染 e.Recon, 这样后续调用仍能
-// 看到"这两个字段从未被显式设置过"。
-func (e *Set) SetupAni(opts ReconOptions, logger telemetry.Logger) {
-	if logger == nil {
-		logger = telemetry.NopLogger()
-	}
-	e.Recon = mergeReconOptions(e.Recon, opts)
-	eff := normalizeAniOptions(e.Recon)
-	cfg := anigo.NewConfig().WithLogger(&aniLoggerAdapter{logger: logger})
-	cfg.WithDepth(eff.AniDepth)
-	cfg.WithPercent(eff.AniPercent)
-	if eff.AniProxy != "" {
-		cfg.WithProxy(eff.AniProxy)
-	}
-	if eff.AniTycToken != "" {
-		cfg.WithTycToken(eff.AniTycToken)
-	}
-	if eff.AniQccCookie != "" {
-		cfg.WithQccCookie(eff.AniQccCookie)
-	}
-	if eff.AniAqcCookie != "" {
-		cfg.WithAqcCookie(eff.AniAqcCookie)
-	}
-	if e.Ani != nil {
-		_ = e.Ani.Close()
-	}
-	e.Ani = anigo.NewEngine(cfg)
-	logger.Infof("engine=ani status=ready sources=%v", e.Ani.Sources())
-}
-
-func normalizeAniOptions(opts ReconOptions) ReconOptions {
-	if !opts.AniDepthSet {
-		opts.AniDepth = DefaultAniDepth
-		opts.AniDepthSet = true
-	}
-	if !opts.AniPercentSet {
-		opts.AniPercent = DefaultAniPercent
-		opts.AniPercentSet = true
-	}
-	return opts
+	e.Ina = eng
+	logger.Infof("engine=uncover status=ready sources=%v", e.Ina.Sources())
 }
 
 func mergeReconOptions(base, next ReconOptions) ReconOptions {
@@ -316,40 +229,5 @@ func mergeReconOptions(base, next ReconOptions) ReconOptions {
 	if next.Limit != 0 {
 		base.Limit = next.Limit
 	}
-	if next.AniDepthSet {
-		base.AniDepth = next.AniDepth
-		base.AniDepthSet = true
-	}
-	if next.AniPercentSet {
-		base.AniPercent = next.AniPercent
-		base.AniPercentSet = true
-	}
-	if next.AniProxy != "" {
-		base.AniProxy = next.AniProxy
-	}
-	if next.AniTycToken != "" {
-		base.AniTycToken = next.AniTycToken
-	}
-	if next.AniQccCookie != "" {
-		base.AniQccCookie = next.AniQccCookie
-	}
-	if next.AniAqcCookie != "" {
-		base.AniAqcCookie = next.AniAqcCookie
-	}
 	return base
 }
-
-// inaLoggerAdapter / aniLoggerAdapter 把 telemetry.Logger 适配到 SDK 的 Logger 接口。
-type inaLoggerAdapter struct{ logger telemetry.Logger }
-
-func (a *inaLoggerAdapter) Debugf(format string, args ...any) { a.logger.Debugf(format, args...) }
-func (a *inaLoggerAdapter) Infof(format string, args ...any)  { a.logger.Infof(format, args...) }
-func (a *inaLoggerAdapter) Warnf(format string, args ...any)  { a.logger.Warnf(format, args...) }
-func (a *inaLoggerAdapter) Errorf(format string, args ...any) { a.logger.Errorf(format, args...) }
-
-type aniLoggerAdapter struct{ logger telemetry.Logger }
-
-func (a *aniLoggerAdapter) Debugf(format string, args ...any) { a.logger.Debugf(format, args...) }
-func (a *aniLoggerAdapter) Infof(format string, args ...any)  { a.logger.Infof(format, args...) }
-func (a *aniLoggerAdapter) Warnf(format string, args ...any)  { a.logger.Warnf(format, args...) }
-func (a *aniLoggerAdapter) Errorf(format string, args ...any) { a.logger.Errorf(format, args...) }
