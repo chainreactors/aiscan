@@ -29,7 +29,7 @@ type Set struct {
 	Spray     *spray.SprayEngine
 	Neutron   *neutron.Engine
 	Zombie    *sdkzombie.Engine
-	Ina       *UncoverEngine
+	Uncover   *UncoverEngine
 	Index     *association.FingerPOCIndex
 	Resources *resources.Set
 	Capacity  CapacityConfig
@@ -70,8 +70,8 @@ func (e *Set) Close() {
 	if e.Zombie != nil {
 		e.Zombie.Close()
 	}
-	if e.Ina != nil {
-		_ = e.Ina.Close()
+	if e.Uncover != nil {
+		_ = e.Uncover.Close()
 	}
 }
 
@@ -191,10 +191,10 @@ func InitWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 	return set, nil
 }
 
-// SetupIna 在 InitWithOptions 之后追加 uncover engine 初始化, 把 ReconOptions
-// 的凭证注入。任一 source 凭证非空就 init; 都为空时 Ina 留 nil 让 passive 工具不注册。
+// SetupUncover 在 InitWithOptions 之后追加 uncover engine 初始化, 把 ReconOptions
+// 的凭证注入。任一 source 凭证非空就 init; 都为空时 Uncover 留 nil 让 passive 工具不注册。
 // 可被反复调用: opts 的非零字段累加进 e.Recon, engine 基于合并后的全集重建。
-func (e *Set) SetupIna(opts ReconOptions, logger telemetry.Logger) {
+func (e *Set) SetupUncover(opts ReconOptions, logger telemetry.Logger) {
 	if logger == nil {
 		logger = telemetry.NopLogger()
 	}
@@ -203,11 +203,11 @@ func (e *Set) SetupIna(opts ReconOptions, logger telemetry.Logger) {
 	if len(eng.Sources()) == 0 {
 		return
 	}
-	if e.Ina != nil {
-		_ = e.Ina.Close()
+	if e.Uncover != nil {
+		_ = e.Uncover.Close()
 	}
-	e.Ina = eng
-	logger.Infof("engine=uncover status=ready sources=%v", e.Ina.Sources())
+	e.Uncover = eng
+	logger.Infof("engine=uncover status=ready sources=%v", e.Uncover.Sources())
 }
 
 func mergeReconOptions(base, next ReconOptions) ReconOptions {
