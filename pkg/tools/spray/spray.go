@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
@@ -15,17 +16,16 @@ import (
 	"github.com/gookit/config/v2/yaml"
 )
 
-func init() {
-	// Mirror spray's main-package init: register the YAML decoder for
-	// gookit/config so that LoadConfig("config.yaml", ...) works when the
-	// CWD contains a config.yaml file.  Without this, spray/core.RunWithArgs
-	// fails with "not register decoder for the format: yaml" because
-	// aiscan imports spray/core directly and never runs spray's main init.
-	config.WithOptions(func(opt *config.Options) {
-		opt.DecoderConfig.TagName = "config"
-		opt.ParseDefault = true
+var sprayConfigOnce sync.Once
+
+func ensureSprayConfig() {
+	sprayConfigOnce.Do(func() {
+		config.WithOptions(func(opt *config.Options) {
+			opt.DecoderConfig.TagName = "config"
+			opt.ParseDefault = true
+		})
+		config.AddDriver(yaml.Driver)
 	})
-	config.AddDriver(yaml.Driver)
 }
 
 type Command struct {
@@ -60,6 +60,7 @@ func (c *Command) Usage() string {
 }
 
 func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
+	ensureSprayConfig()
 	args = c.resolveRelativePaths(args)
 	var buf bytes.Buffer
 	debug := toolargs.BoolFlagEnabled(args, "--debug")
