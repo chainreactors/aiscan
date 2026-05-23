@@ -44,16 +44,6 @@ type CapacityConfig struct {
 	Neutron int // total concurrent template executions (default: 10)
 }
 
-// DefaultCapacity returns sensible capacity defaults.
-func DefaultCapacity() CapacityConfig {
-	return CapacityConfig{
-		Gogo:    800,
-		Spray:   100,
-		Zombie:  100,
-		Neutron: 100,
-	}
-}
-
 func (e *Set) Close() {
 	if e.Fingers != nil {
 		e.Fingers.Close()
@@ -75,23 +65,11 @@ func (e *Set) Close() {
 	}
 }
 
-func Init(ctx context.Context, cyberhubURL, apiKey string) (*Set, error) {
-	return InitWithLogger(ctx, cyberhubURL, apiKey, telemetry.NopLogger())
-}
-
-func InitWithLogger(ctx context.Context, cyberhubURL, apiKey string, logger telemetry.Logger) (*Set, error) {
-	return InitWithOptions(ctx, resources.Options{
-		CyberhubURL: cyberhubURL,
-		APIKey:      apiKey,
-		Mode:        resources.ModeMerge,
-	}, logger)
-}
-
 func InitWithOptions(ctx context.Context, opts resources.Options, logger telemetry.Logger) (*Set, error) {
-	return InitWithCapacity(ctx, opts, DefaultCapacity(), logger)
+	return initWithCapacity(ctx, opts, CapacityConfig{}, logger)
 }
 
-func InitWithCapacity(ctx context.Context, opts resources.Options, caps CapacityConfig, logger telemetry.Logger) (*Set, error) {
+func initWithCapacity(ctx context.Context, opts resources.Options, caps CapacityConfig, logger telemetry.Logger) (*Set, error) {
 	if logger == nil {
 		logger = telemetry.NopLogger()
 	}
