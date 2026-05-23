@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -33,6 +34,106 @@ func TestResolvePreservesExplicitBaseURL(t *testing.T) {
 	}
 	if cfg.BaseURL != "http://base-url.example/v1" {
 		t.Fatalf("BaseURL = %q", cfg.BaseURL)
+	}
+}
+
+func TestAnthropicProviderChatCompletion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages" {
+			t.Fatalf("path = %q, want /v1/messages", r.URL.Path)
+		}
+		if got := r.Header.Get("x-api-key"); got != "test-key" {
+			t.Fatalf("x-api-key = %q, want test-key", got)
+		}
+		if got := r.Header.Get("anthropic-version"); got == "" {
+			t.Fatal("missing anthropic-version header")
+		}
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Fatalf("Authorization header = %q, want empty", got)
+		}
+
+		var body struct {
+			Model     string `json:"model"`
+			System    string `json:"system"`
+			MaxTokens int    `json:"max_tokens"`
+			Tools     []struct {
+				Type        string                 `json:"type"`
+				Name        string                 `json:"name"`
+				InputSchema map[string]interface{} `json:"input_schema"`
+			} `json:"tools"`
+			Messages []struct {
+				Role    string                   `json:"role"`
+				Content []map[string]interface{} `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if body.Model != "claude-test" {
+			t.Fatalf("model = %q, want claude-test", body.Model)
+		}
+		if body.System != "system prompt" {
+			t.Fatalf("system = %q, want system prompt", body.System)
+		}
+		if body.MaxTokens != defaultAnthropicMaxToken {
+			t.Fatalf("max_tokens = %d, want %d", body.MaxTokens, defaultAnthropicMaxToken)
+		}
+		if len(body.Tools) != 1 || body.Tools[0].Type != "custom" || body.Tools[0].Name != "bash" {
+			t.Fatalf("tools = %#v, want custom bash tool", body.Tools)
+		}
+		if len(body.Messages) != 1 || body.Messages[0].Role != "user" {
+			t.Fatalf("messages = %#v, want one user message", body.Messages)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"scan ready"},{"type":"tool_use","id":"toolu_1","name":"bash","input":{"command":"id"}}],"stop_reason":"tool_use","usage":{"input_tokens":10,"output_tokens":5}}`)
+	}))
+	defer server.Close()
+
+	p, err := NewOpenAIProvider(&ProviderConfig{
+		Provider: "anthropic",
+		BaseURL:  server.URL + "/v1",
+		APIKey:   "test-key",
+		Timeout:  5,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenAIProvider() error = %v", err)
+	}
+
+	resp, err := p.ChatCompletion(context.Background(), &ChatCompletionRequest{
+		Model: "claude-test",
+		Messages: []ChatMessage{
+			NewTextMessage("system", "system prompt"),
+			NewTextMessage("user", "scan localhost"),
+		},
+		Tools: []ToolDefinition{{
+			Type: "function",
+			Function: FunctionDefinition{
+				Name: "bash",
+				Parameters: map[string]interface{}{
+					"type": "object",
+				},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("ChatCompletion() error = %v", err)
+	}
+	if len(resp.Choices) != 1 {
+		t.Fatalf("choices = %d, want 1", len(resp.Choices))
+	}
+	msg := resp.Choices[0].Message
+	if msg.Role != "assistant" || msg.Content == nil || *msg.Content != "scan ready" {
+		t.Fatalf("message = %#v, want assistant text", msg)
+	}
+	if len(msg.ToolCalls) != 1 {
+		t.Fatalf("tool calls = %d, want 1", len(msg.ToolCalls))
+	}
+	if got := msg.ToolCalls[0].Function.Arguments; got != `{"command":"id"}` {
+		t.Fatalf("tool arguments = %q, want command JSON", got)
+	}
+	if resp.Usage == nil || resp.Usage.TotalTokens != 15 {
+		t.Fatalf("usage = %#v, want total 15", resp.Usage)
 	}
 }
 
@@ -85,6 +186,126 @@ func TestOpenAIProviderChatCompletionStream(t *testing.T) {
 	}
 	if reasoning != "think" {
 		t.Fatalf("reasoning = %q, want think", reasoning)
+	}
+	if !done {
+		t.Fatal("missing done event")
+	}
+}
+
+func TestAnthropicProviderChatCompletionStream(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages" {
+			t.Fatalf("path = %q, want /v1/messages", r.URL.Path)
+		}
+		if got := r.Header.Get("Accept"); got != "text/event-stream" {
+			t.Fatalf("Accept = %q, want text/event-stream", got)
+		}
+		var body struct {
+			Stream bool `json:"stream"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if !body.Stream {
+			t.Fatal("stream = false, want true")
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "event: message_start\n")
+		fmt.Fprint(w, "data: {\"type\":\"message_start\",\"message\":{\"role\":\"assistant\",\"usage\":{\"input_tokens\":7}}}\n\n")
+		fmt.Fprint(w, "event: content_block_delta\n")
+		fmt.Fprint(w, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"}}\n\n")
+		fmt.Fprint(w, "event: content_block_start\n")
+		fmt.Fprint(w, "data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"bash\",\"input\":{}}}\n\n")
+		fmt.Fprint(w, "event: content_block_delta\n")
+		fmt.Fprint(w, "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"command\\\":\\\"\"}}\n\n")
+		fmt.Fprint(w, "event: content_block_delta\n")
+		fmt.Fprint(w, "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"id\\\"}\"}}\n\n")
+		fmt.Fprint(w, "event: message_delta\n")
+		fmt.Fprint(w, "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":5}}\n\n")
+		fmt.Fprint(w, "event: message_stop\n")
+		fmt.Fprint(w, "data: {\"type\":\"message_stop\"}\n\n")
+	}))
+	defer server.Close()
+
+	p, err := NewOpenAIProvider(&ProviderConfig{
+		Provider: "anthropic",
+		BaseURL:  server.URL + "/v1",
+		APIKey:   "test-key",
+		Timeout:  5,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenAIProvider() error = %v", err)
+	}
+
+	ch, err := p.ChatCompletionStream(context.Background(), &ChatCompletionRequest{
+		Model:    "claude-test",
+		Messages: []ChatMessage{NewTextMessage("user", "scan localhost")},
+	})
+	if err != nil {
+		t.Fatalf("ChatCompletionStream() error = %v", err)
+	}
+
+	var role string
+	var text string
+	var done bool
+	var finishReason string
+	var usage *Usage
+	toolCalls := make(map[int]ToolCall)
+	for event := range ch {
+		if event.Err != nil {
+			t.Fatalf("stream error = %v", event.Err)
+		}
+		if event.Delta.Role != "" {
+			role = event.Delta.Role
+		}
+		if event.Delta.Content != nil {
+			text += *event.Delta.Content
+		}
+		for _, delta := range event.Delta.ToolCalls {
+			tc := toolCalls[delta.Index]
+			if delta.ID != "" {
+				tc.ID = delta.ID
+			}
+			if delta.Type != "" {
+				tc.Type = delta.Type
+			}
+			if delta.Function.Name != "" {
+				tc.Function.Name = delta.Function.Name
+			}
+			if delta.Function.Arguments != "" {
+				tc.Function.Arguments += delta.Function.Arguments
+			}
+			toolCalls[delta.Index] = tc
+		}
+		if event.FinishReason != "" {
+			finishReason = event.FinishReason
+		}
+		if event.Usage != nil {
+			usage = event.Usage
+		}
+		if event.Done {
+			done = true
+		}
+	}
+	if role != "assistant" {
+		t.Fatalf("role = %q, want assistant", role)
+	}
+	if text != "hi" {
+		t.Fatalf("text = %q, want hi", text)
+	}
+	if finishReason != "tool_calls" {
+		t.Fatalf("finish reason = %q, want tool_calls", finishReason)
+	}
+	tc := toolCalls[1]
+	if tc.ID != "toolu_1" || tc.Type != "function" || tc.Function.Name != "bash" {
+		t.Fatalf("tool call = %#v, want bash tool call", tc)
+	}
+	if tc.Function.Arguments != `{"command":"id"}` {
+		t.Fatalf("tool call arguments = %q, want command JSON", tc.Function.Arguments)
+	}
+	if usage == nil || usage.TotalTokens != 12 {
+		t.Fatalf("usage = %#v, want total 12", usage)
 	}
 	if !done {
 		t.Fatal("missing done event")
