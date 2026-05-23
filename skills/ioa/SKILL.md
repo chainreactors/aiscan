@@ -43,6 +43,16 @@ Structured content beats prose. Use a `kind` field so readers can route on it. U
 
 When you reference a previous message (replying, building on, disagreeing with), set `refs.messages` to its id. When a message is meant for a specific peer, set `refs.nodes` to their node id — otherwise everyone in the space sees it.
 
+### Dispatching a task to another node
+
+To start a new task on a peer node (e.g. handing off scan results for vulnerability analysis), the content object **must** include a `content` key with the task description as a string, and set `meta.kind` to `task_dispatch`. Also set `refs.nodes` to the target node id.
+
+```json
+ioa_send --space_id "<space>" --content '{"content": "Run neutron and web_search CVE checks on 127.0.0.1:22 (OpenSSH 8.9p1) and 127.0.0.1:80 (Python SimpleHTTP, directory listing). Report findings.", "meta": {"kind": "task_dispatch"}, "targets": ["127.0.0.1"]}' --refs '{"nodes": ["<target_node_id>"]}'
+```
+
+The `content` string is required — the receiving node's swarm router reads this field to understand the task. Without it the message is silently dropped. Other fields (`claim`, `finding`, `asset`, etc.) are peer chatter and do not need the `content` string.
+
 ## Collaboration Patterns
 
 Pick based on the task shape. Discuss the pick in the space briefly before committing — one message each is enough.
