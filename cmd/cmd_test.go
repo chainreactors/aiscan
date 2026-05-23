@@ -260,7 +260,7 @@ func TestParseCLIReconCommandsAndFlags(t *testing.T) {
 		"--hunter-api-key", "HUNTERKEY",
 		"--recon-proxy", "socks5://127.0.0.1:1080",
 		"--recon-limit", "0",
-		"ina",
+		"passive",
 		`domain="example.com"`,
 		"-s", "fofa",
 	})
@@ -270,7 +270,7 @@ func TestParseCLIReconCommandsAndFlags(t *testing.T) {
 	if parsed.Mode != runModeScanner {
 		t.Fatalf("mode = %s, want %s", parsed.Mode, runModeScanner)
 	}
-	wantArgs := []string{"ina", `domain="example.com"`, "-s", "fofa"}
+	wantArgs := []string{"passive", `domain="example.com"`, "-s", "fofa"}
 	if !reflect.DeepEqual(parsed.ScannerArgs, wantArgs) {
 		t.Fatalf("scanner args = %#v, want %#v", parsed.ScannerArgs, wantArgs)
 	}
@@ -281,29 +281,6 @@ func TestParseCLIReconCommandsAndFlags(t *testing.T) {
 		t.Fatalf("recon limit = %#v, want explicit 0", parsed.Option.ReconLimit)
 	}
 
-	parsed, err = parseCLI([]string{
-		"--ani-depth", "0",
-		"--ani-percent", "0",
-		"--ani-proxy", "http://127.0.0.1:8080",
-		"--ani-tyc-token", "TYC",
-		"--ani-qcc-cookie", "QCCSESSID=QCC",
-		"--ani-aqc-cookie", "BAIDUID=AQC",
-		"ani",
-		"-n", "默安科技",
-	})
-	if err != nil {
-		t.Fatalf("parseCLI() error = %v", err)
-	}
-	wantArgs = []string{"ani", "-n", "默安科技"}
-	if !reflect.DeepEqual(parsed.ScannerArgs, wantArgs) {
-		t.Fatalf("scanner args = %#v, want %#v", parsed.ScannerArgs, wantArgs)
-	}
-	if parsed.Option.AniDepth == nil || *parsed.Option.AniDepth != 0 || parsed.Option.AniPercent == nil || *parsed.Option.AniPercent != 0 || parsed.Option.AniProxy != "http://127.0.0.1:8080" {
-		t.Fatalf("ani options = %#v", parsed.Option.ReconOptions)
-	}
-	if parsed.Option.AniTycToken != "TYC" || parsed.Option.AniQccCookie != "QCCSESSID=QCC" || parsed.Option.AniAqcCookie != "BAIDUID=AQC" {
-		t.Fatalf("ani credential options = %#v", parsed.Option.ReconOptions)
-	}
 }
 
 func TestParseCLINonScanScannerKeepsPostRootArgsIsolated(t *testing.T) {

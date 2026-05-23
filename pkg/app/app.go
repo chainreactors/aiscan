@@ -49,14 +49,6 @@ type ScannerConfig struct {
 	HunterAPIKey  string
 	ReconProxy    string
 	ReconLimit    int
-	AniDepth      int
-	AniDepthSet   bool
-	AniPercent    float64
-	AniPercentSet bool
-	AniProxy      string
-	AniTycToken   string
-	AniQccCookie  string
-	AniAqcCookie  string
 }
 
 type ToolConfig struct {
@@ -193,17 +185,8 @@ func initEngines(ctx context.Context, cfg ScannerConfig, logger telemetry.Logger
 		HunterAPIKey:  cfg.HunterAPIKey,
 		IngressProxy:  cfg.ReconProxy,
 		Limit:         cfg.ReconLimit,
-		AniDepth:      cfg.AniDepth,
-		AniDepthSet:   cfg.AniDepthSet,
-		AniPercent:    cfg.AniPercent,
-		AniPercentSet: cfg.AniPercentSet,
-		AniProxy:      cfg.AniProxy,
-		AniTycToken:   cfg.AniTycToken,
-		AniQccCookie:  cfg.AniQccCookie,
-		AniAqcCookie:  cfg.AniAqcCookie,
 	}
 	engineSet.SetupIna(recon, logger)
-	engineSet.SetupAni(recon, logger)
 	return engineSet
 }
 
@@ -324,7 +307,7 @@ func scanVerifyBlocksCommand(commandLine string) bool {
 
 func isScanVerifyBlockedCommand(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "scan", "ani", "ina", "gogo", "spray", "zombie", "neutron":
+	case "scan", "passive", "gogo", "spray", "zombie", "neutron":
 		return true
 	default:
 		return false

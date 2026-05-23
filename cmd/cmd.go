@@ -30,18 +30,12 @@ type Option struct {
 }
 
 type ReconOptions struct {
-	FofaEmail    string   `long:"fofa-email" config:"fofa_email" description:"FOFA account email for ina recon (or set env FOFA_EMAIL)"`
-	FofaKey      string   `long:"fofa-key" config:"fofa_key" description:"FOFA API key for ina recon (or set env FOFA_KEY)"`
+	FofaEmail    string   `long:"fofa-email" config:"fofa_email" description:"FOFA account email for passive recon (or set env FOFA_EMAIL)"`
+	FofaKey      string   `long:"fofa-key" config:"fofa_key" description:"FOFA API key for passive recon (or set env FOFA_KEY)"`
 	HunterToken  string   `long:"hunter-token" config:"hunter_token" description:"Hunter web token (rarely needed; prefer hunter-api-key)"`
 	HunterAPIKey string   `long:"hunter-api-key" config:"hunter_api_key" description:"Hunter API key (64-hex from console) (or env HUNTER_API_KEY)"`
-	ReconProxy   string   `long:"recon-proxy" config:"proxy" description:"Outbound proxy for ina recon (socks5://host:port for hunter via mainland)"`
-	ReconLimit   *int     `long:"recon-limit" config:"limit" description:"Per-query asset limit for ina recon (0 = unlimited)"`
-	AniDepth     *int     `long:"ani-depth" config:"ani_depth" description:"Subsidiary recursion depth for ani recon"`
-	AniPercent   *float64 `long:"ani-percent" config:"ani_percent" description:"Min ownership ratio to follow subsidiaries (0-1)"`
-	AniProxy     string   `long:"ani-proxy" config:"ani_proxy" description:"HTTP proxy for ani recon"`
-	AniTycToken  string   `long:"ani-tyc-token" config:"ani_tyc_token" description:"Tianyancha auth_token JWT for ani tyc source"`
-	AniQccCookie string   `long:"ani-qcc-cookie" config:"ani_qcc_cookie" description:"Qichacha QCCSESSID cookie for ani qcc source"`
-	AniAqcCookie string   `long:"ani-aqc-cookie" config:"ani_aqc_cookie" description:"Aiqicha BAIDUID cookie for ani aqc auth source"`
+	ReconProxy   string   `long:"recon-proxy" config:"proxy" description:"Outbound proxy for passive recon (socks5://host:port for hunter via mainland)"`
+	ReconLimit   *int     `long:"recon-limit" config:"limit" description:"Per-query asset limit for passive recon (0 = unlimited)"`
 }
 
 type LLMOptions struct {
@@ -112,8 +106,7 @@ type cliOptions struct {
 	Katana   struct{}   `command:"katana" description:"Run katana web crawler"`
 	Zombie   struct{}   `command:"zombie" description:"Run zombie weakpass scanner"`
 	Neutron  struct{}   `command:"neutron" description:"Run neutron POC scanner"`
-	Ina      struct{}   `command:"ina" description:"Run ina asset recon"`
-	Ani      struct{}   `command:"ani" description:"Run ani enterprise recon"`
+	Passive  struct{}   `command:"passive" description:"Run passive cyberspace recon"`
 }
 
 type ioaCommand struct {
@@ -200,7 +193,7 @@ func AiScan() {
 		return
 	}
 	if parsed.Mode == runModeNoCommand {
-		fmt.Fprintln(os.Stderr, "error: missing subcommand: use agent, ioa serve, scan, cyberhub, gogo, spray, katana, zombie, neutron, ina, or ani")
+		fmt.Fprintln(os.Stderr, "error: missing subcommand: use agent, ioa serve, scan, cyberhub, gogo, spray, katana, zombie, neutron, or passive")
 		os.Exit(1)
 	}
 
@@ -377,16 +370,6 @@ func mergeReconOptions(option, manual *Option) {
 	if manual.ReconLimit != nil {
 		option.ReconLimit = manual.ReconLimit
 	}
-	if manual.AniDepth != nil {
-		option.AniDepth = manual.AniDepth
-	}
-	if manual.AniPercent != nil {
-		option.AniPercent = manual.AniPercent
-	}
-	option.AniProxy = resolveString(manual.AniProxy, option.AniProxy)
-	option.AniTycToken = resolveString(manual.AniTycToken, option.AniTycToken)
-	option.AniQccCookie = resolveString(manual.AniQccCookie, option.AniQccCookie)
-	option.AniAqcCookie = resolveString(manual.AniAqcCookie, option.AniAqcCookie)
 }
 
 func newCLIParser(cli *cliOptions, options goflags.Options) *goflags.Parser {
@@ -406,8 +389,7 @@ Advanced scanners:
   katana         Run katana web crawler
   zombie         Run zombie directly
   neutron        Run neutron directly
-  ina            Run ina asset recon
-  ani            Run ani enterprise recon
+  passive        Run passive cyberspace recon
 
 Infrastructure:
   cyberhub       Search Cyberhub fingerprints and POCs
@@ -532,20 +514,6 @@ var scannerKnownFlags = []knownFlag{
 			o.ReconLimit = &n
 		}
 	}},
-	{names: []string{"--ani-depth"}, arity: 1, apply: func(o *Option, v string) {
-		if n, e := strconv.Atoi(v); e == nil {
-			o.AniDepth = &n
-		}
-	}},
-	{names: []string{"--ani-percent"}, arity: 1, apply: func(o *Option, v string) {
-		if f, e := strconv.ParseFloat(v, 64); e == nil {
-			o.AniPercent = &f
-		}
-	}},
-	{names: []string{"--ani-proxy"}, arity: 1, apply: func(o *Option, v string) { o.AniProxy = v }},
-	{names: []string{"--ani-tyc-token"}, arity: 1, apply: func(o *Option, v string) { o.AniTycToken = v }},
-	{names: []string{"--ani-qcc-cookie"}, arity: 1, apply: func(o *Option, v string) { o.AniQccCookie = v }},
-	{names: []string{"--ani-aqc-cookie"}, arity: 1, apply: func(o *Option, v string) { o.AniAqcCookie = v }},
 	{names: []string{"--heartbeat"}, arity: 1, apply: func(o *Option, v string) {
 		if n, e := strconv.Atoi(v); e == nil && n >= 0 {
 			o.Heartbeat = n
@@ -590,7 +558,7 @@ func argsAfterCommand(args []string, command string) []string {
 
 func isScannerCommandName(name string) bool {
 	switch name {
-	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "ina", "ani":
+	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "passive":
 		return true
 	}
 	return false
@@ -620,7 +588,7 @@ func selectedMode(parser *goflags.Parser) runMode {
 		return runModeAgent
 	case "serve":
 		return runModeIOAServe
-	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "ina", "ani":
+	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "passive":
 		return runModeScanner
 	}
 	return runModeNoCommand
@@ -647,7 +615,7 @@ func selectedScanner(parser *goflags.Parser) string {
 		return ""
 	}
 	switch active.Name {
-	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "ina", "ani":
+	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "passive":
 		return active.Name
 	}
 	return ""
@@ -798,7 +766,7 @@ func isDirectScannerCommand(rest []string) bool {
 		return false
 	}
 	switch rest[0] {
-	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "ina", "ani":
+	case "scan", "cyberhub", "gogo", "spray", "katana", "zombie", "neutron", "passive":
 		return true
 	}
 	return false

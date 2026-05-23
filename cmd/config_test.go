@@ -139,8 +139,6 @@ func TestLoadConfigReconNumericZeroIsExplicit(t *testing.T) {
 	writeTestConfig(t, dir, `
 recon:
   limit: 0
-  ani_depth: 0
-  ani_percent: 0
 `)
 
 	var opt Option
@@ -150,34 +148,21 @@ recon:
 	if opt.ReconLimit == nil || *opt.ReconLimit != 0 {
 		t.Fatalf("ReconLimit = %#v, want explicit 0", opt.ReconLimit)
 	}
-	if opt.AniDepth == nil || *opt.AniDepth != 0 {
-		t.Fatalf("AniDepth = %#v, want explicit 0", opt.AniDepth)
-	}
-	if opt.AniPercent == nil || *opt.AniPercent != 0 {
-		t.Fatalf("AniPercent = %#v, want explicit 0", opt.AniPercent)
-	}
 }
 
 func TestMergeOptionReconExplicitZeroWins(t *testing.T) {
 	zeroInt := 0
-	zeroFloat := 0.0
 	cfgLimit := 10
-	cfgDepth := 2
-	cfgPercent := 0.5
 	dst := Option{ReconOptions: ReconOptions{
 		ReconLimit: &zeroInt,
-		AniDepth:   &zeroInt,
-		AniPercent: &zeroFloat,
 	}}
 	src := Option{ReconOptions: ReconOptions{
 		ReconLimit: &cfgLimit,
-		AniDepth:   &cfgDepth,
-		AniPercent: &cfgPercent,
 	}}
 
 	mergeOption(&dst, &src)
 
-	if *dst.ReconLimit != 0 || *dst.AniDepth != 0 || *dst.AniPercent != 0 {
+	if *dst.ReconLimit != 0 {
 		t.Fatalf("explicit zero was overwritten: %#v", dst.ReconOptions)
 	}
 }

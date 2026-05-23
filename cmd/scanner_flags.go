@@ -27,7 +27,7 @@ func staticScannerUsage(name string) (string, bool) {
 	case "scan":
 		return scan.Usage(), true
 	case "passive":
-		return passivecmd.New(nil, nil).Usage(), true
+		return passivecmd.New(nil).Usage(), true
 	case "cyberhub":
 		return cyberhubcmd.Usage(), true
 	case "gogo":

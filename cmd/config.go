@@ -56,12 +56,6 @@ func applyExplicitReconNumericOptions(c *config.Config, v interface{}) {
 	if c.Exists("recon.limit") {
 		opt.ReconLimit = intOption(c.Int("recon.limit"))
 	}
-	if c.Exists("recon.ani_depth") {
-		opt.AniDepth = intOption(c.Int("recon.ani_depth"))
-	}
-	if c.Exists("recon.ani_percent") {
-		opt.AniPercent = floatOption(c.Float("recon.ani_percent"))
-	}
 }
 
 func findDefaultConfigFile() string {
@@ -135,16 +129,6 @@ func mergeOption(dst, src *Option) {
 	if dst.ReconLimit == nil && src.ReconLimit != nil {
 		dst.ReconLimit = src.ReconLimit
 	}
-	if dst.AniDepth == nil && src.AniDepth != nil {
-		dst.AniDepth = src.AniDepth
-	}
-	if dst.AniPercent == nil && src.AniPercent != nil {
-		dst.AniPercent = src.AniPercent
-	}
-	dst.AniProxy = resolveString(dst.AniProxy, src.AniProxy)
-	dst.AniTycToken = resolveString(dst.AniTycToken, src.AniTycToken)
-	dst.AniQccCookie = resolveString(dst.AniQccCookie, src.AniQccCookie)
-	dst.AniAqcCookie = resolveString(dst.AniAqcCookie, src.AniAqcCookie)
 	dst.ScannerOptions.Proxy = resolveString(dst.ScannerOptions.Proxy, src.ScannerOptions.Proxy)
 	dst.IOAURL = resolveString(dst.IOAURL, src.IOAURL)
 	dst.IOANodeName = resolveString(dst.IOANodeName, src.IOANodeName)
@@ -219,9 +203,9 @@ ioa:
   node_name: ""
   space: ""
 
-# 资产测绘 (Ina / Ani, 通过 ina-go / ani-go SDK)
+# 资产测绘 (通过 uncover SDK)
 # FOFA 凭证从此处或环境变量 FOFA_EMAIL / FOFA_KEY 读取
-# Ani (aqc_unauth) 不需要凭证, depth/percent 控制投资链路递归
+# 额外 source (Shodan/Censys/...) 通过环境变量或 ~/.uncover-config/provider-config.yaml 配置
 recon:
   fofa_email: ""
   fofa_key: ""
@@ -229,13 +213,6 @@ recon:
   hunter_api_key: ""  # 华顺信安后台 API 管理生成的 64 位 hex key
   proxy: ""           # 出站代理 (Hunter 屏蔽境外 IP, 中国 VPS 走 socks5://host:1080)
   limit: 0            # 单次查询最多返回多少 asset, 0 = 不限
-  ani_depth: 1      # 子公司递归深度
-  ani_percent: 0.5  # 子公司入选最小持股比例 (0-1)
-  ani_proxy: ""     # Ani 的 HTTP proxy
-  # Phase 2 source 凭证 (留空时对应源不注册; aqc_unauth / tyc_unauth 不需要)
-  ani_tyc_token: ""    # 天眼查 auth_token JWT (用于 tyc 源, 也可设 env ANI_TYC_TOKEN)
-  ani_qcc_cookie: ""   # 企查查 QCCSESSID cookie (用于 qcc 源, 也可设 env ANI_QCC_COOKIE)
-  ani_aqc_cookie: ""   # 爱企查 BAIDUID cookie (用于 aqc 源, 也可设 env ANI_AQC_COOKIE)
 
 # 扫描默认值
 scan:
