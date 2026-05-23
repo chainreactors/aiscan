@@ -6,27 +6,12 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
 	"github.com/chainreactors/sdk/spray"
 	spraycore "github.com/chainreactors/spray/core"
-	"github.com/gookit/config/v2"
-	"github.com/gookit/config/v2/yaml"
 )
-
-var sprayConfigOnce sync.Once
-
-func ensureSprayConfig() {
-	sprayConfigOnce.Do(func() {
-		config.WithOptions(func(opt *config.Options) {
-			opt.DecoderConfig.TagName = "config"
-			opt.ParseDefault = true
-		})
-		config.AddDriver(yaml.Driver)
-	})
-}
 
 type Command struct {
 	engine  *spray.SprayEngine
@@ -60,7 +45,6 @@ func (c *Command) Usage() string {
 }
 
 func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
-	ensureSprayConfig()
 	args = c.resolveRelativePaths(args)
 	var buf bytes.Buffer
 	debug := toolargs.BoolFlagEnabled(args, "--debug")

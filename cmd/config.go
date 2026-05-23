@@ -12,6 +12,14 @@ import (
 
 const defaultConfigName = "config.yaml"
 
+func init() {
+	config.WithOptions(func(opt *config.Options) {
+		opt.DecoderConfig.TagName = "config"
+		opt.ParseDefault = true
+	})
+	config.AddDriver(yamldrv.Driver)
+}
+
 func intOption(v int) *int           { return &v }
 func floatOption(v float64) *float64 { return &v }
 func intOptionValue(p *int) int {
