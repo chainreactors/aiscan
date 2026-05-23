@@ -29,8 +29,8 @@ func init() {
 			}
 			proxy := deps.ScannerProxy
 
-			if es.Ina != nil {
-				reg.Register(passivecmd.New(es.Ina).WithLogger(logger), "scanner")
+			if es.Uncover != nil {
+				reg.Register(passivecmd.New(es.Uncover).WithLogger(logger), "scanner")
 			}
 
 			var scanOpts []scan.Option
