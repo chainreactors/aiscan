@@ -31,7 +31,7 @@ func TestIntegrationPassiveFofa(t *testing.T) {
 	if set.Ina == nil {
 		t.Fatal("expected Ina engine to be initialized")
 	}
-	cmd := passivecmd.New(nil, set.Ina)
+	cmd := passivecmd.New(set.Ina)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	out, err := cmd.Execute(ctx, []string{"-s", "fofa", `domain="anthropic.com"`})
@@ -71,7 +71,7 @@ func TestIntegrationPassiveHunter(t *testing.T) {
 	if set.Ina == nil {
 		t.Fatal("expected Ina engine to be initialized")
 	}
-	cmd := passivecmd.New(nil, set.Ina)
+	cmd := passivecmd.New(set.Ina)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	out, err := cmd.Execute(ctx, []string{"-s", "hunter", `domain.suffix="anthropic.com"`})
@@ -84,110 +84,6 @@ func TestIntegrationPassiveHunter(t *testing.T) {
 		return
 	}
 	t.Logf("passive/hunter output (first 500 bytes): %s", truncForTest(out, 500))
-}
-
-func TestIntegrationPassiveAqc(t *testing.T) {
-	if os.Getenv("AISCAN_INTEGRATION") == "" {
-		t.Skip("set AISCAN_INTEGRATION=1 to run")
-	}
-	set := &engine.Set{}
-	set.SetupAni(engine.ReconOptions{AniDepth: 1, AniPercent: 0.5}, telemetry.NopLogger())
-	if set.Ani == nil {
-		t.Fatal("expected Ani engine to be initialized")
-	}
-	cmd := passivecmd.New(set.Ani, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	out, err := cmd.Execute(ctx, []string{"-s", "aqc_unauth", "-n", "默安科技"})
-	if err != nil {
-		t.Fatalf("passive aqc Execute: %v", err)
-	}
-	var got map[string]map[string]any
-	if err := json.Unmarshal([]byte(out), &got); err != nil {
-		t.Fatalf("not JSON object: %v\n%s", err, out)
-	}
-	if len(got) == 0 {
-		t.Fatalf("no companies returned: %q", out)
-	}
-	t.Logf("passive/aqc returned %d companies", len(got))
-}
-
-func TestIntegrationPassiveTycUnauth(t *testing.T) {
-	if os.Getenv("AISCAN_INTEGRATION") == "" {
-		t.Skip("set AISCAN_INTEGRATION=1 to run")
-	}
-	set := &engine.Set{}
-	set.SetupAni(engine.ReconOptions{AniDepth: 1, AniPercent: 0.5}, telemetry.NopLogger())
-	cmd := passivecmd.New(set.Ani, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	out, err := cmd.Execute(ctx, []string{"-s", "tyc_unauth", "-n", "默安科技"})
-	if err != nil {
-		// tyc_unauth 反爬比较激进, 命中机器人验证就跳过
-		t.Logf("tyc_unauth Execute failed (likely 429/captcha): %v", err)
-		t.Skip("tyc_unauth unreachable from this network")
-	}
-	t.Logf("passive/tyc_unauth output (first 500 bytes): %s", truncForTest(out, 500))
-}
-
-func TestIntegrationPassiveTyc(t *testing.T) {
-	if os.Getenv("AISCAN_INTEGRATION") == "" {
-		t.Skip("set AISCAN_INTEGRATION=1 to run")
-	}
-	token := os.Getenv("ANI_TYC_TOKEN")
-	if token == "" {
-		t.Skip("ANI_TYC_TOKEN required")
-	}
-	set := &engine.Set{}
-	set.SetupAni(engine.ReconOptions{AniDepth: 1, AniPercent: 0.5, AniTycToken: token}, telemetry.NopLogger())
-	cmd := passivecmd.New(set.Ani, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	out, err := cmd.Execute(ctx, []string{"-s", "tyc", "-n", "默安科技"})
-	if err != nil {
-		t.Fatalf("passive tyc Execute: %v", err)
-	}
-	t.Logf("passive/tyc output (first 500 bytes): %s", truncForTest(out, 500))
-}
-
-func TestIntegrationPassiveQcc(t *testing.T) {
-	if os.Getenv("AISCAN_INTEGRATION") == "" {
-		t.Skip("set AISCAN_INTEGRATION=1 to run")
-	}
-	cookie := os.Getenv("ANI_QCC_COOKIE")
-	if cookie == "" {
-		t.Skip("ANI_QCC_COOKIE required")
-	}
-	set := &engine.Set{}
-	set.SetupAni(engine.ReconOptions{AniDepth: 1, AniPercent: 0.5, AniQccCookie: cookie}, telemetry.NopLogger())
-	cmd := passivecmd.New(set.Ani, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	out, err := cmd.Execute(ctx, []string{"-s", "qcc", "-n", "默安科技"})
-	if err != nil {
-		t.Fatalf("passive qcc Execute: %v", err)
-	}
-	t.Logf("passive/qcc output (first 500 bytes): %s", truncForTest(out, 500))
-}
-
-func TestIntegrationPassiveAqcAuth(t *testing.T) {
-	if os.Getenv("AISCAN_INTEGRATION") == "" {
-		t.Skip("set AISCAN_INTEGRATION=1 to run")
-	}
-	cookie := os.Getenv("ANI_AQC_COOKIE")
-	if cookie == "" {
-		t.Skip("ANI_AQC_COOKIE required")
-	}
-	set := &engine.Set{}
-	set.SetupAni(engine.ReconOptions{AniDepth: 1, AniPercent: 0.5, AniAqcCookie: cookie}, telemetry.NopLogger())
-	cmd := passivecmd.New(set.Ani, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	out, err := cmd.Execute(ctx, []string{"-s", "aqc", "-n", "默安科技"})
-	if err != nil {
-		t.Fatalf("passive aqc(authed) Execute: %v", err)
-	}
-	t.Logf("passive/aqc(authed) output (first 500 bytes): %s", truncForTest(out, 500))
 }
 
 func truncForTest(s string, n int) string {

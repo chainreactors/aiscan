@@ -4,61 +4,17 @@ import (
 	"encoding/json"
 	"testing"
 
-	anigo "github.com/chainreactors/ani-go"
-	inago "github.com/chainreactors/ina-go"
+	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
+	"github.com/projectdiscovery/uncover/sources"
 )
 
-func TestAniPythonShape(t *testing.T) {
-	b, err := json.Marshal(aniPython([]anigo.CompanyAsset{
-		{
-			Name: "RootCo", PID: "aqc-1", ICP: "ICP1", Domain: "root.example",
-			Title: "Root", Percent: 1, Source: "aqc_unauth",
-		},
-		{
-			Name: "NoICP", PID: "aqc-2", Parent: "RootCo", Percent: 0.8,
-			Source: "aqc_unauth",
-		},
-		{
-			Name: "ChildCo", PID: "tyc-1", ICP: "ICP2", Domain: "child.example",
-			Title: "Child", Parent: "RootCo", Percent: 0.6, Source: "tyc_unauth",
-		},
-	}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got map[string]map[string]any
-	if err := json.Unmarshal(b, &got); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := got["NoICP"]; ok {
-		t.Fatalf("company without ICP should be omitted: %v", got)
-	}
-	root := got["RootCo"]
-	if root["name"] != "RootCo" || root["perc"] != float64(1) || root["aqcid"] != "aqc-1" {
-		t.Fatalf("root fields mismatch: %v", root)
-	}
-	if root["parent"] != nil {
-		t.Fatalf("root parent = %v, want nil", root["parent"])
-	}
-	for _, forbidden := range []string{"pid", "source", "percent", "depth"} {
-		if _, ok := root[forbidden]; ok {
-			t.Fatalf("unexpected Go-only key %q in %v", forbidden, root)
-		}
-	}
-	icps, ok := root["icps"].([]any)
-	if !ok || len(icps) != 1 {
-		t.Fatalf("root icps = %#v", root["icps"])
-	}
-	child := got["ChildCo"]
-	if child["tycid"] != "tyc-1" || child["parent"] != "RootCo" {
-		t.Fatalf("child fields mismatch: %v", child)
-	}
-}
-
-func TestInaPythonFofaShape(t *testing.T) {
-	b, err := json.Marshal(inaPython("fofa", []inago.Asset{{
-		IP: "1.2.3.4", Port: "443", URL: "https://example.com",
-		Domain: "example.com", Title: "Example", ICP: "ICP1", Source: "fofa",
+func TestUncoverPythonFofaShape(t *testing.T) {
+	raw, _ := json.Marshal(engine.RawFofa{
+		IP: "1.2.3.4", Port: "443", Host: "https://example.com",
+		Domain: "example.com", Title: "Example", ICP: "ICP1",
+	})
+	b, err := json.Marshal(uncoverPython("fofa", []sources.Result{{
+		Source: "fofa", IP: "1.2.3.4", Port: 443, Host: "example.com", Raw: raw,
 	}}))
 	if err != nil {
 		t.Fatal(err)
@@ -76,15 +32,18 @@ func TestInaPythonFofaShape(t *testing.T) {
 		}
 	}
 	if _, ok := got[0]["source"]; ok {
-		t.Fatalf("source should not be in Python shape: %v", got[0])
+		t.Fatalf("source should not be in fofa Python shape: %v", got[0])
 	}
 }
 
-func TestInaPythonHunterShape(t *testing.T) {
-	b, err := json.Marshal(inaPython("hunter", []inago.Asset{{
+func TestUncoverPythonHunterShape(t *testing.T) {
+	raw, _ := json.Marshal(engine.RawHunter{
 		IP: "1.2.3.4", Port: "443", URL: "http://example.com:443",
 		Domain: "example.com", Status: "200", Company: "Example Inc",
-		Frame: "nginx, spring", Title: "Example", ICP: "ICP1", Source: "hunter",
+		Frame: "nginx,spring", Title: "Example", ICP: "ICP1",
+	})
+	b, err := json.Marshal(uncoverPython("hunter", []sources.Result{{
+		Source: "hunter", IP: "1.2.3.4", Port: 443, Host: "example.com", Raw: raw,
 	}}))
 	if err != nil {
 		t.Fatal(err)
@@ -101,8 +60,33 @@ func TestInaPythonHunterShape(t *testing.T) {
 			t.Fatalf("missing key %q in %v", key, got[0])
 		}
 	}
-	if got[0]["frame"] != "nginx, spring" {
+	if got[0]["frame"] != "nginx,spring" {
 		t.Fatalf("frame = %v", got[0]["frame"])
+	}
+}
+
+func TestUncoverPythonGenericShape(t *testing.T) {
+	b, err := json.Marshal(uncoverPython("shodan", []sources.Result{{
+		Source: "shodan", IP: "5.6.7.8", Port: 80, Host: "example.org",
+		Url: "http://example.org:80",
+	}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1", len(got))
+	}
+	for _, key := range []string{"ip", "port", "url", "host", "source"} {
+		if _, ok := got[0][key]; !ok {
+			t.Fatalf("missing key %q in %v", key, got[0])
+		}
+	}
+	if got[0]["source"] != "shodan" {
+		t.Fatalf("source = %v, want shodan", got[0]["source"])
 	}
 }
 
@@ -120,21 +104,6 @@ func TestSplitSource(t *testing.T) {
 	_, _, _, err = splitSource([]string{"-n", "foo"})
 	if err == nil {
 		t.Fatal("expected error when -s missing")
-	}
-}
-
-func TestParseAniArgs(t *testing.T) {
-	name, depth, pct, dSet, pSet, err := parseAniArgs([]string{"-n", "默安科技", "-d", "2", "-p", "0.6"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if name != "默安科技" || !dSet || depth != 2 || !pSet || pct != 0.6 {
-		t.Fatalf("got name=%q d=%d(%v) p=%f(%v)", name, depth, dSet, pct, pSet)
-	}
-
-	_, _, _, _, _, err = parseAniArgs([]string{})
-	if err == nil {
-		t.Fatal("expected error for missing -n")
 	}
 }
 

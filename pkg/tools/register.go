@@ -28,17 +28,8 @@ func RegisterAllWithLogger(reg *ScannerRegistry, engineSet *engine.Set, logger t
 	}
 	scanOpts := append([]scan.Option{scan.WithLogger(logger)}, opts...)
 	reg.Register(katanacmd.New())
-	if engineSet.Ani != nil || engineSet.Ina != nil {
-		reg.Register(passivecmd.New(engineSet.Ani, engineSet.Ina).WithLogger(logger).WithDefaults(passivecmd.AniDefaults{
-			Depth:      engineSet.Recon.AniDepth,
-			DepthSet:   engineSet.Recon.AniDepthSet,
-			Percent:    engineSet.Recon.AniPercent,
-			PercentSet: engineSet.Recon.AniPercentSet,
-			Proxy:      engineSet.Recon.AniProxy,
-			TycToken:   engineSet.Recon.AniTycToken,
-			QccCookie:  engineSet.Recon.AniQccCookie,
-			AqcCookie:  engineSet.Recon.AniAqcCookie,
-		}))
+	if engineSet.Ina != nil {
+		reg.Register(passivecmd.New(engineSet.Ina).WithLogger(logger))
 	}
 	if engineSet.Resources != nil {
 		reg.Register(cyberhubcmd.New(engineSet.Resources))

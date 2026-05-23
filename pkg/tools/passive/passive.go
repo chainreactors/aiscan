@@ -1,6 +1,4 @@
-// Package passive is a unified aiscan wrapper for company recon (ani-go) and
-// cyberspace recon (ina-go). It replaces the old separate ani / ina tools with
-// a single "passive" command that dispatches by -s <source>.
+// Package passive wraps uncover for cyberspace recon as the "passive" command.
 package passive
 
 import (
@@ -13,50 +11,25 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/telemetry"
-	anigo "github.com/chainreactors/ani-go"
-	inago "github.com/chainreactors/ina-go"
+	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
+	"github.com/projectdiscovery/uncover/sources"
 )
 
-const (
-	aniTimeout = 300 * time.Second
-	inaTimeout = 600 * time.Second
-)
+const inaTimeout = 600 * time.Second
 
-// AniDefaults mirrors config-file values for company recon.
-type AniDefaults struct {
-	Depth      int
-	DepthSet   bool
-	Percent    float64
-	PercentSet bool
-	Proxy      string
-	TycToken   string
-	QccCookie  string
-	AqcCookie  string
-}
-
-// Command dispatches passive recon to ani-go or ina-go by -s <source>.
+// Command dispatches passive recon to uncover by -s <source>.
 type Command struct {
-	ani        *anigo.Engine
-	ina        *inago.Engine
+	ina        *engine.UncoverEngine
 	logger     telemetry.Logger
-	defaults   AniDefaults
-	aniSources map[string]bool
 	inaSources map[string]bool
 }
 
-// New creates a passive command. Either engine may be nil (not configured).
-func New(ani *anigo.Engine, ina *inago.Engine) *Command {
+// New creates a passive command. Engine may be nil (not configured).
+func New(ina *engine.UncoverEngine) *Command {
 	c := &Command{
-		ani: ani, ina: ina,
+		ina:        ina,
 		logger:     telemetry.NopLogger(),
-		defaults:   AniDefaults{Depth: 1, DepthSet: true, Percent: 0.5, PercentSet: true},
-		aniSources: map[string]bool{},
 		inaSources: map[string]bool{},
-	}
-	if ani != nil {
-		for _, s := range ani.Sources() {
-			c.aniSources[s] = true
-		}
 	}
 	if ina != nil {
 		for _, s := range ina.Sources() {
@@ -73,39 +46,21 @@ func (c *Command) WithLogger(l telemetry.Logger) *Command {
 	return c
 }
 
-func (c *Command) WithDefaults(d AniDefaults) *Command {
-	if !d.DepthSet {
-		d.Depth = 1
-		d.DepthSet = true
-	}
-	if !d.PercentSet {
-		d.Percent = 0.5
-		d.PercentSet = true
-	}
-	c.defaults = d
-	return c
-}
-
 func (c *Command) Name() string { return "passive" }
 
 func (c *Command) Usage() string {
-	return `passive - unified passive recon (company graph + cyberspace search)
+	return `passive - cyberspace passive recon (uncover)
 
-Company recon (ani-go):
-  passive -s aqc_unauth -n "默安科技"
-  passive -s tyc -n "深信服" -d 2 -p 0.5
-
-Cyberspace recon (ina-go):
+Usage:
   passive -s fofa 'domain="example.com"'
   passive -s hunter 'domain.suffix="example.com"'
+  passive -s shodan 'org:"Example"'
 
 Options:
   -s <source>   Data source (required).
-                Company:    aqc_unauth, tyc_unauth, tyc, qcc, aqc
-                Cyberspace: fofa, hunter
-  -n <name>     Target company name  (company sources only, required)
-  -d <int>      Recursion depth       (company only, default from config / 1)
-  -p <float>    Min ownership ratio   (company only, default from config / 0.5)
+                Cyberspace: fofa, hunter, shodan, shodan-idb, censys,
+                            quake, zoomeye, netlas, criminalip, publicwww,
+                            hunterhow, binaryedge, onyphe, driftnet, greynoise
   -h            Show this help`
 }
 
@@ -117,72 +72,17 @@ func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
 	if help {
 		return c.Usage(), nil
 	}
-	if c.aniSources[src] {
-		return c.runAni(ctx, src, rest)
-	}
 	if c.inaSources[src] {
 		return c.runIna(ctx, src, rest)
 	}
 	return "", fmt.Errorf("passive: unknown source %q (available: %v)", src, c.sourceList())
 }
 
-// --------------- ani dispatch ------------------------------------------------
-
-func (c *Command) runAni(ctx context.Context, src string, args []string) (string, error) {
-	if c.ani == nil {
-		return "", fmt.Errorf("passive: ani engine not initialized")
-	}
-	name, depth, pct, dSet, pSet, err := parseAniArgs(args)
-	if err != nil {
-		return "", err
-	}
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, aniTimeout)
-		defer cancel()
-	}
-	eng := c.ani
-	if dSet || pSet {
-		cfg := anigo.NewConfig().WithLogger(&aniLog{c.logger})
-		cfg.WithDepth(c.defaults.Depth).WithPercent(c.defaults.Percent)
-		if c.defaults.Proxy != "" {
-			cfg.WithProxy(c.defaults.Proxy)
-		}
-		if c.defaults.TycToken != "" {
-			cfg.WithTycToken(c.defaults.TycToken)
-		}
-		if c.defaults.QccCookie != "" {
-			cfg.WithQccCookie(c.defaults.QccCookie)
-		}
-		if c.defaults.AqcCookie != "" {
-			cfg.WithAqcCookie(c.defaults.AqcCookie)
-		}
-		if dSet {
-			cfg.WithDepth(depth)
-		}
-		if pSet {
-			cfg.WithPercent(pct)
-		}
-		eng = anigo.NewEngine(cfg)
-		defer eng.Close()
-	}
-	assets, err := eng.Query(ctx, src, name)
-	if err != nil {
-		return "", fmt.Errorf("passive: %w", err)
-	}
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(aniPython(assets)); err != nil {
-		return buf.String(), fmt.Errorf("passive: encode: %w", err)
-	}
-	c.logger.Debugf("passive source=%s name=%s assets=%d", src, name, len(assets))
-	return buf.String(), nil
-}
-
 // --------------- ina dispatch ------------------------------------------------
 
 func (c *Command) runIna(ctx context.Context, src string, args []string) (string, error) {
 	if c.ina == nil {
-		return "", fmt.Errorf("passive: ina engine not initialized — set recon credentials")
+		return "", fmt.Errorf("passive: uncover engine not initialized — set recon credentials")
 	}
 	query, err := parseInaArgs(args)
 	if err != nil {
@@ -193,22 +93,20 @@ func (c *Command) runIna(ctx context.Context, src string, args []string) (string
 		ctx, cancel = context.WithTimeout(ctx, inaTimeout)
 		defer cancel()
 	}
-	assets, err := c.ina.QueryRaw(ctx, src, query)
+	results, err := c.ina.QueryRaw(ctx, src, query)
 	if err != nil {
 		return "", fmt.Errorf("passive: %w", err)
 	}
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(inaPython(src, assets)); err != nil {
+	if err := json.NewEncoder(&buf).Encode(uncoverPython(src, results)); err != nil {
 		return buf.String(), fmt.Errorf("passive: encode: %w", err)
 	}
-	c.logger.Debugf("passive source=%s assets=%d", src, len(assets))
+	c.logger.Debugf("passive source=%s results=%d", src, len(results))
 	return buf.String(), nil
 }
 
 // --------------- arg parsing -------------------------------------------------
 
-// splitSource extracts -s <source> and -h from the full arg list, returning
-// the remaining args untouched for the engine-specific parsers.
 func splitSource(args []string) (source string, rest []string, help bool, err error) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -221,59 +119,13 @@ func splitSource(args []string) (source string, rest []string, help bool, err er
 				return
 			}
 			source = args[i+1]
-			i++ // skip value
+			i++
 		default:
 			rest = append(rest, args[i])
 		}
 	}
 	if source == "" && !help {
 		err = fmt.Errorf("passive: -s <source> is required (use -h for help)")
-	}
-	return
-}
-
-func parseAniArgs(args []string) (name string, depth int, pct float64, dSet, pSet bool, err error) {
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "-n" || a == "--name":
-			if i+1 >= len(args) {
-				err = fmt.Errorf("passive: -n requires a value")
-				return
-			}
-			i++
-			name = args[i]
-		case a == "-d" || a == "--depth":
-			if i+1 >= len(args) {
-				err = fmt.Errorf("passive: -d requires a value")
-				return
-			}
-			i++
-			depth, err = strconv.Atoi(args[i])
-			if err != nil {
-				err = fmt.Errorf("passive: -d %q: %v", args[i], err)
-				return
-			}
-			dSet = true
-		case a == "-p" || a == "--percent":
-			if i+1 >= len(args) {
-				err = fmt.Errorf("passive: -p requires a value")
-				return
-			}
-			i++
-			pct, err = strconv.ParseFloat(args[i], 64)
-			if err != nil {
-				err = fmt.Errorf("passive: -p %q: %v", args[i], err)
-				return
-			}
-			pSet = true
-		case strings.HasPrefix(a, "-"):
-			err = fmt.Errorf("passive: unknown flag %q", a)
-			return
-		}
-	}
-	if name == "" {
-		err = fmt.Errorf("passive: -n <company name> is required for company sources")
 	}
 	return
 }
@@ -298,62 +150,6 @@ func parseInaArgs(args []string) (query string, err error) {
 
 // --------------- Python-compatible JSON shapes --------------------------------
 
-type pyICPItem struct {
-	ICP    string `json:"icp"`
-	Domain string `json:"domain"`
-	Title  string `json:"title"`
-}
-
-type pyCompany struct {
-	Name   string      `json:"name"`
-	Perc   float64     `json:"perc"`
-	AqcID  string      `json:"aqcid,omitempty"`
-	TycID  string      `json:"tycid,omitempty"`
-	QccID  string      `json:"qccid,omitempty"`
-	ICP    string      `json:"icp,omitempty"`
-	ICPs   []pyICPItem `json:"icps"`
-	Parent *string     `json:"parent"`
-}
-
-// aniPython converts flat CompanyAsset list to the Python ani -t json shape.
-func aniPython(assets []anigo.CompanyAsset) map[string]pyCompany {
-	out := make(map[string]pyCompany)
-	for _, a := range assets {
-		if a.ICP == "" {
-			continue
-		}
-		co, ok := out[a.Name]
-		if !ok {
-			co = pyCompany{Name: a.Name, Perc: a.Percent, ICPs: []pyICPItem{}, Parent: nilStr(a.Parent)}
-			setCompanyID(&co, a.Source, a.PID)
-		}
-		if co.ICP == "" {
-			co.ICP = a.ICP
-		}
-		co.ICPs = append(co.ICPs, pyICPItem{ICP: a.ICP, Domain: a.Domain, Title: a.Title})
-		out[a.Name] = co
-	}
-	return out
-}
-
-func nilStr(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-func setCompanyID(co *pyCompany, src, pid string) {
-	switch src {
-	case "tyc", "tyc_unauth":
-		co.TycID = pid
-	case "qcc":
-		co.QccID = pid
-	default:
-		co.AqcID = pid
-	}
-}
-
 type pyFofa struct {
 	IP     string `json:"ip"`
 	Port   string `json:"port"`
@@ -375,43 +171,49 @@ type pyHunter struct {
 	ICP     string `json:"icp"`
 }
 
-type pyZoomeye struct {
+type pyGeneric struct {
 	IP     string `json:"ip"`
 	Port   string `json:"port"`
 	URL    string `json:"url"`
-	Domain string `json:"domain"`
-	ICO    string `json:"ico"`
+	Host   string `json:"host"`
+	Source string `json:"source"`
 }
 
-// inaPython converts Asset list to the Python InaData.to_dict() shape.
-func inaPython(src string, assets []inago.Asset) any {
-	eff := src
-	if eff == "" && len(assets) > 0 {
-		eff = assets[0].Source
-	}
-	switch eff {
-	case "hunter":
-		out := make([]pyHunter, 0, len(assets))
-		for _, a := range assets {
-			out = append(out, pyHunter{
-				IP: a.IP, Port: a.Port, URL: a.URL, Domain: a.Domain,
-				Status: a.Status, Company: a.Company, Frame: a.Frame,
-				Title: a.Title, ICP: a.ICP,
+func uncoverPython(src string, results []sources.Result) any {
+	switch src {
+	case "fofa":
+		out := make([]pyFofa, 0, len(results))
+		for _, r := range results {
+			var raw engine.RawFofa
+			_ = json.Unmarshal(r.Raw, &raw)
+			out = append(out, pyFofa{
+				IP: raw.IP, Port: raw.Port, URL: raw.Host,
+				Domain: raw.Domain, Title: raw.Title, ICP: raw.ICP,
 			})
 		}
 		return out
-	case "zoomeye":
-		out := make([]pyZoomeye, 0, len(assets))
-		for _, a := range assets {
-			out = append(out, pyZoomeye{IP: a.IP, Port: a.Port, URL: a.URL, Domain: a.Domain, ICO: a.ICO})
+	case "hunter":
+		out := make([]pyHunter, 0, len(results))
+		for _, r := range results {
+			var raw engine.RawHunter
+			_ = json.Unmarshal(r.Raw, &raw)
+			out = append(out, pyHunter{
+				IP: raw.IP, Port: raw.Port, URL: raw.URL,
+				Domain: raw.Domain, Status: raw.Status,
+				Company: raw.Company, Frame: raw.Frame,
+				Title: raw.Title, ICP: raw.ICP,
+			})
 		}
 		return out
 	default:
-		out := make([]pyFofa, 0, len(assets))
-		for _, a := range assets {
-			out = append(out, pyFofa{
-				IP: a.IP, Port: a.Port, URL: a.URL, Domain: a.Domain,
-				Title: a.Title, ICP: a.ICP,
+		out := make([]pyGeneric, 0, len(results))
+		for _, r := range results {
+			out = append(out, pyGeneric{
+				IP:     r.IP,
+				Port:   strconv.Itoa(r.Port),
+				URL:    r.Url,
+				Host:   r.Host,
+				Source: r.Source,
 			})
 		}
 		return out
@@ -421,19 +223,9 @@ func inaPython(src string, assets []inago.Asset) any {
 // --------------- helpers -----------------------------------------------------
 
 func (c *Command) sourceList() []string {
-	out := make([]string, 0, len(c.aniSources)+len(c.inaSources))
-	for s := range c.aniSources {
-		out = append(out, s)
-	}
+	out := make([]string, 0, len(c.inaSources))
 	for s := range c.inaSources {
 		out = append(out, s)
 	}
 	return out
 }
-
-type aniLog struct{ l telemetry.Logger }
-
-func (a *aniLog) Debugf(f string, v ...any) { a.l.Debugf(f, v...) }
-func (a *aniLog) Infof(f string, v ...any)  { a.l.Infof(f, v...) }
-func (a *aniLog) Warnf(f string, v ...any)  { a.l.Warnf(f, v...) }
-func (a *aniLog) Errorf(f string, v ...any) { a.l.Errorf(f, v...) }

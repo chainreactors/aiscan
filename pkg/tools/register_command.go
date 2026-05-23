@@ -29,17 +29,8 @@ func init() {
 			}
 			proxy := deps.ScannerProxy
 
-			if es.Ani != nil || es.Ina != nil {
-				reg.Register(passivecmd.New(es.Ani, es.Ina).WithLogger(logger).WithDefaults(passivecmd.AniDefaults{
-					Depth:      es.Recon.AniDepth,
-					DepthSet:   es.Recon.AniDepthSet,
-					Percent:    es.Recon.AniPercent,
-					PercentSet: es.Recon.AniPercentSet,
-					Proxy:      es.Recon.AniProxy,
-					TycToken:   es.Recon.AniTycToken,
-					QccCookie:  es.Recon.AniQccCookie,
-					AqcCookie:  es.Recon.AniAqcCookie,
-				}), "scanner")
+			if es.Ina != nil {
+				reg.Register(passivecmd.New(es.Ina).WithLogger(logger), "scanner")
 			}
 
 			var scanOpts []scan.Option
