@@ -23,6 +23,11 @@ type Skill struct {
 	Body        string
 	Raw         string
 	Internal    bool
+
+	Agent           bool
+	AgentMaxTurns   int
+	AgentModel      string
+	AgentBackground bool
 }
 
 type Diagnostic struct {
@@ -99,6 +104,19 @@ func (s *Store) ByName(name string) (Skill, bool) {
 	}
 	skill, ok := s.byName[name]
 	return skill, ok
+}
+
+func (s *Store) AgentTypes() []Skill {
+	if s == nil {
+		return nil
+	}
+	var agents []Skill
+	for _, skill := range s.Skills {
+		if skill.Agent {
+			agents = append(agents, skill)
+		}
+	}
+	return agents
 }
 
 func (s *Store) ByLocation(location string) (Skill, bool) {
@@ -255,15 +273,27 @@ func parseSkill(filePath, defaultName, raw string) (Skill, []Diagnostic, bool) {
 		return Skill{}, diagnostics, false
 	}
 	internal := strings.EqualFold(strings.TrimSpace(frontmatter["internal"]), "true")
+	isAgent := strings.EqualFold(strings.TrimSpace(frontmatter["agent"]), "true")
+	agentBackground := strings.EqualFold(strings.TrimSpace(frontmatter["agent_background"]), "true")
+	agentMaxTurns := 0
+	if v := strings.TrimSpace(frontmatter["agent_max_turns"]); v != "" {
+		fmt.Sscanf(v, "%d", &agentMaxTurns)
+	}
+	agentModel := strings.TrimSpace(frontmatter["agent_model"])
+
 	location := uriPrefix + name + "/SKILL.md"
 	return Skill{
-		Name:        name,
-		Description: description,
-		Location:    location,
-		BaseDir:     uriPrefix + name,
-		Body:        strings.TrimSpace(body),
-		Raw:         raw,
-		Internal:    internal,
+		Name:            name,
+		Description:     description,
+		Location:        location,
+		BaseDir:         uriPrefix + name,
+		Body:            strings.TrimSpace(body),
+		Raw:             raw,
+		Internal:        internal,
+		Agent:           isAgent,
+		AgentMaxTurns:   agentMaxTurns,
+		AgentModel:      agentModel,
+		AgentBackground: agentBackground,
 	}, diagnostics, true
 }
 

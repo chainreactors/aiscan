@@ -1,6 +1,6 @@
 package cmd
 
-import "github.com/chainreactors/aiscan/pkg/provider"
+import "github.com/chainreactors/aiscan/pkg/agent/provider"
 
 var (
 	DefaultProvider = "deepseek"

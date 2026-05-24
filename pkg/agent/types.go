@@ -4,7 +4,8 @@ import (
 	"context"
 
 	"github.com/chainreactors/aiscan/pkg/command"
-	"github.com/chainreactors/aiscan/pkg/provider"
+	"github.com/chainreactors/aiscan/pkg/agent/inbox"
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
@@ -96,7 +97,8 @@ type Config struct {
 	// turn and appends to the transcript. Used by the swarm bridge and task
 	// manager to inject events into the LLM's next reasoning step. A closed
 	// inbox is treated as "no more external input"; nil disables the mechanism.
-	Inbox Inbox
+	Inbox    inbox.Inbox
+	Expander *inbox.Expander
 }
 
 type Option func(*Config)
@@ -187,6 +189,10 @@ func WithResponseFormat(rf *provider.ResponseFormat) Option {
 	return func(c *Config) { c.ResponseFormat = rf }
 }
 
-func WithInbox(inbox Inbox) Option {
-	return func(c *Config) { c.Inbox = inbox }
+func WithInbox(ib inbox.Inbox) Option {
+	return func(c *Config) { c.Inbox = ib }
+}
+
+func WithExpander(e *inbox.Expander) Option {
+	return func(c *Config) { c.Expander = e }
 }

@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/provider"
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
 )
 
 func TestEventsWriterAppendsJSONL(t *testing.T) {

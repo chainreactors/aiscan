@@ -13,69 +13,46 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/provider"
 )
 
-type testSink struct {
-	mu   sync.Mutex
-	msgs []provider.ChatMessage
-	ch   chan struct{}
+type completionRecord struct {
+	Info      Info
+	Killed    bool
+	KillCause string
 }
 
-func newTestSink() *testSink {
-	return &testSink{ch: make(chan struct{}, 8)}
+type testCollector struct {
+	mu      sync.Mutex
+	records []completionRecord
+	ch      chan struct{}
 }
 
-func (s *testSink) Push(msg provider.ChatMessage) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.msgs = append(s.msgs, msg)
-	select {
-	case s.ch <- struct{}{}:
-	default:
+func newTestCollector() *testCollector {
+	return &testCollector{ch: make(chan struct{}, 8)}
+}
+
+func (c *testCollector) handler() CompletionFunc {
+	return func(info Info, killed bool, killCause string) {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.records = append(c.records, completionRecord{Info: info, Killed: killed, KillCause: killCause})
+		select {
+		case c.ch <- struct{}{}:
+		default:
+		}
 	}
-	return true
 }
 
-func (s *testSink) waitOne(t *testing.T, timeout time.Duration) provider.ChatMessage {
+func (c *testCollector) waitOne(t *testing.T, timeout time.Duration) completionRecord {
 	t.Helper()
 	select {
-	case <-s.ch:
+	case <-c.ch:
 	case <-time.After(timeout):
-		t.Fatalf("no completion message received within %s", timeout)
+		t.Fatalf("no completion received within %s", timeout)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.msgs[len(s.msgs)-1]
-}
-
-// rejectSink always returns false, simulating a full/closed inbox.
-type rejectSink struct{}
-
-func (rejectSink) Push(provider.ChatMessage) bool { return false }
-
-type panicSink struct {
-	called chan struct{}
-}
-
-func (s panicSink) Push(provider.ChatMessage) bool {
-	if s.called != nil {
-		close(s.called)
-	}
-	panic("boom")
-}
-
-type blockingSink struct {
-	started chan struct{}
-	release <-chan struct{}
-}
-
-func (s blockingSink) Push(provider.ChatMessage) bool {
-	if s.started != nil {
-		close(s.started)
-	}
-	<-s.release
-	return true
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.records[len(c.records)-1]
 }
 
 // waitUntil polls until predicate returns true or timeout elapses. Used in
@@ -97,8 +74,8 @@ func TestSpawnCompletesAndNotifies(t *testing.T) {
 	}
 	dir := t.TempDir()
 	mgr := NewManager(filepath.Join(dir, "tasks"))
-	sink := newTestSink()
-	mgr.SetSink(sink)
+	col := newTestCollector()
+	mgr.SetOnComplete(col.handler())
 
 	info, err := mgr.Spawn(dir, "printf done; sleep 0.05", "demo", 10*time.Second)
 	if err != nil {
@@ -108,12 +85,13 @@ func TestSpawnCompletesAndNotifies(t *testing.T) {
 		t.Fatalf("initial state = %s, want running", info.State)
 	}
 
-	msg := sink.waitOne(t, 5*time.Second)
-	if msg.Content == nil || !strings.Contains(*msg.Content, info.ID) {
-		t.Fatalf("completion message missing id: %v", msg)
+	rec := col.waitOne(t, 5*time.Second)
+	formatted := FormatCompletion(rec.Info, rec.Killed, rec.KillCause)
+	if !strings.Contains(formatted, info.ID) {
+		t.Fatalf("completion missing id: %v", formatted)
 	}
-	if !strings.Contains(*msg.Content, "done") {
-		t.Fatalf("completion message missing stdout tail: %v", *msg.Content)
+	if !strings.Contains(formatted, "done") {
+		t.Fatalf("completion missing stdout tail: %v", formatted)
 	}
 
 	final, ok := mgr.Get(info.ID)
@@ -310,8 +288,8 @@ func TestShutdownKillsRunning(t *testing.T) {
 func TestSpawnInProcessCompletesAndNotifies(t *testing.T) {
 	dir := t.TempDir()
 	mgr := NewManager(filepath.Join(dir, "tasks"))
-	sink := newTestSink()
-	mgr.SetSink(sink)
+	col := newTestCollector()
+	mgr.SetOnComplete(col.handler())
 
 	fn := func(ctx context.Context, out io.Writer) error {
 		fmt.Fprintln(out, "step 1")
@@ -323,12 +301,13 @@ func TestSpawnInProcessCompletesAndNotifies(t *testing.T) {
 		t.Fatalf("SpawnInProcess: %v", err)
 	}
 
-	msg := sink.waitOne(t, 3*time.Second)
-	if msg.Content == nil || !strings.Contains(*msg.Content, info.ID) {
-		t.Fatalf("completion msg missing id: %v", msg)
+	rec := col.waitOne(t, 3*time.Second)
+	formatted := FormatCompletion(rec.Info, rec.Killed, rec.KillCause)
+	if !strings.Contains(formatted, info.ID) {
+		t.Fatalf("completion msg missing id: %v", formatted)
 	}
-	if !strings.Contains(*msg.Content, "step 2") {
-		t.Fatalf("completion msg missing stdout: %v", *msg.Content)
+	if !strings.Contains(formatted, "step 2") {
+		t.Fatalf("completion msg missing stdout: %v", formatted)
 	}
 
 	final, _ := mgr.Get(info.ID)
@@ -371,16 +350,15 @@ func TestSpawnInProcessKillCancelsContext(t *testing.T) {
 	}
 }
 
-func TestCompletionToFullSinkDoesNotPanic(t *testing.T) {
+func TestCompletionWithNilCallbackDoesNotPanic(t *testing.T) {
 	dir := t.TempDir()
 	mgr := NewManager(filepath.Join(dir, "tasks"))
-	mgr.SetSink(rejectSink{})
 
 	fn := func(ctx context.Context, out io.Writer) error {
 		fmt.Fprintln(out, "done")
 		return nil
 	}
-	info, err := mgr.SpawnInProcess("full-sink", "full-sink", 5*time.Second, fn)
+	info, err := mgr.SpawnInProcess("nil-cb", "nil-cb", 5*time.Second, fn)
 	if err != nil {
 		t.Fatalf("SpawnInProcess: %v", err)
 	}
@@ -393,50 +371,46 @@ func TestCompletionToFullSinkDoesNotPanic(t *testing.T) {
 	}
 }
 
-func TestCompletionToPanicSinkDoesNotPanic(t *testing.T) {
+func TestCompletionToPanicCallbackDoesNotPanic(t *testing.T) {
 	called := make(chan struct{})
-	sendCompletion(panicSink{called: called}, Info{
-		ID:        "panic-sink",
-		Name:      "panic-sink",
-		StartedAt: time.Now(),
-		EndedAt:   time.Now(),
-		State:     StateCompleted,
-	}, false, "")
+	fn := CompletionFunc(func(info Info, killed bool, cause string) {
+		close(called)
+		panic("boom")
+	})
+	fireCompletion(fn, Info{ID: "panic-test", State: StateCompleted}, false, "")
 
 	select {
 	case <-called:
 	case <-time.After(time.Second):
-		t.Fatal("panic sink was not called")
+		t.Fatal("panic callback was not called")
 	}
 }
 
-func TestCompletionToBlockingSinkDoesNotBlock(t *testing.T) {
+func TestCompletionToBlockingCallbackDoesNotBlock(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
 
 	started := make(chan struct{})
 	done := make(chan struct{})
+	fn := CompletionFunc(func(info Info, killed bool, cause string) {
+		close(started)
+		<-release
+	})
 	go func() {
-		sendCompletion(blockingSink{started: started, release: release}, Info{
-			ID:        "blocking-sink",
-			Name:      "blocking-sink",
-			StartedAt: time.Now(),
-			EndedAt:   time.Now(),
-			State:     StateCompleted,
-		}, false, "")
+		fireCompletion(fn, Info{ID: "block-test", State: StateCompleted}, false, "")
 		close(done)
 	}()
 
 	select {
 	case <-done:
 	case <-time.After(200 * time.Millisecond):
-		t.Fatal("sendCompletion blocked on sink.Push")
+		t.Fatal("fireCompletion blocked on callback")
 	}
 
 	select {
 	case <-started:
 	case <-time.After(time.Second):
-		t.Fatal("blocking sink was not called")
+		t.Fatal("blocking callback was not called")
 	}
 }
 

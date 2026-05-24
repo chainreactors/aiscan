@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/chainreactors/aiscan/pkg/command"
-	"github.com/chainreactors/aiscan/pkg/provider"
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
@@ -30,11 +30,7 @@ func RunWithEvents(ctx context.Context, prompt string, tools *command.CommandReg
 	return ag.Prompt(ctx, prompt)
 }
 
-func RunLoop(ctx context.Context, prompts []provider.ChatMessage, agentCtx Context, cfg Config) (*Result, error) {
-	return runLoop(ctx, prompts, agentCtx, normalizeConfig(cfg))
-}
-
-func runLoop(ctx context.Context, prompts []provider.ChatMessage, agentCtx Context, cfg Config) (*Result, error) {
+func runLoop(ctx context.Context, agentCtx Context, cfg Config) (*Result, error) {
 	if cfg.Provider == nil {
 		return nil, fmt.Errorf("agent provider is nil")
 	}
@@ -45,11 +41,11 @@ func runLoop(ctx context.Context, prompts []provider.ChatMessage, agentCtx Conte
 		agentCtx.SystemPrompt = cfg.SystemPrompt
 	}
 
-	transcript := newTranscript(agentCtx.Messages, len(prompts)+4)
+	transcript := newTranscript(agentCtx.Messages, 8)
 	turn := 0
 
 	emitFn := cfg.Emit
-	var inbox Inbox = cfg.Inbox
+	ib := cfg.Inbox
 	if err := emit(ctx, emitFn, Event{Type: EventAgentStart}); err != nil {
 		return nil, err
 	}
@@ -90,34 +86,25 @@ func runLoop(ctx context.Context, prompts []provider.ChatMessage, agentCtx Conte
 			return end(nil, err)
 		}
 
-		// Drain any external messages (e.g. swarm peer chatter, task completions)
-		// that arrived since the previous turn ended. They appear in the
-		// transcript as user-role messages, so the LLM "sees" them when it
-		// makes the next completion call.
-		if inbox != nil {
-			messages := inbox.Drain()
-			for _, msg := range messages {
-				transcript.append(msg)
-				if err := emitMessage(ctx, emitFn, turn, msg); err != nil {
-					return end(nil, err)
+		if ib != nil {
+			inboxMsgs := ib.Drain()
+			for i, msg := range inboxMsgs {
+				if cfg.Expander != nil {
+					inboxMsgs[i] = cfg.Expander.Expand(msg)
+				}
+				for _, cm := range inboxMsgs[i].ToChatMessages() {
+					transcript.append(cm)
+					if err := emitMessage(ctx, emitFn, turn, cm); err != nil {
+						return end(nil, err)
+					}
 				}
 			}
-			if len(messages) > 0 {
-				cfg.Logger.Debugf("[turn %d] drained %d inbox message(s)", turn, len(messages))
+			if len(inboxMsgs) > 0 {
+				cfg.Logger.Debugf("[turn %d] drained %d inbox message(s)", turn, len(inboxMsgs))
 			}
-			if inbox.Closed() {
-				inbox = nil
+			if ib.Closed() {
+				ib = nil
 			}
-		}
-
-		if len(prompts) > 0 {
-			for _, msg := range prompts {
-				transcript.append(msg)
-				if err := emitMessage(ctx, emitFn, turn, msg); err != nil {
-					return end(nil, err)
-				}
-			}
-			prompts = nil
 		}
 
 		reqMessages := requestMessages(agentCtx.SystemPrompt, transcript.messages, cfg.TransformContext)

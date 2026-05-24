@@ -39,12 +39,6 @@ type Task struct {
 	Targets   []string
 	Meta      map[string]any
 	Refs      ioa.Ref
-	// Peers receives non-task messages (peer chatter, partner ioa_send results)
-	// arriving in the same space while this task executes. The node closes the
-	// channel when the worker should stop draining (currently: when OnTask
-	// returns). Handlers that want LLM-level visibility into peers should
-	// forward Peers into agent.WithInbox.
-	Peers <-chan PeerMessage
 }
 
 // PeerMessage is a non-task swarm message arriving during an active task.
@@ -84,6 +78,7 @@ type NodeConfig struct {
 	Skills                []string
 	Network               map[string]any
 	OnTask                TaskHandler
+	OnPeer                func(PeerMessage) bool
 	OnHeartbeat           HeartbeatFunc
 	Logger                Logger
 }
@@ -135,7 +130,6 @@ type pendingTask struct {
 
 type activeTask struct {
 	messageID string
-	peers     chan PeerMessage
 	done      chan taskResult
 }
 
@@ -233,11 +227,6 @@ func (n *Node) Run(ctx context.Context) error {
 	n.runCtx = ctx
 
 	var active *activeTask
-	defer func() {
-		if active != nil {
-			close(active.peers)
-		}
-	}()
 
 	if n.cfg.HeartbeatInterval > 0 && n.cfg.OnHeartbeat != nil {
 		if err := n.markExisting(ctx); err != nil {
@@ -314,7 +303,6 @@ func (n *Node) Run(ctx context.Context) error {
 				}()
 			}
 		case res := <-activeDone():
-			close(active.peers)
 			if err := n.completeTask(ctx, res); err != nil {
 				n.cfg.Logger.Warnf("swarm task=report failed: %s", err)
 			}
@@ -580,23 +568,17 @@ func (n *Node) routeIncoming(ctx context.Context, msg ioa.Message, active **acti
 		return true, nil
 	}
 
-	// Peer chatter while a task is running: forward to the active task's inbox.
 	if *active != nil {
 		peer := peerMessageFromIOA(msg, sm)
-		select {
-		case (*active).peers <- peer:
+		if n.cfg.OnPeer != nil && n.cfg.OnPeer(peer) {
 			n.markDispatched(msg.ID)
 			n.cfg.Logger.Debugf("swarm peer=forwarded msg=%s sender=%s active=%s",
 				msg.ID, msg.Sender, (*active).messageID)
 			return true, nil
-		default:
-			// Buffer full: do NOT mark dispatched, and signal handled=false
-			// so catchUp keeps its watermark behind this message. The next
-			// poll will re-fetch and retry once the agent drains some peers.
-			n.cfg.Logger.Warnf("swarm peer=deferred (buffer full) msg=%s active=%s",
-				msg.ID, (*active).messageID)
-			return false, nil
 		}
+		n.cfg.Logger.Warnf("swarm peer=deferred (buffer full) msg=%s active=%s",
+			msg.ID, (*active).messageID)
+		return false, nil
 	}
 
 	// No consumer (idle node, not a task-start message). Decision made:
@@ -618,11 +600,9 @@ func (n *Node) startTask(ctx context.Context, msg ioa.Message, sm SwarmMessage) 
 		return nil, err
 	}
 
-	peers := make(chan PeerMessage, defaultPeerBufferSize)
 	done := make(chan taskResult, 1)
 	state := &activeTask{
 		messageID: msg.ID,
-		peers:     peers,
 		done:      done,
 	}
 
@@ -633,7 +613,6 @@ func (n *Node) startTask(ctx context.Context, msg ioa.Message, sm SwarmMessage) 
 		Targets:   sm.Targets,
 		Meta:      sm.Meta,
 		Refs:      msg.Refs,
-		Peers:     peers,
 	}
 
 	go func() {

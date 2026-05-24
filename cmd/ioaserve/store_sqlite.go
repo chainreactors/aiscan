@@ -1,6 +1,6 @@
 //go:build sqlite
 
-package cmd
+package ioaserve
 
 import (
 	"fmt"
@@ -12,8 +12,7 @@ import (
 	ioasqlite "github.com/chainreactors/ioa/sqlite"
 )
 
-func openIOAStore(option *Option, logger telemetry.Logger) (ioaserver.Store, func() error, error) {
-	dbPath := option.IOADB
+func openStore(dbPath string, logger telemetry.Logger) (ioaserver.Store, func() error, error) {
 	if dbPath == "" {
 		dbPath = "./ioa.db"
 	}

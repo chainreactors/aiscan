@@ -1,0 +1,11 @@
+{
+  "id": "cff495fd",
+  "name": "scan-demo",
+  "command": "sleep 3 \u0026\u0026 echo SCAN_COMPLETE_12345",
+  "pid": 23223,
+  "started_at": "2026-05-24T05:56:12.340404302-07:00",
+  "ended_at": "2026-05-24T05:56:13.94432726-07:00",
+  "exit_code": 0,
+  "state": "completed",
+  "stdout_file": "/mnt/chainreactors/aiscan/out/tasks/cff495fd/stdout"
+}

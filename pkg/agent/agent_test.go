@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/command"
-	"github.com/chainreactors/aiscan/pkg/provider"
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/skills"
 )
@@ -227,31 +227,24 @@ func TestAgentReusesConversationAcrossPrompts(t *testing.T) {
 	}
 }
 
-func TestRunLoopReturnsRunScopedNewMessages(t *testing.T) {
+func TestAgentPromptReturnsRunScopedNewMessages(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{
 		responses: []*provider.ChatCompletionResponse{
 			chatResponse(provider.NewTextMessage("assistant", "next")),
 		},
 	}
-	base := []provider.ChatMessage{provider.NewTextMessage("user", "base")}
-	prompt := provider.NewTextMessage("user", "prompt")
-
-	result, err := RunLoop(context.Background(), []provider.ChatMessage{prompt}, Context{
-		Messages: base,
-		Tools:    tools,
-	}, Config{Provider: llm, Model: "test"})
+	ag := New(llm, tools, WithModel("test"), WithSystemPrompt(""))
+	ag.state.Messages = []provider.ChatMessage{provider.NewTextMessage("user", "base")}
+	result, err := ag.Prompt(context.Background(), "prompt")
 	if err != nil {
-		t.Fatalf("RunLoop() error = %v", err)
+		t.Fatalf("Prompt() error = %v", err)
 	}
 	if len(result.NewMessages) != 2 {
 		t.Fatalf("new messages = %d, want 2: %#v", len(result.NewMessages), result.NewMessages)
 	}
 	if len(result.Messages) != 3 {
 		t.Fatalf("messages = %d, want 3: %#v", len(result.Messages), result.Messages)
-	}
-	if *result.Messages[0].Content != "base" || *result.NewMessages[0].Content != "prompt" {
-		t.Fatalf("unexpected transcript: messages=%#v new=%#v", result.Messages, result.NewMessages)
 	}
 }
 

@@ -14,13 +14,12 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
 	cmdpkg "github.com/chainreactors/aiscan/pkg/command"
-	"github.com/chainreactors/aiscan/pkg/provider"
+	inboxpkg "github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/swarm"
-	"github.com/chainreactors/aiscan/pkg/task"
+	taskmod "github.com/chainreactors/aiscan/pkg/task"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
 	"github.com/chainreactors/aiscan/skills"
-	ioaserver "github.com/chainreactors/ioa/server"
 )
 
 func runAgentMode(ctx context.Context, option *Option, logger telemetry.Logger) error {
@@ -101,12 +100,36 @@ func runAgentOneShotMode(ctx context.Context, option *Option, logger telemetry.L
 	}()
 	handler := combineEventHandlers(output.HandleEvent, events.HandleEvent)
 
+	agentInbox := inboxpkg.NewBuffered(64)
+	taskMgr := bashTaskManager(application.Commands)
+	if taskMgr != nil {
+		taskMgr.SetOnComplete(func(info taskmod.Info, killed bool, cause string) {
+			msg := inboxpkg.NewMessage(inboxpkg.OriginTask, "user", taskmod.FormatCompletion(info, killed, cause))
+			msg.Meta = map[string]any{"task_id": info.ID, "task_name": info.Name, "exit_code": info.ExitCode}
+			agentInbox.Push(msg)
+		})
+		defer taskMgr.ClearOnComplete()
+	}
+
+	application.Commands.RegisterTool(NewSubAgentTool(SubAgentConfig{
+		Provider:    application.Provider,
+		Tools:       application.Commands,
+		ParentInbox: agentInbox,
+		SkillStore:  application.Skills,
+		BaseOpts: []agent.Option{
+			agent.WithProvider(application.Provider),
+			agent.WithModel(option.Model),
+			agent.WithLogger(logger),
+		},
+	}))
+
 	result, err := agent.RunWithEvents(ctx, task, application.Commands, handler,
 		agent.WithProvider(application.Provider),
 		agent.WithSystemPrompt(runtime.systemPrompt),
 		agent.WithModel(option.Model),
 		agent.WithStream(false),
 		agent.WithLogger(logger),
+		agent.WithInbox(agentInbox),
 	)
 	if err != nil {
 		return err
@@ -295,27 +318,24 @@ func runLoop(ctx context.Context, option *Option, logger telemetry.Logger) error
 		loopOpts = append(loopOpts, agent.WithEventHandler(events.HandleEvent))
 	}
 
-	// Locate the bash tool's task manager so we can route its completion
-	// notifications into the same inbox the swarm uses for peer chatter.
 	taskMgr := bashTaskManager(application.Commands)
+	loopInbox := inboxpkg.NewBuffered(64)
 
-	taskHandler := func(ctx context.Context, task swarm.Task) (string, error) {
+	taskHandler := func(ctx context.Context, st swarm.Task) (string, error) {
 		opts := append([]agent.Option(nil), loopOpts...)
-		inbox := agent.NewBufferedInbox(64)
-		if task.Peers != nil {
-			bridgeCtx, cancelBridge := context.WithCancel(ctx)
-			defer cancelBridge()
-			go forwardPeersToInbox(bridgeCtx, task.Peers, inbox, logger)
-		}
-		opts = append(opts, agent.WithInbox(inbox))
+		opts = append(opts, agent.WithInbox(loopInbox))
 		if taskMgr != nil {
-			taskMgr.SetSink(inbox)
+			taskMgr.SetOnComplete(func(info taskmod.Info, killed bool, cause string) {
+				msg := inboxpkg.NewMessage(inboxpkg.OriginTask, "user", taskmod.FormatCompletion(info, killed, cause))
+				msg.Meta = map[string]any{"task_id": info.ID, "task_name": info.Name, "exit_code": info.ExitCode}
+				loopInbox.Push(msg)
+			})
 			defer func() {
-				taskMgr.ClearSink()
+				taskMgr.ClearOnComplete()
 				taskMgr.KillAll()
 			}()
 		}
-		return agent.Run(ctx, task.Content, application.Commands, opts...)
+		return agent.Run(ctx, st.Content, application.Commands, opts...)
 	}
 
 	heartbeatFunc := func(ctx context.Context, prompt string) (string, error) {
@@ -334,28 +354,16 @@ func runLoop(ctx context.Context, option *Option, logger telemetry.Logger) error
 		Intent:                intent,
 		Skills:                option.Skills,
 		OnTask:                taskHandler,
-		OnHeartbeat:           heartbeatFunc,
-		Logger:                logger,
+		OnPeer: func(peer swarm.PeerMessage) bool {
+			return loopInbox.Push(peerToInboxMessage(peer))
+		},
+		OnHeartbeat: heartbeatFunc,
+		Logger:      logger,
 	})
 
 	application.Commands.RegisterTool(swarm.CronCommand(node))
 
 	return node.Run(ctx)
-}
-
-func runIOAServe(ctx context.Context, option *Option, logger telemetry.Logger) error {
-	store, closeStore, err := openIOAStore(option, logger)
-	if err != nil {
-		return err
-	}
-	if closeStore != nil {
-		defer func() { _ = closeStore() }()
-	}
-	return ioaserver.RunServer(ctx, ioaserver.ServerOptions{
-		URL:    option.IOAURL,
-		Store:  store,
-		Logger: logger,
-	})
 }
 
 func registerIOATools(ctx context.Context, application *app.App, option *Option) error {
@@ -377,28 +385,6 @@ func registerIOATools(ctx context.Context, application *app.App, option *Option)
 	return application.InitIOA(ctx, cfg)
 }
 
-// forwardPeersToInbox bridges swarm peer messages into an agent Inbox,
-// formatting each peer as a user-role chat message the LLM will see at the
-// next turn boundary. Exits when peers is closed (Node finished the task) or
-// when ctx is cancelled (agent.Run returned and the parent cancelled bridge).
-func forwardPeersToInbox(ctx context.Context, peers <-chan swarm.PeerMessage, inbox agent.Inbox, logger telemetry.Logger) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case peer, ok := <-peers:
-			if !ok {
-				inbox.Close()
-				return
-			}
-			msg := provider.NewTextMessage("user", formatPeerForLLM(peer))
-			if !inbox.Push(msg) {
-				logger.Warnf("swarm inbox=full dropping peer msg=%s sender=%s", peer.MessageID, peer.Sender)
-			}
-		}
-	}
-}
-
 func formatPeerForLLM(peer swarm.PeerMessage) string {
 	var sb strings.Builder
 	sb.WriteString("<swarm_peer")
@@ -409,7 +395,7 @@ func formatPeerForLLM(peer swarm.PeerMessage) string {
 		writeXMLAttr(&sb, "message_id", peer.MessageID)
 	}
 	sb.WriteString(">\n")
-	_ = xml.EscapeText(&sb, []byte(peerPayloadForLLM(peer)))
+	_ = xml.EscapeText(&sb, []byte(peerPayload(peer)))
 	sb.WriteString("\n</swarm_peer>")
 	return sb.String()
 }
@@ -422,7 +408,7 @@ func writeXMLAttr(sb *strings.Builder, name, value string) {
 	sb.WriteByte('"')
 }
 
-func peerPayloadForLLM(peer swarm.PeerMessage) string {
+func peerPayload(peer swarm.PeerMessage) string {
 	if strings.TrimSpace(peer.Content) != "" {
 		return peer.Content
 	}
@@ -436,12 +422,21 @@ func peerPayloadForLLM(peer swarm.PeerMessage) string {
 	return string(data)
 }
 
+func peerToInboxMessage(peer swarm.PeerMessage) inboxpkg.Message {
+	msg := inboxpkg.NewMessage(inboxpkg.OriginPeer, "user", formatPeerForLLM(peer))
+	msg.Meta = map[string]any{
+		"sender":     peer.Sender,
+		"message_id": peer.MessageID,
+	}
+	return msg
+}
+
 // bashTaskManager fetches the task.Manager owned by the bash tool inside the
 // shared command registry. Returns nil if the registry has no bash tool
 // (which only happens in test setups without the core tool factory).
 func bashTaskManager(reg interface {
 	GetTool(string) (cmdpkg.AgentTool, bool)
-}) *task.Manager {
+}) *taskmod.Manager {
 	if reg == nil {
 		return nil
 	}

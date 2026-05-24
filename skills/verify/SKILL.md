@@ -1,6 +1,9 @@
 ---
 name: verify
 description: Use this skill to validate scan findings by reasoning about evidence quality and determining if a vulnerability is genuinely confirmed.
+agent: true
+agent_max_turns: 10
+agent_background: true
 ---
 
 # Verify

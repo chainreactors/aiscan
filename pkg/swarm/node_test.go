@@ -834,19 +834,19 @@ func TestPeerMessagesForwardedToActiveTask(t *testing.T) {
 		PollInterval:     100 * time.Millisecond,
 		OnTask: func(ctx context.Context, task Task) (string, error) {
 			close(taskStarted)
-			// Drain peers until the test signals task completion.
-			for {
-				select {
-				case p, ok := <-task.Peers:
-					if !ok {
-						return "drained", nil
-					}
-					receivedPeers <- p
-				case <-releaseTask:
-					return "drained", nil
-				case <-ctx.Done():
-					return "", ctx.Err()
-				}
+			select {
+			case <-releaseTask:
+				return "drained", nil
+			case <-ctx.Done():
+				return "", ctx.Err()
+			}
+		},
+		OnPeer: func(peer PeerMessage) bool {
+			select {
+			case receivedPeers <- peer:
+				return true
+			default:
+				return false
 			}
 		},
 	})
@@ -940,7 +940,7 @@ func TestPeerMessagesForwardedToActiveTask(t *testing.T) {
 	}
 
 	// Structured IOA messages from the ioa skill do not have content["content"].
-	// They should still be delivered with RawContent so the LLM can see them.
+	// They should still be delivered via inbox with the raw content JSON-formatted.
 	if _, err := peer.Send(ctx, space.ID, ioa.SendMessage{
 		Content: map[string]any{"kind": "asset", "domains": []string{"example.com"}},
 	}); err != nil {
@@ -949,10 +949,10 @@ func TestPeerMessagesForwardedToActiveTask(t *testing.T) {
 	select {
 	case p := <-receivedPeers:
 		if p.Content != "" {
-			t.Fatalf("structured peer content = %q, want empty text content", p.Content)
+			t.Fatalf("structured peer content = %q, want empty", p.Content)
 		}
 		if got, _ := p.RawContent["kind"].(string); got != "asset" {
-			t.Fatalf("structured peer kind = %q, want asset; raw=%#v", got, p.RawContent)
+			t.Fatalf("structured peer kind = %q, want asset", got)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("structured peer message not forwarded to active task")
@@ -1155,30 +1155,32 @@ func TestPeerOverflowRecoversViaCatchUp(t *testing.T) {
 		PollInterval:     50 * time.Millisecond,
 		Network:          map[string]any{"test": true},
 		OnTask: func(ctx context.Context, task Task) (string, error) {
-			// Wait for the test to fill the peer buffer before we start
-			// draining.
 			select {
 			case <-startDraining:
 			case <-ctx.Done():
 				return "", ctx.Err()
 			}
-			for {
-				select {
-				case p, ok := <-task.Peers:
-					if !ok {
-						return "drained", nil
-					}
-					gotPeers <- p
-					if len(gotPeers) >= totalPeers {
+			select {
+			case <-taskDone:
+				return "drained", nil
+			case <-ctx.Done():
+				return "", ctx.Err()
+			}
+		},
+		OnPeer: func(peer PeerMessage) bool {
+			select {
+			case gotPeers <- peer:
+				if len(gotPeers) >= totalPeers {
+					select {
+					case <-taskDone:
+					default:
 						close(taskDone)
-						// Keep draining until Peers closes; the node closes
-						// it when OnTask returns.
-						return "drained", nil
 					}
-					time.Sleep(drainPause)
-				case <-ctx.Done():
-					return "", ctx.Err()
 				}
+				time.Sleep(drainPause)
+				return true
+			default:
+				return false
 			}
 		},
 	})

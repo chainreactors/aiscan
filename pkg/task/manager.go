@@ -26,7 +26,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/provider"
 )
 
 type State string
@@ -66,13 +65,17 @@ type Info struct {
 	StdoutFile string    `json:"stdout_file"`
 }
 
-// Manager owns a set of background tasks and an optional completion-message
-// sink. Safe for concurrent use; all maps are protected by mu.
+// CompletionFunc is called when a background task finishes. The framework
+// layer provides this callback to bridge task completions into the agent's
+// inbox without the task package knowing about inbox internals.
+type CompletionFunc func(info Info, killed bool, killCause string)
+
+// Manager owns a set of background tasks. Safe for concurrent use.
 type Manager struct {
-	mu     sync.Mutex
-	tasks  map[string]*task
-	outDir string
-	sink   MessageSink
+	mu         sync.Mutex
+	tasks      map[string]*task
+	outDir     string
+	onComplete CompletionFunc
 }
 
 type task struct {
@@ -88,13 +91,6 @@ type task struct {
 // must respect ctx (used by Kill / Shutdown) and write progress to out.
 type InProcessFn func(ctx context.Context, out io.Writer) error
 
-// MessageSink accepts task-completion notifications. Satisfied by
-// agent.BufferedInbox or any type with a Push method. Push should be
-// best-effort; Manager isolates slow or panicking sinks from task cleanup.
-type MessageSink interface {
-	Push(msg provider.ChatMessage) bool
-}
-
 // NewManager returns an empty Manager. outDir is the base directory under
 // which each task's files are written (outDir/<id>/{cmd,stdout,signal,meta.json}).
 // The directory is created lazily on first Spawn.
@@ -105,17 +101,16 @@ func NewManager(outDir string) *Manager {
 	}
 }
 
-// SetSink configures the MessageSink that receives task-completion
-// notifications. Pass nil to disable injection. Replaces any previous sink.
-// Existing in-flight tasks pick up the new sink when they complete.
-func (m *Manager) SetSink(s MessageSink) {
+// SetOnComplete registers a callback invoked when any task finishes.
+// Pass nil to disable. Replaces any previous callback.
+func (m *Manager) SetOnComplete(fn CompletionFunc) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.sink = s
+	m.onComplete = fn
 }
 
-// ClearSink is shorthand for SetSink(nil).
-func (m *Manager) ClearSink() { m.SetSink(nil) }
+// ClearOnComplete is shorthand for SetOnComplete(nil).
+func (m *Manager) ClearOnComplete() { m.SetOnComplete(nil) }
 
 // Spawn launches cmdLine in its own process group. Returns immediately
 // after exec.Start() succeeds; the supervising goroutine handles wait,
@@ -310,7 +305,7 @@ func (m *Manager) superviseInProcess(t *task, fn InProcessFn, ctx context.Contex
 	t.EndedAt = time.Now()
 	t.ExitCode = exitCode
 	t.State = state
-	sink := m.sink
+	completeFn := m.onComplete
 	infoCopy := t.Info
 	m.mu.Unlock()
 
@@ -324,7 +319,7 @@ func (m *Manager) superviseInProcess(t *task, fn InProcessFn, ctx context.Contex
 
 	close(t.done)
 
-	sendCompletion(sink, infoCopy, state == StateKilled, killCause)
+	fireCompletion(completeFn, infoCopy, state == StateKilled, killCause)
 }
 
 // supervise runs in its own goroutine; one per spawned task. It blocks on
@@ -384,7 +379,7 @@ func (m *Manager) supervise(t *task, timeout time.Duration) {
 	t.EndedAt = time.Now()
 	t.ExitCode = exitCode
 	t.State = state
-	sink := m.sink
+	fn := m.onComplete
 	infoCopy := t.Info
 	m.mu.Unlock()
 
@@ -398,7 +393,7 @@ func (m *Manager) supervise(t *task, timeout time.Duration) {
 
 	close(t.done)
 
-	sendCompletion(sink, infoCopy, state == StateKilled, killCause)
+	fireCompletion(fn, infoCopy, state == StateKilled, killCause)
 }
 
 // forceKillTask cancels in-process tasks via context, or sends SIGTERM →
@@ -667,15 +662,20 @@ func formatCompletion(info Info, killed bool, killCause string) string {
 	return sb.String()
 }
 
-func sendCompletion(sink MessageSink, info Info, killed bool, killCause string) {
-	if sink == nil {
+func fireCompletion(fn CompletionFunc, info Info, killed bool, killCause string) {
+	if fn == nil {
 		return
 	}
-	msg := provider.NewTextMessage("user", formatCompletion(info, killed, killCause))
 	go func() {
 		defer func() {
 			_ = recover()
 		}()
-		sink.Push(msg)
+		fn(info, killed, killCause)
 	}()
+}
+
+// FormatCompletion renders a task's final state as an XML-tagged summary
+// suitable for injection into an LLM conversation.
+func FormatCompletion(info Info, killed bool, killCause string) string {
+	return formatCompletion(info, killed, killCause)
 }

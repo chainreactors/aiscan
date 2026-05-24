@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/chainreactors/aiscan/pkg/provider"
 	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/agent/inbox"
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
 )
 
 type Agent struct {
@@ -90,7 +91,6 @@ func (a *Agent) Run(ctx context.Context, task string) (string, error) {
 }
 
 func (a *Agent) Prompt(ctx context.Context, prompt string) (*Result, error) {
-	msg := provider.NewTextMessage("user", prompt)
 	runCtx, cancel, err := a.startRun(ctx)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,13 @@ func (a *Agent) Prompt(ctx context.Context, prompt string) (*Result, error) {
 	defer cancel()
 	defer a.finishRun()
 
-	result, runErr := runLoop(runCtx, []provider.ChatMessage{msg}, a.contextSnapshotLocked(), a.runtimeConfig())
+	cfg := a.runtimeConfig()
+	if cfg.Inbox == nil {
+		cfg.Inbox = inbox.NewBuffered(8)
+	}
+	cfg.Inbox.Push(inbox.NewUserMessage(prompt))
+
+	result, runErr := runLoop(runCtx, a.contextSnapshotLocked(), cfg)
 	a.finish(result, runErr)
 	return result, runErr
 }
@@ -115,7 +121,7 @@ func (a *Agent) Continue(ctx context.Context) (*Result, error) {
 	defer cancel()
 	defer a.finishRun()
 
-	result, runErr := runLoop(runCtx, nil, a.contextSnapshotLocked(), a.runtimeConfig())
+	result, runErr := runLoop(runCtx, a.contextSnapshotLocked(), a.runtimeConfig())
 	a.finish(result, runErr)
 	return result, runErr
 }

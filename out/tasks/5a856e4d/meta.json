@@ -1,0 +1,11 @@
+{
+  "id": "5a856e4d",
+  "name": "hello-bg",
+  "command": "echo hello-from-background",
+  "pid": 22974,
+  "started_at": "2026-05-24T05:54:18.389601195-07:00",
+  "ended_at": "2026-05-24T05:54:18.391668579-07:00",
+  "exit_code": 0,
+  "state": "completed",
+  "stdout_file": "/mnt/chainreactors/aiscan/out/tasks/5a856e4d/stdout"
+}

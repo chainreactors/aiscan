@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	"github.com/chainreactors/aiscan/pkg/command"
-	"github.com/chainreactors/aiscan/pkg/provider"
+	"github.com/chainreactors/aiscan/pkg/agent/inbox"
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
 )
 
 func TestInboxDrainedBeforeFirstTurnLLMCall(t *testing.T) {
@@ -15,15 +16,15 @@ func TestInboxDrainedBeforeFirstTurnLLMCall(t *testing.T) {
 			chatResponse(provider.NewTextMessage("assistant", "ack")),
 		},
 	}
-	inbox := NewBufferedInbox(4)
-	inbox.Push(provider.NewTextMessage("user", "[peer] hello"))
-	inbox.Push(provider.NewTextMessage("user", "[peer] status?"))
+	ib := inbox.NewBuffered(4)
+	ib.Push(inbox.NewMessage(inbox.OriginPeer, "user", "[peer] hello"))
+	ib.Push(inbox.NewMessage(inbox.OriginPeer, "user", "[peer] status?"))
 
 	result, err := Run(context.Background(), "main task", tools,
 		WithProvider(llm),
 		WithModel("test"),
 		WithSystemPrompt("system"),
-		WithInbox(inbox),
+		WithInbox(ib),
 	)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -61,14 +62,14 @@ func TestInboxClosedDoesNotBlock(t *testing.T) {
 			chatResponse(provider.NewTextMessage("assistant", "done")),
 		},
 	}
-	inbox := NewBufferedInbox(4)
-	inbox.Close()
+	ib := inbox.NewBuffered(4)
+	ib.Close()
 
 	result, err := Run(context.Background(), "task", tools,
 		WithProvider(llm),
 		WithModel("test"),
 		WithSystemPrompt("system"),
-		WithInbox(inbox),
+		WithInbox(ib),
 	)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -78,14 +79,11 @@ func TestInboxClosedDoesNotBlock(t *testing.T) {
 	}
 }
 
-// pushingProvider pushes a message into an inbox during the first LLM call,
-// simulating a swarm peer that fires while the agent is mid-turn. Turn 2's
-// drain should then pick it up.
 type pushingProvider struct {
 	inner  provider.Provider
-	inbox  *BufferedInbox
+	inbox  *inbox.Buffered
 	pushed bool
-	push   provider.ChatMessage
+	push   inbox.Message
 }
 
 func (p *pushingProvider) Name() string { return "pushing" }
@@ -116,18 +114,18 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 		},
 	}
 
-	inbox := NewBufferedInbox(4)
+	ib := inbox.NewBuffered(4)
 	pushing := &pushingProvider{
 		inner: scripted,
-		inbox: inbox,
-		push:  provider.NewTextMessage("user", "[peer] watch out for example.com"),
+		inbox: ib,
+		push:  inbox.NewMessage(inbox.OriginPeer, "user", "[peer] watch out for example.com"),
 	}
 
 	result, err := Run(context.Background(), "scan things", tools,
 		WithProvider(pushing),
 		WithModel("test"),
 		WithSystemPrompt("system"),
-		WithInbox(inbox),
+		WithInbox(ib),
 	)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -141,7 +139,6 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 		t.Fatalf("requests = %d, want 2", len(requests))
 	}
 
-	// Turn 1 should NOT have the peer message yet — it was pushed during this very call.
 	turn1Msgs := requests[0].Messages
 	for _, m := range turn1Msgs {
 		if contentOf(m) == "[peer] watch out for example.com" {
@@ -149,7 +146,6 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 		}
 	}
 
-	// Turn 2 should have the peer message between tool result and the next user-or-assistant boundary.
 	turn2Msgs := requests[1].Messages
 	found := false
 	for _, m := range turn2Msgs {
