@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"context"
-	"time"
-
 	"github.com/chainreactors/aiscan/pkg/agent"
 	inboxpkg "github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/app"
@@ -33,9 +30,6 @@ func newAgentSession(cfg sessionConfig) *agentSession {
 			msg.Meta = map[string]any{"task_id": info.ID, "task_name": info.Name, "exit_code": info.ExitCode}
 			ib.Push(msg)
 		})
-		taskMgr.StartReminder(30*time.Second, func(content string) {
-			ib.Push(inboxpkg.NewMessage(inboxpkg.OriginTask, "user", content))
-		})
 	}
 
 	cfg.Application.Commands.RegisterTool(NewSubAgentTool(SubAgentConfig{
@@ -55,11 +49,11 @@ func newAgentSession(cfg sessionConfig) *agentSession {
 		Model:    cfg.Option.Model,
 		Logger:   cfg.Logger,
 		Inbox:    ib,
-		ShouldWaitAfterTurn: func(_ context.Context, _ agent.ShouldWaitAfterTurnContext) (bool, error) {
+		KeepAlive: func() bool {
 			if taskMgr == nil {
-				return false, nil
+				return false
 			}
-			return taskMgr.RunningCount() > 0, nil
+			return taskMgr.RunningCount() > 0
 		},
 	}
 	if cfg.Events != nil {

@@ -54,6 +54,36 @@ type PeerMessage struct {
 	Refs       ioa.Ref
 }
 
+func (t Task) Prompt() string {
+	var sb strings.Builder
+	sb.WriteString(t.Content)
+	if len(t.Targets) > 0 {
+		sb.WriteString("\n\nTargets:\n")
+		for _, tgt := range t.Targets {
+			sb.WriteString("- ")
+			sb.WriteString(tgt)
+			sb.WriteByte('\n')
+		}
+	}
+	if len(t.Meta) > 0 {
+		skip := true
+		for k := range t.Meta {
+			if k != "kind" {
+				skip = false
+				break
+			}
+		}
+		if !skip {
+			if data, err := json.MarshalIndent(t.Meta, "", "  "); err == nil {
+				sb.WriteString("\nContext:\n")
+				sb.Write(data)
+				sb.WriteByte('\n')
+			}
+		}
+	}
+	return sb.String()
+}
+
 type TaskHandler func(ctx context.Context, task Task) (string, error)
 
 type HeartbeatFunc func(ctx context.Context, prompt string) (string, error)

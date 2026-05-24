@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/command"
-	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
@@ -204,13 +203,15 @@ func runLoop(ctx context.Context, agentCtx Context, cfg Config) (*Result, error)
 				cfg.Logger.Debugf("[turn %d] continuing for pending inbox message(s)", turn)
 				continue
 			}
-			if cfg.ShouldWaitAfterTurn != nil && ib != nil {
-				waitCtx := waitAfterTurnContext(transcript, assistantMsg, toolResults, agentCtx)
-				hasMessage, err := waitForInboxAfterTurn(ctx, ib, cfg, waitCtx, turn)
-				if err != nil {
-					return end(nil, err)
-				}
+			if ib != nil && !ib.Closed() && cfg.KeepAlive != nil && cfg.KeepAlive() {
+				cfg.Logger.Debugf("[turn %d] waiting for inbox while background work is active", turn)
+				pollCtx, cancel := context.WithTimeout(ctx, inboxIdlePollInterval)
+				hasMessage := ib.Wait(pollCtx)
+				cancel()
 				if hasMessage {
+					continue
+				}
+				if cfg.KeepAlive() {
 					continue
 				}
 			}
@@ -253,45 +254,6 @@ func (t *transcript) result(output string, turns int, err error) *Result {
 		Messages:    messages,
 		Turns:       turns,
 		Err:         err,
-	}
-}
-
-func waitAfterTurnContext(t *transcript, msg provider.ChatMessage, toolResults []provider.ChatMessage, agentCtx Context) ShouldWaitAfterTurnContext {
-	messages, newMessages := t.snapshot()
-	return ShouldWaitAfterTurnContext{
-		Message:     msg,
-		ToolResults: append([]provider.ChatMessage(nil), toolResults...),
-		Context: Context{
-			SystemPrompt: agentCtx.SystemPrompt,
-			Messages:     messages,
-			Tools:        agentCtx.Tools,
-		},
-		NewMessages: newMessages,
-	}
-}
-
-func waitForInboxAfterTurn(ctx context.Context, ib inbox.Inbox, cfg Config, waitCtx ShouldWaitAfterTurnContext, turn int) (bool, error) {
-	for {
-		if err := ctx.Err(); err != nil {
-			return false, err
-		}
-		if ib.Len() > 0 {
-			return true, nil
-		}
-		wait, err := cfg.ShouldWaitAfterTurn(ctx, waitCtx)
-		if err != nil {
-			return false, err
-		}
-		if !wait || ib.Closed() {
-			return false, nil
-		}
-		cfg.Logger.Debugf("[turn %d] waiting for inbox while background work is active", turn)
-		pollCtx, cancel := context.WithTimeout(ctx, inboxIdlePollInterval)
-		hasMessage := ib.Wait(pollCtx)
-		cancel()
-		if hasMessage {
-			return true, nil
-		}
 	}
 }
 

@@ -77,13 +77,6 @@ type ShouldStopAfterTurnContext struct {
 	NewMessages []provider.ChatMessage
 }
 
-type ShouldWaitAfterTurnContext struct {
-	Message     provider.ChatMessage
-	ToolResults []provider.ChatMessage
-	Context     Context
-	NewMessages []provider.ChatMessage
-}
-
 type Config struct {
 	Provider            provider.Provider
 	Tools               *command.CommandRegistry
@@ -101,7 +94,7 @@ type Config struct {
 	BeforeToolCall      func(context.Context, BeforeToolCallContext) (*BeforeToolCallResult, error)
 	AfterToolCall       func(context.Context, AfterToolCallContext) (*AfterToolCallResult, error)
 	ShouldStopAfterTurn func(context.Context, ShouldStopAfterTurnContext) (bool, error)
-	ShouldWaitAfterTurn func(context.Context, ShouldWaitAfterTurnContext) (bool, error)
+	KeepAlive           func() bool
 	Inbox               inbox.Inbox
 	Expander            *inbox.Expander
 }
@@ -119,8 +112,8 @@ func (c Config) WithEventHandler(h EventHandler) Config { c.Emit = h; return c }
 func (c Config) WithMaxTokens(n int) Config { c.MaxTokens = n; return c }
 func (c Config) WithTokenBudget(n int) Config { c.TokenBudget = n; return c }
 func (c Config) WithExpander(e *inbox.Expander) Config { c.Expander = e; return c }
-func (c Config) WithShouldWaitAfterTurn(fn func(context.Context, ShouldWaitAfterTurnContext) (bool, error)) Config {
-	c.ShouldWaitAfterTurn = fn
+func (c Config) WithKeepAlive(fn func() bool) Config {
+	c.KeepAlive = fn
 	return c
 }
 
@@ -240,8 +233,8 @@ func WithShouldStopAfterTurn(fn func(context.Context, ShouldStopAfterTurnContext
 	return func(c *Config) { c.ShouldStopAfterTurn = fn }
 }
 
-func WithShouldWaitAfterTurn(fn func(context.Context, ShouldWaitAfterTurnContext) (bool, error)) Option {
-	return func(c *Config) { c.ShouldWaitAfterTurn = fn }
+func WithKeepAlive(fn func() bool) Option {
+	return func(c *Config) { c.KeepAlive = fn }
 }
 
 func WithMaxRetries(n int) Option {

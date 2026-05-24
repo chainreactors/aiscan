@@ -162,7 +162,7 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 	}
 }
 
-func TestRunWaitsForInboxWhenCallbackRequestsWait(t *testing.T) {
+func TestRunWaitsWhenKeepAliveIsTrue(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{
 		responses: []*provider.ChatCompletionResponse{
@@ -171,13 +171,13 @@ func TestRunWaitsForInboxWhenCallbackRequestsWait(t *testing.T) {
 		},
 	}
 	ib := inbox.NewBuffered(4)
-	var waitForBackground atomic.Bool
-	waitForBackground.Store(true)
+	var keepAlive atomic.Bool
+	keepAlive.Store(true)
 
 	go func() {
 		time.Sleep(20 * time.Millisecond)
-		ib.Push(inbox.NewMessage(inbox.OriginTask, "user", "<task_reminder>check task peek_new</task_reminder>"))
-		waitForBackground.Store(false)
+		ib.Push(inbox.NewMessage(inbox.OriginTask, "user", "<task_completion>scan done</task_completion>"))
+		keepAlive.Store(false)
 	}()
 
 	result, err := Run(context.Background(), "start background scan", tools,
@@ -185,9 +185,7 @@ func TestRunWaitsForInboxWhenCallbackRequestsWait(t *testing.T) {
 		WithModel("test"),
 		WithSystemPrompt("system"),
 		WithInbox(ib),
-		WithShouldWaitAfterTurn(func(context.Context, ShouldWaitAfterTurnContext) (bool, error) {
-			return waitForBackground.Load(), nil
-		}),
+		WithKeepAlive(func() bool { return keepAlive.Load() }),
 	)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -199,15 +197,15 @@ func TestRunWaitsForInboxWhenCallbackRequestsWait(t *testing.T) {
 	if len(requests) != 2 {
 		t.Fatalf("requests = %d, want 2", len(requests))
 	}
-	foundReminder := false
+	found := false
 	for _, msg := range requests[1].Messages {
-		if strings.Contains(contentOf(msg), "<task_reminder>") {
-			foundReminder = true
+		if strings.Contains(contentOf(msg), "<task_completion>") {
+			found = true
 			break
 		}
 	}
-	if !foundReminder {
-		t.Fatalf("second request missing reminder: %#v", requests[1].Messages)
+	if !found {
+		t.Fatalf("second request missing task completion: %#v", requests[1].Messages)
 	}
 }
 

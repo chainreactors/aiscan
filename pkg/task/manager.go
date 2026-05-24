@@ -75,7 +75,6 @@ type Manager struct {
 	tasks      map[string]*task
 	outDir     string
 	onComplete CompletionFunc
-	reminder   *Reminder
 }
 
 type task struct {
@@ -90,9 +89,6 @@ type task struct {
 // InProcessFn is the closure executed by SpawnInProcess. Implementations
 // must respect ctx (used by Kill / Shutdown) and write progress to out.
 type InProcessFn func(ctx context.Context, out io.Writer) error
-
-// ReminderFunc is called by Reminder to push periodic nudge messages.
-type ReminderFunc func(content string)
 
 // NewManager returns an empty Manager. outDir is the base directory under
 // which each task's files are written (outDir/<id>/{cmd,stdout,signal,meta.json}).
@@ -494,9 +490,8 @@ func (m *Manager) KillAll() {
 	}
 }
 
-// Shutdown stops the reminder, kills all tasks, and cleans up.
+// Shutdown kills all running tasks and waits for them to finish.
 func (m *Manager) Shutdown() {
-	m.StopReminder()
 	m.KillAll()
 }
 
@@ -581,30 +576,6 @@ func (m *Manager) PeekSinceLimit(id string, offset int64, maxBytes int64) (strin
 		return "", offset, more, nil
 	}
 	return string(data), offset + int64(len(data)), more, nil
-}
-
-// StartReminder launches a background goroutine that periodically pushes
-// reminder messages to the sink when there are running tasks. No-op if
-// sink is nil or a reminder is already active.
-func (m *Manager) StartReminder(interval time.Duration, fn ReminderFunc) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if fn == nil || m.reminder != nil {
-		return
-	}
-	m.reminder = newReminder(m, interval, fn)
-	m.reminder.start()
-}
-
-// StopReminder stops the reminder goroutine if running.
-func (m *Manager) StopReminder() {
-	m.mu.Lock()
-	r := m.reminder
-	m.reminder = nil
-	m.mu.Unlock()
-	if r != nil {
-		r.stop()
-	}
 }
 
 // Wait blocks until the task completes or timeout elapses. ctx cancellation
