@@ -10,7 +10,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/command"
-	"github.com/chainreactors/aiscan/pkg/task"
+	"github.com/chainreactors/aiscan/pkg/agent/task"
 )
 
 func TestTaskCompletionInjectedIntoAgentLoop(t *testing.T) {

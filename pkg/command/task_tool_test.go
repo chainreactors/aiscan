@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/task"
+	"github.com/chainreactors/aiscan/pkg/agent/task"
 )
 
 func TestTaskToolPeekNewLimitsAndPreservesOverflow(t *testing.T) {

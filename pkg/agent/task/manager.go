@@ -108,9 +108,6 @@ func (m *Manager) SetOnComplete(fn CompletionFunc) {
 	m.onComplete = fn
 }
 
-// ClearOnComplete is shorthand for SetOnComplete(nil).
-func (m *Manager) ClearOnComplete() { m.SetOnComplete(nil) }
-
 // Spawn launches cmdLine in its own process group. Returns immediately
 // after exec.Start() succeeds; the supervising goroutine handles wait,
 // timeout, and completion notification.
@@ -449,7 +446,7 @@ func (m *Manager) Kill(id string) error {
 // KillAll terminates every running task and waits up to shutdownGrace for
 // them to finish. Useful between swarm tasks so background scans from a
 // previous company don't leak into the next.
-func (m *Manager) KillAll() {
+func (m *Manager) killAll() {
 	m.mu.Lock()
 	running := make([]*task, 0, len(m.tasks))
 	for _, t := range m.tasks {
@@ -492,7 +489,7 @@ func (m *Manager) KillAll() {
 
 // Shutdown kills all running tasks and waits for them to finish.
 func (m *Manager) Shutdown() {
-	m.KillAll()
+	m.killAll()
 }
 
 // List returns a copy of every task currently tracked, oldest first.
@@ -706,7 +703,7 @@ func tailLines(s string, n int) string {
 	return strings.Join(kept, "\n")
 }
 
-func formatCompletion(info Info, killed bool, killCause string) string {
+func FormatCompletion(info Info, killed bool, killCause string) string {
 	duration := info.EndedAt.Sub(info.StartedAt).Round(time.Second)
 	status := "completed"
 	switch {
@@ -742,14 +739,10 @@ func fireCompletion(fn CompletionFunc, info Info, killed bool, killCause string)
 	}
 	go func() {
 		defer func() {
-			_ = recover()
+			if r := recover(); r != nil {
+				fmt.Fprintf(os.Stderr, "task completion callback panic: %v\n", r)
+			}
 		}()
 		fn(info, killed, killCause)
 	}()
-}
-
-// FormatCompletion renders a task's final state as an XML-tagged summary
-// suitable for injection into an LLM conversation.
-func FormatCompletion(info Info, killed bool, killCause string) string {
-	return formatCompletion(info, killed, killCause)
 }

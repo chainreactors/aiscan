@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
-	"github.com/chainreactors/aiscan/pkg/task"
+	"github.com/chainreactors/aiscan/pkg/agent/task"
 )
 
 const peekNewMaxBytes = 40 * 1024
