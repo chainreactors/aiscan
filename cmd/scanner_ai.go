@@ -14,7 +14,6 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
-	cmdpkg "github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/skills"
 )
@@ -99,13 +98,18 @@ func runScannerAIProcess(ctx context.Context, option *Option, application *app.A
 	processCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	return agent.Run(processCtx, buildScannerAIProcessPrompt(command, scannerArgs[1:], intent, output), cmdpkg.NewRegistry(),
-		agent.WithProvider(application.Provider),
-		agent.WithModel(option.Model),
-		agent.WithMaxTokens(1600),
-		agent.WithSystemPrompt(scannerAIProcessSystemPrompt(command)),
-		agent.WithLogger(telemetry.NopLogger()),
-	)
+	cfg := agent.Config{
+		Provider:     application.Provider,
+		Model:        option.Model,
+		MaxTokens:    1600,
+		SystemPrompt: scannerAIProcessSystemPrompt(command),
+		Logger:       telemetry.NopLogger(),
+	}
+	result, err := cfg.Run(processCtx, buildScannerAIProcessPrompt(command, scannerArgs[1:], intent, output))
+	if err != nil {
+		return "", err
+	}
+	return result.Output, nil
 }
 
 func resolveScannerAIIntent(option *Option, store *skills.Store, command string) (string, error) {

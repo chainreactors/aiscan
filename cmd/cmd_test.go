@@ -518,7 +518,7 @@ func TestAgentConsolePromptCommandRunsAgent(t *testing.T) {
 		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
 	llm := &fakeConsoleProvider{}
-	session := agent.New(llm, command.NewRegistry())
+	session := (agent.Config{Provider: llm, Tools: command.NewRegistry()}).NewAgent()
 	repl := newAgentConsole(context.Background(), &Option{}, &app.App{Skills: store}, session)
 
 	if err := repl.executeArgs(context.Background(), []string{agentPromptCommandName, "hello"}); err != nil {

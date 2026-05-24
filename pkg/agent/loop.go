@@ -20,14 +20,20 @@ func Run(ctx context.Context, prompt string, tools *command.CommandRegistry, opt
 }
 
 func RunWithEvents(ctx context.Context, prompt string, tools *command.CommandRegistry, emit EventHandler, opts ...Option) (*Result, error) {
-	allOpts := make([]Option, 0, len(opts)+1)
-	allOpts = append(allOpts, opts...)
+	cfg := applyOpts(Config{Tools: tools}, opts)
 	if emit != nil {
-		allOpts = append(allOpts, WithEventHandler(emit))
+		cfg.Emit = emit
 	}
-	cfg := newConfig(allOpts...)
-	ag := New(cfg.Provider, tools, allOpts...)
-	return ag.Prompt(ctx, prompt)
+	return cfg.Run(ctx, prompt)
+}
+
+func applyOpts(cfg Config, opts []Option) Config {
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
+	}
+	return cfg
 }
 
 func runLoop(ctx context.Context, agentCtx Context, cfg Config) (*Result, error) {
@@ -417,15 +423,6 @@ func compactLogContent(value string) string {
 	return strings.Join(strings.Fields(value), " ")
 }
 
-func newConfig(opts ...Option) Config {
-	cfg := normalizeConfig(Config{})
-	for _, opt := range opts {
-		if opt != nil {
-			opt(&cfg)
-		}
-	}
-	return normalizeConfig(cfg)
-}
 
 const defaultMaxRetries = 2
 

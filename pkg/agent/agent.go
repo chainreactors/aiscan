@@ -25,23 +25,8 @@ type Agent struct {
 }
 
 func New(p provider.Provider, tools *command.CommandRegistry, opts ...Option) *Agent {
-	cfg := newConfig(opts...)
-	cfg.Provider = p
-	if tools == nil {
-		tools = command.NewRegistry()
-	}
-	return &Agent{
-		provider: p,
-		tools:    tools,
-		config:   cfg,
-		emit:     cfg.Emit,
-		state: State{
-			SystemPrompt:     cfg.SystemPrompt,
-			Tools:            tools,
-			PendingToolCalls: make(map[string]struct{}),
-		},
-		done: closedChan(),
-	}
+	cfg := applyOpts(Config{Provider: p, Tools: tools}, opts)
+	return cfg.NewAgent()
 }
 
 func (a *Agent) Subscribe(fn EventHandler) func() {

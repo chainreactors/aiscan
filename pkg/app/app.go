@@ -199,24 +199,34 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 	if scanCfg.AIEnabled && llmProvider != nil {
 		p := llmProvider
 		scanOpts = append(scanOpts, scan.WithAIFunc(func(ctx context.Context, prompt, systemPrompt, model string, maxTokens int) (string, error) {
-			return agent.Run(ctx, prompt, command.NewRegistry(),
-				agent.WithProvider(p),
-				agent.WithModel(model),
-				agent.WithMaxTokens(maxTokens),
-				agent.WithSystemPrompt(buildScanAISystemPrompt(cmdReg, skillStore, systemPrompt)),
-				agent.WithLogger(logger),
-			)
+			cfg := agent.Config{
+				Provider:     p,
+				Model:        model,
+				MaxTokens:    maxTokens,
+				SystemPrompt: buildScanAISystemPrompt(cmdReg, skillStore, systemPrompt),
+				Logger:       logger,
+			}
+			result, err := cfg.Run(ctx, prompt)
+			if err != nil {
+				return "", err
+			}
+			return result.Output, nil
 		}))
 		scanOpts = append(scanOpts, scan.WithReportFunc(func(ctx context.Context, prompt, systemPrompt, model string, maxTokens int) (string, error) {
-			sysPrompt := buildScanAISystemPrompt(cmdReg, skillStore, systemPrompt)
-			return agent.Run(ctx, prompt, cmdReg,
-				agent.WithProvider(p),
-				agent.WithModel(model),
-				agent.WithMaxTokens(maxTokens),
-				agent.WithSystemPrompt(sysPrompt),
-				agent.WithBeforeToolCall(scanVerifyBeforeToolCall),
-				agent.WithLogger(logger),
-			)
+			cfg := agent.Config{
+				Provider:        p,
+				Tools:           cmdReg,
+				Model:           model,
+				MaxTokens:       maxTokens,
+				SystemPrompt:    buildScanAISystemPrompt(cmdReg, skillStore, systemPrompt),
+				BeforeToolCall:  scanVerifyBeforeToolCall,
+				Logger:          logger,
+			}
+			result, err := cfg.Run(ctx, prompt)
+			if err != nil {
+				return "", err
+			}
+			return result.Output, nil
 		}))
 		scanOpts = append(scanOpts, scan.WithAISkillConfig(scan.AISkillConfig{
 			Model:   model,
