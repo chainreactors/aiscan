@@ -98,38 +98,18 @@ func runAgentOneShotMode(ctx context.Context, option *Option, logger telemetry.L
 			logger.Warnf("close events file: %s", cerr)
 		}
 	}()
+
+	sess := newAgentSession(sessionConfig{
+		Application: application,
+		Option:      option,
+		Logger:      logger,
+		Events:      events,
+	})
+	defer sess.Cleanup()
+
 	handler := combineEventHandlers(output.HandleEvent, events.HandleEvent)
-
-	agentInbox := inboxpkg.NewBuffered(64)
-	taskMgr := bashTaskManager(application.Commands)
-	if taskMgr != nil {
-		taskMgr.SetOnComplete(func(info taskmod.Info, killed bool, cause string) {
-			msg := inboxpkg.NewMessage(inboxpkg.OriginTask, "user", taskmod.FormatCompletion(info, killed, cause))
-			msg.Meta = map[string]any{"task_id": info.ID, "task_name": info.Name, "exit_code": info.ExitCode}
-			agentInbox.Push(msg)
-		})
-		defer taskMgr.ClearOnComplete()
-	}
-
-	application.Commands.RegisterTool(NewSubAgentTool(SubAgentConfig{
-		Provider:    application.Provider,
-		Tools:       application.Commands,
-		ParentInbox: agentInbox,
-		SkillStore:  application.Skills,
-		BaseOpts: []agent.Option{
-			agent.WithProvider(application.Provider),
-			agent.WithModel(option.Model),
-			agent.WithLogger(logger),
-		},
-	}))
-
 	result, err := agent.RunWithEvents(ctx, task, application.Commands, handler,
-		agent.WithProvider(application.Provider),
-		agent.WithSystemPrompt(runtime.systemPrompt),
-		agent.WithModel(option.Model),
-		agent.WithStream(false),
-		agent.WithLogger(logger),
-		agent.WithInbox(agentInbox),
+		append(sess.Opts, agent.WithSystemPrompt(runtime.systemPrompt), agent.WithStream(false))...,
 	)
 	if err != nil {
 		return err
@@ -307,35 +287,18 @@ func runLoop(ctx context.Context, option *Option, logger telemetry.Logger) error
 		}
 	}()
 
-	loopOpts := []agent.Option{
-		agent.WithProvider(application.Provider),
-		agent.WithSystemPrompt(systemPrompt),
-		agent.WithModel(option.Model),
-		agent.WithStream(true),
-		agent.WithLogger(logger),
-	}
-	if events != nil {
-		loopOpts = append(loopOpts, agent.WithEventHandler(events.HandleEvent))
-	}
+	sess := newAgentSession(sessionConfig{
+		Application: application,
+		Option:      option,
+		Logger:      logger,
+		Events:      events,
+	})
+	defer sess.Cleanup()
 
-	taskMgr := bashTaskManager(application.Commands)
-	loopInbox := inboxpkg.NewBuffered(64)
+	loopOpts := append(sess.Opts, agent.WithSystemPrompt(systemPrompt), agent.WithStream(true))
 
 	taskHandler := func(ctx context.Context, st swarm.Task) (string, error) {
-		opts := append([]agent.Option(nil), loopOpts...)
-		opts = append(opts, agent.WithInbox(loopInbox))
-		if taskMgr != nil {
-			taskMgr.SetOnComplete(func(info taskmod.Info, killed bool, cause string) {
-				msg := inboxpkg.NewMessage(inboxpkg.OriginTask, "user", taskmod.FormatCompletion(info, killed, cause))
-				msg.Meta = map[string]any{"task_id": info.ID, "task_name": info.Name, "exit_code": info.ExitCode}
-				loopInbox.Push(msg)
-			})
-			defer func() {
-				taskMgr.ClearOnComplete()
-				taskMgr.KillAll()
-			}()
-		}
-		return agent.Run(ctx, st.Content, application.Commands, opts...)
+		return agent.Run(ctx, st.Content, application.Commands, loopOpts...)
 	}
 
 	heartbeatFunc := func(ctx context.Context, prompt string) (string, error) {
@@ -355,7 +318,7 @@ func runLoop(ctx context.Context, option *Option, logger telemetry.Logger) error
 		Skills:                option.Skills,
 		OnTask:                taskHandler,
 		OnPeer: func(peer swarm.PeerMessage) bool {
-			return loopInbox.Push(peerToInboxMessage(peer))
+			return sess.Inbox.Push(peerToInboxMessage(peer))
 		},
 		OnHeartbeat: heartbeatFunc,
 		Logger:      logger,

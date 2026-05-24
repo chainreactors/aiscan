@@ -54,12 +54,15 @@ func runScannerAgentMode(ctx context.Context, option *Option, application *app.A
 	output := newAgentOutput(option)
 	output.Start("scanner", strings.Join(scannerArgs, " "))
 
+	sess := newAgentSession(sessionConfig{
+		Application: application,
+		Option:      option,
+		Logger:      logger,
+	})
+	defer sess.Cleanup()
+
 	result, err := agent.RunWithEvents(ctx, prompt, cmdReg, output.HandleEvent,
-		agent.WithProvider(application.Provider),
-		agent.WithSystemPrompt(systemPrompt),
-		agent.WithModel(option.Model),
-		agent.WithStream(false),
-		agent.WithLogger(telemetry.NopLogger()),
+		append(sess.Opts, agent.WithSystemPrompt(systemPrompt), agent.WithStream(false))...,
 	)
 	if err != nil {
 		return err
