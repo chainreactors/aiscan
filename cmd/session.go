@@ -9,8 +9,7 @@ import (
 )
 
 type agentSession struct {
-	Inbox   *inboxpkg.Buffered
-	Opts    []agent.Option
+	Config  agent.Config
 	cleanup func()
 }
 
@@ -34,25 +33,25 @@ func newAgentSession(cfg sessionConfig) *agentSession {
 	}
 
 	cfg.Application.Commands.RegisterTool(NewSubAgentTool(SubAgentConfig{
-		Provider:    cfg.Application.Provider,
-		Tools:       cfg.Application.Commands,
+		Base: agent.Config{
+			Provider: cfg.Application.Provider,
+			Tools:    cfg.Application.Commands,
+			Model:    cfg.Option.Model,
+			Logger:   cfg.Logger,
+		},
 		ParentInbox: ib,
 		SkillStore:  cfg.Application.Skills,
-		BaseOpts: []agent.Option{
-			agent.WithProvider(cfg.Application.Provider),
-			agent.WithModel(cfg.Option.Model),
-			agent.WithLogger(cfg.Logger),
-		},
 	}))
 
-	opts := []agent.Option{
-		agent.WithProvider(cfg.Application.Provider),
-		agent.WithModel(cfg.Option.Model),
-		agent.WithLogger(cfg.Logger),
-		agent.WithInbox(ib),
+	agentCfg := agent.Config{
+		Provider: cfg.Application.Provider,
+		Tools:    cfg.Application.Commands,
+		Model:    cfg.Option.Model,
+		Logger:   cfg.Logger,
+		Inbox:    ib,
 	}
 	if cfg.Events != nil {
-		opts = append(opts, agent.WithEventHandler(cfg.Events.HandleEvent))
+		agentCfg.Emit = cfg.Events.HandleEvent
 	}
 
 	cleanup := func() {
@@ -61,7 +60,7 @@ func newAgentSession(cfg sessionConfig) *agentSession {
 		}
 	}
 
-	return &agentSession{Inbox: ib, Opts: opts, cleanup: cleanup}
+	return &agentSession{Config: agentCfg, cleanup: cleanup}
 }
 
 func (s *agentSession) Cleanup() {

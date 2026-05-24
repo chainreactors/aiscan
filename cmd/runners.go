@@ -107,10 +107,11 @@ func runAgentOneShotMode(ctx context.Context, option *Option, logger telemetry.L
 	})
 	defer sess.Cleanup()
 
-	handler := combineEventHandlers(output.HandleEvent, events.HandleEvent)
-	result, err := agent.RunWithEvents(ctx, task, application.Commands, handler,
-		append(sess.Opts, agent.WithSystemPrompt(runtime.systemPrompt), agent.WithStream(false))...,
-	)
+	result, err := sess.Config.
+		WithSystemPrompt(runtime.systemPrompt).
+		WithStream(false).
+		WithEventHandler(combineEventHandlers(output.HandleEvent, events.HandleEvent)).
+		Run(ctx, task)
 	if err != nil {
 		return err
 	}
@@ -295,14 +296,22 @@ func runLoop(ctx context.Context, option *Option, logger telemetry.Logger) error
 	})
 	defer sess.Cleanup()
 
-	loopOpts := append(sess.Opts, agent.WithSystemPrompt(systemPrompt), agent.WithStream(true))
+	loopCfg := sess.Config.WithSystemPrompt(systemPrompt).WithStream(true)
 
 	taskHandler := func(ctx context.Context, st swarm.Task) (string, error) {
-		return agent.Run(ctx, st.Content, application.Commands, loopOpts...)
+		result, err := loopCfg.Run(ctx, st.Content)
+		if err != nil {
+			return "", err
+		}
+		return result.Output, nil
 	}
 
 	heartbeatFunc := func(ctx context.Context, prompt string) (string, error) {
-		return agent.Run(ctx, prompt, application.Commands, loopOpts...)
+		result, err := loopCfg.Run(ctx, prompt)
+		if err != nil {
+			return "", err
+		}
+		return result.Output, nil
 	}
 
 	node := swarm.NewNode(swarm.NodeConfig{
@@ -318,7 +327,7 @@ func runLoop(ctx context.Context, option *Option, logger telemetry.Logger) error
 		Skills:                option.Skills,
 		OnTask:                taskHandler,
 		OnPeer: func(peer swarm.PeerMessage) bool {
-			return sess.Inbox.Push(peerToInboxMessage(peer))
+			return sess.Config.Inbox.Push(peerToInboxMessage(peer))
 		},
 		OnHeartbeat: heartbeatFunc,
 		Logger:      logger,

@@ -62,9 +62,10 @@ func runInteractiveAgentMode(ctx context.Context, option *Option, logger telemet
 	})
 	defer sess.Cleanup()
 
-	session := agent.New(application.Provider, application.Commands,
-		append(sess.Opts, agent.WithSystemPrompt(runtime.systemPrompt), agent.WithStream(false))...,
-	)
+	session := sess.Config.
+		WithSystemPrompt(runtime.systemPrompt).
+		WithStream(false).
+		NewAgent()
 
 	repl := newAgentConsole(ctx, option, application, session)
 	return repl.start()

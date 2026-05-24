@@ -79,6 +79,7 @@ type ShouldStopAfterTurnContext struct {
 
 type Config struct {
 	Provider            provider.Provider
+	Tools               *command.CommandRegistry
 	Model               string
 	SystemPrompt        string
 	MaxTokens           int
@@ -93,12 +94,58 @@ type Config struct {
 	BeforeToolCall      func(context.Context, BeforeToolCallContext) (*BeforeToolCallResult, error)
 	AfterToolCall       func(context.Context, AfterToolCallContext) (*AfterToolCallResult, error)
 	ShouldStopAfterTurn func(context.Context, ShouldStopAfterTurnContext) (bool, error)
-	// Inbox receives external messages that runLoop drains at the start of every
-	// turn and appends to the transcript. Used by the swarm bridge and task
-	// manager to inject events into the LLM's next reasoning step. A closed
-	// inbox is treated as "no more external input"; nil disables the mechanism.
-	Inbox    inbox.Inbox
-	Expander *inbox.Expander
+	Inbox               inbox.Inbox
+	Expander            *inbox.Expander
+}
+
+// Builder methods — each returns a modified copy (Config is a value type).
+
+func (c Config) WithProvider(p provider.Provider) Config { c.Provider = p; return c }
+func (c Config) WithTools(t *command.CommandRegistry) Config { c.Tools = t; return c }
+func (c Config) WithModel(m string) Config { c.Model = m; return c }
+func (c Config) WithSystemPrompt(s string) Config { c.SystemPrompt = s; return c }
+func (c Config) WithStream(s bool) Config { c.Stream = s; return c }
+func (c Config) WithInbox(ib inbox.Inbox) Config { c.Inbox = ib; return c }
+func (c Config) WithLogger(l telemetry.Logger) Config { c.Logger = l; return c }
+func (c Config) WithEventHandler(h EventHandler) Config { c.Emit = h; return c }
+func (c Config) WithMaxTokens(n int) Config { c.MaxTokens = n; return c }
+func (c Config) WithTokenBudget(n int) Config { c.TokenBudget = n; return c }
+func (c Config) WithExpander(e *inbox.Expander) Config { c.Expander = e; return c }
+
+// Run executes a one-shot agent task and returns the result.
+func (c Config) Run(ctx context.Context, prompt string) (*Result, error) {
+	cfg := normalizeConfig(c)
+	if cfg.Tools == nil {
+		cfg.Tools = command.NewRegistry()
+	}
+	if cfg.Inbox == nil {
+		cfg.Inbox = inbox.NewBuffered(8)
+	}
+	cfg.Inbox.Push(inbox.NewUserMessage(prompt))
+	return runLoop(ctx, Context{
+		SystemPrompt: cfg.SystemPrompt,
+		Tools:        cfg.Tools,
+	}, cfg)
+}
+
+// NewAgent creates a reusable Agent instance for multi-turn interaction.
+func (c Config) NewAgent() *Agent {
+	cfg := normalizeConfig(c)
+	if cfg.Tools == nil {
+		cfg.Tools = command.NewRegistry()
+	}
+	return &Agent{
+		provider: cfg.Provider,
+		tools:    cfg.Tools,
+		config:   cfg,
+		emit:     cfg.Emit,
+		state: State{
+			SystemPrompt:     cfg.SystemPrompt,
+			Tools:            cfg.Tools,
+			PendingToolCalls: make(map[string]struct{}),
+		},
+		done: closedChan(),
+	}
 }
 
 type Option func(*Config)
@@ -127,6 +174,10 @@ type State struct {
 	PendingToolCalls map[string]struct{}
 	ErrorMessage     string
 	LastError        error
+}
+
+func WithTools(tools *command.CommandRegistry) Option {
+	return func(c *Config) { c.Tools = tools }
 }
 
 func WithProvider(p provider.Provider) Option {

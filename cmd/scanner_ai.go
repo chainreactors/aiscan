@@ -61,9 +61,11 @@ func runScannerAgentMode(ctx context.Context, option *Option, application *app.A
 	})
 	defer sess.Cleanup()
 
-	result, err := agent.RunWithEvents(ctx, prompt, cmdReg, output.HandleEvent,
-		append(sess.Opts, agent.WithSystemPrompt(systemPrompt), agent.WithStream(false))...,
-	)
+	result, err := sess.Config.
+		WithSystemPrompt(systemPrompt).
+		WithStream(false).
+		WithEventHandler(output.HandleEvent).
+		Run(ctx, prompt)
 	if err != nil {
 		return err
 	}

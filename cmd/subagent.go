@@ -11,16 +11,13 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
-	cmdpkg "github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/skills"
 )
 
 type SubAgentConfig struct {
-	Provider    provider.Provider
-	Tools       *cmdpkg.CommandRegistry
+	Base        agent.Config // base config inherited by subagents
 	ParentInbox inbox.Inbox
 	SkillStore  *skills.Store
-	BaseOpts    []agent.Option
 }
 
 type subAgentInfo struct {
@@ -143,20 +140,20 @@ func (t *SubAgentTool) create(ctx context.Context, prompt, typeName, name string
 		bg = skill.AgentBackground
 	}
 
-	opts := append([]agent.Option(nil), t.cfg.BaseOpts...)
+	cfg := t.cfg.Base
 	if skill != nil {
 		prompt = skills.FormatInvocation(*skill, prompt)
 		if skill.AgentModel != "" {
-			opts = append(opts, agent.WithModel(skill.AgentModel))
+			cfg = cfg.WithModel(skill.AgentModel)
 		}
 	}
 
 	if !bg {
-		result, err := agent.Run(ctx, prompt, t.cfg.Tools, opts...)
+		r, err := cfg.Run(ctx, prompt)
 		if err != nil {
 			return fmt.Sprintf("subagent %q failed: %s", name, err), nil
 		}
-		return fmt.Sprintf("<subagent_result name=%q type=%q status=\"completed\">\n%s\n</subagent_result>", name, typeName, result), nil
+		return fmt.Sprintf("<subagent_result name=%q type=%q status=\"completed\">\n%s\n</subagent_result>", name, typeName, r.Output), nil
 	}
 
 	childCtx, cancel := context.WithCancel(ctx)
@@ -166,10 +163,12 @@ func (t *SubAgentTool) create(ctx context.Context, prompt, typeName, name string
 		defer t.untrack(name)
 		defer cancel()
 
-		childInbox := inbox.NewBuffered(16)
-		childOpts := append(opts, agent.WithInbox(childInbox))
-
-		result, err := agent.Run(childCtx, prompt, t.cfg.Tools, childOpts...)
+		childCfg := cfg.WithInbox(inbox.NewBuffered(16))
+		r, err := childCfg.Run(childCtx, prompt)
+		result := ""
+		if r != nil {
+			result = r.Output
+		}
 
 		status := "completed"
 		content := result
