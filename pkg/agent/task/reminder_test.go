@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -16,8 +14,7 @@ func TestPeekSinceIncremental(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only test")
 	}
-	dir := t.TempDir()
-	mgr := NewManager(filepath.Join(dir, "tasks"))
+	mgr := NewManager()
 
 	fn := func(ctx context.Context, out io.Writer) error {
 		fmt.Fprintln(out, "line1")
@@ -33,8 +30,8 @@ func TestPeekSinceIncremental(t *testing.T) {
 	}
 
 	waitUntil(t, 2*time.Second, func() bool {
-		data, _ := os.ReadFile(info.StdoutFile)
-		return strings.Contains(string(data), "line2")
+		out, _ := mgr.Peek(info.ID, 30)
+		return strings.Contains(out, "line2")
 	})
 
 	out1, off1, err := mgr.PeekSince(info.ID, 0)
@@ -80,8 +77,7 @@ func TestPeekSinceIncremental(t *testing.T) {
 }
 
 func TestPeekSinceLimitPagesWithoutSkipping(t *testing.T) {
-	dir := t.TempDir()
-	mgr := NewManager(filepath.Join(dir, "tasks"))
+	mgr := NewManager()
 
 	payload := strings.Repeat("a", 12)
 	fn := func(ctx context.Context, out io.Writer) error {
@@ -126,8 +122,7 @@ func TestPeekSinceLimitPagesWithoutSkipping(t *testing.T) {
 }
 
 func TestPeekSinceUnknownTask(t *testing.T) {
-	dir := t.TempDir()
-	mgr := NewManager(filepath.Join(dir, "tasks"))
+	mgr := NewManager()
 
 	_, _, err := mgr.PeekSince("nonexistent", 0)
 	if err == nil {

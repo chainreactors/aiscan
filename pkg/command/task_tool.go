@@ -171,7 +171,7 @@ func formatInfo(info task.Info) string {
 		fmt.Fprintf(&sb, "duration=%s ended_at=%s\n",
 			info.EndedAt.Sub(info.StartedAt).Round(time.Second), info.EndedAt.Format(time.RFC3339))
 	}
-	fmt.Fprintf(&sb, "stdout file: %s", info.StdoutFile)
+	fmt.Fprintf(&sb, "Use `task peek %s` for latest output.", info.ID)
 	return sb.String()
 }
 

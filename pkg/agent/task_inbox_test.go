@@ -2,47 +2,43 @@ package agent
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
-	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/agent/task"
+	"github.com/chainreactors/aiscan/pkg/command"
 )
 
 func TestTaskCompletionInjectedIntoAgentLoop(t *testing.T) {
 	tools := command.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
 
-	// Turn 1: LLM calls tool "echo" → tool result returned.
-	// Meanwhile, a background task completes and fires the OnComplete callback,
-	// which pushes a completion message into the inbox.
-	// Turn 2: LLM sees the task_completion message in its context and responds.
-
 	ib := inbox.NewBuffered(8)
-	dir := t.TempDir()
-	taskMgr := task.NewManager(filepath.Join(dir, "tasks"))
-	taskMgr.SetOnComplete(func(info task.Info, killed bool, cause string) {
-		msg := inbox.NewMessage(inbox.OriginTask, "user", task.FormatCompletion(info, killed, cause))
-		msg.Meta = map[string]any{"task_id": info.ID}
+	taskMgr := task.NewManager()
+	taskMgr.SetObserver(func(ev task.TaskEvent) {
+		if ev.Kind != task.EventCompletion {
+			return
+		}
+		tail := taskMgr.PeekOrEmpty(ev.TaskID, 20)
+		msg := inbox.NewMessage(inbox.OriginTask, "user",
+			task.FormatCompletion(ev.TaskInfo, ev.Killed, ev.KillCause, tail))
+		msg.Meta = map[string]any{"task_id": ev.TaskID}
 		ib.Push(msg)
 	})
 
-	// Spawn a quick background task that will complete before turn 2.
+	dir := t.TempDir()
 	_, err := taskMgr.Spawn(dir, "echo background-result", "bg-scan", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
 	}
 
-	// Wait for the task to complete so the inbox has the message.
 	time.Sleep(500 * time.Millisecond)
 
 	scripted := &scriptedProvider{
 		responses: []*provider.ChatCompletionResponse{
-			// Turn 1: call a tool
 			chatResponse(provider.ChatMessage{
 				Role: "assistant",
 				ToolCalls: []provider.ToolCall{{
@@ -51,7 +47,6 @@ func TestTaskCompletionInjectedIntoAgentLoop(t *testing.T) {
 					Function: provider.FunctionCall{Name: "echo", Arguments: "{}"},
 				}},
 			}),
-			// Turn 2: see task completion + respond
 			chatResponse(provider.NewTextMessage("assistant", "saw the background task")),
 		},
 	}
@@ -69,7 +64,6 @@ func TestTaskCompletionInjectedIntoAgentLoop(t *testing.T) {
 		t.Fatalf("result = %q, want 'saw the background task'", result)
 	}
 
-	// Verify turn 2's request includes the task completion message.
 	requests := scripted.requestsSnapshot()
 	if len(requests) != 2 {
 		t.Fatalf("expected 2 LLM requests, got %d", len(requests))
@@ -99,27 +93,30 @@ func TestTaskCompletionInjectedIntoAgentLoop(t *testing.T) {
 
 func TestTaskCompletionMetadata(t *testing.T) {
 	ib := inbox.NewBuffered(4)
-	dir := t.TempDir()
-	taskMgr := task.NewManager(filepath.Join(dir, "tasks"))
-
-	var received []inbox.Message
-	taskMgr.SetOnComplete(func(info task.Info, killed bool, cause string) {
-		msg := inbox.NewMessage(inbox.OriginTask, "user", task.FormatCompletion(info, killed, cause))
+	taskMgr := task.NewManager()
+	taskMgr.SetObserver(func(ev task.TaskEvent) {
+		if ev.Kind != task.EventCompletion {
+			return
+		}
+		tail := taskMgr.PeekOrEmpty(ev.TaskID, 20)
+		msg := inbox.NewMessage(inbox.OriginTask, "user",
+			task.FormatCompletion(ev.TaskInfo, ev.Killed, ev.KillCause, tail))
 		msg.Meta = map[string]any{
-			"task_id":   info.ID,
-			"task_name": info.Name,
-			"exit_code": info.ExitCode,
+			"task_id":   ev.TaskID,
+			"task_name": ev.TaskInfo.Name,
+			"exit_code": ev.TaskInfo.ExitCode,
 		}
 		ib.Push(msg)
 	})
 
+	dir := t.TempDir()
 	_, err := taskMgr.Spawn(dir, "echo done", "test-task", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
 	}
 	time.Sleep(500 * time.Millisecond)
 
-	received = ib.Drain()
+	received := ib.Drain()
 	if len(received) == 0 {
 		t.Fatal("expected at least 1 inbox message from task completion")
 	}

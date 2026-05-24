@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +12,7 @@ import (
 )
 
 func TestTaskToolPeekNewLimitsAndPreservesOverflow(t *testing.T) {
-	mgr := task.NewManager(filepath.Join(t.TempDir(), "tasks"))
+	mgr := task.NewManager()
 	payload := strings.Repeat("x", peekNewMaxBytes+7)
 	fn := func(ctx context.Context, out io.Writer) error {
 		_, _ = io.WriteString(out, payload)

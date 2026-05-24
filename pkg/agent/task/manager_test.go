@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -30,11 +28,14 @@ func newTestCollector() *testCollector {
 	return &testCollector{ch: make(chan struct{}, 8)}
 }
 
-func (c *testCollector) handler() CompletionFunc {
-	return func(info Info, killed bool, killCause string) {
+func (c *testCollector) observer() TaskObserver {
+	return func(ev TaskEvent) {
+		if ev.Kind != EventCompletion {
+			return
+		}
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		c.records = append(c.records, completionRecord{Info: info, Killed: killed, KillCause: killCause})
+		c.records = append(c.records, completionRecord{Info: ev.TaskInfo, Killed: ev.Killed, KillCause: ev.KillCause})
 		select {
 		case c.ch <- struct{}{}:
 		default:
@@ -54,8 +55,6 @@ func (c *testCollector) waitOne(t *testing.T, timeout time.Duration) completionR
 	return c.records[len(c.records)-1]
 }
 
-// waitUntil polls until predicate returns true or timeout elapses. Used in
-// place of fixed sleeps so tests stay fast and don't flake on slow CI.
 func waitUntil(t *testing.T, timeout time.Duration, predicate func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -71,11 +70,11 @@ func TestSpawnCompletesAndNotifies(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only test")
 	}
-	dir := t.TempDir()
-	mgr := NewManager(filepath.Join(dir, "tasks"))
+	mgr := NewManager()
 	col := newTestCollector()
-	mgr.SetOnComplete(col.handler())
+	mgr.SetObserver(col.observer())
 
+	dir := t.TempDir()
 	info, err := mgr.Spawn(dir, "printf done; sleep 0.05", "demo", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
@@ -85,7 +84,7 @@ func TestSpawnCompletesAndNotifies(t *testing.T) {
 	}
 
 	rec := col.waitOne(t, 5*time.Second)
-	formatted := FormatCompletion(rec.Info, rec.Killed, rec.KillCause)
+	formatted := FormatCompletion(rec.Info, rec.Killed, rec.KillCause, mgr.PeekOrEmpty(rec.Info.ID, 20))
 	if !strings.Contains(formatted, info.ID) {
 		t.Fatalf("completion missing id: %v", formatted)
 	}
@@ -104,21 +103,12 @@ func TestSpawnCompletesAndNotifies(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0", final.ExitCode)
 	}
 
-	stdoutBytes, err := os.ReadFile(final.StdoutFile)
+	output, err := mgr.Peek(info.ID, 30)
 	if err != nil {
-		t.Fatalf("read stdout: %v", err)
+		t.Fatalf("Peek: %v", err)
 	}
-	if !strings.Contains(string(stdoutBytes), "done") {
-		t.Fatalf("stdout file missing 'done': %q", string(stdoutBytes))
-	}
-
-	signalPath := filepath.Join(filepath.Dir(final.StdoutFile), "signal")
-	sigBytes, err := os.ReadFile(signalPath)
-	if err != nil {
-		t.Fatalf("read signal: %v", err)
-	}
-	if strings.TrimSpace(string(sigBytes)) != "0" {
-		t.Fatalf("signal = %q, want 0", string(sigBytes))
+	if !strings.Contains(output, "done") {
+		t.Fatalf("peek missing 'done': %q", output)
 	}
 }
 
@@ -126,8 +116,8 @@ func TestKillCascadesToGrandchild(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only test")
 	}
+	mgr := NewManager()
 	dir := t.TempDir()
-	mgr := NewManager(filepath.Join(dir, "tasks"))
 
 	script := "sh -c 'sleep 30 & echo CHILDPID=$! ; wait'"
 	info, err := mgr.Spawn(dir, script, "kill-test", 30*time.Second)
@@ -137,8 +127,8 @@ func TestKillCascadesToGrandchild(t *testing.T) {
 
 	var childPID int
 	waitUntil(t, 3*time.Second, func() bool {
-		data, _ := os.ReadFile(info.StdoutFile)
-		for _, line := range strings.Split(string(data), "\n") {
+		output, _ := mgr.Peek(info.ID, 30)
+		for _, line := range strings.Split(output, "\n") {
 			if !strings.HasPrefix(line, "CHILDPID=") {
 				continue
 			}
@@ -173,14 +163,6 @@ func TestKillCascadesToGrandchild(t *testing.T) {
 	if final.State != StateKilled {
 		t.Fatalf("state after Kill = %s, want killed", final.State)
 	}
-	signalPath := filepath.Join(filepath.Dir(final.StdoutFile), "signal")
-	sigBytes, err := os.ReadFile(signalPath)
-	if err != nil {
-		t.Fatalf("read signal: %v", err)
-	}
-	if !strings.HasPrefix(strings.TrimSpace(string(sigBytes)), "killed:") {
-		t.Fatalf("signal = %q, want killed marker", string(sigBytes))
-	}
 
 	waitUntil(t, 3*time.Second, func() bool {
 		return syscall.Kill(childPID, 0) != nil
@@ -191,8 +173,8 @@ func TestPeekReturnsTail(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only test")
 	}
+	mgr := NewManager()
 	dir := t.TempDir()
-	mgr := NewManager(filepath.Join(dir, "tasks"))
 	info, err := mgr.Spawn(dir, "for i in 1 2 3 4 5; do echo line$i; done", "peek-test", 5*time.Second)
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
@@ -217,10 +199,10 @@ func TestWaitRespectsTimeoutAndContext(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only test")
 	}
-	dir := t.TempDir()
-	mgr := NewManager(filepath.Join(dir, "tasks"))
+	mgr := NewManager()
 	defer mgr.Shutdown()
 
+	dir := t.TempDir()
 	info, err := mgr.Spawn(dir, "sleep 5", "wait-test", 30*time.Second)
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
@@ -256,8 +238,8 @@ func TestShutdownKillsRunning(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only test")
 	}
+	mgr := NewManager()
 	dir := t.TempDir()
-	mgr := NewManager(filepath.Join(dir, "tasks"))
 
 	info, err := mgr.Spawn(dir, "sleep 30", "shutdown-test", 60*time.Second)
 	if err != nil {
@@ -279,10 +261,9 @@ func TestShutdownKillsRunning(t *testing.T) {
 }
 
 func TestSpawnInProcessCompletesAndNotifies(t *testing.T) {
-	dir := t.TempDir()
-	mgr := NewManager(filepath.Join(dir, "tasks"))
+	mgr := NewManager()
 	col := newTestCollector()
-	mgr.SetOnComplete(col.handler())
+	mgr.SetObserver(col.observer())
 
 	fn := func(ctx context.Context, out io.Writer) error {
 		fmt.Fprintln(out, "step 1")
@@ -295,7 +276,7 @@ func TestSpawnInProcessCompletesAndNotifies(t *testing.T) {
 	}
 
 	rec := col.waitOne(t, 3*time.Second)
-	formatted := FormatCompletion(rec.Info, rec.Killed, rec.KillCause)
+	formatted := FormatCompletion(rec.Info, rec.Killed, rec.KillCause, mgr.PeekOrEmpty(rec.Info.ID, 20))
 	if !strings.Contains(formatted, info.ID) {
 		t.Fatalf("completion msg missing id: %v", formatted)
 	}
@@ -308,15 +289,14 @@ func TestSpawnInProcessCompletesAndNotifies(t *testing.T) {
 		t.Fatalf("state = %s, want completed", final.State)
 	}
 
-	stdoutBytes, _ := os.ReadFile(final.StdoutFile)
-	if !strings.Contains(string(stdoutBytes), "step 1") {
-		t.Fatalf("stdout missing 'step 1': %q", string(stdoutBytes))
+	output, _ := mgr.Peek(info.ID, 30)
+	if !strings.Contains(output, "step 1") {
+		t.Fatalf("peek missing 'step 1': %q", output)
 	}
 }
 
 func TestSpawnInProcessKillCancelsContext(t *testing.T) {
-	dir := t.TempDir()
-	mgr := NewManager(filepath.Join(dir, "tasks"))
+	mgr := NewManager()
 
 	started := make(chan struct{})
 	fn := func(ctx context.Context, out io.Writer) error {
@@ -343,15 +323,14 @@ func TestSpawnInProcessKillCancelsContext(t *testing.T) {
 	}
 }
 
-func TestCompletionWithNilCallbackDoesNotPanic(t *testing.T) {
-	dir := t.TempDir()
-	mgr := NewManager(filepath.Join(dir, "tasks"))
+func TestCompletionWithNilObserverDoesNotPanic(t *testing.T) {
+	mgr := NewManager()
 
 	fn := func(ctx context.Context, out io.Writer) error {
 		fmt.Fprintln(out, "done")
 		return nil
 	}
-	info, err := mgr.SpawnInProcess("nil-cb", "nil-cb", 5*time.Second, fn)
+	info, err := mgr.SpawnInProcess("nil-obs", "nil-obs", 5*time.Second, fn)
 	if err != nil {
 		t.Fatalf("SpawnInProcess: %v", err)
 	}
@@ -364,46 +343,70 @@ func TestCompletionWithNilCallbackDoesNotPanic(t *testing.T) {
 	}
 }
 
-func TestCompletionToPanicCallbackDoesNotPanic(t *testing.T) {
+func TestObserverPanicDoesNotCrashManager(t *testing.T) {
+	mgr := NewManager()
 	called := make(chan struct{})
-	fn := CompletionFunc(func(info Info, killed bool, cause string) {
-		close(called)
-		panic("boom")
+	mgr.SetObserver(func(ev TaskEvent) {
+		if ev.Kind == EventCompletion {
+			close(called)
+			panic("boom")
+		}
 	})
-	fireCompletion(fn, Info{ID: "panic-test", State: StateCompleted}, false, "")
+
+	fn := func(ctx context.Context, out io.Writer) error { return nil }
+	_, err := mgr.SpawnInProcess("panic-test", "panic-test", 5*time.Second, fn)
+	if err != nil {
+		t.Fatalf("SpawnInProcess: %v", err)
+	}
 
 	select {
 	case <-called:
-	case <-time.After(time.Second):
-		t.Fatal("panic callback was not called")
+	case <-time.After(3 * time.Second):
+		t.Fatal("observer was not called")
 	}
 }
 
-func TestCompletionToBlockingCallbackDoesNotBlock(t *testing.T) {
-	release := make(chan struct{})
-	defer close(release)
-
-	started := make(chan struct{})
-	done := make(chan struct{})
-	fn := CompletionFunc(func(info Info, killed bool, cause string) {
-		close(started)
-		<-release
+func TestObserverReceivesStartAndOutput(t *testing.T) {
+	mgr := NewManager()
+	var mu sync.Mutex
+	var events []TaskEvent
+	mgr.SetObserver(func(ev TaskEvent) {
+		mu.Lock()
+		events = append(events, ev)
+		mu.Unlock()
 	})
-	go func() {
-		fireCompletion(fn, Info{ID: "block-test", State: StateCompleted}, false, "")
-		close(done)
-	}()
 
-	select {
-	case <-done:
-	case <-time.After(200 * time.Millisecond):
-		t.Fatal("fireCompletion blocked on callback")
+	fn := func(ctx context.Context, out io.Writer) error {
+		fmt.Fprintln(out, "hello")
+		return nil
 	}
+	_, err := mgr.SpawnInProcess("events-test", "events-test", 5*time.Second, fn)
+	if err != nil {
+		t.Fatalf("SpawnInProcess: %v", err)
+	}
+	time.Sleep(500 * time.Millisecond)
 
-	select {
-	case <-started:
-	case <-time.After(time.Second):
-		t.Fatal("blocking callback was not called")
+	mu.Lock()
+	defer mu.Unlock()
+
+	if len(events) < 3 {
+		t.Fatalf("expected >= 3 events (start, output, completion), got %d", len(events))
+	}
+	if events[0].Kind != EventStart {
+		t.Errorf("first event = %s, want start", events[0].Kind)
+	}
+	hasOutput := false
+	for _, ev := range events {
+		if ev.Kind == EventOutput {
+			hasOutput = true
+			break
+		}
+	}
+	if !hasOutput {
+		t.Error("no output event received")
+	}
+	if events[len(events)-1].Kind != EventCompletion {
+		t.Errorf("last event = %s, want completion", events[len(events)-1].Kind)
 	}
 }
 

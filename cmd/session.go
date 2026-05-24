@@ -25,9 +25,18 @@ func newAgentSession(cfg sessionConfig) *agentSession {
 
 	taskMgr := bashTaskManager(cfg.Application.Commands)
 	if taskMgr != nil {
-		taskMgr.SetOnComplete(func(info taskmod.Info, killed bool, cause string) {
-			msg := inboxpkg.NewMessage(inboxpkg.OriginTask, "user", taskmod.FormatCompletion(info, killed, cause))
-			msg.Meta = map[string]any{"task_id": info.ID, "task_name": info.Name, "exit_code": info.ExitCode}
+		taskMgr.SetObserver(func(ev taskmod.TaskEvent) {
+			if ev.Kind != taskmod.EventCompletion {
+				return
+			}
+			tail := taskMgr.PeekOrEmpty(ev.TaskID, 20)
+			msg := inboxpkg.NewMessage(inboxpkg.OriginTask, "user",
+				taskmod.FormatCompletion(ev.TaskInfo, ev.Killed, ev.KillCause, tail))
+			msg.Meta = map[string]any{
+				"task_id":   ev.TaskID,
+				"task_name": ev.TaskInfo.Name,
+				"exit_code": ev.TaskInfo.ExitCode,
+			}
 			ib.Push(msg)
 		})
 	}

@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
+
 	"runtime"
 	"strings"
 	"time"
@@ -41,12 +41,11 @@ func NewBashTool(workDir string, timeout int, registry *CommandRegistry) *BashTo
 	if registry != nil && workDir != "" {
 		registry.SetWorkDir(workDir)
 	}
-	taskDir := filepath.Join(workDir, "out", "tasks")
 	return &BashTool{
 		registry: registry,
 		workDir:  workDir,
 		timeout:  timeout,
-		tasks:    task.NewManager(taskDir),
+		tasks:    task.NewManager(),
 	}
 }
 
@@ -183,8 +182,8 @@ func (t *BashTool) execPseudoBackground(cmdLine, name string, timeoutSeconds int
 		return "", err
 	}
 	return fmt.Sprintf(
-		"Started pseudo-command task id=%s name=%s (in-process)\nstdout file: %s\nUse `task peek %s` to inspect progress, `task wait %s` to block, `task kill %s` to stop.",
-		info.ID, info.Name, info.StdoutFile, info.ID, info.ID, info.ID,
+		"Started pseudo-command task id=%s name=%s (in-process)\nUse `task peek %s` to inspect progress, `task wait %s` to block, `task kill %s` to stop.",
+		info.ID, info.Name, info.ID, info.ID, info.ID,
 	), nil
 }
 
@@ -284,8 +283,8 @@ func (t *BashTool) execBackground(cmdLine, name string, timeoutSeconds int) (str
 		return "", err
 	}
 	return fmt.Sprintf(
-		"Started background task id=%s name=%s pid=%d\nstdout file: %s\nUse `task peek %s` to inspect progress, `task wait %s` to block, `task kill %s` to stop. A completion message will be injected automatically when the task ends.",
-		info.ID, info.Name, info.PID, info.StdoutFile, info.ID, info.ID, info.ID,
+		"Started background task id=%s name=%s pid=%d\nUse `task peek %s` to inspect progress, `task wait %s` to block, `task kill %s` to stop. A completion message will be injected automatically when the task ends.",
+		info.ID, info.Name, info.PID, info.ID, info.ID, info.ID,
 	), nil
 }
 

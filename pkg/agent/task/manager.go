@@ -1,27 +1,20 @@
 // Package task provides a background-task manager for long-running shell
-// commands launched by the agent. Each task runs in its own process group
-// (so kill cascades to descendants), tees stdout+stderr to a persistent
-// file, and on completion pushes a follow-up external message onto an optional
-// MessageSink so the next agent turn can react to the result.
-//
-// Design follows pi-mono's tmux-bash extension (richardgill/pi-extensions)
-// but uses plain os/exec + a filesystem signal pattern instead of tmux.
+// commands and in-process closures launched by the agent. Output is buffered
+// in memory (no disk I/O). An optional TaskObserver receives structured events
+// (start, output, completion) modeled after the scan pipeline's Observe pattern.
 package task
 
 import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,85 +30,91 @@ const (
 )
 
 const (
-	// DefaultTimeout caps a single background task's wall-clock runtime.
-	// 30 minutes covers a full scan→spray→neutron pipeline against one
-	// target; longer bursts should pass an explicit timeout.
 	DefaultTimeout = 30 * time.Minute
-
-	// killGrace is the SIGTERM → SIGKILL grace window.
-	killGrace = 5 * time.Second
-
-	// shutdownGrace is how long Shutdown waits for tasks to flush after
-	// SIGKILL before returning.
-	shutdownGrace = 2 * time.Second
+	killGrace      = 5 * time.Second
+	shutdownGrace  = 2 * time.Second
 )
 
-// Info is the externally-visible state of a task. Always returned by value
-// so callers can't mutate the Manager's view.
-type Info struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name,omitempty"`
-	Command    string    `json:"command"`
-	PID        int       `json:"pid"`
-	StartedAt  time.Time `json:"started_at"`
-	EndedAt    time.Time `json:"ended_at,omitempty"`
-	ExitCode   int       `json:"exit_code"`
-	State      State     `json:"state"`
-	StdoutFile string    `json:"stdout_file"`
+type EventKind string
+
+const (
+	EventStart      EventKind = "start"
+	EventOutput     EventKind = "output"
+	EventCompletion EventKind = "completion"
+)
+
+type TaskEvent struct {
+	Kind      EventKind
+	TaskID    string
+	TaskInfo  Info
+	Output    []byte // EventOutput only
+	Killed    bool
+	KillCause string
 }
 
-// CompletionFunc is called when a background task finishes. The framework
-// layer provides this callback to bridge task completions into the agent's
-// inbox without the task package knowing about inbox internals.
-type CompletionFunc func(info Info, killed bool, killCause string)
+type TaskObserver func(TaskEvent)
 
-// Manager owns a set of background tasks. Safe for concurrent use.
-type Manager struct {
-	mu         sync.Mutex
-	tasks      map[string]*task
-	outDir     string
-	onComplete CompletionFunc
+type Info struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name,omitempty"`
+	Command   string    `json:"command"`
+	PID       int       `json:"pid"`
+	StartedAt time.Time `json:"started_at"`
+	EndedAt   time.Time `json:"ended_at,omitempty"`
+	ExitCode  int       `json:"exit_code"`
+	State     State     `json:"state"`
 }
 
 type task struct {
 	Info
 	cmd       *exec.Cmd
-	stdoutFP  *os.File
+	output    *OutputBuffer
 	done      chan struct{}
-	cancel    context.CancelFunc // populated for in-process tasks; nil for shell tasks
-	killCause string             // protected by Manager.mu
+	cancel    context.CancelFunc
+	killCause string
 }
 
-// InProcessFn is the closure executed by SpawnInProcess. Implementations
-// must respect ctx (used by Kill / Shutdown) and write progress to out.
 type InProcessFn func(ctx context.Context, out io.Writer) error
 
-// NewManager returns an empty Manager. outDir is the base directory under
-// which each task's files are written (outDir/<id>/{cmd,stdout,signal,meta.json}).
-// The directory is created lazily on first Spawn.
-func NewManager(outDir string) *Manager {
-	return &Manager{
-		tasks:  make(map[string]*task),
-		outDir: outDir,
-	}
+type Manager struct {
+	mu      sync.Mutex
+	tasks   map[string]*task
+	observe TaskObserver
+	bufCap  int
 }
 
-// SetOnComplete registers a callback invoked when any task finishes.
-// Pass nil to disable. Replaces any previous callback.
-func (m *Manager) SetOnComplete(fn CompletionFunc) {
+func NewManager() *Manager {
+	return &Manager{tasks: make(map[string]*task)}
+}
+
+func (m *Manager) SetObserver(fn TaskObserver) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.onComplete = fn
+	m.observe = fn
 }
 
-// Spawn launches cmdLine in its own process group. Returns immediately
-// after exec.Start() succeeds; the supervising goroutine handles wait,
-// timeout, and completion notification.
-//
-//   - workDir: child's cwd; usually the agent's working directory.
-//   - cmdLine: shell command (passed to sh -c on Unix, cmd /c on Windows).
-//   - name:    optional human label (shown in `task list`); defaults to first token of cmdLine.
-//   - timeout: wall-clock kill deadline; 0 means DefaultTimeout.
+func (m *Manager) bufferCap() int {
+	if m.bufCap > 0 {
+		return m.bufCap
+	}
+	return DefaultBufferCap
+}
+
+func (m *Manager) emit(ev TaskEvent) {
+	m.mu.Lock()
+	obs := m.observe
+	m.mu.Unlock()
+	if obs == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "task observer panic: %v\n", r)
+		}
+	}()
+	obs(ev)
+}
+
 func (m *Manager) Spawn(workDir, cmdLine, name string, timeout time.Duration) (Info, error) {
 	if strings.TrimSpace(cmdLine) == "" {
 		return Info{}, errors.New("empty command")
@@ -131,18 +130,8 @@ func (m *Manager) Spawn(workDir, cmdLine, name string, timeout time.Duration) (I
 	if err != nil {
 		return Info{}, fmt.Errorf("generate id: %w", err)
 	}
-	taskDir := filepath.Join(m.outDir, id)
-	if err := os.MkdirAll(taskDir, 0o700); err != nil {
-		return Info{}, fmt.Errorf("mkdir %s: %w", taskDir, err)
-	}
-	if err := os.WriteFile(filepath.Join(taskDir, "cmd"), []byte(cmdLine+"\n"), 0o600); err != nil {
-		return Info{}, fmt.Errorf("write cmd: %w", err)
-	}
-	stdoutPath := filepath.Join(taskDir, "stdout")
-	stdoutFP, err := os.OpenFile(stdoutPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return Info{}, fmt.Errorf("open stdout file: %w", err)
-	}
+
+	buf := NewOutputBuffer(m.bufferCap())
 
 	var c *exec.Cmd
 	if runtime.GOOS == "windows" {
@@ -152,42 +141,37 @@ func (m *Manager) Spawn(workDir, cmdLine, name string, timeout time.Duration) (I
 	}
 	c.Dir = workDir
 	c.Stdin = nil
-	c.Stdout = stdoutFP
-	c.Stderr = stdoutFP
+	c.Stdout = buf
+	c.Stderr = buf
 	configureTaskProcessGroup(c)
 
 	if err := c.Start(); err != nil {
-		_ = stdoutFP.Close()
 		return Info{}, fmt.Errorf("start: %w", err)
 	}
 
-	now := time.Now()
 	info := Info{
-		ID:         id,
-		Name:       name,
-		Command:    cmdLine,
-		PID:        c.Process.Pid,
-		StartedAt:  now,
-		State:      StateRunning,
-		StdoutFile: stdoutPath,
+		ID:        id,
+		Name:      name,
+		Command:   cmdLine,
+		PID:       c.Process.Pid,
+		StartedAt: time.Now(),
+		State:     StateRunning,
 	}
-	t := &task{Info: info, cmd: c, stdoutFP: stdoutFP, done: make(chan struct{})}
+	t := &task{Info: info, cmd: c, output: buf, done: make(chan struct{})}
+
+	buf.onWrite = func(p []byte) {
+		m.emit(TaskEvent{Kind: EventOutput, TaskID: id, TaskInfo: t.Info, Output: p})
+	}
 
 	m.mu.Lock()
 	m.tasks[id] = t
 	m.mu.Unlock()
 
-	writeMeta(taskDir, info)
-
+	m.emit(TaskEvent{Kind: EventStart, TaskID: id, TaskInfo: info})
 	go m.supervise(t, timeout)
 	return info, nil
 }
 
-// SpawnInProcess registers a task that runs a Go closure (typically a
-// pseudo-command via CommandRegistry.ExecuteStreaming) instead of a shell
-// subprocess. Output is tee'd to the same on-disk stdout file as Spawn so
-// the LLM can `task peek` / `task wait` uniformly. Cancellation is by
-// context.CancelFunc (no signals).
 func (m *Manager) SpawnInProcess(label, cmdDisplay string, timeout time.Duration, fn InProcessFn) (Info, error) {
 	if fn == nil {
 		return Info{}, errors.New("nil function")
@@ -204,44 +188,32 @@ func (m *Manager) SpawnInProcess(label, cmdDisplay string, timeout time.Duration
 	if err != nil {
 		return Info{}, fmt.Errorf("generate id: %w", err)
 	}
-	taskDir := filepath.Join(m.outDir, id)
-	if err := os.MkdirAll(taskDir, 0o700); err != nil {
-		return Info{}, fmt.Errorf("mkdir %s: %w", taskDir, err)
-	}
-	if err := os.WriteFile(filepath.Join(taskDir, "cmd"), []byte(cmdDisplay+"\n"), 0o600); err != nil {
-		return Info{}, fmt.Errorf("write cmd: %w", err)
-	}
-	stdoutPath := filepath.Join(taskDir, "stdout")
-	stdoutFP, err := os.OpenFile(stdoutPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return Info{}, fmt.Errorf("open stdout file: %w", err)
-	}
 
+	buf := NewOutputBuffer(m.bufferCap())
 	ctx, cancel := context.WithCancel(context.Background())
 
-	now := time.Now()
 	info := Info{
-		ID:         id,
-		Name:       name,
-		Command:    cmdDisplay,
-		PID:        0,
-		StartedAt:  now,
-		State:      StateRunning,
-		StdoutFile: stdoutPath,
+		ID:        id,
+		Name:      name,
+		Command:   cmdDisplay,
+		StartedAt: time.Now(),
+		State:     StateRunning,
 	}
-	t := &task{Info: info, stdoutFP: stdoutFP, done: make(chan struct{}), cancel: cancel}
+	t := &task{Info: info, output: buf, done: make(chan struct{}), cancel: cancel}
+
+	buf.onWrite = func(p []byte) {
+		m.emit(TaskEvent{Kind: EventOutput, TaskID: id, TaskInfo: t.Info, Output: p})
+	}
 
 	m.mu.Lock()
 	m.tasks[id] = t
 	m.mu.Unlock()
 
-	writeMeta(taskDir, info)
-
+	m.emit(TaskEvent{Kind: EventStart, TaskID: id, TaskInfo: info})
 	go m.superviseInProcess(t, fn, ctx, timeout)
 	return info, nil
 }
 
-// superviseInProcess is SpawnInProcess's equivalent of supervise().
 func (m *Manager) superviseInProcess(t *task, fn InProcessFn, ctx context.Context, timeout time.Duration) {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
@@ -253,7 +225,7 @@ func (m *Manager) superviseInProcess(t *task, fn InProcessFn, ctx context.Contex
 				runErr <- fmt.Errorf("panic in background task: %v", r)
 			}
 		}()
-		runErr <- fn(ctx, t.stdoutFP)
+		runErr <- fn(ctx, t.output)
 	}()
 
 	var (
@@ -271,8 +243,6 @@ func (m *Manager) superviseInProcess(t *task, fn InProcessFn, ctx context.Contex
 		fnErr = <-runErr
 	}
 
-	_ = t.stdoutFP.Close()
-
 	recordedKillCause := m.killCause(t)
 	if recordedKillCause != "" {
 		killed = true
@@ -282,16 +252,10 @@ func (m *Manager) superviseInProcess(t *task, fn InProcessFn, ctx context.Contex
 	state, exitCode := StateCompleted, 0
 	if fnErr != nil {
 		if killed {
-			state = StateKilled
-			exitCode = -1
+			state, exitCode = StateKilled, -1
 		} else {
-			state = StateFailed
-			exitCode = 1
-			// Append the error message to stdout file so peek/wait see why.
-			if data, err := os.OpenFile(t.StdoutFile, os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-				fmt.Fprintf(data, "\n[task error] %v\n", fnErr)
-				_ = data.Close()
-			}
+			state, exitCode = StateFailed, 1
+			t.output.AppendError(fnErr.Error())
 		}
 	} else if killed {
 		state = StateKilled
@@ -301,26 +265,13 @@ func (m *Manager) superviseInProcess(t *task, fn InProcessFn, ctx context.Contex
 	t.EndedAt = time.Now()
 	t.ExitCode = exitCode
 	t.State = state
-	completeFn := m.onComplete
 	infoCopy := t.Info
 	m.mu.Unlock()
 
-	taskDir := filepath.Dir(t.StdoutFile)
-	signalContent := strconv.Itoa(exitCode)
-	if state == StateKilled {
-		signalContent = "killed:" + killCause
-	}
-	_ = os.WriteFile(filepath.Join(taskDir, "signal"), []byte(signalContent+"\n"), 0o600)
-	writeMeta(taskDir, infoCopy)
-
 	close(t.done)
-
-	fireCompletion(completeFn, infoCopy, state == StateKilled, killCause)
+	m.emit(TaskEvent{Kind: EventCompletion, TaskID: t.ID, TaskInfo: infoCopy, Killed: killed, KillCause: killCause})
 }
 
-// supervise runs in its own goroutine; one per spawned task. It blocks on
-// cmd.Wait, applies the timeout, writes the signal file, and pushes the
-// completion notification to the sink (if any).
 func (m *Manager) supervise(t *task, timeout time.Duration) {
 	waitDone := make(chan error, 1)
 	go func() { waitDone <- t.cmd.Wait() }()
@@ -343,8 +294,6 @@ func (m *Manager) supervise(t *task, timeout time.Duration) {
 		m.forceKillTask(t)
 		waitErr = <-waitDone
 	}
-
-	_ = t.stdoutFP.Close()
 
 	recordedKillCause := m.killCause(t)
 	if recordedKillCause != "" {
@@ -375,29 +324,15 @@ func (m *Manager) supervise(t *task, timeout time.Duration) {
 	t.EndedAt = time.Now()
 	t.ExitCode = exitCode
 	t.State = state
-	fn := m.onComplete
 	infoCopy := t.Info
 	m.mu.Unlock()
 
-	taskDir := filepath.Dir(t.StdoutFile)
-	signalContent := strconv.Itoa(exitCode)
-	if state == StateKilled {
-		signalContent = "killed:" + killCause
-	}
-	_ = os.WriteFile(filepath.Join(taskDir, "signal"), []byte(signalContent+"\n"), 0o600)
-	writeMeta(taskDir, infoCopy)
-
 	close(t.done)
-
-	fireCompletion(fn, infoCopy, state == StateKilled, killCause)
+	m.emit(TaskEvent{Kind: EventCompletion, TaskID: t.ID, TaskInfo: infoCopy, Killed: killed, KillCause: killCause})
 }
 
-// forceKillTask cancels in-process tasks via context, or sends SIGTERM →
-// SIGKILL to shell tasks' process group. Either way the supervising
-// goroutine still owns the wait/close-done sequence.
 func (m *Manager) forceKillTask(t *task) {
 	if t.cmd == nil {
-		// In-process task: ctx cancellation is the only lever.
 		if t.cancel != nil {
 			t.cancel()
 		}
@@ -417,7 +352,6 @@ func (m *Manager) forceKillTask(t *task) {
 	_ = signalProcessGroup(t.cmd.Process.Pid, true)
 }
 
-// Kill terminates a running task. Returns nil if the task is already done.
 func (m *Manager) Kill(id string) error {
 	m.mu.Lock()
 	t, ok := m.tasks[id]
@@ -443,9 +377,6 @@ func (m *Manager) Kill(id string) error {
 	return nil
 }
 
-// KillAll terminates every running task and waits up to shutdownGrace for
-// them to finish. Useful between swarm tasks so background scans from a
-// previous company don't leak into the next.
 func (m *Manager) killAll() {
 	m.mu.Lock()
 	running := make([]*task, 0, len(m.tasks))
@@ -477,7 +408,6 @@ func (m *Manager) killAll() {
 			}
 		}
 	}
-	// Final drain.
 	finalDeadline := time.After(shutdownGrace)
 	for _, t := range running {
 		select {
@@ -487,12 +417,8 @@ func (m *Manager) killAll() {
 	}
 }
 
-// Shutdown kills all running tasks and waits for them to finish.
-func (m *Manager) Shutdown() {
-	m.killAll()
-}
+func (m *Manager) Shutdown() { m.killAll() }
 
-// List returns a copy of every task currently tracked, oldest first.
 func (m *Manager) List() []Info {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -504,7 +430,6 @@ func (m *Manager) List() []Info {
 	return out
 }
 
-// RunningCount returns the number of tasks that are still active.
 func (m *Manager) RunningCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -517,7 +442,6 @@ func (m *Manager) RunningCount() int {
 	return count
 }
 
-// Get returns a snapshot of one task's Info.
 func (m *Manager) Get(id string) (Info, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -528,8 +452,6 @@ func (m *Manager) Get(id string) (Info, bool) {
 	return t.Info, true
 }
 
-// Peek returns the last n non-empty lines of the task's stdout file.
-// If n <= 0, returns the last 30 lines.
 func (m *Manager) Peek(id string, n int) (string, error) {
 	m.mu.Lock()
 	t, ok := m.tasks[id]
@@ -540,24 +462,14 @@ func (m *Manager) Peek(id string, n int) (string, error) {
 	if n <= 0 {
 		n = 30
 	}
-	data, err := os.ReadFile(t.StdoutFile)
-	if err != nil {
-		return "", err
-	}
-	return tailLines(string(data), n), nil
+	return t.output.TailLines(n), nil
 }
 
-// PeekSince returns output added to the task's stdout since byteOffset.
-// Returns the new content and the updated offset for the next call.
-// Pass offset=0 to read from the beginning.
 func (m *Manager) PeekSince(id string, offset int64) (string, int64, error) {
 	output, newOffset, _, err := m.PeekSinceLimit(id, offset, 0)
 	return output, newOffset, err
 }
 
-// PeekSinceLimit is PeekSince with an optional maxBytes cap. When maxBytes > 0,
-// only that many bytes are returned and the cursor advances by the returned
-// byte count, so callers can page through large task output without data loss.
 func (m *Manager) PeekSinceLimit(id string, offset int64, maxBytes int64) (string, int64, bool, error) {
 	m.mu.Lock()
 	t, ok := m.tasks[id]
@@ -565,19 +477,21 @@ func (m *Manager) PeekSinceLimit(id string, offset int64, maxBytes int64) (strin
 	if !ok {
 		return "", 0, false, fmt.Errorf("no such task: %s", id)
 	}
-	data, more, err := readSinceLimit(t.StdoutFile, offset, maxBytes)
+	data, newOffset, more, err := t.output.ReadSinceLimit(offset, maxBytes)
 	if err != nil {
 		return "", offset, false, err
 	}
 	if len(data) == 0 {
 		return "", offset, more, nil
 	}
-	return string(data), offset + int64(len(data)), more, nil
+	return string(data), newOffset, more, nil
 }
 
-// Wait blocks until the task completes or timeout elapses. ctx cancellation
-// is honored. Returns the final Info; the State field discriminates between
-// "still running" (timed out) and a terminal state.
+func (m *Manager) PeekOrEmpty(id string, n int) string {
+	s, _ := m.Peek(id, n)
+	return s
+}
+
 func (m *Manager) Wait(ctx context.Context, id string, timeout time.Duration) (Info, error) {
 	m.mu.Lock()
 	t, ok := m.tasks[id]
@@ -625,52 +539,12 @@ func (m *Manager) killCause(t *task) string {
 
 // --- helpers ---
 
-func readSinceLimit(path string, offset int64, maxBytes int64) ([]byte, bool, error) {
-	if offset < 0 {
-		return nil, false, fmt.Errorf("negative offset: %d", offset)
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, false, err
-	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return nil, false, err
-	}
-	if info.Size() <= offset {
-		return nil, false, nil
-	}
-	toRead := info.Size() - offset
-	more := false
-	if maxBytes > 0 && toRead > maxBytes {
-		toRead = maxBytes
-		more = true
-	}
-	if _, err := f.Seek(offset, io.SeekStart); err != nil {
-		return nil, false, err
-	}
-	data, err := io.ReadAll(io.LimitReader(f, toRead))
-	if err != nil {
-		return nil, false, err
-	}
-	return data, more, nil
-}
-
 func genID() (string, error) {
 	b := make([]byte, 4)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
-}
-
-func writeMeta(dir string, info Info) {
-	data, err := json.MarshalIndent(info, "", "  ")
-	if err != nil {
-		return
-	}
-	_ = os.WriteFile(filepath.Join(dir, "meta.json"), data, 0o600)
 }
 
 func labelFromCommand(cmdLine string) string {
@@ -687,7 +561,6 @@ func labelFromCommand(cmdLine string) string {
 	return cmdLine
 }
 
-// tailLines returns up to n trailing non-empty lines of s.
 func tailLines(s string, n int) string {
 	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
 	kept := make([]string, 0, len(lines))
@@ -703,7 +576,7 @@ func tailLines(s string, n int) string {
 	return strings.Join(kept, "\n")
 }
 
-func FormatCompletion(info Info, killed bool, killCause string) string {
+func FormatCompletion(info Info, killed bool, killCause, lastOutput string) string {
 	duration := info.EndedAt.Sub(info.StartedAt).Round(time.Second)
 	status := "completed"
 	switch {
@@ -713,36 +586,17 @@ func FormatCompletion(info Info, killed bool, killCause string) string {
 		status = fmt.Sprintf("exited with code %d", info.ExitCode)
 	}
 
-	tail := ""
-	if data, err := os.ReadFile(info.StdoutFile); err == nil {
-		tail = tailLines(string(data), 20)
-	}
-
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "<task_completion id=%q name=%q exit_code=%d duration=%q stdout_file=%q>\n",
-		info.ID, info.Name, info.ExitCode, duration.String(), info.StdoutFile)
+	fmt.Fprintf(&sb, "<task_completion id=%q name=%q exit_code=%d duration=%q>\n",
+		info.ID, info.Name, info.ExitCode, duration.String())
 	fmt.Fprintf(&sb, "Background task %s.\n", status)
-	if tail != "" {
+	if lastOutput != "" {
 		sb.WriteString("--- last 20 lines ---\n")
-		sb.WriteString(tail)
+		sb.WriteString(lastOutput)
 		sb.WriteString("\n")
 	} else {
 		sb.WriteString("(no output)\n")
 	}
 	sb.WriteString("</task_completion>")
 	return sb.String()
-}
-
-func fireCompletion(fn CompletionFunc, info Info, killed bool, killCause string) {
-	if fn == nil {
-		return
-	}
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Fprintf(os.Stderr, "task completion callback panic: %v\n", r)
-			}
-		}()
-		fn(info, killed, killCause)
-	}()
 }
