@@ -65,15 +65,50 @@ func FromChatMessage(msg provider.ChatMessage, origin Origin) Message {
 	}
 }
 
+// ToChatMessages converts an inbox Message to LLM-compatible ChatMessages.
+// User-origin messages with no attachments pass through unchanged.
+// All other origins get a metadata envelope so the LLM knows the source.
 func (m Message) ToChatMessages() []provider.ChatMessage {
-	if len(m.Attachments) == 0 {
-		return []provider.ChatMessage{m.ChatMessage}
-	}
-	var sb strings.Builder
+	content := m.renderContent()
+	msg := m.ChatMessage
+	msg.Content = &content
+	return []provider.ChatMessage{msg}
+}
+
+func (m Message) renderContent() string {
+	body := ""
 	if m.ChatMessage.Content != nil {
-		sb.WriteString(*m.ChatMessage.Content)
+		body = *m.ChatMessage.Content
 	}
-	for _, att := range m.Attachments {
+
+	var sb strings.Builder
+
+	if m.needsEnvelope() {
+		sb.WriteString(fmt.Sprintf("<message origin=%q", m.Origin))
+		if !m.CreatedAt.IsZero() {
+			sb.WriteString(fmt.Sprintf(" time=%q", m.CreatedAt.Format(time.RFC3339)))
+		}
+		if sender, _ := m.Meta["sender"].(string); sender != "" {
+			sb.WriteString(fmt.Sprintf(" sender=%q", sender))
+		}
+		sb.WriteString(">\n")
+		sb.WriteString(body)
+		renderAttachments(&sb, m.Attachments)
+		sb.WriteString("\n</message>")
+	} else {
+		sb.WriteString(body)
+		renderAttachments(&sb, m.Attachments)
+	}
+
+	return sb.String()
+}
+
+func (m Message) needsEnvelope() bool {
+	return m.Origin != OriginUser && m.Origin != ""
+}
+
+func renderAttachments(sb *strings.Builder, attachments []Attachment) {
+	for _, att := range attachments {
 		if att.Error != "" {
 			sb.WriteString(fmt.Sprintf("\n\n<attachment_error type=%q ref=%q>%s</attachment_error>", att.Type, att.Ref, att.Error))
 			continue
@@ -83,10 +118,6 @@ func (m Message) ToChatMessages() []provider.ChatMessage {
 		}
 		sb.WriteString(fmt.Sprintf("\n\n<attachment type=%q ref=%q>\n%s\n</attachment>", att.Type, att.Ref, att.Content))
 	}
-	content := sb.String()
-	msg := m.ChatMessage
-	msg.Content = &content
-	return []provider.ChatMessage{msg}
 }
 
 func (m Message) WithMeta(key string, value any) Message {

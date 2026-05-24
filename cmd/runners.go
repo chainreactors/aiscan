@@ -61,6 +61,8 @@ func newAgentRuntime(ctx context.Context, option *Option, logger telemetry.Logge
 		Tools:       application.Commands,
 		ScannerDocs: application.Commands.UsageDocs(),
 		Skills:      application.Skills.Skills,
+		NodeName:    defaultIOANodeName(option),
+		Space:       option.Space,
 	})
 	logger.Debugf("system prompt length: %d chars", len(systemPrompt))
 	return &agentRuntime{application: application, systemPrompt: systemPrompt}, nil
@@ -271,6 +273,8 @@ func runLoop(ctx context.Context, option *Option, logger telemetry.Logger) error
 		Tools:       application.Commands,
 		ScannerDocs: application.Commands.UsageDocs(),
 		Skills:      application.Skills.Skills,
+		NodeName:    defaultIOANodeName(option),
+		Space:       option.Space,
 	})
 
 	streamClient := application.IOAStreamClient

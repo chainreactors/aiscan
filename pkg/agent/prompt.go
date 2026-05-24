@@ -2,8 +2,10 @@ package agent
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/skills"
@@ -16,6 +18,8 @@ type PromptConfig struct {
 	Skills           []skills.Skill
 	ScannerAgentMode bool
 	ScannerName      string
+	NodeName         string
+	Space            string
 }
 
 const sharedKeyPrinciples = `## Key Principles
@@ -52,7 +56,18 @@ You can use parse_results and filter_results pseudo-commands via bash for struct
 `)
 	}
 
-	sb.WriteString(fmt.Sprintf("## Environment\n\nOperating System: %s/%s\n", runtime.GOOS, runtime.GOARCH))
+	sb.WriteString("## Environment\n\n")
+	sb.WriteString(fmt.Sprintf("Operating System: %s/%s\n", runtime.GOOS, runtime.GOARCH))
+	sb.WriteString(fmt.Sprintf("Current Time: %s\n", time.Now().Format(time.RFC3339)))
+	if hostname, err := os.Hostname(); err == nil && hostname != "" {
+		sb.WriteString(fmt.Sprintf("Hostname: %s\n", hostname))
+	}
+	if cfg.NodeName != "" {
+		sb.WriteString(fmt.Sprintf("Node: %s\n", cfg.NodeName))
+	}
+	if cfg.Space != "" {
+		sb.WriteString(fmt.Sprintf("Space: %s\n", cfg.Space))
+	}
 	if runtime.GOOS == "windows" {
 		sb.WriteString("Shell: cmd.exe — do NOT use Unix shell syntax (2>&1, |, /dev/null). Pseudo-commands run in-process and need no shell redirections.\n")
 	}
