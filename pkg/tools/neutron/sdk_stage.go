@@ -9,13 +9,12 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/telemetry"
+	scanengine "github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	"github.com/chainreactors/neutron/common"
 	"github.com/chainreactors/neutron/templates"
 	sdkneutron "github.com/chainreactors/sdk/neutron"
 	"github.com/chainreactors/sdk/pkg/association"
 )
-
-var errNoNeutronTemplates = errors.New("no neutron templates selected")
 
 type neutronExecuteOptions struct {
 	Target              string
@@ -47,7 +46,7 @@ func neutronExecuteStream(ctx context.Context, engine *sdkneutron.Engine, index 
 	selected, filtered := selectNeutronTemplates(engine, index, opts)
 	if filtered {
 		if len(selected) == 0 {
-			return nil, errNoNeutronTemplates
+			return nil, scanengine.ErrNoNeutronTemplates
 		}
 	}
 	if len(selected) == 0 {
@@ -190,17 +189,7 @@ func selectNeutronTemplates(engine *sdkneutron.Engine, index *association.Finger
 	allowedByFinger := map[string]struct{}{}
 	allowedFingers := stringSet(opts.Fingers)
 	if hasFingerFilter {
-		if index != nil {
-			for _, finger := range opts.Fingers {
-				ids := index.GetPOCsByFinger(finger)
-				if opts.MaxPerFinger > 0 && len(ids) > opts.MaxPerFinger {
-					ids = ids[:opts.MaxPerFinger]
-				}
-				for _, id := range ids {
-					allowedByFinger[strings.ToLower(strings.TrimSpace(id))] = struct{}{}
-				}
-			}
-		}
+		allowedByFinger = scanengine.FingerAllowedIDs(index, opts.Fingers, opts.MaxPerFinger)
 	}
 
 	allowedTags := stringSet(opts.Tags)

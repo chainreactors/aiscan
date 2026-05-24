@@ -490,8 +490,7 @@ Review the recent messages below and decide the next useful step.
 If this worker should act now, use the available local tools directly.
 If no action is needed, say that briefly and do not repeat completed work.
 
-When sending tasks to other nodes, use content like {"content":"...", "targets":["..."]} and set refs.nodes to target a specific node.
-When reporting results, set refs.messages to reference the original task message.
+Before sending IOA messages or dispatching tasks to other nodes, read the ioa skill (aiscan://skills/ioa/SKILL.md) for the required message format.
 
 Recent messages (oldest to newest):
 %s`, cron.Name, cron.Interval, n.spaceID, n.spaceName, n.cfg.Client.NodeID(), n.cfg.NodeName, intent, strings.Join(cleanStrings(n.cfg.Skills), ", "), string(contextJSON))

@@ -140,6 +140,9 @@ func resolveScannerAIIntent(option *Option, store *skills.Store, command string)
 func scannerAISkillName(command string) string {
 	switch command {
 	case "gogo", "spray", "katana", "zombie", "neutron", "passive", "scan":
+		if !scannerCommandAvailable(command) {
+			return ""
+		}
 		return command
 	default:
 		return ""

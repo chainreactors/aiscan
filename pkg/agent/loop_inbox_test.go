@@ -2,7 +2,10 @@ package agent
 
 import (
 	"context"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
@@ -44,11 +47,11 @@ func TestInboxDrainedBeforeFirstTurnLLMCall(t *testing.T) {
 	if msgs[0].Role != "system" {
 		t.Fatalf("msg[0].Role = %q, want system", msgs[0].Role)
 	}
-	if got := contentOf(msgs[1]); got != "[peer] hello" {
-		t.Fatalf("msg[1] = %q, want [peer] hello", got)
+	if got := contentOf(msgs[1]); !strings.Contains(got, "[peer] hello") {
+		t.Fatalf("msg[1] missing peer content: %q", got)
 	}
-	if got := contentOf(msgs[2]); got != "[peer] status?" {
-		t.Fatalf("msg[2] = %q, want [peer] status?", got)
+	if got := contentOf(msgs[2]); !strings.Contains(got, "[peer] status?") {
+		t.Fatalf("msg[2] missing peer content: %q", got)
 	}
 	if got := contentOf(msgs[3]); got != "main task" {
 		t.Fatalf("msg[3] = %q, want main task", got)
@@ -141,7 +144,7 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 
 	turn1Msgs := requests[0].Messages
 	for _, m := range turn1Msgs {
-		if contentOf(m) == "[peer] watch out for example.com" {
+		if strings.Contains(contentOf(m), "[peer] watch out for example.com") {
 			t.Fatalf("turn 1 unexpectedly contains peer message: %#v", turn1Msgs)
 		}
 	}
@@ -149,13 +152,62 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 	turn2Msgs := requests[1].Messages
 	found := false
 	for _, m := range turn2Msgs {
-		if contentOf(m) == "[peer] watch out for example.com" {
+		if strings.Contains(contentOf(m), "[peer] watch out for example.com") {
 			found = true
 			break
 		}
 	}
 	if !found {
 		t.Fatalf("turn 2 missing peer message: %#v", turn2Msgs)
+	}
+}
+
+func TestRunWaitsForInboxWhenCallbackRequestsWait(t *testing.T) {
+	tools := command.NewRegistry()
+	llm := &scriptedProvider{
+		responses: []*provider.ChatCompletionResponse{
+			chatResponse(provider.NewTextMessage("assistant", "waiting")),
+			chatResponse(provider.NewTextMessage("assistant", "final")),
+		},
+	}
+	ib := inbox.NewBuffered(4)
+	var waitForBackground atomic.Bool
+	waitForBackground.Store(true)
+
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		ib.Push(inbox.NewMessage(inbox.OriginTask, "user", "<task_reminder>check task peek_new</task_reminder>"))
+		waitForBackground.Store(false)
+	}()
+
+	result, err := Run(context.Background(), "start background scan", tools,
+		WithProvider(llm),
+		WithModel("test"),
+		WithSystemPrompt("system"),
+		WithInbox(ib),
+		WithShouldWaitAfterTurn(func(context.Context, ShouldWaitAfterTurnContext) (bool, error) {
+			return waitForBackground.Load(), nil
+		}),
+	)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result != "final" {
+		t.Fatalf("result = %q, want final", result)
+	}
+	requests := llm.requestsSnapshot()
+	if len(requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(requests))
+	}
+	foundReminder := false
+	for _, msg := range requests[1].Messages {
+		if strings.Contains(contentOf(msg), "<task_reminder>") {
+			foundReminder = true
+			break
+		}
+	}
+	if !foundReminder {
+		t.Fatalf("second request missing reminder: %#v", requests[1].Messages)
 	}
 }
 

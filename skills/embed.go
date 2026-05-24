@@ -67,6 +67,9 @@ func LoadEmbedded() ([]Skill, []Diagnostic) {
 		if !ok {
 			continue
 		}
+		if !skillAvailable(skill.Name) {
+			continue
+		}
 		if existing, exists := seen[skill.Name]; exists {
 			diagnostics = append(diagnostics, Diagnostic{
 				Path:    filePath,
@@ -141,6 +144,9 @@ func (s *Store) ReadVirtual(location string) (string, bool, error) {
 	if embedPath == "" {
 		return "", false, nil
 	}
+	if name := skillNameFromEmbedPath(embedPath); name != "" && !skillAvailable(name) {
+		return "", true, fmt.Errorf("virtual file not available in this build: %s", location)
+	}
 	data, err := fs.ReadFile(embeddedFS, embedPath)
 	if err != nil {
 		return "", false, err
@@ -157,9 +163,15 @@ func (s *Store) GlobVirtual(pattern string) ([]string, bool) {
 	if err != nil || len(matches) == 0 {
 		return nil, false
 	}
-	results := make([]string, len(matches))
-	for i, m := range matches {
-		results[i] = "skills/" + m
+	results := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if name := skillNameFromEmbedPath(m); name != "" && !skillAvailable(name) {
+			continue
+		}
+		results = append(results, "skills/"+m)
+	}
+	if len(results) == 0 {
+		return nil, false
 	}
 	return results, true
 }
@@ -178,6 +190,15 @@ func normalizeEmbedPath(location string) string {
 		return location
 	}
 	return ""
+}
+
+func skillNameFromEmbedPath(embedPath string) string {
+	embedPath = path.Clean(strings.TrimSpace(embedPath))
+	if embedPath == "." || strings.HasPrefix(embedPath, "..") {
+		return ""
+	}
+	name, _, _ := strings.Cut(embedPath, "/")
+	return name
 }
 
 func FormatForPrompt(skills []Skill) string {

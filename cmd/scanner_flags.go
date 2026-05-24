@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	cyberhubcmd "github.com/chainreactors/aiscan/pkg/tools/cyberhub"
-	katanacmd "github.com/chainreactors/aiscan/pkg/tools/katana"
-	passivecmd "github.com/chainreactors/aiscan/pkg/tools/passive"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
 )
+
+var extraScannerUsage = map[string]func() string{}
 
 func isScannerHelpRequest(args []string) bool {
 	if len(args) < 2 {
@@ -26,21 +26,20 @@ func staticScannerUsage(name string) (string, bool) {
 	switch name {
 	case "scan":
 		return scan.Usage(), true
-	case "passive":
-		return passivecmd.New(nil).Usage(), true
 	case "cyberhub":
 		return cyberhubcmd.Usage(), true
 	case "gogo":
 		return "gogo - host, port, service, and banner discovery\nUsage: gogo [options]\n", true
 	case "spray":
 		return "spray - web probing, fingerprints, common files, and crawl checks\nUsage: spray [options]\n", true
-	case "katana":
-		return katanacmd.New().Usage(), true
 	case "zombie":
 		return "zombie - weak credential checks for supported services\nUsage: zombie [options]\n", true
 	case "neutron":
 		return "neutron - POC/vulnerability testing with nuclei-style options\nUsage: neutron -u <target> [options]\n", true
 	default:
+		if fn, ok := extraScannerUsage[name]; ok {
+			return fn(), true
+		}
 		return "", false
 	}
 }
@@ -138,6 +137,14 @@ func replaceOrAppendScannerFlag(args []string, flag, value string) []string {
 		return out
 	}
 	return append(out, flag+"="+value)
+}
+
+func defaultVerifyMode() string {
+	value := strings.ToLower(strings.TrimSpace(DefaultVerify))
+	if value == "" {
+		return "off"
+	}
+	return value
 }
 
 func removeScannerFlag(args []string, flag string) []string {

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/telemetry"
+	scanengine "github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	"github.com/chainreactors/aiscan/pkg/util"
 	neutronhttp "github.com/chainreactors/neutron/protocols/http"
 	"github.com/chainreactors/neutron/templates"
@@ -235,7 +236,7 @@ func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
 		targetOpts := opts
 		targetOpts.Target = target
 		resultCh, err := neutronExecuteStream(ctx, c.engine, c.index, targetOpts)
-		if errors.Is(err, errNoNeutronTemplates) {
+		if errors.Is(err, scanengine.ErrNoNeutronTemplates) {
 			return "", fmt.Errorf("neutron: no templates selected")
 		}
 		if err != nil {

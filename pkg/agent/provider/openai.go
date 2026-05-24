@@ -17,7 +17,9 @@ import (
 	"github.com/chainreactors/proxyclient"
 )
 
-const defaultOpenAITimeout = 120 * time.Second
+const (
+	defaultOpenAITimeout = 120 * time.Second
+)
 
 type OpenAIProvider struct {
 	config *ProviderConfig
@@ -98,25 +100,22 @@ func (p *OpenAIProvider) ChatCompletion(ctx context.Context, req *ChatCompletion
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	endpoint := strings.TrimSuffix(p.config.BaseURL, "/") + "/chat/completions"
+	endpoint := p.completionEndpoint()
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	if p.config.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+p.config.APIKey)
-	}
+	p.setRequestHeaders(httpReq, false)
 
 	resp, err := p.client.Do(httpReq) //nolint:bodyclose // closed by the stream reader goroutine, or on non-2xx below.
 	if err != nil {
-		return nil, wrapOpenAIReadError(parentCtx, callTimedOut.Load(), callTimeout, "http request", err)
+		return nil, wrapReadError(parentCtx, callTimedOut.Load(), callTimeout, "http request", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, wrapOpenAIReadError(parentCtx, callTimedOut.Load(), callTimeout, "read response", err)
+		return nil, wrapReadError(parentCtx, callTimedOut.Load(), callTimeout, "read response", err)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -151,17 +150,13 @@ func (p *OpenAIProvider) ChatCompletionStream(ctx context.Context, req *ChatComp
 	// connection and unblock body reads when the server stops sending data.
 	reqCtx, reqCancel := context.WithCancel(ctx)
 
-	endpoint := strings.TrimSuffix(p.config.BaseURL, "/") + "/chat/completions"
+	endpoint := p.completionEndpoint()
 	httpReq, err := http.NewRequestWithContext(reqCtx, "POST", endpoint, bytes.NewReader(bodyBytes))
 	if err != nil {
 		reqCancel()
 		return nil, fmt.Errorf("create request: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "text/event-stream")
-	if p.config.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+p.config.APIKey)
-	}
+	p.setRequestHeaders(httpReq, true)
 
 	//nolint:bodyclose // The stream response body is closed by the reader goroutine, or on non-2xx below.
 	resp, err := p.client.Do(httpReq)
@@ -175,7 +170,7 @@ func (p *OpenAIProvider) ChatCompletionStream(ctx context.Context, req *ChatComp
 		defer reqCancel()
 		respBody, timedOut, err := readAllWithCancelTimeout(resp.Body, reqCancel, openAITimeout(p.config.Timeout))
 		if err != nil {
-			return nil, wrapOpenAIReadError(ctx, timedOut, openAITimeout(p.config.Timeout), "read response", err)
+			return nil, wrapReadError(ctx, timedOut, openAITimeout(p.config.Timeout), "read response", err)
 		}
 		return nil, fmt.Errorf("API error (%d): %s", resp.StatusCode, string(respBody))
 	}
@@ -232,6 +227,13 @@ func (p *OpenAIProvider) ChatCompletionStream(ctx context.Context, req *ChatComp
 				}
 				return
 			}
+			if event.Done {
+				select {
+				case events <- event:
+				case <-ctx.Done():
+				}
+				return
+			}
 			if event.Err != nil || event.Done || event.Delta.Role != "" || event.Delta.Content != nil || event.Delta.ReasoningContent != nil || len(event.Delta.ToolCalls) > 0 || event.FinishReason != "" || event.Usage != nil {
 				select {
 				case events <- event:
@@ -263,6 +265,21 @@ func (p *OpenAIProvider) ChatCompletionStream(ctx context.Context, req *ChatComp
 	return events, nil
 }
 
+func (p *OpenAIProvider) completionEndpoint() string {
+	base := strings.TrimSuffix(p.config.BaseURL, "/")
+	return base + "/chat/completions"
+}
+
+func (p *OpenAIProvider) setRequestHeaders(req *http.Request, stream bool) {
+	req.Header.Set("Content-Type", "application/json")
+	if stream {
+		req.Header.Set("Accept", "text/event-stream")
+	}
+	if p.config.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
+	}
+}
+
 func openAITimeout(seconds int) time.Duration {
 	if seconds <= 0 {
 		return defaultOpenAITimeout
@@ -282,7 +299,7 @@ func readAllWithCancelTimeout(r io.Reader, cancel context.CancelFunc, timeout ti
 	return body, timedOut.Load(), err
 }
 
-func wrapOpenAIReadError(parentCtx context.Context, timedOut bool, timeout time.Duration, op string, err error) error {
+func wrapReadError(parentCtx context.Context, timedOut bool, timeout time.Duration, op string, err error) error {
 	if timedOut && parentCtx.Err() == nil {
 		return fmt.Errorf("%s: %w after %s: %v", op, ErrCallTimeout, timeout, err)
 	}

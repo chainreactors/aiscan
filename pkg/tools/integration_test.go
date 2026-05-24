@@ -1,7 +1,7 @@
-//go:build integration
+//go:build full && integration
 
 //	Run with: AISCAN_INTEGRATION=1 FOFA_EMAIL=... FOFA_KEY=... \
-//	  go test -tags integration ./pkg/tools/... -run TestIntegration -v
+//	  go test -tags 'full integration' ./pkg/tools/... -run TestIntegration -v
 package tools
 
 import (
@@ -27,11 +27,11 @@ func TestIntegrationPassiveFofa(t *testing.T) {
 		t.Skip("FOFA_EMAIL / FOFA_KEY required")
 	}
 	set := &engine.Set{}
-	set.SetupIna(engine.ReconOptions{FofaEmail: email, FofaKey: key, Limit: 5}, telemetry.NopLogger())
-	if set.Ina == nil {
-		t.Fatal("expected Ina engine to be initialized")
+	set.SetupUncover(engine.ReconOptions{FofaEmail: email, FofaKey: key, Limit: 5}, telemetry.NopLogger())
+	if set.Uncover == nil {
+		t.Fatal("expected Uncover engine to be initialized")
 	}
-	cmd := passivecmd.New(set.Ina)
+	cmd := passivecmd.New(set.Uncover)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	out, err := cmd.Execute(ctx, []string{"-s", "fofa", `domain="anthropic.com"`})
@@ -62,16 +62,16 @@ func TestIntegrationPassiveHunter(t *testing.T) {
 		t.Skip("HUNTER_TOKEN or HUNTER_API_KEY required")
 	}
 	set := &engine.Set{}
-	set.SetupIna(engine.ReconOptions{
+	set.SetupUncover(engine.ReconOptions{
 		HunterToken:  token,
 		HunterAPIKey: apikey,
 		IngressProxy: os.Getenv("RECON_PROXY"),
 		Limit:        3,
 	}, telemetry.NopLogger())
-	if set.Ina == nil {
-		t.Fatal("expected Ina engine to be initialized")
+	if set.Uncover == nil {
+		t.Fatal("expected Uncover engine to be initialized")
 	}
-	cmd := passivecmd.New(set.Ina)
+	cmd := passivecmd.New(set.Uncover)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	out, err := cmd.Execute(ctx, []string{"-s", "hunter", `domain.suffix="anthropic.com"`})

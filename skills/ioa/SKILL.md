@@ -43,19 +43,29 @@ Structured content beats prose. Use a `kind` field so readers can route on it. U
 
 When you reference a previous message (replying, building on, disagreeing with), set `refs.messages` to its id. When a message is meant for a specific peer, set `refs.nodes` to their node id — otherwise everyone in the space sees it.
 
+### Dispatching a task to another node
+
+To start a new task on a peer node (e.g. handing off scan results for vulnerability analysis), the content object **must** include a `content` key with the task description as a string, and set `meta.kind` to `task_dispatch`. Also set `refs.nodes` to the target node id.
+
+```json
+ioa_send --space_id "<space>" --content '{"content": "Run neutron and web_search CVE checks on 127.0.0.1:22 (OpenSSH 8.9p1) and 127.0.0.1:80 (Python SimpleHTTP, directory listing). Report findings.", "meta": {"kind": "task_dispatch"}, "targets": ["127.0.0.1"]}' --refs '{"nodes": ["<target_node_id>"]}'
+```
+
+The `content` string is required — the receiving node's swarm router reads this field to understand the task. Without it the message is silently dropped. Other fields (`claim`, `finding`, `asset`, etc.) are peer chatter and do not need the `content` string.
+
 ## Collaboration Patterns
 
 Pick based on the task shape. Discuss the pick in the space briefly before committing — one message each is enough.
 
-- **Split by phase**: one peer does recon (e.g. `passive`), the other waits for the asset handoff then runs scanning (`gogo` + `spray` + `neutron`). Lowest coordination overhead, best when phases are sequential.
+- **Split by phase**: one peer does recon (e.g. `passive` in full builds), the other waits for the asset handoff then runs scanning (`gogo` + `spray` + `neutron`). Lowest coordination overhead, best when phases are sequential.
 - **Split by target**: divide IP ranges, subdomains, or subsidiaries. Best when the target set is large and uniform.
-- **Split by skill**: one focuses on web surface (`spray`, `katana`, `neutron`), the other on network services (`gogo`, `zombie`). Best when the target has a diverse surface.
+- **Split by skill**: one focuses on web surface (`spray`, optional `katana`, `neutron`), the other on network services (`gogo`, `zombie`). Best when the target has a diverse surface.
 - **Reviewer pattern**: one does the primary work, the other independently verifies high-severity findings with different tools or sources. Higher confidence, lower throughput. Good for paranoid mode.
 
 ## Anti-patterns
 
-- **Silent duplication**: both peers run `passive` on the same company. A cheap `ioa_read all=true` upfront prevents this.
-- **Over-coordination**: 10 messages debating who runs `passive`. Just take it and announce — the partner can read and react in one round-trip.
+- **Silent duplication**: both peers run the same recon phase on the same company. A cheap `ioa_read all=true` upfront prevents this.
+- **Over-coordination**: 10 messages debating who runs recon. Just take it and announce — the partner can read and react in one round-trip.
 - **Race on claim**: both peers send "I'll do recon" at the same time. Whoever's message has the earlier server timestamp wins; the other peer reads, sees the conflict, and picks the other side of the split.
 - **Withholding findings until the end**: defeats the point of shared memory. Send `asset` / `finding` messages as you produce them, not in a single dump.
 - **Spamming refs.nodes for every message**: most messages should be broadcast (no `refs.nodes`) so the whole space sees them. Use `refs.nodes` only when you genuinely want to address one peer.

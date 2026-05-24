@@ -29,7 +29,7 @@ type Set struct {
 	Spray     *spray.SprayEngine
 	Neutron   *neutron.Engine
 	Zombie    *sdkzombie.Engine
-	Ina       *UncoverEngine
+	Uncover   *UncoverEngine
 	Index     *association.FingerPOCIndex
 	Resources *resources.Set
 	Capacity  CapacityConfig
@@ -42,16 +42,6 @@ type CapacityConfig struct {
 	Spray   int // total concurrent HTTP threads (default: 200)
 	Zombie  int // total concurrent auth threads (default: 500)
 	Neutron int // total concurrent template executions (default: 10)
-}
-
-// DefaultCapacity returns sensible capacity defaults.
-func DefaultCapacity() CapacityConfig {
-	return CapacityConfig{
-		Gogo:    800,
-		Spray:   100,
-		Zombie:  100,
-		Neutron: 100,
-	}
 }
 
 func (e *Set) Close() {
@@ -70,28 +60,16 @@ func (e *Set) Close() {
 	if e.Zombie != nil {
 		e.Zombie.Close()
 	}
-	if e.Ina != nil {
-		_ = e.Ina.Close()
+	if e.Uncover != nil {
+		_ = e.Uncover.Close()
 	}
 }
 
-func Init(ctx context.Context, cyberhubURL, apiKey string) (*Set, error) {
-	return InitWithLogger(ctx, cyberhubURL, apiKey, telemetry.NopLogger())
-}
-
-func InitWithLogger(ctx context.Context, cyberhubURL, apiKey string, logger telemetry.Logger) (*Set, error) {
-	return InitWithOptions(ctx, resources.Options{
-		CyberhubURL: cyberhubURL,
-		APIKey:      apiKey,
-		Mode:        resources.ModeMerge,
-	}, logger)
-}
-
 func InitWithOptions(ctx context.Context, opts resources.Options, logger telemetry.Logger) (*Set, error) {
-	return InitWithCapacity(ctx, opts, DefaultCapacity(), logger)
+	return initWithCapacity(ctx, opts, CapacityConfig{}, logger)
 }
 
-func InitWithCapacity(ctx context.Context, opts resources.Options, caps CapacityConfig, logger telemetry.Logger) (*Set, error) {
+func initWithCapacity(ctx context.Context, opts resources.Options, caps CapacityConfig, logger telemetry.Logger) (*Set, error) {
 	if logger == nil {
 		logger = telemetry.NopLogger()
 	}
@@ -189,45 +167,4 @@ func InitWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 
 	set.Capacity = caps
 	return set, nil
-}
-
-// SetupIna 在 InitWithOptions 之后追加 uncover engine 初始化, 把 ReconOptions
-// 的凭证注入。任一 source 凭证非空就 init; 都为空时 Ina 留 nil 让 passive 工具不注册。
-// 可被反复调用: opts 的非零字段累加进 e.Recon, engine 基于合并后的全集重建。
-func (e *Set) SetupIna(opts ReconOptions, logger telemetry.Logger) {
-	if logger == nil {
-		logger = telemetry.NopLogger()
-	}
-	e.Recon = mergeReconOptions(e.Recon, opts)
-	eng := NewUncoverEngine(e.Recon, logger)
-	if len(eng.Sources()) == 0 {
-		return
-	}
-	if e.Ina != nil {
-		_ = e.Ina.Close()
-	}
-	e.Ina = eng
-	logger.Infof("engine=uncover status=ready sources=%v", e.Ina.Sources())
-}
-
-func mergeReconOptions(base, next ReconOptions) ReconOptions {
-	if next.FofaEmail != "" {
-		base.FofaEmail = next.FofaEmail
-	}
-	if next.FofaKey != "" {
-		base.FofaKey = next.FofaKey
-	}
-	if next.HunterToken != "" {
-		base.HunterToken = next.HunterToken
-	}
-	if next.HunterAPIKey != "" {
-		base.HunterAPIKey = next.HunterAPIKey
-	}
-	if next.IngressProxy != "" {
-		base.IngressProxy = next.IngressProxy
-	}
-	if next.Limit != 0 {
-		base.Limit = next.Limit
-	}
-	return base
 }

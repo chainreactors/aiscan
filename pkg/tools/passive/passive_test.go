@@ -1,3 +1,5 @@
+//go:build full
+
 package passive
 
 import (
@@ -107,18 +109,18 @@ func TestSplitSource(t *testing.T) {
 	}
 }
 
-func TestParseInaArgs(t *testing.T) {
-	q, err := parseInaArgs([]string{`domain="example.com"`})
+func TestParseQueryArgs(t *testing.T) {
+	q, err := parseQueryArgs([]string{`domain="example.com"`})
 	if err != nil || q != `domain="example.com"` {
 		t.Fatalf("q=%q err=%v", q, err)
 	}
 
-	_, err = parseInaArgs([]string{})
+	_, err = parseQueryArgs([]string{})
 	if err == nil {
 		t.Fatal("expected error for missing query")
 	}
 
-	_, err = parseInaArgs([]string{"a", "b"})
+	_, err = parseQueryArgs([]string{"a", "b"})
 	if err == nil {
 		t.Fatal("expected error for multiple positional args")
 	}

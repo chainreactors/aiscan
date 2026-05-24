@@ -1,7 +1,7 @@
 // Package task provides a background-task manager for long-running shell
 // commands launched by the agent. Each task runs in its own process group
 // (so kill cascades to descendants), tees stdout+stderr to a persistent
-// file, and on completion pushes a follow-up ChatMessage onto an optional
+// file, and on completion pushes a follow-up external message onto an optional
 // MessageSink so the next agent turn can react to the result.
 //
 // Design follows pi-mono's tmux-bash extension (richardgill/pi-extensions)
@@ -25,7 +25,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
 )
 
 type State string
@@ -76,6 +75,7 @@ type Manager struct {
 	tasks      map[string]*task
 	outDir     string
 	onComplete CompletionFunc
+	reminder   *Reminder
 }
 
 type task struct {
@@ -90,6 +90,9 @@ type task struct {
 // InProcessFn is the closure executed by SpawnInProcess. Implementations
 // must respect ctx (used by Kill / Shutdown) and write progress to out.
 type InProcessFn func(ctx context.Context, out io.Writer) error
+
+// ReminderFunc is called by Reminder to push periodic nudge messages.
+type ReminderFunc func(content string)
 
 // NewManager returns an empty Manager. outDir is the base directory under
 // which each task's files are written (outDir/<id>/{cmd,stdout,signal,meta.json}).
@@ -491,8 +494,11 @@ func (m *Manager) KillAll() {
 	}
 }
 
-// Shutdown is an alias for KillAll suitable for deferring at process exit.
-func (m *Manager) Shutdown() { m.KillAll() }
+// Shutdown stops the reminder, kills all tasks, and cleans up.
+func (m *Manager) Shutdown() {
+	m.StopReminder()
+	m.KillAll()
+}
 
 // List returns a copy of every task currently tracked, oldest first.
 func (m *Manager) List() []Info {
@@ -504,6 +510,19 @@ func (m *Manager) List() []Info {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].StartedAt.Before(out[j].StartedAt) })
 	return out
+}
+
+// RunningCount returns the number of tasks that are still active.
+func (m *Manager) RunningCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	count := 0
+	for _, t := range m.tasks {
+		if t.State == StateRunning {
+			count++
+		}
+	}
+	return count
 }
 
 // Get returns a snapshot of one task's Info.
@@ -534,6 +553,58 @@ func (m *Manager) Peek(id string, n int) (string, error) {
 		return "", err
 	}
 	return tailLines(string(data), n), nil
+}
+
+// PeekSince returns output added to the task's stdout since byteOffset.
+// Returns the new content and the updated offset for the next call.
+// Pass offset=0 to read from the beginning.
+func (m *Manager) PeekSince(id string, offset int64) (string, int64, error) {
+	output, newOffset, _, err := m.PeekSinceLimit(id, offset, 0)
+	return output, newOffset, err
+}
+
+// PeekSinceLimit is PeekSince with an optional maxBytes cap. When maxBytes > 0,
+// only that many bytes are returned and the cursor advances by the returned
+// byte count, so callers can page through large task output without data loss.
+func (m *Manager) PeekSinceLimit(id string, offset int64, maxBytes int64) (string, int64, bool, error) {
+	m.mu.Lock()
+	t, ok := m.tasks[id]
+	m.mu.Unlock()
+	if !ok {
+		return "", 0, false, fmt.Errorf("no such task: %s", id)
+	}
+	data, more, err := readSinceLimit(t.StdoutFile, offset, maxBytes)
+	if err != nil {
+		return "", offset, false, err
+	}
+	if len(data) == 0 {
+		return "", offset, more, nil
+	}
+	return string(data), offset + int64(len(data)), more, nil
+}
+
+// StartReminder launches a background goroutine that periodically pushes
+// reminder messages to the sink when there are running tasks. No-op if
+// sink is nil or a reminder is already active.
+func (m *Manager) StartReminder(interval time.Duration, fn ReminderFunc) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if fn == nil || m.reminder != nil {
+		return
+	}
+	m.reminder = newReminder(m, interval, fn)
+	m.reminder.start()
+}
+
+// StopReminder stops the reminder goroutine if running.
+func (m *Manager) StopReminder() {
+	m.mu.Lock()
+	r := m.reminder
+	m.reminder = nil
+	m.mu.Unlock()
+	if r != nil {
+		r.stop()
+	}
 }
 
 // Wait blocks until the task completes or timeout elapses. ctx cancellation
@@ -585,6 +656,38 @@ func (m *Manager) killCause(t *task) string {
 }
 
 // --- helpers ---
+
+func readSinceLimit(path string, offset int64, maxBytes int64) ([]byte, bool, error) {
+	if offset < 0 {
+		return nil, false, fmt.Errorf("negative offset: %d", offset)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, false, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, false, err
+	}
+	if info.Size() <= offset {
+		return nil, false, nil
+	}
+	toRead := info.Size() - offset
+	more := false
+	if maxBytes > 0 && toRead > maxBytes {
+		toRead = maxBytes
+		more = true
+	}
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return nil, false, err
+	}
+	data, err := io.ReadAll(io.LimitReader(f, toRead))
+	if err != nil {
+		return nil, false, err
+	}
+	return data, more, nil
+}
 
 func genID() (string, error) {
 	b := make([]byte, 4)

@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
 )
 
 type completionRecord struct {
@@ -130,15 +129,12 @@ func TestKillCascadesToGrandchild(t *testing.T) {
 	dir := t.TempDir()
 	mgr := NewManager(filepath.Join(dir, "tasks"))
 
-	// Spawn a sleep, capture its PID via stdout, then kill via Manager and
-	// verify the grandchild is also gone (kill -- -pgid should sweep it).
 	script := "sh -c 'sleep 30 & echo CHILDPID=$! ; wait'"
 	info, err := mgr.Spawn(dir, script, "kill-test", 30*time.Second)
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
 	}
 
-	// Wait for the child PID to land in stdout.
 	var childPID int
 	waitUntil(t, 3*time.Second, func() bool {
 		data, _ := os.ReadFile(info.StdoutFile)
@@ -186,7 +182,6 @@ func TestKillCascadesToGrandchild(t *testing.T) {
 		t.Fatalf("signal = %q, want killed marker", string(sigBytes))
 	}
 
-	// Grandchild should have been swept by the SIGTERM-to-process-group.
 	waitUntil(t, 3*time.Second, func() bool {
 		return syscall.Kill(childPID, 0) != nil
 	})
@@ -231,7 +226,6 @@ func TestWaitRespectsTimeoutAndContext(t *testing.T) {
 		t.Fatalf("Spawn: %v", err)
 	}
 
-	// Wait with short timeout — should return with task still running.
 	start := time.Now()
 	got, err := mgr.Wait(context.Background(), info.ID, 200*time.Millisecond)
 	if err != nil {
@@ -244,7 +238,6 @@ func TestWaitRespectsTimeoutAndContext(t *testing.T) {
 		t.Fatalf("state after short Wait = %s, want running", got.State)
 	}
 
-	// Context cancellation unblocks Wait.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelDone := make(chan struct{})
 	go func() {

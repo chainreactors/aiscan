@@ -1,3 +1,5 @@
+//go:build full
+
 // Package passive wraps uncover for cyberspace recon as the "passive" command.
 package passive
 
@@ -15,25 +17,25 @@ import (
 	"github.com/projectdiscovery/uncover/sources"
 )
 
-const inaTimeout = 600 * time.Second
+const queryTimeout = 600 * time.Second
 
 // Command dispatches passive recon to uncover by -s <source>.
 type Command struct {
-	ina        *engine.UncoverEngine
-	logger     telemetry.Logger
-	inaSources map[string]bool
+	engine  *engine.UncoverEngine
+	logger  telemetry.Logger
+	sources map[string]bool
 }
 
 // New creates a passive command. Engine may be nil (not configured).
-func New(ina *engine.UncoverEngine) *Command {
+func New(eng *engine.UncoverEngine) *Command {
 	c := &Command{
-		ina:        ina,
-		logger:     telemetry.NopLogger(),
-		inaSources: map[string]bool{},
+		engine:  eng,
+		logger:  telemetry.NopLogger(),
+		sources: map[string]bool{},
 	}
-	if ina != nil {
-		for _, s := range ina.Sources() {
-			c.inaSources[s] = true
+	if eng != nil {
+		for _, s := range eng.Sources() {
+			c.sources[s] = true
 		}
 	}
 	return c
@@ -72,28 +74,28 @@ func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
 	if help {
 		return c.Usage(), nil
 	}
-	if c.inaSources[src] {
-		return c.runIna(ctx, src, rest)
+	if c.sources[src] {
+		return c.runQuery(ctx, src, rest)
 	}
 	return "", fmt.Errorf("passive: unknown source %q (available: %v)", src, c.sourceList())
 }
 
-// --------------- ina dispatch ------------------------------------------------
+// --------------- query dispatch ----------------------------------------------
 
-func (c *Command) runIna(ctx context.Context, src string, args []string) (string, error) {
-	if c.ina == nil {
+func (c *Command) runQuery(ctx context.Context, src string, args []string) (string, error) {
+	if c.engine == nil {
 		return "", fmt.Errorf("passive: uncover engine not initialized — set recon credentials")
 	}
-	query, err := parseInaArgs(args)
+	query, err := parseQueryArgs(args)
 	if err != nil {
 		return "", err
 	}
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, inaTimeout)
+		ctx, cancel = context.WithTimeout(ctx, queryTimeout)
 		defer cancel()
 	}
-	results, err := c.ina.QueryRaw(ctx, src, query)
+	results, err := c.engine.QueryRaw(ctx, src, query)
 	if err != nil {
 		return "", fmt.Errorf("passive: %w", err)
 	}
@@ -130,7 +132,7 @@ func splitSource(args []string) (source string, rest []string, help bool, err er
 	return
 }
 
-func parseInaArgs(args []string) (query string, err error) {
+func parseQueryArgs(args []string) (query string, err error) {
 	for _, a := range args {
 		if strings.HasPrefix(a, "-") {
 			err = fmt.Errorf("passive: unknown flag %q for cyberspace source", a)
@@ -223,8 +225,8 @@ func uncoverPython(src string, results []sources.Result) any {
 // --------------- helpers -----------------------------------------------------
 
 func (c *Command) sourceList() []string {
-	out := make([]string, 0, len(c.inaSources))
-	for s := range c.inaSources {
+	out := make([]string, 0, len(c.sources))
+	for s := range c.sources {
 		out = append(out, s)
 	}
 	return out

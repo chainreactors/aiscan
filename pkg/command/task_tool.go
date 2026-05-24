@@ -6,25 +6,35 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/task"
 )
 
+const peekNewMaxBytes = 40 * 1024
+
 // TaskTool exposes the background-task manager to the agent. Pairs with
 // the bash tool's background:true mode. Action discriminator pattern
 // mirrors pi-mono's tmux tool.
 type TaskTool struct {
 	manager *task.Manager
+	mu      sync.Mutex
+	cursors map[string]int64
 }
 
-func NewTaskTool(manager *task.Manager) *TaskTool { return &TaskTool{manager: manager} }
+func NewTaskTool(manager *task.Manager) *TaskTool {
+	return &TaskTool{
+		manager: manager,
+		cursors: make(map[string]int64),
+	}
+}
 
 func (t *TaskTool) Name() string { return "task" }
 
 func (t *TaskTool) Description() string {
-	return "Inspect and control background tasks started by `bash` with background:true. Actions: list (show running/done tasks), peek (last N lines of stdout), wait (block until done or timeout), kill (terminate)."
+	return "Inspect and control background tasks started by `bash` with background:true. Actions: list (show running/done tasks), peek (last N lines of stdout), peek_new (incremental output since last check), wait (block until done or timeout), kill (terminate)."
 }
 
 func (t *TaskTool) Definition() provider.ToolDefinition {
@@ -38,12 +48,12 @@ func (t *TaskTool) Definition() provider.ToolDefinition {
 				"properties": map[string]any{
 					"action": map[string]any{
 						"type":        "string",
-						"enum":        []string{"list", "peek", "wait", "kill"},
-						"description": "Which subcommand to invoke.",
+						"enum":        []string{"list", "peek", "peek_new", "wait", "kill"},
+						"description": "Which subcommand to invoke. peek_new returns only output added since the last peek_new call for this task (incremental reading).",
 					},
 					"id": map[string]any{
 						"type":        "string",
-						"description": "Task id (required for peek/wait/kill).",
+						"description": "Task id (required for peek/peek_new/wait/kill).",
 					},
 					"lines": map[string]any{
 						"type":        "integer",
@@ -78,6 +88,27 @@ func (t *TaskTool) Execute(ctx context.Context, arguments string) (string, error
 			return "", fmt.Errorf("peek requires id")
 		}
 		return t.manager.Peek(args.ID, args.Lines)
+	case "peek_new":
+		if args.ID == "" {
+			return "", fmt.Errorf("peek_new requires id")
+		}
+		t.mu.Lock()
+		offset := t.cursors[args.ID]
+		t.mu.Unlock()
+		output, newOffset, more, err := t.manager.PeekSinceLimit(args.ID, offset, peekNewMaxBytes)
+		if err != nil {
+			return "", err
+		}
+		t.mu.Lock()
+		t.cursors[args.ID] = newOffset
+		t.mu.Unlock()
+		if output == "" {
+			return "(no new output since last peek_new)", nil
+		}
+		if more {
+			output += "\n\n[more output available; call task peek_new again for the next chunk]"
+		}
+		return output, nil
 	case "wait":
 		if args.ID == "" {
 			return "", fmt.Errorf("wait requires id")
@@ -100,7 +131,7 @@ func (t *TaskTool) Execute(ctx context.Context, arguments string) (string, error
 		}
 		return fmt.Sprintf("Sent SIGTERM to task %s.", args.ID), nil
 	default:
-		return "", fmt.Errorf("unknown action: %q (expected list/peek/wait/kill)", args.Action)
+		return "", fmt.Errorf("unknown action: %q (expected list/peek/peek_new/wait/kill)", args.Action)
 	}
 }
 

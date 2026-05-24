@@ -25,7 +25,7 @@ import (
 type Command struct {
 	engines    *engine.Set
 	aiFunc     AIFunc
-	reportFunc ReportFunc
+	reportFunc AIFunc
 	aiConfig   AISkillConfig
 	skillStore SkillBodyLoader
 	recorder   *recorder
@@ -50,7 +50,7 @@ type flags struct {
 	OutputFile      string   `short:"f" long:"file" description:"Write output to file without ANSI colors"`
 	NoColor         bool     `long:"no-color" description:"Disable ANSI colors in terminal output"`
 	Ports           string   `long:"ports" description:"Ports for gogo scanning; defaults to all in quick and - in full"`
-	Port            string   `long:"port" description:"Ports for discovery scanning; overrides --ports when set"`
+	Port            string   `long:"port" hidden:"true" description:"Alias for --ports"`
 	Threads         int      // derived from Thread; not a CLI flag
 	Timeout         int      `long:"timeout" description:"Per-probe timeout in seconds" default:"5"`
 	SprayThreads    int      // derived from Thread; not a CLI flag
@@ -66,7 +66,7 @@ type flags struct {
 	MaxNeutronPerFP int      `long:"max-neutron-per-finger" description:"Maximum neutron templates per fingerprint" default:"20"`
 	BroadPOC        bool     `long:"broad-poc" description:"Run POC templates even without matching fingerprints"`
 	Verify          string   `long:"verify" hidden:"true" description:"Deprecated: use --ai"`
-	VerifyTimeout   int      `long:"verify-timeout" hidden:"true" description:"Deprecated advanced compatibility option" default:"120"`
+	VerifyTimeout   int      `long:"verify-timeout" hidden:"true" description:"Deprecated compatibility option; ignored" default:"120"`
 }
 
 func New(engineSet *engine.Set, opts ...Option) *Command {
@@ -105,7 +105,6 @@ Advanced:
       --thread      Total concurrency budget (default: 1000); auto-distributed across engines
   -j, --json        Output raw gogo and spray results as JSON Lines
       --ports       Ports for gogo scanning (default: all in quick, - in full)
-      --port        Ports for discovery scanning; overrides --ports when set
       --timeout     Timeout in seconds (default: 5)
       --dict        Dictionary file for spray word-based discovery. Can specify multiple.
       --rule        Rule file for spray word mutation. Can specify multiple.
@@ -131,7 +130,7 @@ Examples:
   scan -i http://target.com --ai
   scan -i http://target.com --sniper
   scan -i http://target.com --mode full --ai --report
-  scan -i 192.168.1.0/24 --port top100
+  scan -i 192.168.1.0/24 --ports top100
   scan -i 127.0.0.1 --mode quick -j
   scan -i 127.0.0.1 --mode quick -f 1.txt
   scan -i 127.0.0.1 --mode quick --report
@@ -212,7 +211,7 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 	coll := newCollector(rawInputs, stream, stream != nil && !flags.NoColor, trace)
 	coll.recorder = c.recorder
 	seeds := buildSeedEvents(rawInputs, func(raw string) {
-		coll.Observe(pipelineEvent{Action: pipelineEventAccept, Event: errorEventOf("", fmt.Sprintf("skip invalid input: %s", raw))})
+		coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: errorEventOf("", fmt.Sprintf("skip invalid input: %s", raw))})
 	})
 	if len(seeds) == 0 {
 		return "", fmt.Errorf("scan: no valid inputs")

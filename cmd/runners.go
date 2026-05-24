@@ -299,7 +299,7 @@ func runLoop(ctx context.Context, option *Option, logger telemetry.Logger) error
 	loopCfg := sess.Config.WithSystemPrompt(systemPrompt).WithStream(true)
 
 	taskHandler := func(ctx context.Context, st swarm.Task) (string, error) {
-		result, err := loopCfg.Run(ctx, st.Content)
+		result, err := loopCfg.Run(ctx, formatTaskPrompt(st))
 		if err != nil {
 			return "", err
 		}
@@ -380,6 +380,50 @@ func writeXMLAttr(sb *strings.Builder, name, value string) {
 	sb.WriteByte('"')
 }
 
+func formatTaskPrompt(task swarm.Task) string {
+	var sb strings.Builder
+	sb.WriteString(task.Content)
+	if len(task.Targets) > 0 {
+		sb.WriteString("\n\nTargets:\n")
+		for _, t := range task.Targets {
+			sb.WriteString("- ")
+			sb.WriteString(t)
+			sb.WriteByte('\n')
+		}
+	}
+	if len(task.Meta) > 0 {
+		skip := true
+		for k := range task.Meta {
+			if k != "kind" {
+				skip = false
+				break
+			}
+		}
+		if !skip {
+			if data, err := json.MarshalIndent(task.Meta, "", "  "); err == nil {
+				sb.WriteString("\nContext:\n")
+				sb.Write(data)
+				sb.WriteByte('\n')
+			}
+		}
+	}
+	return sb.String()
+}
+
+func inboxRefsFromPeer(peer swarm.PeerMessage) map[string][]string {
+	refs := make(map[string][]string, 2)
+	if len(peer.Refs.Messages) > 0 {
+		refs["messages"] = append([]string(nil), peer.Refs.Messages...)
+	}
+	if len(peer.Refs.Nodes) > 0 {
+		refs["nodes"] = append([]string(nil), peer.Refs.Nodes...)
+	}
+	if len(refs) == 0 {
+		return nil
+	}
+	return refs
+}
+
 func peerPayload(peer swarm.PeerMessage) string {
 	if strings.TrimSpace(peer.Content) != "" {
 		return peer.Content
@@ -392,6 +436,12 @@ func peerPayload(peer swarm.PeerMessage) string {
 		return fmt.Sprint(peer.RawContent)
 	}
 	return string(data)
+}
+
+func waitForBackgroundTasksOption(taskMgr *taskmod.Manager) agent.Option {
+	return agent.WithShouldWaitAfterTurn(func(context.Context, agent.ShouldWaitAfterTurnContext) (bool, error) {
+		return taskMgr.RunningCount() > 0, nil
+	})
 }
 
 func peerToInboxMessage(peer swarm.PeerMessage) inboxpkg.Message {

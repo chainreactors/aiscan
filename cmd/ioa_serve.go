@@ -10,6 +10,6 @@ import (
 func runIOAServe(ctx context.Context, option *Option, logger telemetry.Logger) error {
 	return ioaserve.RunServe(ctx, ioaserve.Config{
 		URL: option.IOAURL,
-		DB:  option.IOADB,
+		DB:  "",
 	}, logger)
 }

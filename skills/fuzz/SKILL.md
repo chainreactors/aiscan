@@ -8,7 +8,7 @@ internal: true
 
 ## Timing
 
-After `scan` or `spray --crawl`, run `katana -u <target> -d 2 -f qurl` to enumerate parameterized URLs. Spray crawl strips query parameters by design; katana preserves them.
+After `scan` or `spray --crawl`, enumerate parameterized URLs. In full builds, use `katana -u <target> -d 2 -f qurl`; otherwise work from scan/spray URLs, forms, and manually observed parameters. Spray crawl strips query parameters by design; katana preserves them when available.
 
 ## Target Selection
 

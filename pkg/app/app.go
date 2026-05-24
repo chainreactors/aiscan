@@ -186,7 +186,7 @@ func initEngines(ctx context.Context, cfg ScannerConfig, logger telemetry.Logger
 		IngressProxy:  cfg.ReconProxy,
 		Limit:         cfg.ReconLimit,
 	}
-	engineSet.SetupIna(recon, logger)
+	engineSet.SetupUncover(recon, logger)
 	return engineSet
 }
 

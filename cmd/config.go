@@ -12,6 +12,14 @@ import (
 
 const defaultConfigName = "config.yaml"
 
+func init() {
+	config.WithOptions(func(opt *config.Options) {
+		opt.DecoderConfig.TagName = "config"
+		opt.ParseDefault = true
+	})
+	config.AddDriver(yamldrv.Driver)
+}
+
 func intOption(v int) *int           { return &v }
 func floatOption(v float64) *float64 { return &v }
 func intOptionValue(p *int) int {
@@ -134,9 +142,6 @@ func mergeOption(dst, src *Option) {
 	dst.IOANodeName = resolveString(dst.IOANodeName, src.IOANodeName)
 	if (dst.Space == "" || dst.Space == "default") && src.Space != "" {
 		dst.Space = src.Space
-	}
-	if (dst.IOADB == "" || dst.IOADB == "./ioa.db") && src.IOADB != "" {
-		dst.IOADB = src.IOADB
 	}
 }
 
