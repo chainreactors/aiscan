@@ -275,41 +275,6 @@ func labelFromCommand(cmdLine string) string {
 	return cmdLine
 }
 
-func runForegroundCommand(ctx context.Context, cmd *exec.Cmd) error {
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	exited := make(chan error, 1)
-	go func() {
-		exited <- cmd.Wait()
-	}()
-
-	select {
-	case err := <-exited:
-		return err
-	case <-ctx.Done():
-		// Graceful stop: SIGTERM first, give the process time to flush output.
-		_ = terminateProcess(cmd)
-		select {
-		case err := <-exited:
-			if err != nil {
-				return err
-			}
-			return ctx.Err()
-		case <-time.After(foregroundStopWait):
-		}
-		// Hard kill after grace period.
-		_ = killProcess(cmd)
-		// Always drain the Wait goroutine to avoid a leak.
-		err := <-exited
-		if err != nil {
-			return err
-		}
-		return ctx.Err()
-	}
-}
-
 // execBackground delegates to the task manager; the agent gets back a task
 // id immediately and can keep working while the command runs to completion.
 func (t *BashTool) execBackground(cmdLine, name string, timeoutSeconds int, filename string) (string, error) {

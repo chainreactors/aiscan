@@ -120,14 +120,6 @@ func renderAttachments(sb *strings.Builder, attachments []Attachment) {
 	}
 }
 
-func (m Message) WithMeta(key string, value any) Message {
-	if m.Meta == nil {
-		m.Meta = make(map[string]any)
-	}
-	m.Meta[key] = value
-	return m
-}
-
 func (m Message) WithPriority(p Priority) Message {
 	m.Priority = p
 	return m

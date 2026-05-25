@@ -618,21 +618,6 @@ func labelFromCommand(cmdLine string) string {
 	return cmdLine
 }
 
-func tailLines(s string, n int) string {
-	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
-	kept := make([]string, 0, len(lines))
-	for _, ln := range lines {
-		if strings.TrimSpace(ln) == "" {
-			continue
-		}
-		kept = append(kept, ln)
-	}
-	if len(kept) > n {
-		kept = kept[len(kept)-n:]
-	}
-	return strings.Join(kept, "\n")
-}
-
 func FormatCompletion(info Info, killed bool, killCause, lastOutput string) string {
 	duration := info.EndedAt.Sub(info.StartedAt).Round(time.Second)
 	status := "completed"

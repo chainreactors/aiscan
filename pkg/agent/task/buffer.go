@@ -3,6 +3,7 @@ package task
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -120,15 +121,23 @@ func (b *OutputBuffer) AppendError(msg string) {
 	b.Write([]byte("\n[task error] " + msg + "\n"))
 }
 
+func tailLines(s string, n int) string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	kept := make([]string, 0, len(lines))
+	for _, ln := range lines {
+		if strings.TrimSpace(ln) == "" {
+			continue
+		}
+		kept = append(kept, ln)
+	}
+	if len(kept) > n {
+		kept = kept[len(kept)-n:]
+	}
+	return strings.Join(kept, "\n")
+}
+
 func (b *OutputBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return string(b.buf)
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
