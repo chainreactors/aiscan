@@ -11,11 +11,14 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/skills"
 )
 
+const autoBackgroundThreshold = 15 * time.Second
+
 type SubAgentConfig struct {
-	Base        agent.Config // base config inherited by subagents
+	Base        agent.Config
 	ParentInbox inbox.Inbox
 	SkillStore  *skills.Store
 }
@@ -23,8 +26,10 @@ type SubAgentConfig struct {
 type subAgentInfo struct {
 	Name      string
 	Type      string
+	Mode      string
 	StartedAt time.Time
 	Cancel    context.CancelFunc
+	Inbox     inbox.Inbox
 }
 
 type SubAgentTool struct {
@@ -43,7 +48,7 @@ func NewSubAgentTool(cfg SubAgentConfig) *SubAgentTool {
 func (t *SubAgentTool) Name() string { return "subagent" }
 
 func (t *SubAgentTool) Description() string {
-	return "Create a subagent to handle an independent task in parallel. Use for complex multi-step work that benefits from separate LLM reasoning."
+	return "Create a subagent to handle an independent task. Modes: sync (block), async (background), fork (background with parent context for cache efficiency)."
 }
 
 func (t *SubAgentTool) Definition() provider.ToolDefinition {
@@ -57,24 +62,29 @@ func (t *SubAgentTool) Definition() provider.ToolDefinition {
 				"properties": map[string]any{
 					"action": map[string]any{
 						"type":        "string",
-						"enum":        []string{"create", "list", "kill"},
-						"description": "Action to perform. Default: create",
+						"enum":        []string{"create", "list", "kill", "message"},
+						"description": "create: spawn subagent. list: show running. kill: cancel by name. message: send message to running subagent.",
 					},
 					"prompt": map[string]any{
 						"type":        "string",
-						"description": "Task description for the subagent (required for create)",
+						"description": "Task description for the subagent (required for create).",
+					},
+					"mode": map[string]any{
+						"type":        "string",
+						"enum":        []string{"sync", "async", "fork"},
+						"description": "sync: block until done. async: background with fresh context. fork: background inheriting parent conversation (cache-friendly). Default: async.",
 					},
 					"type": map[string]any{
 						"type":        "string",
-						"description": "Agent type name (a skill with agent:true). Omit to use default configuration.",
+						"description": "Agent type name (a skill with agent:true).",
 					},
 					"name": map[string]any{
 						"type":        "string",
-						"description": "Human-readable label for tracking. Auto-generated if omitted.",
+						"description": "Human-readable label for tracking.",
 					},
-					"background": map[string]any{
-						"type":        "boolean",
-						"description": "true (default): run in background, notify on completion. false: block until done and return result.",
+					"message": map[string]any{
+						"type":        "string",
+						"description": "Message to send (action=message, requires name).",
 					},
 				},
 				"required": []string{"prompt"},
@@ -84,12 +94,21 @@ func (t *SubAgentTool) Definition() provider.ToolDefinition {
 }
 
 func (t *SubAgentTool) Execute(ctx context.Context, arguments string) (string, error) {
+	return t.execute(ctx, arguments, nil)
+}
+
+func (t *SubAgentTool) ExecuteWithContext(ctx context.Context, arguments string, toolCtx command.ToolContext) (string, error) {
+	return t.execute(ctx, arguments, &toolCtx)
+}
+
+func (t *SubAgentTool) execute(ctx context.Context, arguments string, toolCtx *command.ToolContext) (string, error) {
 	var args struct {
-		Action     string `json:"action"`
-		Prompt     string `json:"prompt"`
-		Type       string `json:"type"`
-		Name       string `json:"name"`
-		Background *bool  `json:"background"`
+		Action  string `json:"action"`
+		Prompt  string `json:"prompt"`
+		Mode    string `json:"mode"`
+		Type    string `json:"type"`
+		Name    string `json:"name"`
+		Message string `json:"message"`
 	}
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 		return "", fmt.Errorf("parse arguments: %w", err)
@@ -100,14 +119,16 @@ func (t *SubAgentTool) Execute(ctx context.Context, arguments string) (string, e
 		return t.list(), nil
 	case "kill":
 		return t.kill(args.Name)
+	case "message":
+		return t.sendMessage(args.Name, args.Message)
 	case "", "create":
-		return t.create(ctx, args.Prompt, args.Type, args.Name, args.Background)
+		return t.create(ctx, args.Prompt, args.Type, args.Name, args.Mode, toolCtx)
 	default:
 		return "", fmt.Errorf("unknown action: %s", args.Action)
 	}
 }
 
-func (t *SubAgentTool) create(ctx context.Context, prompt, typeName, name string, background *bool) (string, error) {
+func (t *SubAgentTool) create(ctx context.Context, prompt, typeName, name, mode string, toolCtx *command.ToolContext) (string, error) {
 	if strings.TrimSpace(prompt) == "" {
 		return "", fmt.Errorf("prompt is required")
 	}
@@ -119,7 +140,7 @@ func (t *SubAgentTool) create(ctx context.Context, prompt, typeName, name string
 			return "", fmt.Errorf("agent type %q not found", typeName)
 		}
 		if !s.Agent {
-			return "", fmt.Errorf("skill %q is not configured as an agent type (add 'agent: true' to its SKILL.md)", typeName)
+			return "", fmt.Errorf("skill %q is not configured as an agent type", typeName)
 		}
 		skill = &s
 	}
@@ -133,11 +154,11 @@ func (t *SubAgentTool) create(ctx context.Context, prompt, typeName, name string
 	}
 	name = t.uniqueName(name)
 
-	bg := true
-	if background != nil {
-		bg = *background
-	} else if skill != nil {
-		bg = skill.AgentBackground
+	if mode == "" {
+		mode = "async"
+		if skill != nil && !skill.AgentBackground {
+			mode = "sync"
+		}
 	}
 
 	cfg := t.cfg.Base
@@ -148,50 +169,134 @@ func (t *SubAgentTool) create(ctx context.Context, prompt, typeName, name string
 		}
 	}
 
-	if !bg {
-		r, err := cfg.Run(ctx, prompt)
+	switch mode {
+	case "sync":
+		return t.runSync(ctx, cfg, prompt, name, typeName, toolCtx)
+	case "fork":
+		return t.runFork(ctx, cfg, prompt, name, typeName, toolCtx)
+	default: // async
+		return t.runAsync(ctx, cfg, prompt, name, typeName)
+	}
+}
+
+func (t *SubAgentTool) runSync(ctx context.Context, cfg agent.Config, prompt, name, typeName string, toolCtx *command.ToolContext) (string, error) {
+	resultCh := make(chan *agent.Result, 1)
+	errCh := make(chan error, 1)
+
+	childCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		r, err := cfg.Run(childCtx, prompt)
+		resultCh <- r
+		errCh <- err
+	}()
+
+	select {
+	case r := <-resultCh:
+		err := <-errCh
 		if err != nil {
 			return fmt.Sprintf("subagent %q failed: %s", name, err), nil
 		}
-		return fmt.Sprintf("<subagent_result name=%q type=%q status=\"completed\">\n%s\n</subagent_result>", name, typeName, r.Output), nil
-	}
+		output := ""
+		if r != nil {
+			output = r.Output
+		}
+		return fmt.Sprintf("<subagent_result name=%q type=%q status=\"completed\">\n%s\n</subagent_result>", name, typeName, output), nil
 
+	case <-time.After(autoBackgroundThreshold):
+		childIb := inbox.NewBuffered(16)
+		t.track(name, typeName, "async", cancel, childIb)
+		go func() {
+			defer t.untrack(name)
+			r := <-resultCh
+			err := <-errCh
+			t.pushCompletion(name, typeName, r, err)
+		}()
+		return fmt.Sprintf("Subagent %q auto-backgrounded (exceeded %s). Will notify on completion.", name, autoBackgroundThreshold), nil
+	}
+}
+
+func (t *SubAgentTool) runAsync(ctx context.Context, cfg agent.Config, prompt, name, typeName string) (string, error) {
 	childCtx, cancel := context.WithCancel(ctx)
-	t.track(name, typeName, cancel)
+	childIb := inbox.NewBuffered(16)
+	t.track(name, typeName, "async", cancel, childIb)
 
 	go func() {
 		defer t.untrack(name)
 		defer cancel()
-
-		childCfg := cfg.WithInbox(inbox.NewBuffered(16))
+		childCfg := cfg.WithInbox(childIb)
 		r, err := childCfg.Run(childCtx, prompt)
-		result := ""
-		if r != nil {
-			result = r.Output
-		}
-
-		status := "completed"
-		content := result
-		if err != nil {
-			status = "failed"
-			if result != "" {
-				content = fmt.Sprintf("Error: %s\n\nPartial output:\n%s", err, result)
-			} else {
-				content = fmt.Sprintf("Error: %s", err)
-			}
-		}
-
-		msg := inbox.NewMessage(inbox.OriginSystem, "user",
-			fmt.Sprintf("<subagent_completion name=%q type=%q status=%q>\n%s\n</subagent_completion>", name, typeName, status, content))
-		msg.Meta = map[string]any{
-			"subagent": name,
-			"type":     typeName,
-			"status":   status,
-		}
-		t.cfg.ParentInbox.Push(msg)
+		t.pushCompletion(name, typeName, r, err)
 	}()
 
-	return fmt.Sprintf("Started subagent %q (type=%s). Completion will be injected automatically when done.", name, typeName), nil
+	return fmt.Sprintf("Started subagent %q (mode=async, type=%s). Will notify on completion.", name, typeName), nil
+}
+
+func (t *SubAgentTool) runFork(ctx context.Context, cfg agent.Config, directive, name, typeName string, toolCtx *command.ToolContext) (string, error) {
+	var parentMessages []provider.ChatMessage
+	if toolCtx != nil {
+		parentMessages = append([]provider.ChatMessage(nil), toolCtx.Messages...)
+		if toolCtx.SystemPrompt != "" {
+			cfg.SystemPrompt = toolCtx.SystemPrompt
+		}
+	}
+
+	childCtx, cancel := context.WithCancel(ctx)
+	childIb := inbox.NewBuffered(16)
+	t.track(name, typeName, "fork", cancel, childIb)
+
+	go func() {
+		defer t.untrack(name)
+		defer cancel()
+		childCfg := cfg.WithInbox(childIb)
+		r, err := childCfg.RunWithContext(childCtx, directive, parentMessages)
+		t.pushCompletion(name, typeName, r, err)
+	}()
+
+	return fmt.Sprintf("Started subagent %q (mode=fork, type=%s). Inherits parent context. Will notify on completion.", name, typeName), nil
+}
+
+func (t *SubAgentTool) pushCompletion(name, typeName string, r *agent.Result, err error) {
+	result := ""
+	if r != nil {
+		result = r.Output
+	}
+	status := "completed"
+	content := result
+	if err != nil {
+		status = "failed"
+		if result != "" {
+			content = fmt.Sprintf("Error: %s\n\nPartial output:\n%s", err, result)
+		} else {
+			content = fmt.Sprintf("Error: %s", err)
+		}
+	}
+
+	msg := inbox.NewMessage(inbox.OriginSystem, "user",
+		fmt.Sprintf("<subagent_completion name=%q type=%q status=%q>\n%s\n</subagent_completion>", name, typeName, status, content))
+	msg.Meta = map[string]any{"subagent": name, "type": typeName, "status": status}
+	t.cfg.ParentInbox.Push(msg)
+}
+
+func (t *SubAgentTool) sendMessage(name, message string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("name is required for message action")
+	}
+	if message == "" {
+		return "", fmt.Errorf("message is required")
+	}
+	t.mu.Lock()
+	info, ok := t.running[name]
+	t.mu.Unlock()
+	if !ok {
+		return "", fmt.Errorf("no running subagent named %q", name)
+	}
+	msg := inbox.NewMessage(inbox.OriginUser, "user", message)
+	if !info.Inbox.Push(msg) {
+		return fmt.Sprintf("Subagent %q inbox full, message dropped.", name), nil
+	}
+	return fmt.Sprintf("Message sent to subagent %q.", name), nil
 }
 
 func (t *SubAgentTool) list() string {
@@ -204,7 +309,7 @@ func (t *SubAgentTool) list() string {
 	sb.WriteString("Running subagents:\n")
 	for name, info := range t.running {
 		elapsed := time.Since(info.StartedAt).Round(time.Second)
-		sb.WriteString(fmt.Sprintf("  - %s (type=%s, running %s)\n", name, info.Type, elapsed))
+		sb.WriteString(fmt.Sprintf("  - %s (type=%s, mode=%s, running %s)\n", name, info.Type, info.Mode, elapsed))
 	}
 	return sb.String()
 }
@@ -220,14 +325,16 @@ func (t *SubAgentTool) kill(name string) (string, error) {
 	return fmt.Sprintf("Subagent %q cancelled.", name), nil
 }
 
-func (t *SubAgentTool) track(name, typeName string, cancel context.CancelFunc) {
+func (t *SubAgentTool) track(name, typeName, mode string, cancel context.CancelFunc, ib inbox.Inbox) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.running[name] = &subAgentInfo{
 		Name:      name,
 		Type:      typeName,
+		Mode:      mode,
 		StartedAt: time.Now(),
 		Cancel:    cancel,
+		Inbox:     ib,
 	}
 }
 

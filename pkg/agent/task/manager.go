@@ -127,6 +127,33 @@ func (m *Manager) emit(ev TaskEvent) {
 	obs(ev)
 }
 
+func (m *Manager) Adopt(cmd *exec.Cmd, output *OutputBuffer, name string, timeout time.Duration) Info {
+	id, _ := genID()
+	if name == "" {
+		name = "adopted"
+	}
+	info := Info{
+		ID:        id,
+		Name:      name,
+		Command:   strings.Join(cmd.Args, " "),
+		PID:       cmd.Process.Pid,
+		StartedAt: time.Now(),
+		State:     StateRunning,
+	}
+	t := &task{Info: info, cmd: cmd, output: output, done: make(chan struct{})}
+	output.onWrite = func(p []byte) {
+		m.emit(TaskEvent{Kind: EventOutput, TaskID: id, TaskInfo: t.Info, Output: p})
+	}
+
+	m.mu.Lock()
+	m.tasks[id] = t
+	m.mu.Unlock()
+
+	m.emit(TaskEvent{Kind: EventStart, TaskID: id, TaskInfo: info})
+	go m.supervise(t, timeout)
+	return info
+}
+
 func (m *Manager) Spawn(workDir, cmdLine, name string, timeout time.Duration, opts ...SpawnOption) (Info, error) {
 	if strings.TrimSpace(cmdLine) == "" {
 		return Info{}, errors.New("empty command")

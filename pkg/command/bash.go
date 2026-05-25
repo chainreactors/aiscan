@@ -1,8 +1,7 @@
 package command
 
 import (
-	"bytes"
-	"context"
+"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -196,6 +195,8 @@ func (t *BashTool) execPseudoBackground(cmdLine, name string, timeoutSeconds int
 	return msg, nil
 }
 
+const autoBackgroundThreshold = 15 * time.Second
+
 func (t *BashTool) execShell(ctx context.Context, cmdLine string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(t.timeout)*time.Second)
 	defer cancel()
@@ -210,31 +211,50 @@ func (t *BashTool) execShell(ctx context.Context, cmdLine string) (string, error
 	t.applyProxyEnv(cmd)
 	configureProcessGroup(cmd)
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	buf := task.NewOutputBuffer(task.DefaultBufferCap)
+	cmd.Stdout = buf
+	cmd.Stderr = buf
 
-	err := runForegroundCommand(ctx, cmd)
-
-	var sb strings.Builder
-	if stdout.Len() > 0 {
-		sb.Write(stdout.Bytes())
+	if err := cmd.Start(); err != nil {
+		return "", err
 	}
-	if stderr.Len() > 0 {
-		if sb.Len() > 0 {
-			sb.WriteString("\n")
+
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
+
+	select {
+	case err := <-exited:
+		return t.collectForegroundResult(buf, err, ctx)
+
+	case <-time.After(autoBackgroundThreshold):
+		remaining := time.Duration(t.timeout)*time.Second - autoBackgroundThreshold
+		if remaining <= 0 {
+			remaining = task.DefaultTimeout
 		}
-		sb.WriteString("[stderr] ")
-		sb.Write(stderr.Bytes())
-	}
+		info := t.tasks.Adopt(cmd, buf, labelFromCommand(cmdLine), remaining)
+		return fmt.Sprintf(
+			"Command auto-backgrounded (exceeded %s).\ntask id=%s name=%s\nUse `task peek %s` to check progress.",
+			autoBackgroundThreshold, info.ID, info.Name, info.ID), nil
 
-	output := sb.String()
+	case <-ctx.Done():
+		_ = terminateProcess(cmd)
+		select {
+		case <-exited:
+		case <-time.After(foregroundStopWait):
+			_ = killProcess(cmd)
+			<-exited
+		}
+		return t.collectForegroundResult(buf, ctx.Err(), ctx)
+	}
+}
+
+func (t *BashTool) collectForegroundResult(buf *task.OutputBuffer, err error, ctx context.Context) (string, error) {
+	output := buf.String()
 	if len(output) > maxOutputSize {
 		original := len(output)
 		output = output[:maxOutputSize] + fmt.Sprintf(
 			"\n\n[truncated: showing %d of %d bytes]", maxOutputSize, original)
 	}
-
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return output, fmt.Errorf("command timed out after %ds", t.timeout)
@@ -244,8 +264,15 @@ func (t *BashTool) execShell(ctx context.Context, cmdLine string) (string, error
 		}
 		return output + "\n[exit code: non-zero]", nil
 	}
-
 	return output, nil
+}
+
+func labelFromCommand(cmdLine string) string {
+	cmdLine = strings.TrimSpace(cmdLine)
+	if i := strings.IndexAny(cmdLine, " \t\n"); i > 0 {
+		cmdLine = cmdLine[:i]
+	}
+	return cmdLine
 }
 
 func runForegroundCommand(ctx context.Context, cmd *exec.Cmd) error {

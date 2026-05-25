@@ -325,7 +325,8 @@ type toolExecution struct {
 func runToolCall(ctx context.Context, agentCtx Context, assistantMsg provider.ChatMessage, tc provider.ToolCall, cfg Config) toolExecution {
 	execution := beforeToolCall(ctx, agentCtx, assistantMsg, tc, cfg)
 	if execution.result == "" && !execution.isError {
-		result, execErr := agentCtx.Tools.ExecuteTool(ctx, tc.Function.Name, tc.Function.Arguments)
+		result, execErr := agentCtx.Tools.ExecuteTool(ctx, tc.Function.Name, tc.Function.Arguments,
+			command.ToolContext{SystemPrompt: agentCtx.SystemPrompt, Messages: agentCtx.Messages})
 		execution.result = result
 		execution.err = execErr
 		execution.isError = execErr != nil

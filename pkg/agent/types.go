@@ -117,6 +117,25 @@ func (c Config) WithKeepAlive(fn func() bool) Config {
 	return c
 }
 
+// RunWithContext executes a one-shot agent task inheriting parent messages.
+// Used by fork mode: child sees parent's full conversation + new directive,
+// maximizing prompt cache hit on the shared prefix.
+func (c Config) RunWithContext(ctx context.Context, prompt string, parentMessages []provider.ChatMessage) (*Result, error) {
+	cfg := normalizeConfig(c)
+	if cfg.Tools == nil {
+		cfg.Tools = command.NewRegistry()
+	}
+	if cfg.Inbox == nil {
+		cfg.Inbox = inbox.NewBuffered(8)
+	}
+	cfg.Inbox.Push(inbox.NewUserMessage(prompt))
+	return runLoop(ctx, Context{
+		SystemPrompt: cfg.SystemPrompt,
+		Messages:     parentMessages,
+		Tools:        cfg.Tools,
+	}, cfg)
+}
+
 // Run executes a one-shot agent task and returns the result.
 func (c Config) Run(ctx context.Context, prompt string) (*Result, error) {
 	cfg := normalizeConfig(c)

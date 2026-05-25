@@ -29,8 +29,16 @@ type AgentTool interface {
 	Execute(ctx context.Context, arguments string) (string, error)
 }
 
-// WorkDirAware is implemented by pseudo-commands that need to resolve
-// relative file paths against a working directory.
+type ToolContext struct {
+	SystemPrompt string
+	Messages     []provider.ChatMessage
+}
+
+type ContextAwareAgentTool interface {
+	AgentTool
+	ExecuteWithContext(ctx context.Context, arguments string, toolCtx ToolContext) (string, error)
+}
+
 type WorkDirAware interface {
 	SetWorkDir(dir string)
 }
@@ -90,10 +98,13 @@ func (r *CommandRegistry) ToolDefinitions() []provider.ToolDefinition {
 	return defs
 }
 
-func (r *CommandRegistry) ExecuteTool(ctx context.Context, name, arguments string) (string, error) {
+func (r *CommandRegistry) ExecuteTool(ctx context.Context, name, arguments string, toolCtx ...ToolContext) (string, error) {
 	t, ok := r.GetTool(name)
 	if !ok {
 		return "", fmt.Errorf("unknown tool: %s", name)
+	}
+	if ca, ok := t.(ContextAwareAgentTool); ok && len(toolCtx) > 0 {
+		return ca.ExecuteWithContext(ctx, arguments, toolCtx[0])
 	}
 	return t.Execute(ctx, arguments)
 }
