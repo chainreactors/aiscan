@@ -155,6 +155,7 @@ func runLoop(ctx context.Context, agentCtx Context, cfg Config) (*Result, error)
 		var toolResults []provider.ChatMessage
 		terminate := false
 		if len(assistantMsg.ToolCalls) > 0 {
+			agentCtx.Messages = append([]provider.ChatMessage(nil), transcript.messages...)
 			batch, err := executeToolCalls(ctx, agentCtx, assistantMsg, cfg, turn)
 			if err != nil {
 				return end(nil, err)

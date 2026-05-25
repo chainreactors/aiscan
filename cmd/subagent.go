@@ -236,7 +236,7 @@ func (t *SubAgentTool) runAsync(ctx context.Context, cfg agent.Config, prompt, n
 func (t *SubAgentTool) runFork(ctx context.Context, cfg agent.Config, directive, name, typeName string, toolCtx *command.ToolContext) (string, error) {
 	var parentMessages []provider.ChatMessage
 	if toolCtx != nil {
-		parentMessages = append([]provider.ChatMessage(nil), toolCtx.Messages...)
+		parentMessages = stripPendingToolCalls(toolCtx.Messages)
 		if toolCtx.SystemPrompt != "" {
 			cfg.SystemPrompt = toolCtx.SystemPrompt
 		}
@@ -299,6 +299,12 @@ func (t *SubAgentTool) sendMessage(name, message string) (string, error) {
 	return fmt.Sprintf("Message sent to subagent %q.", name), nil
 }
 
+func (t *SubAgentTool) RunningCount() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return len(t.running)
+}
+
 func (t *SubAgentTool) list() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -356,6 +362,19 @@ func (t *SubAgentTool) uniqueName(base string) string {
 			return candidate
 		}
 	}
+}
+
+func stripPendingToolCalls(messages []provider.ChatMessage) []provider.ChatMessage {
+	out := append([]provider.ChatMessage(nil), messages...)
+	for len(out) > 0 {
+		last := out[len(out)-1]
+		if last.Role == "assistant" && len(last.ToolCalls) > 0 {
+			out = out[:len(out)-1]
+			continue
+		}
+		break
+	}
+	return out
 }
 
 func labelFromPrompt(prompt string) string {

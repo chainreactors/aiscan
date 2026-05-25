@@ -41,7 +41,7 @@ func newAgentSession(cfg sessionConfig) *agentSession {
 		})
 	}
 
-	cfg.Application.Commands.RegisterTool(NewSubAgentTool(SubAgentConfig{
+	subAgentTool := NewSubAgentTool(SubAgentConfig{
 		Base: agent.Config{
 			Provider: cfg.Application.Provider,
 			Tools:    cfg.Application.Commands,
@@ -50,7 +50,8 @@ func newAgentSession(cfg sessionConfig) *agentSession {
 		},
 		ParentInbox: ib,
 		SkillStore:  cfg.Application.Skills,
-	}))
+	})
+	cfg.Application.Commands.RegisterTool(subAgentTool)
 
 	agentCfg := agent.Config{
 		Provider: cfg.Application.Provider,
@@ -59,6 +60,9 @@ func newAgentSession(cfg sessionConfig) *agentSession {
 		Logger:   cfg.Logger,
 		Inbox:    ib,
 		KeepAlive: func() bool {
+			if subAgentTool.RunningCount() > 0 {
+				return true
+			}
 			if taskMgr == nil {
 				return false
 			}
