@@ -63,11 +63,11 @@ type Info struct {
 	EndedAt    time.Time `json:"ended_at,omitempty"`
 	ExitCode   int       `json:"exit_code"`
 	State      State     `json:"state"`
-	OutputFile string    `json:"output_file,omitempty"`
+	Filename   string    `json:"filename,omitempty"`
 }
 
 type SpawnOption struct {
-	OutputFile string // optional: tee stdout to this file path
+	Filename string // optional: tee stdout to this file; empty = memory only
 }
 
 type task struct {
@@ -147,7 +147,7 @@ func (m *Manager) Spawn(workDir, cmdLine, name string, timeout time.Duration, op
 		return Info{}, fmt.Errorf("generate id: %w", err)
 	}
 
-	buf, err := m.newBuffer(opt.OutputFile)
+	buf, err := m.newBuffer(opt.Filename)
 	if err != nil {
 		return Info{}, err
 	}
@@ -175,7 +175,7 @@ func (m *Manager) Spawn(workDir, cmdLine, name string, timeout time.Duration, op
 		PID:        c.Process.Pid,
 		StartedAt:  time.Now(),
 		State:      StateRunning,
-		OutputFile: opt.OutputFile,
+		Filename: opt.Filename,
 	}
 	t := &task{Info: info, cmd: c, output: buf, done: make(chan struct{})}
 
@@ -213,7 +213,7 @@ func (m *Manager) SpawnInProcess(label, cmdDisplay string, timeout time.Duration
 		return Info{}, fmt.Errorf("generate id: %w", err)
 	}
 
-	buf, err := m.newBuffer(opt.OutputFile)
+	buf, err := m.newBuffer(opt.Filename)
 	if err != nil {
 		return Info{}, err
 	}
@@ -225,7 +225,7 @@ func (m *Manager) SpawnInProcess(label, cmdDisplay string, timeout time.Duration
 		Command:    cmdDisplay,
 		StartedAt:  time.Now(),
 		State:      StateRunning,
-		OutputFile: opt.OutputFile,
+		Filename: opt.Filename,
 	}
 	t := &task{Info: info, output: buf, done: make(chan struct{}), cancel: cancel}
 

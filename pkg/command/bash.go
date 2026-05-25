@@ -100,6 +100,10 @@ func (t *BashTool) Definition() provider.ToolDefinition {
 						"type":        "integer",
 						"description": "Optional wall-clock kill deadline for the background task. Defaults to 1800 (30 min). Ignored when background=false.",
 					},
+					"filename": map[string]any{
+						"type":        "string",
+						"description": "Optional file path to save task output. When set, stdout is written to both memory and the file. When omitted, output stays in memory only (use `task peek` to read). Ignored when background=false.",
+					},
 				},
 				"required": []string{"command"},
 			},
@@ -113,6 +117,7 @@ func (t *BashTool) Execute(ctx context.Context, arguments string) (string, error
 		Background         bool   `json:"background"`
 		TaskName           string `json:"task_name"`
 		TaskTimeoutSeconds int    `json:"task_timeout_seconds"`
+		Filename           string `json:"filename"`
 	}
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 		return "", fmt.Errorf("invalid arguments: %w", err)
@@ -140,9 +145,9 @@ func (t *BashTool) Execute(ctx context.Context, arguments string) (string, error
 
 	if args.Background {
 		if isPseudo {
-			return t.execPseudoBackground(pseudoCleaned, args.TaskName, args.TaskTimeoutSeconds)
+			return t.execPseudoBackground(pseudoCleaned, args.TaskName, args.TaskTimeoutSeconds, args.Filename)
 		}
-		return t.execBackground(cmdLine, args.TaskName, args.TaskTimeoutSeconds)
+		return t.execBackground(cmdLine, args.TaskName, args.TaskTimeoutSeconds, args.Filename)
 	}
 
 	if isPseudo {
@@ -160,7 +165,7 @@ func (t *BashTool) Execute(ctx context.Context, arguments string) (string, error
 // to the task manager so it runs in the background while the agent keeps
 // working. Output is streamed (or returned at end) to the task's stdout
 // file; the completion notification is injected into the agent's inbox.
-func (t *BashTool) execPseudoBackground(cmdLine, name string, timeoutSeconds int) (string, error) {
+func (t *BashTool) execPseudoBackground(cmdLine, name string, timeoutSeconds int, filename string) (string, error) {
 	timeout := time.Duration(timeoutSeconds) * time.Second
 	reg := t.registry
 	fn := func(ctx context.Context, w io.Writer) error {
@@ -177,14 +182,18 @@ func (t *BashTool) execPseudoBackground(cmdLine, name string, timeoutSeconds int
 		}
 		return nil
 	}
-	info, err := t.tasks.SpawnInProcess(name, cmdLine, timeout, fn)
+	opt := task.SpawnOption{Filename: filename}
+	info, err := t.tasks.SpawnInProcess(name, cmdLine, timeout, fn, opt)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(
+	msg := fmt.Sprintf(
 		"Started pseudo-command task id=%s name=%s (in-process)\nUse `task peek %s` to inspect progress, `task wait %s` to block, `task kill %s` to stop.",
-		info.ID, info.Name, info.ID, info.ID, info.ID,
-	), nil
+		info.ID, info.Name, info.ID, info.ID, info.ID)
+	if info.Filename != "" {
+		msg += fmt.Sprintf("\nOutput also saved to: %s", info.Filename)
+	}
+	return msg, nil
 }
 
 func (t *BashTool) execShell(ctx context.Context, cmdLine string) (string, error) {
@@ -276,16 +285,20 @@ func runForegroundCommand(ctx context.Context, cmd *exec.Cmd) error {
 
 // execBackground delegates to the task manager; the agent gets back a task
 // id immediately and can keep working while the command runs to completion.
-func (t *BashTool) execBackground(cmdLine, name string, timeoutSeconds int) (string, error) {
+func (t *BashTool) execBackground(cmdLine, name string, timeoutSeconds int, filename string) (string, error) {
 	timeout := time.Duration(timeoutSeconds) * time.Second
-	info, err := t.tasks.Spawn(t.workDir, cmdLine, name, timeout)
+	opt := task.SpawnOption{Filename: filename}
+	info, err := t.tasks.Spawn(t.workDir, cmdLine, name, timeout, opt)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(
+	msg := fmt.Sprintf(
 		"Started background task id=%s name=%s pid=%d\nUse `task peek %s` to inspect progress, `task wait %s` to block, `task kill %s` to stop. A completion message will be injected automatically when the task ends.",
-		info.ID, info.Name, info.PID, info.ID, info.ID, info.ID,
-	), nil
+		info.ID, info.Name, info.PID, info.ID, info.ID, info.ID)
+	if info.Filename != "" {
+		msg += fmt.Sprintf("\nOutput also saved to: %s", info.Filename)
+	}
+	return msg, nil
 }
 
 // isOnlyCommentsOrBlank returns true if every line in the input is blank or a
