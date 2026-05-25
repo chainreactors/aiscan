@@ -55,14 +55,19 @@ type TaskEvent struct {
 type TaskObserver func(TaskEvent)
 
 type Info struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name,omitempty"`
-	Command   string    `json:"command"`
-	PID       int       `json:"pid"`
-	StartedAt time.Time `json:"started_at"`
-	EndedAt   time.Time `json:"ended_at,omitempty"`
-	ExitCode  int       `json:"exit_code"`
-	State     State     `json:"state"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name,omitempty"`
+	Command    string    `json:"command"`
+	PID        int       `json:"pid"`
+	StartedAt  time.Time `json:"started_at"`
+	EndedAt    time.Time `json:"ended_at,omitempty"`
+	ExitCode   int       `json:"exit_code"`
+	State      State     `json:"state"`
+	OutputFile string    `json:"output_file,omitempty"`
+}
+
+type SpawnOption struct {
+	OutputFile string // optional: tee stdout to this file path
 }
 
 type task struct {
@@ -100,6 +105,13 @@ func (m *Manager) bufferCap() int {
 	return DefaultBufferCap
 }
 
+func (m *Manager) newBuffer(outputFile string) (*OutputBuffer, error) {
+	if outputFile != "" {
+		return NewOutputBufferWithFile(m.bufferCap(), outputFile)
+	}
+	return NewOutputBuffer(m.bufferCap()), nil
+}
+
 func (m *Manager) emit(ev TaskEvent) {
 	m.mu.Lock()
 	obs := m.observe
@@ -115,7 +127,7 @@ func (m *Manager) emit(ev TaskEvent) {
 	obs(ev)
 }
 
-func (m *Manager) Spawn(workDir, cmdLine, name string, timeout time.Duration) (Info, error) {
+func (m *Manager) Spawn(workDir, cmdLine, name string, timeout time.Duration, opts ...SpawnOption) (Info, error) {
 	if strings.TrimSpace(cmdLine) == "" {
 		return Info{}, errors.New("empty command")
 	}
@@ -125,13 +137,20 @@ func (m *Manager) Spawn(workDir, cmdLine, name string, timeout time.Duration) (I
 	if name == "" {
 		name = labelFromCommand(cmdLine)
 	}
+	var opt SpawnOption
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
 
 	id, err := genID()
 	if err != nil {
 		return Info{}, fmt.Errorf("generate id: %w", err)
 	}
 
-	buf := NewOutputBuffer(m.bufferCap())
+	buf, err := m.newBuffer(opt.OutputFile)
+	if err != nil {
+		return Info{}, err
+	}
 
 	var c *exec.Cmd
 	if runtime.GOOS == "windows" {
@@ -150,12 +169,13 @@ func (m *Manager) Spawn(workDir, cmdLine, name string, timeout time.Duration) (I
 	}
 
 	info := Info{
-		ID:        id,
-		Name:      name,
-		Command:   cmdLine,
-		PID:       c.Process.Pid,
-		StartedAt: time.Now(),
-		State:     StateRunning,
+		ID:         id,
+		Name:       name,
+		Command:    cmdLine,
+		PID:        c.Process.Pid,
+		StartedAt:  time.Now(),
+		State:      StateRunning,
+		OutputFile: opt.OutputFile,
 	}
 	t := &task{Info: info, cmd: c, output: buf, done: make(chan struct{})}
 
@@ -172,7 +192,7 @@ func (m *Manager) Spawn(workDir, cmdLine, name string, timeout time.Duration) (I
 	return info, nil
 }
 
-func (m *Manager) SpawnInProcess(label, cmdDisplay string, timeout time.Duration, fn InProcessFn) (Info, error) {
+func (m *Manager) SpawnInProcess(label, cmdDisplay string, timeout time.Duration, fn InProcessFn, opts ...SpawnOption) (Info, error) {
 	if fn == nil {
 		return Info{}, errors.New("nil function")
 	}
@@ -183,21 +203,29 @@ func (m *Manager) SpawnInProcess(label, cmdDisplay string, timeout time.Duration
 	if name == "" {
 		name = labelFromCommand(cmdDisplay)
 	}
+	var opt SpawnOption
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
 
 	id, err := genID()
 	if err != nil {
 		return Info{}, fmt.Errorf("generate id: %w", err)
 	}
 
-	buf := NewOutputBuffer(m.bufferCap())
+	buf, err := m.newBuffer(opt.OutputFile)
+	if err != nil {
+		return Info{}, err
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	info := Info{
-		ID:        id,
-		Name:      name,
-		Command:   cmdDisplay,
-		StartedAt: time.Now(),
-		State:     StateRunning,
+		ID:         id,
+		Name:       name,
+		Command:    cmdDisplay,
+		StartedAt:  time.Now(),
+		State:      StateRunning,
+		OutputFile: opt.OutputFile,
 	}
 	t := &task{Info: info, output: buf, done: make(chan struct{}), cancel: cancel}
 
@@ -268,6 +296,7 @@ func (m *Manager) superviseInProcess(t *task, fn InProcessFn, ctx context.Contex
 	infoCopy := t.Info
 	m.mu.Unlock()
 
+	t.output.Close()
 	close(t.done)
 	m.emit(TaskEvent{Kind: EventCompletion, TaskID: t.ID, TaskInfo: infoCopy, Killed: killed, KillCause: killCause})
 }
@@ -327,6 +356,7 @@ func (m *Manager) supervise(t *task, timeout time.Duration) {
 	infoCopy := t.Info
 	m.mu.Unlock()
 
+	t.output.Close()
 	close(t.done)
 	m.emit(TaskEvent{Kind: EventCompletion, TaskID: t.ID, TaskInfo: infoCopy, Killed: killed, KillCause: killCause})
 }

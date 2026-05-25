@@ -1,6 +1,8 @@
 package task
 
 import (
+	"fmt"
+	"os"
 	"sync"
 )
 
@@ -12,6 +14,7 @@ type OutputBuffer struct {
 	cap        int
 	baseOffset int64
 	onWrite    func([]byte)
+	file       *os.File // optional: tee writes to file alongside memory
 }
 
 func NewOutputBuffer(cap int) *OutputBuffer {
@@ -24,6 +27,16 @@ func NewOutputBuffer(cap int) *OutputBuffer {
 	}
 }
 
+func NewOutputBufferWithFile(cap int, path string) (*OutputBuffer, error) {
+	b := NewOutputBuffer(cap)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open output file: %w", err)
+	}
+	b.file = f
+	return b, nil
+}
+
 func (b *OutputBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	b.buf = append(b.buf, p...)
@@ -34,12 +47,24 @@ func (b *OutputBuffer) Write(p []byte) (int, error) {
 		copy(fresh, b.buf[excess:])
 		b.buf = fresh
 	}
+	if b.file != nil {
+		b.file.Write(p)
+	}
 	cb := b.onWrite
 	b.mu.Unlock()
 	if cb != nil {
 		cb(p)
 	}
 	return len(p), nil
+}
+
+func (b *OutputBuffer) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.file != nil {
+		b.file.Close()
+		b.file = nil
+	}
 }
 
 func (b *OutputBuffer) TailLines(n int) string {
@@ -95,15 +120,15 @@ func (b *OutputBuffer) AppendError(msg string) {
 	b.Write([]byte("\n[task error] " + msg + "\n"))
 }
 
+func (b *OutputBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return string(b.buf)
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
-}
-
-func (b *OutputBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return string(b.buf)
 }
