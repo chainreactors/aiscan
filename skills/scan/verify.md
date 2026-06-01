@@ -1,11 +1,3 @@
----
-name: verify
-description: Use this skill to validate scan findings by actively probing targets and reasoning about evidence quality. Determines if a vulnerability is genuinely confirmed.
-agent: true
-agent_max_turns: 10
-agent_background: true
----
-
 # Verify
 
 Verify is aiscan's active finding validation skill. Scanner output is a **lead**, not proof. This skill probes the target to determine whether the evidence actually supports a confirmed security issue.

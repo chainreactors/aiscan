@@ -299,9 +299,17 @@ func isFileRedirection(token string) bool {
 func (r *CommandRegistry) UsageDocs() string {
 	var sb strings.Builder
 	for _, cmd := range r.All() {
-		sb.WriteString("```\n")
-		sb.WriteString(cmd.Usage())
-		sb.WriteString("\n```\n\n")
+		first := cmd.Usage()
+		if idx := strings.IndexByte(first, '\n'); idx > 0 {
+			first = first[:idx]
+		}
+		first = strings.TrimSpace(first)
+		if !strings.HasPrefix(first, cmd.Name()) {
+			first = cmd.Name()
+		}
+		sb.WriteString("- ")
+		sb.WriteString(first)
+		sb.WriteString("\n")
 	}
 	return sb.String()
 }

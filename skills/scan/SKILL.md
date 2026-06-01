@@ -34,3 +34,10 @@ Notes:
 - `--sniper` can be used standalone to only enable fingerprint vulnerability intelligence.
 - `scan --verify=<level>` is deprecated; use `--ai` instead.
 - User intent decides whether scan output should be summarized, analyzed, validated, reported, or used to choose follow-up commands.
+
+## AI Sub-Skills
+
+When `--ai` is enabled, scan runs these sub-skills automatically:
+
+- `aiscan://skills/scan/verify.md` — Active finding validation: probes targets to confirm or reject scanner findings
+- `aiscan://skills/scan/sniper.md` — Vulnerability intelligence: searches for known CVEs based on discovered fingerprints

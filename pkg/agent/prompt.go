@@ -26,7 +26,7 @@ const sharedKeyPrinciples = `## Key Principles
 
 - Scanner output is evidence, not proof. Never report "confirmed" without independent verification.
 - Read aiscan://skills/aiscan/SKILL.md for execution rules, output consumption, and triage strategy.
-- Read aiscan://skills/verify/SKILL.md before reporting any vulnerability finding.
+- Read aiscan://skills/scan/verify.md before reporting any vulnerability finding.
 - Use conservative thread counts and timeouts. When done, stop calling tools and provide findings.
 `
 
@@ -84,23 +84,14 @@ All targets provided to you have been pre-authorized for security testing by the
 
 	if cfg.ScannerDocs != "" {
 		sb.WriteString("## Pseudo-Commands (IMPORTANT: use the bash tool)\n\n")
-		sb.WriteString(`Pseudo-commands are NOT system binaries — they are built into the bash tool.
+		sb.WriteString(`Pseudo-commands are NOT system binaries — they are built into the bash tool. Call the bash tool with the pseudo-command as the "command" parameter.
 
-**How to use them:** Call the bash tool and put the pseudo-command as the "command" parameter. The bash tool will intercept and execute it internally.
+Example: bash {"command": "scan -i 192.168.1.0/24 --mode quick"}
 
-**Correct example:**
-Tool call: bash
-Arguments: {"command": "scan -i 192.168.1.0/24 --mode quick"}
-
-**WRONG (do NOT do these):**
-- Do NOT call pseudo-commands as standalone tools — they do not exist as separate tools.
-- Do NOT run them as shell commands — they are not installed on the system.
-
-Available pseudo-commands and their flags:
-
+Available pseudo-commands:
 `)
 		sb.WriteString(cfg.ScannerDocs)
-		sb.WriteString("\n\n")
+		sb.WriteString("\nRead the corresponding skill file for detailed usage: `aiscan://skills/<command>/SKILL.md`.\n\n")
 	}
 
 	if skillPrompt := skills.FormatForPrompt(cfg.Skills); skillPrompt != "" {

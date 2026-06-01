@@ -44,10 +44,6 @@ func testSeeds(events ...event) []pipeline.Event {
 	return seedsToEvents(events)
 }
 
-// stubSkillStore returns a fixed body for any skill name, satisfying SkillBodyLoader.
-type stubSkillStore struct{ body string }
-
-func (s stubSkillStore) LoadBody(string) string { return s.body }
 
 func TestScanRunsWithOnlySprayStage(t *testing.T) {
 	cmd := New(&engine.Set{Spray: spray.NewEngine(nil)})
@@ -840,7 +836,7 @@ func TestAgentVerifyCapabilityAcceptsFocusFingerprint(t *testing.T) {
 			},
 		}, nil
 	}
-	cmd := New(&engine.Set{}, WithAgentFunc(agentFn), WithSkillStore(stubSkillStore{body: "test verify prompt"}), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
+	cmd := New(&engine.Set{}, WithAgentFunc(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
 	verifySkill := scanAISkills[0]
 	cap := buildAISkillCap(cmd, verifySkill)
 	coll := newCollector([]string{"seed"}, nil, false, false)
@@ -871,7 +867,7 @@ func TestAgentVerifyCapabilityUsesProviderAndEmitsVerification(t *testing.T) {
 			},
 		}, nil
 	}
-	cmd := New(&engine.Set{}, WithAgentFunc(agentFn), WithSkillStore(stubSkillStore{body: "test verify prompt"}), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
+	cmd := New(&engine.Set{}, WithAgentFunc(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
 	verifySkill := scanAISkills[0]
 	cap := buildAISkillCap(cmd, verifySkill)
 	coll := newCollector([]string{"seed"}, nil, false, false)

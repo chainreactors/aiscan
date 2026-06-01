@@ -218,7 +218,6 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 			Enable:     scanCfg.EnableAllAISkills,
 			VerifyMode: scanCfg.VerifyMode,
 		}))
-		scanOpts = append(scanOpts, scan.WithSkillStore(skillStoreAdapter{store: skillStore}))
 		scanOpts = append(scanOpts, scan.WithAgentFunc(func(ctx context.Context, prompt, systemPrompt, model string, maxTokens int) (*scan.AgentRunResult, error) {
 			cfg := agent.Config{
 				Provider:            p,
@@ -289,21 +288,6 @@ func makeMaxTurnStop(maxTurns int) func(context.Context, agent.ShouldStopAfterTu
 		turn++
 		return turn >= maxTurns, nil
 	}
-}
-
-type skillStoreAdapter struct {
-	store *skills.Store
-}
-
-func (a skillStoreAdapter) LoadBody(name string) string {
-	if a.store == nil {
-		return ""
-	}
-	skill, ok := a.store.ByName(name)
-	if !ok {
-		return ""
-	}
-	return skill.Body
 }
 
 func scanVerifyBeforeToolCall(_ context.Context, call agent.BeforeToolCallContext) (*agent.BeforeToolCallResult, error) {

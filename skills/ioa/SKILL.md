@@ -1,82 +1,85 @@
 ---
 name: ioa
-description: Use when collaborating with peer agents in a shared IOA space. Covers when to read partner messages, what to share, and how to converge on a strategy without a central controller. Read this before sending or reading IOA messages in a multi-agent session.
+description: Use when collaborating with peer agents via IOA (shared message spaces). Covers tool API, message format, and basic coordination rules. For multi-agent swarm coordination without a central controller, also read aiscan://skills/ioa/swarm.md.
 ---
 
 # IOA — Inter-Operator Async Collaboration
 
-IOA gives you a shared message log with peer agents. You and your partner(s) see the same messages and can converge on a strategy without a central controller. The three tools are `ioa_space`, `ioa_send`, `ioa_read`.
+IOA provides shared message spaces for agent coordination. Three tools: `ioa_space`, `ioa_send`, `ioa_read`.
 
-Treat the space as **shared memory**, not chat. Every message persists and is visible to all peers in the space.
+## 1. Tool API
 
-## When to Read
+### ioa_space
 
-- **Joining a space**: see what's already been discussed, what's claimed, what's been found.
-- **Before starting a major phase** (recon, scanning, exploitation): your partner may have already started or have findings you can build on.
-- **After completing a phase**: check if the partner sent anything you should react to.
-- **When stuck, or considering a slow / quota-consuming operation**: maybe the partner already did it.
+Create or join a space. Returns space info including all member nodes with their descriptions.
 
-Use `ioa_read --space_id "<space_id>" --all true` to see every message in the space, not just messages addressed to you. The `--space_id` parameter is **always required**. The default scope only returns messages explicitly directed at your node id.
-
-## When to Send
-
-- **You've decided to take on a chunk of work** — announce it so the partner can pick something else. This is the "claim" pattern.
-- **You've found something concrete** — domains, IPs, vulnerabilities, dead ends. Share immediately, the partner may need it now.
-- **You're handing off** — "I'm done with recon, here's the asset list, switching to scan".
-- **You disagree with the partner's direction or notice a duplicate** — say so, don't silently re-do the work.
-- **You finished the whole task** — emit a final result message so the dispatcher and partner know.
-
-Do not send: chatty acknowledgments ("ok", "thanks"), thinking-out-loud, or status pings with no new information. The space is shared memory, not chat — noise costs everyone tokens.
-
-## Message Content
-
-Structured content beats prose. Use a `kind` field so readers can route on it. Useful kinds:
-
-```json
-{"kind": "claim", "scope": "recon for fjsmartedu.cn", "eta_min": 5}
-{"kind": "asset", "domains": ["..."], "ips": ["..."], "source": "passive/fofa"}
-{"kind": "finding", "severity": "high", "target": "https://...", "evidence": "..."}
-{"kind": "handoff", "from_phase": "recon", "next": "scan", "context": {"asset_count": 47}}
-{"kind": "blocker", "reason": "fofa quota exhausted", "need": "partner run hunter source"}
-{"kind": "result", "summary": "...", "findings_count": 6}
+```
+ioa_space --name "case-target" --description "Your role or intent in this space"
 ```
 
-When you reference a previous message (replying, building on, disagreeing with), set `refs.messages` to its id. When a message is meant for a specific peer, set `refs.nodes` to their node id — otherwise everyone in the space sees it.
+The response includes `nodes[]` — each node's ID, name, and description. Use this to understand who else is in the space and what they can do.
 
-### Dispatching a task to another node
+### ioa_send
 
-To start a new task on a peer node (e.g. handing off scan results for vulnerability analysis), the content object **must** include a `content` key with the task description as a string, and set `meta.kind` to `task_dispatch`. Also set `refs.nodes` to the target node id.
+Send a message to a space. The `--space_id` parameter is always required.
 
-```json
-ioa_send --space_id "<space>" --content '{"content": "Run neutron and web_search CVE checks on 127.0.0.1:22 (OpenSSH 8.9p1) and 127.0.0.1:80 (Python SimpleHTTP, directory listing). Report findings.", "meta": {"kind": "task_dispatch"}, "targets": ["127.0.0.1"]}' --refs '{"nodes": ["<target_node_id>"]}'
+```
+ioa_send --space_id "<id>" --content '{"kind": "asset", "ips": ["10.0.0.1"]}'
 ```
 
-The `content` string is required — the receiving node's swarm router reads this field to understand the task. Without it the message is silently dropped. Other fields (`claim`, `finding`, `asset`, etc.) are peer chatter and do not need the `content` string.
+Optional parameters:
+- `--refs '{"messages": ["<msg_id>"], "nodes": ["<node_id>"]}'` — reference a prior message or address a specific node
+- `--meta '{"kind": "task_dispatch"}'` — metadata for routing (e.g. task dispatch)
 
-## Collaboration Patterns
+### ioa_read
 
-Pick based on the task shape. Discuss the pick in the space briefly before committing — one message each is enough.
+Read messages from a space. The `--space_id` parameter is always required.
 
-- **Split by phase**: one peer does recon (e.g. `passive` in full builds), the other waits for the asset handoff then runs scanning (`gogo` + `spray` + `neutron`). Lowest coordination overhead, best when phases are sequential.
-- **Split by target**: divide IP ranges, subdomains, or subsidiaries. Best when the target set is large and uniform.
-- **Split by skill**: one focuses on web surface (`spray`, optional `katana`, `neutron`), the other on network services (`gogo`, `zombie`). Best when the target has a diverse surface.
-- **Reviewer pattern**: one does the primary work, the other independently verifies high-severity findings with different tools or sources. Higher confidence, lower throughput. Good for paranoid mode.
+```
+ioa_read --space_id "<id>" --all true              # all messages
+ioa_read --space_id "<id>" --all true --limit 50   # last 50
+ioa_read --space_id "<id>" --message_id "<id>"     # thread from a message
+ioa_read --space_id "<id>" --after "<id>"          # messages after cursor
+```
 
-## Anti-patterns
+Without `--all true`, only messages explicitly directed at your node are returned.
 
-- **Silent duplication**: both peers run the same recon phase on the same company. A cheap `ioa_read --space_id "<space_id>" --all true` upfront prevents this.
-- **Over-coordination**: 10 messages debating who runs recon. Just take it and announce — the partner can read and react in one round-trip.
-- **Race on claim**: both peers send "I'll do recon" at the same time. Whoever's message has the earlier server timestamp wins; the other peer reads, sees the conflict, and picks the other side of the split.
-- **Withholding findings until the end**: defeats the point of shared memory. Send `asset` / `finding` messages as you produce them, not in a single dump.
-- **Spamming refs.nodes for every message**: most messages should be broadcast (no `refs.nodes`) so the whole space sees them. Use `refs.nodes` only when you genuinely want to address one peer.
+## 2. Message Format
 
-## Quick Reference
+Messages use structured JSON content with a `kind` field for routing:
 
-| Situation | Action |
-|-----------|--------|
-| Just joined a space | `ioa_read --space_id "<space_id>" --all true --limit 50` |
-| About to start a long operation | `ioa_read --space_id "<space_id>" --all true`, then `ioa_send` a claim |
-| Found something useful | `ioa_send` with `kind=asset` or `kind=finding` |
-| Phase finished | `ioa_send` with `kind=handoff` |
-| Stuck | `ioa_send` with `kind=blocker` |
-| Task complete | `ioa_send` with `kind=result` |
+| kind | purpose | key fields |
+|------|---------|------------|
+| `claim` | announce work you're about to start | `scope`, `eta_min` |
+| `asset` | share discovered targets | `ips`, `domains`, `source` |
+| `finding` | share vulnerabilities or dead ends | `severity`, `target`, `vuln`, `evidence` |
+| `handoff` | signal phase transition | `from_phase`, `next`, `context` |
+| `blocker` | request help | `reason`, `need` |
+| `result` | report completed work | `scope`, `summary`, `findings_count` |
+
+### Refs
+
+- `refs.messages`: reference a prior message (reply, follow-up)
+- `refs.nodes`: address a specific node. Omit to broadcast to all space members.
+
+### Task dispatch
+
+To start a new task on a peer node, the content **must** include a `content` key (string with the task), and meta must have `kind: task_dispatch`:
+
+```json
+ioa_send --space_id "<id>" --content '{"content": "Scan 10.0.0.0/24 for web services", "meta": {"kind": "task_dispatch"}, "targets": ["10.0.0.0/24"]}' --refs '{"nodes": ["<target_node_id>"]}'
+```
+
+## 3. Basic Coordination Rules
+
+These apply in any multi-agent scenario:
+
+1. **Read before write** — always `ioa_read --all true` before starting work. A peer may have already claimed your target.
+2. **Claim before work** — send `kind: claim` with your scope before any significant operation.
+3. **Share as you go** — emit findings immediately, not in a final batch. Peers need your data to make decisions now.
+4. **No noise** — the space is shared memory, not chat. No "ok", "thanks", or thinking-out-loud.
+5. **Conflict resolution** — if two agents claim the same scope simultaneously, earlier message (by server ID order) wins. The later agent adapts.
+
+## 4. Multi-Agent Swarm
+
+When working in a swarm (2+ agents, no central controller), read the full coordination protocol at `aiscan://skills/ioa/swarm.md`. It covers: semantic self-introduction, target negotiation strategies, work cycles, convergence criteria, and collaboration patterns (split-by-skill, pipeline, reviewer).

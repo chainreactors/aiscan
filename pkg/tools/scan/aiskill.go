@@ -12,18 +12,19 @@ import (
 )
 
 type AISkill struct {
-	Name    string
-	CapName string
-	Flag    string
-	Agent   bool
-	Accept  func(event) bool
-	Prompt  func(event) string
-	Workers int
+	Name      string
+	CapName   string
+	Flag      string
+	Agent     bool
+	SkillFile string // embedded skill file path for LLM reference (e.g. "aiscan://skills/scan/verify.md")
+	Accept    func(event) bool
+	Prompt    func(event) string
+	Workers   int
 }
 
 var scanAISkills = []AISkill{
 	{
-		Name: "verify", CapName: capAgentVerify, Flag: "", Agent: true,
+		Name: "verify", CapName: capAgentVerify, Flag: "", Agent: true, SkillFile: "aiscan://skills/scan/verify.md",
 		Accept: shouldVerifyFinding,
 		Prompt: func(e event) string {
 			// Sniper findings carry CVE intelligence that needs active probing,
@@ -55,7 +56,7 @@ Return "confirmed" only for direct evidence. Return "not_confirmed" when probing
 		Workers: 3,
 	},
 	{
-		Name: "sniper", CapName: capAgentSniper, Flag: "sniper",
+		Name: "sniper", CapName: capAgentSniper, Flag: "sniper", SkillFile: "aiscan://skills/scan/sniper.md",
 		Accept: func(e event) bool {
 			if e.Kind != eventFinding {
 				return false
@@ -156,15 +157,10 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 	skillCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	skillBody := ""
-	if c.skillStore != nil {
-		skillBody = c.skillStore.LoadBody(skill.Name)
-	}
-	if skillBody == "" {
-		c.logger.Warnf("scan capability=%s skill=%s skill_body_empty, using fallback prompt", skill.CapName, skill.Name)
-	}
-
 	prompt := skill.Prompt(e)
+	if skill.SkillFile != "" {
+		prompt = fmt.Sprintf("Read %s for instructions before starting.\n\n%s", skill.SkillFile, prompt)
+	}
 	start := time.Now()
 
 	var parsed *agent.SkillResult
@@ -172,7 +168,7 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 	var err error
 
 	if skill.Agent && c.agentFunc != nil {
-		agentResult, agentErr := c.agentFunc(skillCtx, prompt, skillBody, c.aiConfig.Model, 1600)
+		agentResult, agentErr := c.agentFunc(skillCtx, prompt, "", c.aiConfig.Model, 1600)
 		if agentErr != nil {
 			c.logger.Debugf("scan capability=%s status=failed error=%q", skill.CapName, agentErr)
 			return
@@ -184,7 +180,7 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 		parsed = agentResult.Parsed
 		rawResult = agentResult.Raw
 	} else {
-		rawResult, err = c.aiFunc(skillCtx, prompt, skillBody, c.aiConfig.Model, 1600)
+		rawResult, err = c.aiFunc(skillCtx, prompt, "", c.aiConfig.Model, 1600)
 		if err != nil {
 			c.logger.Debugf("scan capability=%s status=failed error=%q", skill.CapName, err)
 			return
@@ -256,12 +252,9 @@ func (c *Command) generateAIReport(ctx context.Context, coll *collector) string 
 		scanData = coll.TerminalString(false)
 	}
 
-	skillBody := ""
-	if c.skillStore != nil {
-		skillBody = c.skillStore.LoadBody("report")
-	}
+	prompt := fmt.Sprintf(`Read aiscan://skills/report/SKILL.md for report formatting instructions before starting.
 
-	prompt := fmt.Sprintf(`Generate a security scan report from the following scan results and write it to a file with a descriptive name (e.g., report_<target>_<date>.md).
+Generate a security scan report from the following scan results and write it to a file with a descriptive name (e.g., report_<target>_<date>.md).
 
 After writing the file, output the report content to the user as well.
 
@@ -275,7 +268,7 @@ Scan results:
 	reportCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	result, err := fn(reportCtx, prompt, skillBody, c.aiConfig.Model, 4000)
+	result, err := fn(reportCtx, prompt, "", c.aiConfig.Model, 4000)
 	if err != nil {
 		c.logger.Debugf("scan report skill failed: %v", err)
 		return coll.ReportMarkdown()

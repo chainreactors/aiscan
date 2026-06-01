@@ -20,7 +20,6 @@ type Command struct {
 	agentFunc  AgentFunc
 	reportFunc AIFunc
 	aiConfig   AISkillConfig
-	skillStore SkillBodyLoader
 	recorder   *recorder
 	logger     telemetry.Logger
 	proxy      string

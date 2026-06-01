@@ -1,8 +1,3 @@
----
-name: sniper
-description: Use this skill to search for known public vulnerabilities (CVEs, exploits) based on discovered service fingerprints.
----
-
 # Sniper
 
 Sniper is aiscan's vulnerability intelligence skill. Given discovered fingerprints, identify known public vulnerabilities.

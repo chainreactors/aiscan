@@ -20,10 +20,6 @@ type AISkillConfig struct {
 	VerifyMode string
 }
 
-type SkillBodyLoader interface {
-	LoadBody(name string) string
-}
-
 func WithAIFunc(fn AIFunc) Option {
 	return func(c *Command) { c.aiFunc = fn }
 }
@@ -34,10 +30,6 @@ func WithReportFunc(fn AIFunc) Option {
 
 func WithAISkillConfig(cfg AISkillConfig) Option {
 	return func(c *Command) { c.aiConfig = cfg }
-}
-
-func WithSkillStore(store SkillBodyLoader) Option {
-	return func(c *Command) { c.skillStore = store }
 }
 
 func WithProxy(proxy string) Option {

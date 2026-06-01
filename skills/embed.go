@@ -20,8 +20,6 @@ type Skill struct {
 	Description string
 	Location    string
 	BaseDir     string
-	Body        string
-	Raw         string
 	Internal    bool
 
 	Agent           bool
@@ -38,8 +36,7 @@ type Diagnostic struct {
 type Store struct {
 	Skills []Skill
 
-	byName     map[string]Skill
-	byLocation map[string]Skill
+	byName map[string]Skill
 }
 
 func LoadEmbedded() ([]Skill, []Diagnostic) {
@@ -90,13 +87,11 @@ func LoadEmbeddedStore() (*Store, []Diagnostic) {
 
 func NewStore(skills []Skill) *Store {
 	store := &Store{
-		Skills:     append([]Skill(nil), skills...),
-		byName:     make(map[string]Skill, len(skills)),
-		byLocation: make(map[string]Skill, len(skills)),
+		Skills: append([]Skill(nil), skills...),
+		byName: make(map[string]Skill, len(skills)),
 	}
 	for _, skill := range skills {
 		store.byName[skill.Name] = skill
-		store.byLocation[skill.Location] = skill
 	}
 	return store
 }
@@ -122,34 +117,24 @@ func (s *Store) AgentTypes() []Skill {
 	return agents
 }
 
-func (s *Store) ByLocation(location string) (Skill, bool) {
-	if s == nil {
-		return Skill{}, false
-	}
-	skill, ok := s.byLocation[location]
-	return skill, ok
-}
-
+// ReadVirtual reads a file from the embedded skill filesystem.
+// It handles both aiscan:// URIs and relative paths.
 func (s *Store) ReadVirtual(location string) (string, bool, error) {
+	var embedPath string
 	if strings.HasPrefix(location, uriPrefix) {
-		skill, ok := s.ByLocation(location)
-		if !ok {
-			return "", true, fmt.Errorf("virtual file not found: %s", location)
+		embedPath = strings.TrimPrefix(location, uriPrefix)
+	} else {
+		embedPath = normalizeEmbedPath(location)
+		if embedPath == "" {
+			return "", false, nil
 		}
-		return skill.Raw, true, nil
-	}
-
-	// Support relative paths: "skills/verify/example.md" or "verify/SKILL.md"
-	embedPath := normalizeEmbedPath(location)
-	if embedPath == "" {
-		return "", false, nil
 	}
 	if name := skillNameFromEmbedPath(embedPath); name != "" && !skillAvailable(name) {
 		return "", true, fmt.Errorf("virtual file not available in this build: %s", location)
 	}
 	data, err := fs.ReadFile(embeddedFS, embedPath)
 	if err != nil {
-		return "", false, err
+		return "", true, fmt.Errorf("virtual file not found: %s", location)
 	}
 	return string(data), true, nil
 }
@@ -176,6 +161,30 @@ func (s *Store) GlobVirtual(pattern string) ([]string, bool) {
 	return results, true
 }
 
+// ReadBody reads a skill's markdown body (without frontmatter) on-demand from embeddedFS.
+func ReadBody(name string) string {
+	filePath := path.Join(name, "SKILL.md")
+	raw, err := embeddedFS.ReadFile(filePath)
+	if err != nil {
+		return ""
+	}
+	_, body := SplitFrontmatter(string(raw))
+	return strings.TrimSpace(body)
+}
+
+// ReadFile reads any file from the embedded skills filesystem.
+func ReadFile(embedPath string) string {
+	normalized := normalizeEmbedPath(embedPath)
+	if normalized == "" {
+		return ""
+	}
+	data, err := fs.ReadFile(embeddedFS, normalized)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
 func normalizeEmbedPath(location string) string {
 	location = strings.TrimSpace(location)
 	if location == "" {
@@ -185,7 +194,6 @@ func normalizeEmbedPath(location string) string {
 	if strings.HasPrefix(location, "skills/") {
 		return strings.TrimPrefix(location, "skills/")
 	}
-	// Direct subpath like "verify/SKILL.md"
 	if !strings.HasPrefix(location, "/") && !strings.HasPrefix(location, ".") {
 		return location
 	}
@@ -240,6 +248,7 @@ func appendEscapedXML(sb *strings.Builder, value string) {
 }
 
 func FormatInvocation(skill Skill, args string) string {
+	body := ReadBody(skill.Name)
 	var sb strings.Builder
 	sb.WriteString(`<skill name="`)
 	sb.WriteString(skill.Name)
@@ -249,7 +258,7 @@ func FormatInvocation(skill Skill, args string) string {
 	sb.WriteString("References are relative to ")
 	sb.WriteString(skill.BaseDir)
 	sb.WriteString(".\n\n")
-	sb.WriteString(strings.TrimSpace(skill.Body))
+	sb.WriteString(body)
 	sb.WriteString("\n</skill>")
 	if strings.TrimSpace(args) != "" {
 		sb.WriteString("\n\n")
@@ -282,7 +291,7 @@ func ExpandCommand(text string, store *Store) string {
 }
 
 func parseSkill(filePath, defaultName, raw string) (Skill, []Diagnostic, bool) {
-	frontmatter, body := splitFrontmatter(raw)
+	frontmatter, _ := SplitFrontmatter(raw)
 	name := strings.TrimSpace(frontmatter["name"])
 	if name == "" {
 		name = defaultName
@@ -308,8 +317,6 @@ func parseSkill(filePath, defaultName, raw string) (Skill, []Diagnostic, bool) {
 		Description:     description,
 		Location:        location,
 		BaseDir:         uriPrefix + name,
-		Body:            strings.TrimSpace(body),
-		Raw:             raw,
 		Internal:        internal,
 		Agent:           isAgent,
 		AgentMaxTurns:   agentMaxTurns,
@@ -318,7 +325,8 @@ func parseSkill(filePath, defaultName, raw string) (Skill, []Diagnostic, bool) {
 	}, diagnostics, true
 }
 
-func splitFrontmatter(raw string) (map[string]string, string) {
+// SplitFrontmatter separates YAML frontmatter from markdown body.
+func SplitFrontmatter(raw string) (map[string]string, string) {
 	frontmatter := make(map[string]string)
 	normalized := strings.ReplaceAll(raw, "\r\n", "\n")
 	if !strings.HasPrefix(normalized, "---\n") {

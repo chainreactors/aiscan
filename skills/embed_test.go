@@ -31,8 +31,12 @@ func TestLoadEmbeddedSkills(t *testing.T) {
 	if skill.Location != "aiscan://skills/aiscan/SKILL.md" {
 		t.Fatalf("location = %q", skill.Location)
 	}
-	if strings.Contains(skill.Body, "---") {
-		t.Fatalf("body contains frontmatter: %q", skill.Body)
+	body := ReadBody("aiscan")
+	if body == "" {
+		t.Fatal("ReadBody returned empty")
+	}
+	if strings.Contains(body, "---") {
+		t.Fatalf("ReadBody contains frontmatter: %q", body)
 	}
 }
 
