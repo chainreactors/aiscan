@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
@@ -181,20 +182,6 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 	var scanOpts []any
 	if scanCfg.AIEnabled && llmProvider != nil {
 		p := llmProvider
-		scanOpts = append(scanOpts, scan.WithAIFunc(func(ctx context.Context, prompt, systemPrompt, model string, maxTokens int) (string, error) {
-			cfg := agent.Config{
-				Provider:     p,
-				Model:        model,
-				MaxTokens:    maxTokens,
-				SystemPrompt: buildScanAISystemPrompt(cmdReg, skillStore, systemPrompt),
-				Logger:       logger,
-			}
-			result, err := cfg.Run(ctx, prompt)
-			if err != nil {
-				return "", err
-			}
-			return result.Output, nil
-		}))
 		scanOpts = append(scanOpts, scan.WithReportFunc(func(ctx context.Context, prompt, systemPrompt, model string, maxTokens int) (string, error) {
 			cfg := agent.Config{
 				Provider:       p,
@@ -218,15 +205,25 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 			Enable:     scanCfg.EnableAllAISkills,
 			VerifyMode: scanCfg.VerifyMode,
 		}))
+		scanOpts = append(scanOpts, scan.WithDeepBrowserFunc(func(ctx context.Context, targetURL string) (string, error) {
+			return collectDeepBrowserArtifacts(ctx, cmdReg, targetURL, logger)
+		}))
 		scanOpts = append(scanOpts, scan.WithAgentFunc(func(ctx context.Context, prompt, systemPrompt, model string, maxTokens int) (*scan.AgentRunResult, error) {
+			cp := command.NewCheckpointTool()
+
+			verifyReg := command.NewRegistry()
+			for _, t := range cmdReg.Tools() {
+				verifyReg.RegisterTool(t)
+			}
+			verifyReg.RegisterTool(cp)
+
 			cfg := agent.Config{
 				Provider:            p,
-				Tools:               cmdReg,
+				Tools:               verifyReg,
 				Model:               model,
 				MaxTokens:           maxTokens,
 				SystemPrompt:        buildScanVerifySystemPrompt(systemPrompt),
 				BeforeToolCall:      scanVerifyBeforeToolCall,
-				ResponseFormat:      &provider.ResponseFormat{Type: "json_object"},
 				Logger:              logger,
 				ShouldStopAfterTurn: makeMaxTurnStop(10),
 			}
@@ -238,11 +235,11 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 			if result != nil {
 				raw = result.Output
 			}
-			parsed, parseErr := agent.ParseSkillResult(raw)
-			if parseErr != nil {
-				return nil, parseErr
+
+			if r := cp.Result(); r != nil {
+				return &scan.AgentRunResult{Raw: raw, Checkpoint: r}, nil
 			}
-			return &scan.AgentRunResult{Raw: raw, Parsed: parsed}, nil
+			return &scan.AgentRunResult{Raw: raw}, nil
 		}))
 	}
 	scanOpts = append(scanOpts, scan.WithLogger(logger))
@@ -279,7 +276,139 @@ func buildScanVerifySystemPrompt(skillPrompt string) string {
 	if strings.TrimSpace(skillPrompt) != "" {
 		return skillPrompt
 	}
-	return "You are aiscan's active verification agent. Probe the target to confirm or deny the finding. Return confirmed only with direct evidence, not_confirmed when probing does not support the claim, and inconclusive only when probing cannot be completed or evaluated. Return JSON with status: confirmed|info|not_confirmed|inconclusive."
+	return "You are aiscan's active verification agent. Probe the target to confirm or deny the finding. " +
+		"When you have reached your conclusion, call the checkpoint tool with target, status, title, and content. " +
+		"Use labels for severity tags only (e.g. high, critical). " +
+		"Do not output raw JSON directly."
+}
+
+func collectDeepBrowserArtifacts(ctx context.Context, reg *command.CommandRegistry, targetURL string, logger telemetry.Logger) (string, error) {
+	if reg == nil || !reg.Has("playwright") {
+		return "", fmt.Errorf("playwright command unavailable; rebuild web with browser tag")
+	}
+	targetURL = strings.TrimSpace(targetURL)
+	if targetURL == "" {
+		return "", fmt.Errorf("target URL is empty")
+	}
+
+	session := fmt.Sprintf("deep%d", time.Now().UnixNano())
+	closed := false
+	defer func() {
+		if closed {
+			return
+		}
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, _ = reg.Execute(closeCtx, "playwright close "+session)
+	}()
+
+	script := `(()=>JSON.stringify({url:location.href,title:document.title,forms:[...document.forms].map((f,i)=>({i,action:f.action,method:f.method,inputs:[...f.elements].map(e=>({tag:e.tagName,type:e.type,name:e.name,id:e.id,placeholder:e.placeholder}))})),buttons:[...document.querySelectorAll("button,input[type=button],input[type=submit],a")].slice(0,80).map(e=>({tag:e.tagName,text:(e.innerText||e.value||e.getAttribute("aria-label")||"").trim(),href:e.href||"",type:e.type||"",id:e.id||"",name:e.name||""})),scripts:[...document.scripts].map(s=>s.src).filter(Boolean).slice(0,50),localStorage:Object.keys(localStorage),sessionStorage:Object.keys(sessionStorage)}))()`
+	steps := []struct {
+		name    string
+		command string
+	}{
+		{"open", fmt.Sprintf("playwright open %s --session %s --ttl 0 --op-timeout 8 --record", quoteCommandArg(targetURL), session)},
+		{"network-start", "playwright network " + session + " --start"},
+		{"reload", "playwright reload " + session},
+		{"wait-idle", "playwright wait-for " + session + " --idle"},
+		{"url", "playwright url " + session},
+		{"discover", "playwright discover " + session},
+		{"text-content", "playwright text-content " + session},
+		{"storage-links-scripts", fmt.Sprintf("playwright evaluate %s %s", session, quoteCommandArg(script))},
+		{"network-dump", "playwright network " + session + " --dump"},
+	}
+
+	const stepTimeout = 12 * time.Second
+	var sb strings.Builder
+	sb.WriteString("Target: ")
+	sb.WriteString(targetURL)
+	sb.WriteString("\nSession: ")
+	sb.WriteString(session)
+	sb.WriteString("\n")
+	for _, step := range steps {
+		if err := ctx.Err(); err != nil {
+			appendDeepBrowserStep(&sb, step.name, step.command, "", err)
+			break
+		}
+		out, err := executeRegistryCommand(ctx, reg, step.command, stepTimeout)
+		appendDeepBrowserStep(&sb, step.name, step.command, out, err)
+		if err != nil && logger != nil {
+			logger.Debugf("deep browser step=%s error=%q", step.name, err)
+		}
+		if err != nil {
+			break
+		}
+	}
+
+	closeCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	out, err := executeRegistryCommand(closeCtx, reg, "playwright close "+session, 8*time.Second)
+	cancel()
+	closed = true
+	appendDeepBrowserStep(&sb, "close", "playwright close "+session, out, err)
+
+	return truncateDeepBrowserArtifact(sb.String(), 42000), nil
+}
+
+func executeRegistryCommand(ctx context.Context, reg *command.CommandRegistry, commandLine string, timeout time.Duration) (string, error) {
+	if timeout <= 0 {
+		return reg.Execute(ctx, commandLine)
+	}
+	stepCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	type result struct {
+		out string
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		out, err := reg.Execute(stepCtx, commandLine)
+		done <- result{out: out, err: err}
+	}()
+
+	select {
+	case r := <-done:
+		return r.out, r.err
+	case <-stepCtx.Done():
+		return "", fmt.Errorf("command timed out after %s: %w", timeout, stepCtx.Err())
+	}
+}
+
+func appendDeepBrowserStep(sb *strings.Builder, name, commandLine, output string, err error) {
+	sb.WriteString("\n## ")
+	sb.WriteString(name)
+	sb.WriteString("\nCommand: `")
+	sb.WriteString(commandLine)
+	sb.WriteString("`\n")
+	if err != nil {
+		sb.WriteString("Error: ")
+		sb.WriteString(err.Error())
+		sb.WriteString("\n")
+	}
+	output = strings.TrimSpace(output)
+	if output != "" {
+		sb.WriteString(truncateDeepBrowserArtifact(output, 8000))
+		sb.WriteString("\n")
+	}
+}
+
+func quoteCommandArg(value string) string {
+	if value == "" {
+		return `""`
+	}
+	if !strings.ContainsAny(value, " \t\r\n'\"\\") {
+		return value
+	}
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	value = strings.ReplaceAll(value, `"`, `\"`)
+	return `"` + value + `"`
+}
+
+func truncateDeepBrowserArtifact(value string, max int) string {
+	if max <= 0 || len(value) <= max {
+		return value
+	}
+	return value[:max] + fmt.Sprintf("\n\n[truncated: showing %d of %d bytes]", max, len(value))
 }
 
 func makeMaxTurnStop(maxTurns int) func(context.Context, agent.ShouldStopAfterTurnContext) (bool, error) {

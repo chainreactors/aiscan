@@ -179,6 +179,10 @@ func (h *Harness) RunWithTimeout(timeout time.Duration, args ...string) *RunResu
 	return result
 }
 
+func (h *Harness) WorkFile(name string) string {
+	return filepath.Join(h.workDir, name)
+}
+
 // --- convenience runners ---
 
 func (h *Harness) Agent(prompt string, extraArgs ...string) *RunResult {

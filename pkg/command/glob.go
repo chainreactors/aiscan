@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 
@@ -119,11 +120,12 @@ func (t *GlobTool) Execute(ctx context.Context, arguments string) (ToolResult, e
 // The pattern is split on "**" — the prefix selects subdirectories to walk,
 // and the suffix is matched against each file within.
 func globRecursive(baseDir, pattern string) ([]string, error) {
+	pattern = filepath.FromSlash(pattern)
 	parts := strings.SplitN(pattern, "**", 2)
-	prefix := strings.TrimRight(parts[0], string(filepath.Separator))
+	prefix := strings.TrimRight(parts[0], `/\`)
 	suffix := ""
 	if len(parts) > 1 {
-		suffix = strings.TrimLeft(parts[1], string(filepath.Separator))
+		suffix = strings.TrimLeft(parts[1], `/\`)
 	}
 
 	root := baseDir
@@ -159,7 +161,7 @@ func globRecursive(baseDir, pattern string) ([]string, error) {
 			return err
 		}
 
-		matched, _ := filepath.Match(suffix, filepath.Base(rel))
+		matched := matchRecursiveSuffix(rel, suffix)
 		if matched {
 			matches = append(matches, path)
 		}
@@ -167,6 +169,27 @@ func globRecursive(baseDir, pattern string) ([]string, error) {
 	})
 
 	return matches, nil
+}
+
+func matchRecursiveSuffix(rel, suffix string) bool {
+	rel = filepath.ToSlash(rel)
+	suffix = filepath.ToSlash(suffix)
+	if !strings.Contains(suffix, "/") {
+		matched, _ := pathpkg.Match(suffix, pathpkg.Base(rel))
+		return matched
+	}
+
+	if matched, _ := pathpkg.Match(suffix, rel); matched {
+		return true
+	}
+	parts := strings.Split(rel, "/")
+	for i := 1; i < len(parts); i++ {
+		candidate := strings.Join(parts[i:], "/")
+		if matched, _ := pathpkg.Match(suffix, candidate); matched {
+			return true
+		}
+	}
+	return false
 }
 
 func mergeUnique(a, b []string) []string {

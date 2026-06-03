@@ -107,6 +107,7 @@ const (
 	findingVuln         findingKind = "vuln-finding"
 	findingVerification findingKind = "verification-finding"
 	findingAISkill      findingKind = "ai-skill"
+	findingAIResponse   findingKind = "ai-response"
 )
 
 type errorEvent struct {
@@ -244,7 +245,6 @@ type aiSkillFinding struct {
 	Status       string
 	Summary      string
 	Detail       string
-	Remediation  string
 	OriginalKey  string
 	OriginalKind findingKind
 }
@@ -260,6 +260,39 @@ func (f aiSkillFinding) Priority() priority {
 
 func (f aiSkillFinding) Key() string {
 	return f.Skill + "|" + f.Target + "|" + f.OriginalKey
+}
+
+type aiSkillResponse struct {
+	Skill        string
+	Target       string
+	Status       string
+	Summary      string
+	Detail       string
+	Raw          string
+	OriginalKey  string
+	OriginalKind findingKind
+}
+
+func (f aiSkillResponse) Kind() findingKind { return findingAIResponse }
+
+func (f aiSkillResponse) Priority() priority { return priorityLow }
+
+func (f aiSkillResponse) Key() string {
+	return f.Skill + "|" + f.Target + "|" + f.Status + "|" + f.OriginalKey + "|" + firstLine(f.Raw)
+}
+
+func firstLine(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if idx := strings.IndexByte(value, '\n'); idx >= 0 {
+		value = value[:idx]
+	}
+	if len(value) > 160 {
+		value = value[:160]
+	}
+	return value
 }
 
 type verificationStatus string

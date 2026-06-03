@@ -543,10 +543,18 @@ func TestDirectScannerRuntimeFeaturesForVerifyModes(t *testing.T) {
 		if features.ProviderEnabled || features.AIEnabled {
 			t.Fatalf("features = %#v", features)
 		}
-		if features.Warning == "" {
-			t.Fatalf("deprecated verify warning missing: %#v", features)
-		}
 		if !reflect.DeepEqual(args, []string{"scan", "-i", "127.0.0.1", "--verify=off"}) {
+			t.Fatalf("args = %#v", args)
+		}
+
+		features, args, err = directScannerRuntimeFeatures([]string{"scan", "-i", "127.0.0.1", "--deep"})
+		if err != nil {
+			t.Fatalf("directScannerRuntimeFeatures() error = %v", err)
+		}
+		if !features.ProviderEnabled || features.ProviderOptional || !features.AIEnabled || !features.ScannerAI {
+			t.Fatalf("deep features = %#v", features)
+		}
+		if !reflect.DeepEqual(args, []string{"scan", "-i", "127.0.0.1", "--deep"}) {
 			t.Fatalf("args = %#v", args)
 		}
 
@@ -556,6 +564,22 @@ func TestDirectScannerRuntimeFeaturesForVerifyModes(t *testing.T) {
 		}
 		if !features.ProviderEnabled || features.ProviderOptional || !features.AIEnabled || !features.ScannerAI {
 			t.Fatalf("features = %#v", features)
+		}
+
+		features, _, err = directScannerRuntimeFeatures([]string{"scan", "-i", "127.0.0.1", "--sniper"})
+		if err != nil {
+			t.Fatalf("directScannerRuntimeFeatures() error = %v", err)
+		}
+		if !features.ProviderEnabled || features.ProviderOptional || !features.AIEnabled || !features.ScannerAI {
+			t.Fatalf("sniper features = %#v", features)
+		}
+
+		features, _, err = directScannerRuntimeFeatures([]string{"scan", "-i", "127.0.0.1", "--ai"})
+		if err != nil {
+			t.Fatalf("directScannerRuntimeFeatures() error = %v", err)
+		}
+		if !features.ProviderEnabled || features.ProviderOptional || !features.AIEnabled || !features.ScannerAI {
+			t.Fatalf("ai features = %#v", features)
 		}
 	})
 }

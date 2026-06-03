@@ -1,0 +1,41 @@
+//go:build windows
+
+package cmd
+
+import (
+	"errors"
+	"os"
+
+	"golang.org/x/sys/windows"
+)
+
+const agentPIDLockOffset = 0xfffffff0
+
+func lockAgentPIDFile(f *os.File) error {
+	overlapped := windows.Overlapped{Offset: agentPIDLockOffset}
+	return windows.LockFileEx(
+		windows.Handle(f.Fd()),
+		windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY,
+		0,
+		1,
+		0,
+		&overlapped,
+	)
+}
+
+func unlockAgentPIDFile(f *os.File) error {
+	overlapped := windows.Overlapped{Offset: agentPIDLockOffset}
+	return windows.UnlockFileEx(windows.Handle(f.Fd()), 0, 1, 0, &overlapped)
+}
+
+func processExists(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err == nil {
+		_ = windows.CloseHandle(handle)
+		return true
+	}
+	return errors.Is(err, windows.ERROR_ACCESS_DENIED)
+}

@@ -34,6 +34,8 @@ func findingTarget(finding finding) string {
 		return f.Target
 	case aiSkillFinding:
 		return f.Target
+	case aiSkillResponse:
+		return f.Target
 	}
 	return ""
 }
@@ -59,7 +61,11 @@ func findingEvidence(finding finding) string {
 			return f.Summary
 		}
 		return f.Detail
+	case aiSkillResponse:
+		if f.Summary != "" {
+			return f.Summary
+		}
+		return f.Detail
 	}
 	return ""
 }
-

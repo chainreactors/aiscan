@@ -2,6 +2,9 @@ package scan
 
 import (
 	"context"
+	"net"
+	"net/url"
+	"strings"
 
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	"github.com/chainreactors/parsers"
@@ -58,6 +61,7 @@ func (c *Command) runSprayCapability(ctx context.Context, flags flags, web webOp
 	opts = applyWebStrategyOptions(flags, web, opts)
 	opts.URLs = []string{target.URL}
 	opts.Host = target.HostHeader
+	opts.Scope = webTargetScope(target)
 	opts.OnStats = func(stats sdktypes.Stats) {
 		emit(statsEvent(source, stats))
 	}
@@ -72,6 +76,10 @@ func (c *Command) runSprayCapability(ctx context.Context, flags flags, web webOp
 			return
 		}
 		if !reportableSprayResultForCapability(result, source) {
+			continue
+		}
+		result = sanitizeSprayResultScope(target.URL, result)
+		if result == nil {
 			continue
 		}
 		emit(targetEvent(source, target.Raw, newWebProbeTarget(target.Raw, source, target.HostHeader, result)))
@@ -229,6 +237,83 @@ func deriveWebProbeResult(profile profile, source string, result *parsers.SprayR
 	if result.RedirectURL != "" {
 		emit(targetEvent(source+":redirect", "", newWebTarget("", result.RedirectURL, hostHeader)))
 	}
+}
+
+func webTargetScope(target webTarget) []string {
+	base, err := url.Parse(strings.TrimSpace(target.URL))
+	if err != nil || base.Host == "" {
+		return nil
+	}
+	scope := []string{strings.ToLower(base.Host)}
+	if target.HostHeader != "" {
+		scope = append(scope, strings.ToLower(target.HostHeader))
+		if _, _, err := net.SplitHostPort(target.HostHeader); err != nil && base.Port() != "" {
+			scope = append(scope, strings.ToLower(net.JoinHostPort(target.HostHeader, base.Port())))
+		}
+	}
+	return uniqueStrings(scope)
+}
+
+func sanitizeSprayResultScope(baseURL string, result *parsers.SprayResult) *parsers.SprayResult {
+	if result == nil {
+		return nil
+	}
+	if !sameAssetURL(baseURL, result.UrlString) {
+		return nil
+	}
+	if result.RedirectURL == "" || sameAssetURL(baseURL, result.RedirectURL) {
+		return result
+	}
+	clone := *result
+	clone.RedirectURL = ""
+	return &clone
+}
+
+func sameAssetURL(baseURL, candidate string) bool {
+	base, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || base.Host == "" {
+		return true
+	}
+	ref, err := url.Parse(strings.TrimSpace(candidate))
+	if err != nil || ref.Host == "" {
+		return true
+	}
+	return strings.EqualFold(base.Hostname(), ref.Hostname()) && effectivePort(base) == effectivePort(ref)
+}
+
+func effectivePort(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	if port := u.Port(); port != "" {
+		return port
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http":
+		return "80"
+	case "https":
+		return "443"
+	default:
+		return ""
+	}
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func deriveWeakpassResult(source string, result *parsers.ZombieResult, emit func(event)) {

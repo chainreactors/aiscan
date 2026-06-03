@@ -269,7 +269,7 @@ quick 模式的 capability：
 | `spray_check` | Web 基础探测和 HTTP 指纹识别 |
 | `core_web` | Web 结果关联分析 |
 | `spray_plugins` | 合并执行 common、bak、active 插件探测 |
-| `spray_crawl` | 网页爬取（depth 1） |
+| `spray_crawl` | 网页爬取（depth 2） |
 | `zombie_weakpass` | 弱口令检测 |
 | `neutron_poc` | 基于指纹的 POC 检测 |
 

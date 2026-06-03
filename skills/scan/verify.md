@@ -107,12 +107,13 @@ The saved template can be replayed against other targets with `playwright templa
 
 ## Output Format
 
-Return a single JSON object:
+When you have completed verification, call the `checkpoint` tool:
 
-```json
-{"status":"confirmed|info|not_confirmed|inconclusive","target":"<host:port or URL>","summary":"<one sentence>","detail":"<exact command output as evidence>","remediation":"<fix advice or empty>"}
-```
+- **kind**: "verify"
+- **target**: the host:port or URL you verified
+- **status**: confirmed, not_confirmed, info, or inconclusive
+- **title**: one-sentence finding summary
+- **content**: markdown body with exact command output as evidence
+- **labels**: severity and classification tags (e.g. "high", "critical")
 
-Only output the JSON object. Do not add markdown fences or extra text.
-
-Include the **exact command output** in the `detail` field as evidence. This allows humans to independently verify your conclusion.
+Do not output raw JSON. Always use the checkpoint tool to report your results.

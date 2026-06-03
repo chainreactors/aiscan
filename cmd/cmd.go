@@ -26,7 +26,7 @@ type Option struct {
 	IOAOptions     `group:"IOA Options" config:"ioa"`
 	ReconOptions   `group:"Recon Options" config:"recon"`
 	MiscOptions    `group:"Miscellaneous Options" config:"misc"`
-	ScanConfig scanConfigOptions `no-flag:"true" config:"scan"`
+	ScanConfig     scanConfigOptions `no-flag:"true" config:"scan"`
 }
 
 type scanConfigOptions struct {
@@ -40,7 +40,7 @@ type LLMOptions struct {
 	APIKey   string `long:"api-key" config:"api_key" description:"LLM API key (or set env: OPENAI_API_KEY, AISCAN_API_KEY)"`
 	Model    string `long:"model" config:"model" description:"LLM model name"`
 	LLMProxy string `long:"llm-proxy" config:"proxy" description:"Proxy for LLM API requests"`
-	AI       bool   `long:"ai" description:"Enable all AI skills: verify findings, sniper fingerprint analysis, and summarize results"`
+	AI       bool   `long:"ai" description:"Enable AI verification, sniper fingerprint analysis, and summarize results"`
 }
 
 type ScannerOptions struct {
@@ -358,7 +358,7 @@ func newCLIParser(cli *cliOptions, options goflags.Options) *goflags.Parser {
 aiscan - AI-assisted security scanner
 
 Commands:
-  scan           Scan a target, with optional AI skills (--ai, --sniper)
+  scan           Scan a target, with optional AI skills (--ai, --sniper, --deep)
   agent          Run the natural-language agent
 
 Advanced scanners:
@@ -376,6 +376,7 @@ Examples:
   aiscan scan -i 127.0.0.1
   aiscan scan -i http://target.com --ai --model gpt-4o
   aiscan scan -i http://target.com --sniper
+  aiscan scan -i http://target.com --mode full --deep
   aiscan scan -i 192.168.1.0/24 --mode full
   aiscan scan -i http://target.com --mode full --ai --report
   aiscan agent -p "find web services and check vulnerabilities" -i 192.168.1.0/24

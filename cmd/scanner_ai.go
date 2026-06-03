@@ -6,7 +6,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
@@ -71,43 +70,6 @@ func runScannerWithAgent(ctx context.Context, option *Option, application *app.A
 	return nil
 }
 
-// runScannerPostAnalysis runs a lightweight one-shot LLM call to analyze
-// scanner output that was already captured. No tool access, no agent loop.
-//
-// Entry point: auto-triggered after `aiscan scan --ai` completes.
-func runScannerPostAnalysis(ctx context.Context, option *Option, application *app.App, scannerArgs []string, scanOutput string, logger telemetry.Logger) (string, error) {
-	if application.Provider == nil {
-		return "", fmt.Errorf("--ai requires a configured LLM provider")
-	}
-	if len(scannerArgs) == 0 {
-		return "", nil
-	}
-
-	command := scannerArgs[0]
-	intent, err := resolveScannerIntent(option, application.Skills, command)
-	if err != nil {
-		return "", err
-	}
-
-	timeout := defaultInt(DefaultVerifyTimeout, 120)
-	analysisCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
-	defer cancel()
-
-	cfg := agent.Config{
-		Provider:     application.Provider,
-		Model:        option.Model,
-		MaxTokens:    1600,
-		SystemPrompt: "You are aiscan's scanner-output processor. Follow the supplied tool capability description and user intent. Use the scanner output as evidence and do not invent unsupported facts.",
-		Logger:       telemetry.NopLogger(),
-	}
-
-	prompt := formatPostAnalysisPrompt(command, scannerArgs[1:], intent, scanOutput)
-	result, err := cfg.Run(analysisCtx, prompt)
-	if err != nil {
-		return "", err
-	}
-	return result.Output, nil
-}
 
 // --- intent resolution ---
 
@@ -173,25 +135,3 @@ func formatScannerTaskPrompt(scannerArgs []string, intent string) string {
 	return fmt.Sprintf("Execute: %s\n\nUser intent: %s", command, strings.TrimSpace(intent))
 }
 
-func formatPostAnalysisPrompt(command string, args []string, intent, output string) string {
-	return fmt.Sprintf(`User intent:
-%s
-
-Scanner command:
-%s %s
-
-Scanner output:
-%s
-
-Use the embedded scanner-output description to interpret the data, then follow the user intent.
-`, strings.TrimSpace(intent), command, strings.Join(args, " "), clipScannerOutput(output))
-}
-
-func clipScannerOutput(output string) string {
-	output = strings.TrimSpace(output)
-	const maxPromptOutput = 60000
-	if len(output) <= maxPromptOutput {
-		return output
-	}
-	return output[:maxPromptOutput] + "\n... (scanner output truncated)"
-}

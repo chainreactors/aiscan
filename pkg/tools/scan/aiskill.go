@@ -3,10 +3,11 @@ package scan
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/agent"
+	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/record"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
 )
@@ -19,6 +20,7 @@ type AISkill struct {
 	SkillFile string // embedded skill file path for LLM reference (e.g. "aiscan://skills/scan/verify.md")
 	Accept    func(event) bool
 	Prompt    func(event) string
+	RunKey    func(event) string
 	Workers   int
 }
 
@@ -56,7 +58,7 @@ Return "confirmed" only for direct evidence. Return "not_confirmed" when probing
 		Workers: 3,
 	},
 	{
-		Name: "sniper", CapName: capAgentSniper, Flag: "sniper", SkillFile: "aiscan://skills/scan/sniper.md",
+		Name: "sniper", CapName: capAgentSniper, Flag: "sniper", Agent: true, SkillFile: "aiscan://skills/scan/sniper.md",
 		Accept: func(e event) bool {
 			if e.Kind != eventFinding {
 				return false
@@ -74,6 +76,19 @@ Identify known CVEs (critical/high), public exploits, and remediation.`,
 				fp.Target, strings.Join(fp.Fingers, ", "))
 		},
 		Workers: 3,
+	},
+	{
+		Name: "deep", CapName: capAgentDeep, Flag: "deep", Agent: true, SkillFile: "aiscan://skills/scan/deep.md",
+		Accept: shouldDeepTestAsset,
+		Prompt: deepAssetPrompt,
+		RunKey: func(e event) string {
+			key := deepAssetTargetKey(e)
+			if key == "" {
+				return ""
+			}
+			return capAgentDeep + "|" + key
+		},
+		Workers: 1,
 	},
 }
 
@@ -102,6 +117,9 @@ func shouldVerifyAISkillFinding(finding aiSkillFinding) bool {
 }
 
 func aiSkillEnabled(skill AISkill, flags flags) bool {
+	if skill.Flag == "deep" {
+		return flags.Deep
+	}
 	if flags.AI {
 		return true
 	}
@@ -131,22 +149,114 @@ func buildAISkillCap(c *Command, skill AISkill) pipeline.Capability {
 	)
 	cap.RunKey = func(pe pipeline.Event) string {
 		e, ok := pe.(event)
-		if !ok || e.Finding == nil {
+		if !ok {
 			return ""
+		}
+		if skill.RunKey != nil {
+			return skill.RunKey(e)
+		}
+		if e.Finding == nil {
+			return skill.CapName + "|" + e.Key()
 		}
 		return skill.CapName + "|" + string(e.Finding.Kind()) + "|" + e.Finding.Key()
 	}
 	return cap
 }
 
-func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit func(event)) {
-	if skill.Agent {
-		if c.agentFunc == nil {
-			c.logger.Debugf("scan capability=%s status=skipped reason=agent_func_unconfigured", skill.CapName)
-			return
+func shouldDeepTestAsset(e event) bool {
+	switch e.Kind {
+	case eventTarget:
+		if target, ok := e.Target.(webTarget); ok {
+			return strings.TrimSpace(target.URL) != ""
 		}
-	} else if c.aiFunc == nil {
-		c.logger.Debugf("scan capability=%s status=skipped reason=provider_unconfigured", skill.CapName)
+	case eventFinding:
+		fp, ok := e.Finding.(fingerprintFinding)
+		return ok && strings.TrimSpace(fp.Target) != "" && len(parsersNormalizeNames(fp.Fingers)) > 0
+	}
+	return false
+}
+
+func deepAssetTargetKey(e event) string {
+	switch e.Kind {
+	case eventTarget:
+		if target, ok := e.Target.(webTarget); ok {
+			return deepAssetKey(webAssetTarget(target.URL), target.HostHeader)
+		}
+	case eventFinding:
+		fp, ok := e.Finding.(fingerprintFinding)
+		if !ok {
+			return ""
+		}
+		if strings.TrimSpace(fp.Target) == "" || len(parsersNormalizeNames(fp.Fingers)) == 0 {
+			return ""
+		}
+		return deepAssetKey(assetTargetFromValues(fp.Target), "")
+	}
+	return ""
+}
+
+func deepAssetKey(target, hostHeader string) string {
+	target = canonicalKey(target)
+	if target == "" || target == canonicalKey("Scan") {
+		return ""
+	}
+	if hostHeader = strings.ToLower(strings.TrimSpace(hostHeader)); hostHeader != "" {
+		return "asset|" + target + "|host=" + hostHeader
+	}
+	return "asset|" + target
+}
+
+func deepAssetPrompt(e event) string {
+	if target, ok := e.Target.(webTarget); ok {
+		return deepWebPrompt(target, e.Source)
+	}
+	if fp, ok := e.Finding.(fingerprintFinding); ok {
+		return deepFingerprintPrompt(fp, e.Source)
+	}
+	return ""
+}
+
+func deepWebPrompt(target webTarget, source string) string {
+	assetURL := webAssetTarget(target.URL)
+	return fmt.Sprintf(`Perform a safe deep dynamic web test for this discovered web asset. Use the browser automation tool for rendered-page and interaction testing.
+
+Website:
+- url: %s
+- evidence_url: %s
+- host_header: %s
+- source: %s
+
+Focus on rendered-page behavior, forms, SPA routes, client-side endpoints, network activity, and safe canary-based vulnerability checks.
+Do not run destructive actions, brute force, credential stuffing, shell uploads, or state-changing workflows unless the page clearly presents a harmless search/login/test interaction.
+You must call the checkpoint tool exactly once when finished. If browser testing fails, still call checkpoint with status=inconclusive and include the attempted commands or errors.
+Submit one checkpoint summarizing exploitable findings, high-value observations, or why no issue was confirmed.`,
+		assetURL, target.URL, target.HostHeader, source)
+}
+
+func deepFingerprintPrompt(fp fingerprintFinding, source string) string {
+	fingers := parsersNormalizeNames(fp.Fingers)
+	sort.Strings(fingers)
+	assetTarget := assetTargetFromValues(fp.Target)
+	return fmt.Sprintf(`Perform a safe deep assessment for this fingerprinted asset.
+
+Asset:
+- target: %s
+- evidence_target: %s
+- fingerprints: %s
+- focus: %t
+- source: %s
+
+Use the fingerprint and scan evidence to assess whether the identified technology or service exposes a realistic attack surface.
+For web targets, consider framework-specific routes, default panels, version exposure, and safe canary checks.
+For non-web services, focus on version-specific risk, authentication surface, known misconfiguration patterns, and safe validation steps that do not brute force or mutate state.
+Do not treat a fingerprint alone as a confirmed vulnerability. Return confirmed only with direct evidence. Return info for meaningful exposure, not_confirmed when no issue is supported, and inconclusive when the evidence is insufficient.
+You must call the checkpoint tool exactly once with kind="deep".`,
+		assetTarget, fp.Target, strings.Join(fingers, ", "), fp.Focus, source)
+}
+
+func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit func(event)) {
+	if c.agentFunc == nil {
+		c.logger.Debugf("scan capability=%s status=skipped reason=agent_func_unconfigured", skill.CapName)
 		return
 	}
 
@@ -161,50 +271,55 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 	if skill.SkillFile != "" {
 		prompt = fmt.Sprintf("Read %s for instructions before starting.\n\n%s", skill.SkillFile, prompt)
 	}
+	browserEvidence := ""
+	if skill.Name == "deep" && c.deepBrowser != nil {
+		targetURL := deepWebURL(e)
+		if targetURL != "" {
+			evidence, err := c.deepBrowser(skillCtx, targetURL)
+			if err != nil {
+				browserEvidence = fmt.Sprintf("Browser collection error: %v", err)
+			} else {
+				browserEvidence = strings.TrimSpace(evidence)
+			}
+			if browserEvidence != "" {
+				prompt = appendDeepBrowserEvidence(prompt, browserEvidence)
+			}
+		}
+	}
 	start := time.Now()
 
-	var parsed *agent.SkillResult
-	var rawResult string
-	var err error
-
-	if skill.Agent && c.agentFunc != nil {
-		agentResult, agentErr := c.agentFunc(skillCtx, prompt, "", c.aiConfig.Model, 1600)
-		if agentErr != nil {
-			c.logger.Debugf("scan capability=%s status=failed error=%q", skill.CapName, agentErr)
-			return
-		}
-		if agentResult == nil {
-			c.logger.Debugf("scan capability=%s status=failed error=nil_result", skill.CapName)
-			return
-		}
-		parsed = agentResult.Parsed
-		rawResult = agentResult.Raw
-	} else {
-		rawResult, err = c.aiFunc(skillCtx, prompt, "", c.aiConfig.Model, 1600)
-		if err != nil {
-			c.logger.Debugf("scan capability=%s status=failed error=%q", skill.CapName, err)
-			return
-		}
-		parsed, err = agent.ParseSkillResult(rawResult)
-		if err != nil || parsed == nil {
-			c.logger.Debugf("scan capability=%s status=parse_failed error=%q", skill.CapName, err)
-			return
-		}
-	}
+	agentResult, agentErr := c.agentFunc(skillCtx, prompt, "", c.aiConfig.Model, 1600)
 	duration := time.Since(start)
-
-	if parsed == nil {
-		c.logger.Debugf("scan capability=%s status=parse_failed error=nil_parsed", skill.CapName)
+	if agentErr != nil {
+		c.logger.Debugf("scan capability=%s status=failed error=%q", skill.CapName, agentErr)
+		emitAISkillResponse(skill, e, "failed", "LLM call failed", agentErr.Error(), emit)
 		return
 	}
+	if agentResult == nil || agentResult.Checkpoint == nil || isMissingAISkillCheckpoint(agentResult.Checkpoint) {
+		c.logger.Debugf("scan capability=%s status=failed error=no_checkpoint", skill.CapName)
+		raw := ""
+		if agentResult != nil {
+			raw = strings.TrimSpace(agentResult.Raw)
+		}
+		if c.recorder != nil {
+			c.recorder.AITurn(skill.Name, 1, prompt, raw, nil, duration, record.TokenUsage{})
+		}
+		emitAISkillResponse(skill, e, "response", "agent response without checkpoint", raw, emit)
+		return
+	}
+	cp := agentResult.Checkpoint
+	c.hydrateAISkillCheckpoint(skill, e, cp)
 
-	if parsed.Summary == "" && parsed.Detail == "" {
+	if cp.Title == "" && cp.Content == "" {
 		return
 	}
 
 	if c.recorder != nil {
-		c.recorder.AITurn(skill.Name, 1, prompt, rawResult, nil, duration, record.TokenUsage{})
+		c.recorder.AITurn(skill.Name, 1, prompt, agentResult.Raw, nil, duration, record.TokenUsage{})
 	}
+
+	status := checkpointStatus(cp)
+	target := checkpointTarget(cp)
 
 	originalKey := ""
 	originalKind := findingKind("")
@@ -212,34 +327,148 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 		originalKey = e.Finding.Key()
 		originalKind = e.Finding.Kind()
 	}
-	if parsed.Target == "" {
-		parsed.Target = findingTarget(e.Finding)
-	}
 
 	if c.recorder != nil {
-		c.recorder.AISkill(skill.Name, parsed.Target, parsed.Status, parsed.Summary, parsed.Detail, duration)
+		c.recorder.AISkill(skill.Name, target, status, cp.Title, cp.Content, duration)
 	}
 
 	emit(findingEvent(skill.CapName, aiSkillFinding{
 		Skill:        skill.Name,
-		Target:       parsed.Target,
-		Status:       parsed.Status,
-		Summary:      parsed.Summary,
-		Detail:       parsed.Detail,
-		Remediation:  parsed.Remediation,
+		Target:       target,
+		Status:       status,
+		Summary:      cp.Title,
+		Detail:       cp.Content,
 		OriginalKey:  originalKey,
 		OriginalKind: originalKind,
 	}))
 }
 
-func (c *Command) generateAIReport(ctx context.Context, coll *collector) string {
-	var fn func(ctx context.Context, prompt, systemPrompt, model string, maxTokens int) (string, error)
-	if c.reportFunc != nil {
-		fn = c.reportFunc
-	} else if c.aiFunc != nil {
-		fn = c.aiFunc
+func isMissingAISkillCheckpoint(cp *command.CheckpointResult) bool {
+	if cp == nil {
+		return true
 	}
-	if fn == nil {
+	return strings.EqualFold(strings.TrimSpace(cp.Title), "agent did not submit checkpoint") &&
+		strings.TrimSpace(cp.Content) == "" &&
+		strings.TrimSpace(cp.Kind) == "" &&
+		strings.TrimSpace(cp.Target) == ""
+}
+
+func emitAISkillResponse(skill AISkill, e event, status, summary, detail string, emit func(event)) {
+	target := aiSkillEventTarget(e)
+	originalKey := ""
+	originalKind := findingKind("")
+	if e.Finding != nil {
+		originalKey = e.Finding.Key()
+		originalKind = e.Finding.Kind()
+	}
+	raw := strings.TrimSpace(detail)
+	if strings.TrimSpace(summary) == "" && raw != "" {
+		summary = firstLine(raw)
+	}
+	emit(findingEvent(skill.CapName, aiSkillResponse{
+		Skill:        skill.Name,
+		Target:       target,
+		Status:       status,
+		Summary:      summary,
+		Detail:       raw,
+		Raw:          raw,
+		OriginalKey:  originalKey,
+		OriginalKind: originalKind,
+	}))
+}
+
+func (c *Command) hydrateAISkillCheckpoint(skill AISkill, e event, cp *command.CheckpointResult) {
+	if cp == nil {
+		return
+	}
+	if strings.TrimSpace(cp.Kind) == "" {
+		cp.Kind = skill.Name
+	}
+	if strings.TrimSpace(cp.Target) == "" {
+		cp.Target = aiSkillEventTarget(e)
+	}
+}
+
+func aiSkillEventTarget(e event) string {
+	if e.Target != nil {
+		switch target := e.Target.(type) {
+		case webTarget:
+			if strings.TrimSpace(target.URL) != "" {
+				return strings.TrimSpace(target.URL)
+			}
+		case webProbeTarget:
+			if target.Result != nil && strings.TrimSpace(target.Result.UrlString) != "" {
+				return strings.TrimSpace(target.Result.UrlString)
+			}
+		case serviceTarget:
+			if target.Result != nil {
+				return target.Result.GetTarget()
+			}
+		}
+		if e.Target.RawInput() != "" {
+			return e.Target.RawInput()
+		}
+		return e.Target.Key()
+	}
+	if e.Finding != nil {
+		if target := findingTarget(e.Finding); target != "" {
+			return target
+		}
+		return e.Finding.Key()
+	}
+	return ""
+}
+
+func deepWebURL(e event) string {
+	if target, ok := e.Target.(webTarget); ok {
+		return strings.TrimSpace(webAssetTarget(target.URL))
+	}
+	return ""
+}
+
+func parsersNormalizeNames(values []string) []string {
+	normalized := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		for _, item := range strings.Split(value, ",") {
+			name := strings.ToLower(strings.TrimSpace(item))
+			if name == "" {
+				continue
+			}
+			if _, ok := seen[name]; ok {
+				continue
+			}
+			seen[name] = struct{}{}
+			normalized = append(normalized, name)
+		}
+	}
+	return normalized
+}
+
+func appendDeepBrowserEvidence(prompt, evidence string) string {
+	return fmt.Sprintf(`%s
+
+aiscan has already run browser automation for this target. Analyze the collected Playwright evidence below; do not say you need to inspect the site before producing a result.
+
+Browser evidence:
+%s
+
+Based on this evidence, call checkpoint with kind="deep" only when you have a clear final assessment. If you cannot call the tool, write a concise natural-language response; aiscan will render it as agent response, not as a checkpoint finding.`, prompt, evidence)
+}
+
+func checkpointStatus(cp *command.CheckpointResult) string {
+	if cp.Status != "" {
+		return cp.Status
+	}
+	return "inconclusive"
+}
+
+func checkpointTarget(cp *command.CheckpointResult) string {
+	return cp.Target
+}
+
+func (c *Command) generateAIReport(ctx context.Context, coll *collector) string {
+	if c.reportFunc == nil {
 		return coll.ReportMarkdown()
 	}
 
@@ -268,7 +497,7 @@ Scan results:
 	reportCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	result, err := fn(reportCtx, prompt, "", c.aiConfig.Model, 4000)
+	result, err := c.reportFunc(reportCtx, prompt, "", c.aiConfig.Model, 4000)
 	if err != nil {
 		c.logger.Debugf("scan report skill failed: %v", err)
 		return coll.ReportMarkdown()

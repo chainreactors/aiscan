@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"encoding/xml"
@@ -170,37 +169,17 @@ func runDirectScannerMode(ctx context.Context, option *Option, rest []string, lo
 		return runScannerWithAgent(ctx, option, application, scannerArgs, logger)
 	}
 	var stream io.Writer
-	var streamCapture bytes.Buffer
 	if option.NoColor && scannerArgs[0] == "scan" && !hasScannerFlag(scannerArgs[1:], "--no-color") {
 		scannerArgs = append(scannerArgs, "--no-color")
 	}
 	if shouldStreamScannerOutput(scannerArgs) {
-		if scanAI {
-			stream = io.MultiWriter(os.Stdout, &streamCapture)
-		} else {
-			stream = os.Stdout
-		}
+		stream = os.Stdout
 	}
 	out, err := application.Commands.ExecuteArgsStreaming(ctx, scannerArgs, stream)
 	if err != nil {
 		return err
 	}
 	fmt.Print(out)
-	if scanAI {
-		aiInput := out
-		if streamCapture.Len() > 0 {
-			aiInput = streamCapture.String() + out
-		}
-		output := newAgentOutput(option)
-		output.Start("analysis", strings.Join(scannerArgs, " "))
-		result, err := runScannerPostAnalysis(ctx, option, application, scannerArgs, aiInput, logger)
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(result) != "" {
-			output.Final(result)
-		}
-	}
 	return nil
 }
 

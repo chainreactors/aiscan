@@ -1,6 +1,9 @@
 package engine
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestBuildSprayOptionAppliesDebugAndRuntimeOptions(t *testing.T) {
 	opt := buildSprayOption(SprayCheckOptions{
@@ -32,5 +35,12 @@ func TestBuildSprayOptionAppliesDebugAndRuntimeOptions(t *testing.T) {
 	}
 	if len(opt.Dictionaries) != 1 || opt.Dictionaries[0] != "paths.txt" || len(opt.Rules) != 1 || opt.Rules[0] != "rules.txt" || opt.Word != "admin" {
 		t.Fatalf("word options = dicts:%#v rules:%#v word:%q", opt.Dictionaries, opt.Rules, opt.Word)
+	}
+}
+
+func TestDefaultSprayInvocationTimeoutBoundsCrawl(t *testing.T) {
+	got := defaultSprayInvocationTimeout(SprayCheckOptions{Timeout: 5, Crawl: true, CrawlDepth: 2})
+	if got != 80*time.Second {
+		t.Fatalf("crawl invocation timeout = %s, want 80s", got)
 	}
 }

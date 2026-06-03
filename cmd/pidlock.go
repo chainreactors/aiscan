@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
@@ -31,7 +30,7 @@ func acquireAgentPIDFile(path string, logger telemetry.Logger) (*agentPIDLock, e
 	if err != nil {
 		return nil, fmt.Errorf("open agent pidfile %s: %w", path, err)
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := lockAgentPIDFile(f); err != nil {
 		_ = f.Close()
 		if existingPID, readErr := readAgentPIDFile(path); readErr == nil && existingPID > 0 {
 			return nil, fmt.Errorf("another aiscan agent is already running (PID %d, pidfile %s); kill it first or remove the pidfile", existingPID, path)
@@ -41,7 +40,7 @@ func acquireAgentPIDFile(path string, logger telemetry.Logger) (*agentPIDLock, e
 	locked := true
 	cleanup := func() {
 		if locked {
-			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+			_ = unlockAgentPIDFile(f)
 		}
 		_ = f.Close()
 	}
@@ -85,7 +84,7 @@ func (l *agentPIDLock) Release() {
 		return
 	}
 	_ = removeOwnedAgentPIDFile(l.path, l.pid)
-	_ = syscall.Flock(int(l.file.Fd()), syscall.LOCK_UN)
+	_ = unlockAgentPIDFile(l.file)
 	_ = l.file.Close()
 	l.file = nil
 }
@@ -115,13 +114,4 @@ func readAgentPIDFile(path string) (int, error) {
 		return 0, fmt.Errorf("invalid pid %q", pidStr)
 	}
 	return pid, nil
-}
-
-func processExists(pid int) bool {
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	err = proc.Signal(syscall.Signal(0))
-	return err == nil || errors.Is(err, os.ErrPermission) || errors.Is(err, syscall.EPERM)
 }

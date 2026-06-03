@@ -17,9 +17,15 @@ Assessment criteria:
 - Are Metasploit/ExploitDB modules available?
 - What is the recommended remediation (version upgrade, patch, workaround)?
 
-Output guidance:
+## Output Format
 
-- status: "info" when vulnerabilities are found, "not_confirmed" when none known
-- summary: brief description of the most critical vulnerability
-- detail: CVE numbers and exploit availability
-- remediation: upgrade path or mitigation advice
+When you have completed analysis, call the `checkpoint` tool:
+
+- **kind**: "sniper"
+- **target**: the host:port or URL you analyzed
+- **status**: "info" when vulnerabilities are found, "not_confirmed" when none known
+- **title**: brief description of the most critical vulnerability found
+- **content**: CVE numbers, exploit availability, and remediation advice
+- **labels**: severity tags (e.g. "high", "critical")
+
+Do not output raw JSON. Always use the checkpoint tool to report your results.

@@ -89,6 +89,7 @@ func (e *Engine) Init() error {
 	}
 
 	l := launcher.New().
+		Leakless(false).
 		Headless(true).
 		Set("disable-gpu").
 		Set("no-sandbox").

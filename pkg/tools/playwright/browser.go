@@ -59,6 +59,8 @@ func (c *Command) SetProxy(proxyURLStr string) {
 
 func (c *Command) Name() string { return "playwright" }
 
+func (c *Command) InProcess() {}
+
 func (c *Command) Usage() string {
 	return `playwright - Headless browser for JS-rendered pages, screenshots, network capture, and interactive vulnerability verification
 Usage:
@@ -372,6 +374,7 @@ func (c *Command) getOrLaunchBrowser() (*rod.Browser, error) {
 	}
 
 	l := launcher.New().
+		Leakless(false).
 		Headless(true).
 		Set("disable-gpu").
 		Set("no-sandbox").
