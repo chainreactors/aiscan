@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"sync"
 
 	"github.com/chainreactors/aiscan/pkg/resources"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
@@ -16,6 +17,8 @@ import (
 	"github.com/chainreactors/sdk/spray"
 	sdkzombie "github.com/chainreactors/sdk/zombie"
 )
+
+var neutronProxyMu sync.Mutex
 
 // ReconOptions 提供 uncover 资产测绘引擎所需的凭证与默认行为。
 type ReconOptions struct {
@@ -190,6 +193,8 @@ func initWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 // process-wide defaults. Each neutron execution creates its own transport clone,
 // making this safe for concurrent use. Pass an empty string to clear.
 func ApplyNeutronProxy(proxyURL string) {
+	neutronProxyMu.Lock()
+	defer neutronProxyMu.Unlock()
 	if proxyURL == "" {
 		neutronhttp.DefaultOption.Proxy = nil
 		neutronhttp.DefaultTransport.Proxy = nil

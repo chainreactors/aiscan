@@ -306,12 +306,12 @@ func executeToolCalls(ctx context.Context, cfg Config, assistantMsg provider.Cha
 				}(i)
 			}
 		}
+		wg.Wait()
 		for i := range slots {
 			if slots[i].mode == command.ExecSequential {
 				slots[i].result = runToolCall(ctx, cfg, assistantMsg, slots[i].tc)
 			}
 		}
-		wg.Wait()
 	} else {
 		for i := range slots {
 			slots[i].result = runToolCall(ctx, cfg, assistantMsg, slots[i].tc)

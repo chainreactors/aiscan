@@ -26,7 +26,7 @@ import (
 //  2. refs.messages  → directed via root message ref (new!)
 //  3. no refs        → broadcast to all nodes
 func TestE2ETwoSwarmNodesCoordinated(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	server := httptest.NewServer(ioaserver.NewHandler(service))
 	defer server.Close()
 

@@ -45,12 +45,18 @@ func (h *Harness) WithMonitor(out ...io.Writer) *Harness {
 func New(t *testing.T) *Harness {
 	t.Helper()
 
-	baseURL := envOrDefault("AISCAN_TEST_BASE_URL", "https://api.deepseek.com")
-	apiKey := envOrDefault("AISCAN_TEST_API_KEY", "")
-	model := envOrDefault("AISCAN_TEST_MODEL", "deepseek-v4-pro")
+	baseURL := os.Getenv("AISCAN_TEST_BASE_URL")
+	apiKey := os.Getenv("AISCAN_TEST_API_KEY")
+	model := os.Getenv("AISCAN_TEST_MODEL")
 
 	if apiKey == "" {
 		t.Skip("AISCAN_TEST_API_KEY not set, skipping e2e test")
+	}
+	if baseURL == "" {
+		baseURL = "https://api.deepseek.com"
+	}
+	if model == "" {
+		model = "deepseek-v4-pro"
 	}
 
 	cachedExeOnce.Do(func() {

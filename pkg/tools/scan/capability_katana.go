@@ -174,7 +174,7 @@ func sameRootDomain(rawURL, rdn string) bool {
 		return false
 	}
 	host := parsed.Hostname()
-	return strings.HasSuffix(host, rdn)
+	return host == rdn || strings.HasSuffix(host, "."+rdn)
 }
 
 type silentWriter struct{}

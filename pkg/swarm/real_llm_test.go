@@ -34,7 +34,7 @@ func TestRealLLMSwarmNodeRepliesThroughIOA(t *testing.T) {
 		model = "deepseek-v4-pro"
 	}
 
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	server := httptest.NewServer(ioaserver.NewHandler(service))
 	defer server.Close()
 

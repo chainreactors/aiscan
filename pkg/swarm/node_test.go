@@ -18,7 +18,7 @@ import (
 )
 
 func TestThreeSwarmNodesCollaborate(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	server := httptest.NewServer(ioaserver.NewHandler(service))
 	defer server.Close()
 
@@ -116,7 +116,7 @@ func TestThreeSwarmNodesCollaborate(t *testing.T) {
 }
 
 func TestThreeSwarmNodesReplyToBroadcastHello(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	server := httptest.NewServer(ioaserver.NewHandler(service))
 	defer server.Close()
 
@@ -199,7 +199,7 @@ func TestThreeSwarmNodesReplyToBroadcastHello(t *testing.T) {
 }
 
 func TestNodeAnnouncesSwarmProfile(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	server := httptest.NewServer(ioaserver.NewHandler(service))
 	defer server.Close()
 
@@ -309,7 +309,7 @@ func TestNodeAnnouncesSwarmProfile(t *testing.T) {
 }
 
 func TestNodeHeartbeatRunsHandler(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	server := httptest.NewServer(ioaserver.NewHandler(service))
 	defer server.Close()
 
@@ -458,7 +458,7 @@ func TestSlimMessageContextHonorsBudgetAndKeepsNewest(t *testing.T) {
 }
 
 func TestHeartbeatPromptUsesNoIntentMessageWhenPromptEmpty(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	server := httptest.NewServer(ioaserver.NewHandler(service))
 	defer server.Close()
 
@@ -492,7 +492,7 @@ func TestHeartbeatPromptUsesNoIntentMessageWhenPromptEmpty(t *testing.T) {
 }
 
 func TestNodeDynamicLoops(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	server := httptest.NewServer(ioaserver.NewHandler(service))
 	defer server.Close()
 
@@ -588,7 +588,7 @@ func TestNodeDynamicLoops(t *testing.T) {
 }
 
 func TestNodeAcceptsTaskByRootMessageRef(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	server := httptest.NewServer(ioaserver.NewHandler(service))
 	defer server.Close()
 
@@ -680,7 +680,7 @@ func TestNodeAcceptsTaskByRootMessageRef(t *testing.T) {
 }
 
 func TestNodeRejectsTaskForOtherRootMessage(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	server := httptest.NewServer(ioaserver.NewHandler(service))
 	defer server.Close()
 
@@ -888,7 +888,7 @@ func TestIsTaskMessage(t *testing.T) {
 // the same space (without task_dispatch meta) are forwarded into the task's
 // Peers channel rather than triggering a second task.
 func TestPeerMessagesForwardedToActiveTask(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	server := httptest.NewServer(ioaserver.NewHandler(service))
 	defer server.Close()
 
@@ -1073,7 +1073,7 @@ func TestPeerMessagesForwardedToActiveTask(t *testing.T) {
 // Regression: previously these messages were marked processed before the
 // busy-check, so they were stamped as "handled" and never retried by catchUp.
 func TestTasksArrivingWhileBusyAreQueued(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	server := httptest.NewServer(ioaserver.NewHandler(service))
 	defer server.Close()
 
@@ -1203,7 +1203,7 @@ func TestTasksArrivingWhileBusyAreQueued(t *testing.T) {
 // per-task peer buffer is full we defer (don't mark processed) so the next
 // catchUp tick re-delivers as soon as the consumer drains some.
 func TestPeerOverflowRecoversViaCatchUp(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	server := httptest.NewServer(ioaserver.NewHandler(service))
 	defer server.Close()
 

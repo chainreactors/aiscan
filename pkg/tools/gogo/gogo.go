@@ -322,8 +322,10 @@ func (c *Command) executeViaRunWithArgs(ctx context.Context, args []string) (str
 	var buf lockedBuffer
 	done := make(chan error, 1)
 
+	childCtx, childCancel := context.WithCancel(ctx)
+
 	go func() {
-		done <- gogocore.RunWithArgs(ctx, args, gogocore.RunOptions{
+		done <- gogocore.RunWithArgs(childCtx, args, gogocore.RunOptions{
 			Output: &buf,
 			BeforeInit: func() error {
 				if c.engine != nil {
@@ -342,14 +344,18 @@ func (c *Command) executeViaRunWithArgs(ctx context.Context, args []string) (str
 
 	select {
 	case err := <-done:
+		childCancel()
 		if err != nil {
 			return buf.String(), fmt.Errorf("gogo: %w", err)
 		}
 		return buf.String(), nil
 	case <-ctx.Done():
-		// Unblock the caller.  The RunWithArgs goroutine continues in the
-		// background — this is a known leak, but the alternative is blocking
-		// the entire agent for hours.
+		childCancel()
+		// Give the goroutine a brief window to exit after cancel before we abandon it.
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+		}
 		return buf.String(), fmt.Errorf("gogo: %w (scan orphaned)", ctx.Err())
 	}
 }

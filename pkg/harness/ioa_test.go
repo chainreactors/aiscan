@@ -17,7 +17,7 @@ import (
 )
 
 func TestIOALoopReceivesTask(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	srv := httptest.NewServer(ioaserver.NewHandler(service))
 	defer srv.Close()
 
@@ -71,7 +71,7 @@ func TestIOALoopReceivesTask(t *testing.T) {
 }
 
 func TestIOALoopMultipleWorkers(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	srv := httptest.NewServer(ioaserver.NewHandler(service))
 	defer srv.Close()
 
@@ -121,7 +121,7 @@ func TestIOALoopMultipleWorkers(t *testing.T) {
 }
 
 func TestIOALoopPeerMessage(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	srv := httptest.NewServer(ioaserver.NewHandler(service))
 	defer srv.Close()
 
@@ -182,7 +182,7 @@ func TestIOALoopPeerMessage(t *testing.T) {
 }
 
 func TestIOATaskSpawnsSubagents(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	srv := httptest.NewServer(ioaserver.NewHandler(service))
 	defer srv.Close()
 
@@ -248,7 +248,7 @@ func TestIOATaskSpawnsSubagents(t *testing.T) {
 }
 
 func TestIOATwoWorkersDispatch(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	srv := httptest.NewServer(ioaserver.NewHandler(service))
 	defer srv.Close()
 

@@ -50,7 +50,7 @@ func TestRealScanDirectPipeline(t *testing.T) {
 }
 
 // =====================================================================
-// Layer 2: Scanner + AI post-analysis (--ai flag)
+// Layer 2: Scanner + AI pipeline skills (--ai flag)
 // =====================================================================
 
 func TestRealScanGogoAI(t *testing.T) {
@@ -227,7 +227,7 @@ func TestRealAgentLoopScan(t *testing.T) {
 // =====================================================================
 
 func TestRealIOALoopScanTask(t *testing.T) {
-	service := ioaserver.NewService(ioaserver.NewMemoryStore())
+	service := ioaserver.NewService(ioaserver.NewMemoryStore(), "")
 	srv := httptest.NewServer(ioaserver.NewHandler(service))
 	defer srv.Close()
 

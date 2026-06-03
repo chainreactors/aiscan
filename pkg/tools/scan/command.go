@@ -239,11 +239,16 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		out = coll.TerminalString(stream != nil && !flags.NoColor)
 	}
 	if c.recorder != nil {
+		coll.mu.Lock()
 		stats := coll.statsSnapshotLocked()
+		gogoCount := len(coll.gogoResults)
+		webCount := len(coll.webEndpoints)
+		vulnCount := len(coll.neutronMatches) + len(coll.zombieResults)
+		aiCount := len(coll.aiSkillResults)
+		errCount := len(coll.errors)
+		coll.mu.Unlock()
 		c.recorder.ScanEnd(stats.Duration(), stats.Inputs,
-			len(coll.gogoResults), len(coll.webEndpoints),
-			len(coll.neutronMatches)+len(coll.zombieResults),
-			len(coll.aiSkillResults), len(coll.errors))
+			gogoCount, webCount, vulnCount, aiCount, errCount)
 	}
 	if flags.OutputFile != "" && !flags.JSON {
 		plainOut := coll.PlainTextWithFindings()

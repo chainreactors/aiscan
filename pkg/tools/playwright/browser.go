@@ -396,6 +396,7 @@ func (c *Command) getOrLaunchBrowser() (*rod.Browser, error) {
 
 	b := rod.New().ControlURL(controlURL)
 	if err := b.Connect(); err != nil {
+		l.Kill()
 		return nil, fmt.Errorf("playwright: connect failed: %w", err)
 	}
 
