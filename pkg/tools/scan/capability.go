@@ -19,7 +19,33 @@ const (
 	capNeutronPOC     = "neutron_poc"
 	capAgentVerify    = "agent_verify"
 	capAgentSniper    = "agent_sniper"
+	capAgentDeep      = "agent_deep"
 )
+
+// CapabilityBuilder builds additional pipeline capabilities for a given
+// profile. Build-tagged packages (e.g. katana) register builders via init()
+// so the scan pipeline gains optional capabilities without the core scan
+// package importing them.
+type CapabilityBuilder func(c *Command, flags flags, opts scanOptions, profile profile) []pipeline.Capability
+
+var extraCapabilityBuilders []CapabilityBuilder
+
+// RegisterCapabilityBuilder adds an optional capability builder that will be
+// invoked during buildCapabilities. Intended for build-tagged init() calls.
+func RegisterCapabilityBuilder(fn CapabilityBuilder) {
+	extraCapabilityBuilders = append(extraCapabilityBuilders, fn)
+}
+
+// ProfileExtender modifies a profile's capability set for a given mode.
+// Build-tagged packages register extenders to add optional capability names.
+type ProfileExtender func(mode string, p *profile)
+
+var profileExtenders []ProfileExtender
+
+// RegisterProfileExtender adds a profile extender called during profileForMode.
+func RegisterProfileExtender(fn ProfileExtender) {
+	profileExtenders = append(profileExtenders, fn)
+}
 
 func acceptsTarget(kinds ...targetKind) func(event) bool {
 	set := make(map[targetKind]struct{}, len(kinds))
@@ -32,6 +58,32 @@ func acceptsTarget(kinds ...targetKind) func(event) bool {
 		}
 		_, ok := set[e.Target.Kind()]
 		return ok
+	}
+}
+
+// crawlSources lists capability names whose output should not re-trigger
+// other crawlers. spray_check still processes them for enrichment.
+var crawlSources = map[string]struct{}{
+	capSprayCrawl: {},
+}
+
+// RegisterCrawlSource marks a capability as a crawl source so its
+// output does not re-trigger other crawlers.
+func RegisterCrawlSource(name string) {
+	crawlSources[name] = struct{}{}
+}
+
+// acceptsNonCrawlTarget builds an accept function that skips events
+// emitted by crawl capabilities. This prevents crawl→crawl loops while
+// still letting spray_check enrich every discovered URL.
+func acceptsNonCrawlTarget(kinds ...targetKind) func(event) bool {
+	base := acceptsTarget(kinds...)
+	return func(e event) bool {
+		if !base(e) {
+			return false
+		}
+		_, isCrawl := crawlSources[e.Source]
+		return !isCrawl
 	}
 }
 
@@ -90,7 +142,14 @@ func (c *Command) buildCapabilities(flags flags, opts scanOptions, profile profi
 
 	if profile.Enabled(capSprayCrawl) && hasSpray(c.engines) {
 		sprayBuilt = true
-		capabilities = append(capabilities, sprayCapability(c, flags, opts.Web, capSprayCrawl, engine.SprayCheckOptions{Crawl: true, CrawlDepth: profile.CrawlDepth}, c.runSprayCapability))
+		capabilities = append(capabilities, wrapCapability(
+			capSprayCrawl,
+			acceptsNonCrawlTarget(targetWeb),
+			capWorkers(c.engines.Capacity.Spray, flags.SprayThreads),
+			func(ctx context.Context, e event, emit func(event)) {
+				c.runSprayCapability(ctx, flags, opts.Web, e.Target, capSprayCrawl, engine.SprayCheckOptions{Crawl: true, CrawlDepth: profile.CrawlDepth}, emit)
+			},
+		))
 	}
 
 	addSpray(capSprayBrute, engine.SprayCheckOptions{DefaultDict: true})
@@ -134,6 +193,10 @@ func (c *Command) buildCapabilities(flags flags, opts scanOptions, profile profi
 	}
 	if opts.hasWeakpassOverrides() && !weakpassBuilt {
 		c.logger.Warnf("scan capability=%s option=user,pwd status=ignored reason=engine_unavailable", capZombieWeakpass)
+	}
+
+	for _, builder := range extraCapabilityBuilders {
+		capabilities = append(capabilities, builder(c, flags, opts, profile)...)
 	}
 
 	for _, skill := range scanAISkills {

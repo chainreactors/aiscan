@@ -52,44 +52,41 @@ func directScannerRuntimeFeatures(rest []string) (runtimeFeatures, []string, err
 		return runtimeFeatures{}, rest, nil
 	}
 	verifyMode, explicit := scannerVerifyMode(rest[1:])
+	aiEnabled := hasScannerFlag(rest[1:], "--ai")
 	sniperEnabled := hasScannerFlag(rest[1:], "--sniper")
-	warning := ""
-	if explicit {
-		warning = "--verify is deprecated; use --ai"
-	}
+	deepEnabled := hasScannerFlag(rest[1:], "--deep")
+	aiSkillRequested := aiEnabled || sniperEnabled || deepEnabled
 
 	features := runtimeFeatures{}
 
-	if sniperEnabled {
+	if aiSkillRequested {
 		features.ProviderEnabled = true
 		features.ProviderOptional = false
 		features.AIEnabled = true
+		features.ScannerAI = true
 	}
 
 	switch verifyMode {
 	case "auto":
 		features.ProviderEnabled = true
-		if !sniperEnabled {
+		if !aiSkillRequested {
 			features.ProviderOptional = true
 		}
 		features.AIEnabled = true
-		features.ScannerAI = explicit
-		features.Warning = warning
+		features.ScannerAI = explicit || aiSkillRequested
 		return features, removeScannerFlag(rest, "--verify"), nil
 	case "off":
 		if explicit {
-			features.Warning = warning
 			return features, replaceOrAppendScannerFlag(rest, "--verify", "off"), nil
 		}
 		return features, rest, nil
 	case "low", "medium", "high", "critical":
 		features.ProviderEnabled = true
-		if !sniperEnabled {
+		if !aiSkillRequested {
 			features.ProviderOptional = !explicit
 		}
 		features.AIEnabled = true
-		features.ScannerAI = explicit
-		features.Warning = warning
+		features.ScannerAI = explicit || aiSkillRequested
 		return features, rest, nil
 	default:
 		if explicit {
