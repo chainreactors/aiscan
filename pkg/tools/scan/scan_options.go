@@ -120,27 +120,32 @@ func profileForMode(mode string) (profile, error) {
 		capNeutronPOC,
 	}
 
+	var p profile
 	switch mode {
 	case scanModeQuick:
-		return profile{
+		p = profile{
 			Name:         scanModeQuick,
 			Capabilities: capabilitySet(quickCaps...),
-			CrawlDepth:   1,
-		}, nil
+			CrawlDepth:   2,
+		}
 	case scanModeFull:
 		fullCaps := append([]string{}, quickCaps...)
 		fullCaps = append(fullCaps,
 			capSprayPlugins,
 			capSprayBrute,
 		)
-		return profile{
+		p = profile{
 			Name:         scanModeFull,
 			Capabilities: capabilitySet(fullCaps...),
 			CrawlDepth:   2,
-		}, nil
+		}
 	default:
 		return profile{}, fmt.Errorf("unknown scan mode %q, expected quick or full", mode)
 	}
+	for _, ext := range profileExtenders {
+		ext(mode, &p)
+	}
+	return p, nil
 }
 
 func capabilitySet(names ...string) map[string]struct{} {

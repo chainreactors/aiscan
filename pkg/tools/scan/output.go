@@ -1,51 +1,13 @@
 package scan
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/chainreactors/parsers"
 )
 
-const (
-	ansiReset  = "\x1b[0m"
-	ansiDim    = "\x1b[2m"
-	ansiCyan   = "\x1b[36m"
-	ansiGreen  = "\x1b[32m"
-	ansiYellow = "\x1b[33m"
-	ansiRed    = "\x1b[31m"
-	ansiBold   = "\x1b[1m"
-)
-
-var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
-
-func stripANSI(value string) string {
-	return ansiPattern.ReplaceAllString(value, "")
-}
-
-func colorize(enabled bool, code, value string) string {
-	if !enabled || value == "" {
-		return value
-	}
-	return code + value + ansiReset
-}
-
-func colorForPriority(priority priority) string {
-	switch priority {
-	case priorityLow:
-		return ansiCyan
-	case priorityMedium:
-		return ansiYellow
-	case priorityHigh:
-		return ansiRed
-	case priorityCritical:
-		return ansiBold + ansiRed
-	default:
-		return ansiDim
-	}
-}
-
 func formatEventLine(event event, color bool) string {
+	rc := newRenderColor(color)
 	switch event.Kind {
 	case eventTarget:
 		switch target := event.Target.(type) {
@@ -57,20 +19,17 @@ func formatEventLine(event event, color bool) string {
 			if target.Result.IsHttp() {
 				label = "web"
 			}
-			prefix := outputPrefix(label, ansiGreen, color)
-			return formatOutputLine(prefix, target.Result.OutputLine(), color)
+			return formatOutputLine(outputPrefix(label, rc.Green), target.Result.OutputLine(), color)
 		case webTarget:
 			if target.URL == "" {
 				return ""
 			}
-			prefix := outputPrefix("web", ansiGreen, color)
-			return formatOutputLine(prefix, parsers.JoinOutput(target.URL, target.HostHeader), color)
+			return formatOutputLine(outputPrefix("web", rc.Green), parsers.JoinOutput(target.URL, target.HostHeader), color)
 		case webProbeTarget:
 			if !reportableSprayResultForCapability(target.Result, target.Capability) {
 				return ""
 			}
-			prefix := outputPrefix("web", ansiGreen, color)
-			return formatOutputLine(prefix, target.Result.OutputLine(), color)
+			return formatOutputLine(outputPrefix("web", rc.Green), target.Result.OutputLine(), color)
 		}
 	case eventFinding:
 		switch finding := event.Finding.(type) {
@@ -79,47 +38,45 @@ func formatEventLine(event event, color bool) string {
 			if len(names) == 0 || !finding.Focus {
 				return ""
 			}
-			prefix := outputPrefix("fingerprint", colorForPriority(finding.Priority()), color)
-			return formatOutputLine(prefix, parsers.JoinOutput(finding.Target, parsers.NamesOutput(names)), color)
+			return formatOutputLine(outputPrefix("fingerprint", rc.ForPriority(finding.Priority())), parsers.JoinOutput(finding.Target, parsers.NamesOutput(names)), color)
 		case weakpassFinding:
 			if finding.Result == nil {
 				return ""
 			}
-			prefix := outputPrefix("risk", colorForPriority(finding.Priority()), color)
-			return formatOutputLine(prefix, finding.Result.OutputLine(), color)
+			return formatOutputLine(outputPrefix("risk", rc.ForPriority(finding.Priority())), finding.Result.OutputLine(), color)
 		case vulnFinding:
 			if finding.String() == "" {
 				return ""
 			}
-			prefix := outputPrefix("vuln", colorForPriority(finding.Priority()), color)
-			return formatOutputLine(prefix, finding.String(), color)
+			return formatOutputLine(outputPrefix("vuln", rc.ForPriority(finding.Priority())), finding.String(), color)
 		case verificationFinding:
 			if !reportableVerificationFinding(finding) {
 				return ""
 			}
-			prefix := outputPrefix("ai", colorForVerificationStatus(finding.Status), color)
-			return formatOutputLine(prefix, verificationOutput(finding), color)
+			return formatOutputLine(outputPrefix("ai", rc.ForVerificationStatus(finding.Status)), verificationOutput(finding), color)
 		case aiSkillFinding:
 			if finding.Summary == "" && finding.Detail == "" {
 				return ""
 			}
-			prefix := outputPrefix(aiSkillOutputLabelWithStatus(finding), aiSkillOutputColor(finding), color)
-			return formatOutputLine(prefix, aiSkillOutput(finding), color)
+			return formatOutputLine(outputPrefix(aiSkillOutputLabelWithStatus(finding), rc.ForAISkill(finding.Status)), aiSkillOutput(finding), color)
+		case aiSkillResponse:
+			if finding.Summary == "" && finding.Detail == "" && finding.Raw == "" {
+				return ""
+			}
+			return formatOutputLine(outputPrefix(aiSkillResponseLabel(finding), rc.Dim), aiSkillResponseOutput(finding), color)
 		}
 	case eventError:
 		if event.Error.Message == "" {
 			return ""
 		}
-		prefix := outputPrefix("error", ansiRed, color)
-		return formatOutputLine(prefix, parsers.JoinOutput(event.Error.Message), color)
+		return formatOutputLine(outputPrefix("error", rc.Red), parsers.JoinOutput(event.Error.Message), color)
 	}
 	return ""
 }
 
-func outputPrefix(source, code string, color bool) string {
-	return colorize(color, code, "["+source+"]")
+func outputPrefix(source string, colorFn func(string) string) string {
+	return colorFn("[" + source + "]")
 }
-
 
 func formatOutputLine(prefix, output string, color bool) string {
 	output = strings.TrimSpace(output)
@@ -136,17 +93,6 @@ func sanitizeOutputLine(line string, color bool) string {
 		line = stripANSI(line)
 	}
 	return line
-}
-
-func colorForVerificationStatus(status verificationStatus) string {
-	switch status {
-	case verificationConfirmed:
-		return ansiGreen
-	case verificationNotConfirmed, verificationFailed:
-		return ansiRed
-	default:
-		return ansiYellow
-	}
 }
 
 func verificationOutput(finding verificationFinding) string {
@@ -182,19 +128,6 @@ func aiSkillOutputLabelWithStatus(finding aiSkillFinding) string {
 	}
 }
 
-func aiSkillOutputColor(finding aiSkillFinding) string {
-	switch finding.Status {
-	case "confirmed":
-		return ansiGreen
-	case "not_confirmed":
-		return ansiDim
-	case "info":
-		return ansiYellow
-	default:
-		return ansiYellow
-	}
-}
-
 func aiSkillOutput(finding aiSkillFinding) string {
 	parts := []string{finding.Target}
 	if finding.Status != "" {
@@ -205,6 +138,30 @@ func aiSkillOutput(finding aiSkillFinding) string {
 	}
 	if finding.Detail != "" {
 		parts = append(parts, finding.Detail)
+	}
+	return parsers.JoinOutput(parts...)
+}
+
+func aiSkillResponseLabel(response aiSkillResponse) string {
+	base := aiSkillOutputLabel(response.Skill)
+	if response.Status != "" {
+		return base + ":" + response.Status
+	}
+	return base + ":response"
+}
+
+func aiSkillResponseOutput(response aiSkillResponse) string {
+	parts := []string{response.Target}
+	if response.Status != "" {
+		parts = append(parts, response.Status)
+	}
+	if response.Summary != "" {
+		parts = append(parts, response.Summary)
+	}
+	if response.Detail != "" {
+		parts = append(parts, response.Detail)
+	} else if response.Raw != "" {
+		parts = append(parts, response.Raw)
 	}
 	return parsers.JoinOutput(parts...)
 }

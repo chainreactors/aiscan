@@ -15,15 +15,15 @@ import (
 )
 
 type Command struct {
-	engines    *engine.Set
-	aiFunc     AIFunc
-	agentFunc  AgentFunc
-	reportFunc AIFunc
-	aiConfig   AISkillConfig
-	recorder   *recorder
-	logger     telemetry.Logger
-	proxy      string
-	workDir    string
+	engines     *engine.Set
+	agentFunc   AgentFunc
+	reportFunc  ReportFunc
+	aiConfig    AISkillConfig
+	deepBrowser DeepBrowserFunc
+	recorder    *recorder
+	logger      telemetry.Logger
+	proxy       string
+	workDir     string
 }
 
 func (c *Command) SetWorkDir(dir string) { c.workDir = dir }
@@ -33,13 +33,15 @@ type flags struct {
 	ListFile        string   `short:"l" long:"list" description:"File containing input targets, one per line"`
 	Mode            string   `long:"mode" description:"Scan profile: quick or full" default:"quick"`
 	Thread          int      `long:"thread" description:"Total concurrency budget distributed across engines" default:"1000"`
-	AI              bool     `long:"ai" description:"Enable all AI skills: verify findings and sniper fingerprint analysis"`
+	AI              bool     `long:"ai" description:"Compatibility alias for --verify=high --sniper"`
 	Sniper          bool     `long:"sniper" description:"Use AI to search public vulnerabilities for discovered fingerprints"`
+	Deep            bool     `long:"deep" description:"Run deep AI testing for discovered websites and fingerprinted assets"`
 	Trace           bool     `long:"trace" description:"Show internal scanner source and pipeline trace"`
 	Debug           bool     `long:"debug" description:"Enable trace and underlying scanner debug logs"`
 	JSON            bool     `short:"j" long:"json" description:"Output raw gogo and spray results as JSON Lines"`
 	Report          bool     `long:"report" description:"Output a concise final markdown report"`
 	OutputFile      string   `short:"f" long:"file" description:"Write output to file without ANSI colors"`
+	FindingsFile    string   `short:"F" long:"format" description:"Write aggregated asset report to file"`
 	NoColor         bool     `long:"no-color" description:"Disable ANSI colors in terminal output"`
 	Ports           string   `long:"ports" description:"Ports for gogo scanning; defaults to all in quick and - in full"`
 	Port            string   `long:"port" hidden:"true" description:"Alias for --ports"`
@@ -57,7 +59,7 @@ type flags struct {
 	Passwords       []string `long:"pwd" description:"Weakpass passwords. Can specify multiple."`
 	MaxNeutronPerFP int      `long:"max-neutron-per-finger" description:"Maximum neutron templates per fingerprint" default:"20"`
 	BroadPOC        bool     `long:"broad-poc" description:"Run POC templates even without matching fingerprints"`
-	Verify          string   `long:"verify" hidden:"true" description:"Deprecated: use --ai"`
+	Verify          string   `long:"verify" description:"Use AI to verify findings at priority threshold: auto, off, low, medium, high, or critical"`
 	VerifyTimeout   int      `long:"verify-timeout" hidden:"true" description:"Deprecated compatibility option; ignored" default:"120"`
 }
 
@@ -85,10 +87,13 @@ Inputs:
   -l, --list        File containing inputs, one per line. CIDR is allowed.
 Options:
       --mode        Scan profile: quick or full (default: quick)
-      --ai          Enable all AI skills: verify + sniper (requires LLM provider)
+      --verify      Use AI to verify findings at threshold: auto, off, low, medium, high, critical
       --sniper      Use AI to search public vulnerabilities for discovered fingerprints
+      --deep        Run deep AI testing for discovered websites and fingerprinted assets
+      --ai          Compatibility alias for --verify=high --sniper
       --report      Output a concise final markdown report
   -f, --file        Write output to file without ANSI colors
+  -F, --format      Write aggregated asset report to file
       --no-color    Disable ANSI colors in terminal output
       --trace       Show internal scanner source and pipeline trace
       --debug       Enable trace and underlying scanner debug logs
@@ -111,17 +116,19 @@ Profiles:
   quick: fast exposure discovery, web probes, HTTP Basic weakpass, and fingerprint-based POC checks
   full: deeper ports, crawl depth=2, common backup/active web checks, and default web dictionary
 AI Skills:
-  --ai enables all AI skills automatically. Individual skills can be used standalone:
+  --verify=<level>: validate findings with LLM-guided active checks
   --sniper: search public CVEs/exploits for each fingerprint via AI agent
-  --ai (verify): validate medium/high findings with LLM reasoning
+  --deep: run dynamic testing for discovered websites and fingerprinted assets
+  --ai: compatibility alias for --verify=high --sniper
 Output:
   default: [web], [service], [fingerprint], [risk], [vuln], [sniper], [ai], [summary]
   --trace: also prints internal gogo/spray/zombie/neutron source and pipeline events
 Examples:
   scan -i 192.168.1.0/24 --mode quick
-  scan -i http://target.com --ai
+  scan -i http://target.com --verify=high
   scan -i http://target.com --sniper
-  scan -i http://target.com --mode full --ai --report
+  scan -i http://target.com --mode full --deep
+  scan -i http://target.com --mode full --verify=high --sniper --report
   scan -i 192.168.1.0/24 --ports top100
   scan -i 127.0.0.1 --mode quick -j
   scan -i 127.0.0.1 --mode quick -f 1.txt
@@ -132,21 +139,27 @@ Examples:
 }
 
 func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
-	return c.execute(ctx, c.resolveRelativePaths(args), nil)
+	out, _, err := c.execute(ctx, c.resolveRelativePaths(args), nil)
+	return out, err
 }
 
 func (c *Command) ExecuteStreaming(ctx context.Context, args []string, stream io.Writer) (string, error) {
+	out, _, err := c.execute(ctx, c.resolveRelativePaths(args), stream)
+	return out, err
+}
+
+func (c *Command) ExecuteStructured(ctx context.Context, args []string, stream io.Writer) (string, *StructuredResult, error) {
 	return c.execute(ctx, c.resolveRelativePaths(args), stream)
 }
 
-func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) (string, error) {
+func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) (string, *StructuredResult, error) {
 	var flags flags
 	parser := goflags.NewParser(&flags, goflags.Default&^goflags.PrintErrors)
 	if _, err := parser.ParseArgs(args); err != nil {
 		if flagsErr, ok := err.(*goflags.Error); ok && flagsErr.Type == goflags.ErrHelp {
-			return c.Usage() + "\n", nil
+			return c.Usage() + "\n", nil, nil
 		}
-		return "", fmt.Errorf("scan: %w", err)
+		return "", nil, fmt.Errorf("scan: %w", err)
 	}
 	if flags.Debug {
 		flags.Trace = true
@@ -158,27 +171,30 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 
 	profile, err := profileForMode(flags.Mode)
 	if err != nil {
-		return "", fmt.Errorf("scan: %w", err)
+		return "", nil, fmt.Errorf("scan: %w", err)
 	}
 	if verificationEnabled(flags.Verify) {
 		if _, err := parsePriority(flags.Verify); err != nil {
-			return "", fmt.Errorf("scan: %w", err)
+			return "", nil, fmt.Errorf("scan: %w", err)
 		}
 	}
 	options := resolveScanOptions(flags)
 
 	rawInputs, err := readInputs(flags.Inputs, flags.ListFile)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if len(rawInputs) == 0 {
-		return "", fmt.Errorf("scan: no input targets")
+		if flags.FindingsFile != "" {
+			return renderRecordFile(flags.FindingsFile, flags.NoColor)
+		}
+		return "", nil, fmt.Errorf("scan: no input targets")
 	}
 
 	if flags.OutputFile != "" {
 		rec, recErr := newRecorder(flags.OutputFile)
 		if recErr != nil {
-			return "", fmt.Errorf("scan: open record file: %w", recErr)
+			return "", nil, fmt.Errorf("scan: open record file: %w", recErr)
 		}
 		c.recorder = rec
 		defer func() { c.recorder.Close(); c.recorder = nil }()
@@ -196,7 +212,7 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: errorEventOf("", fmt.Sprintf("skip invalid input: %s", raw))})
 	})
 	if len(seeds) == 0 {
-		return "", fmt.Errorf("scan: no valid inputs")
+		return "", nil, fmt.Errorf("scan: no valid inputs")
 	}
 
 	capabilities := c.buildCapabilities(flags, options, profile)
@@ -213,9 +229,9 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 	if flags.JSON {
 		out, err = coll.JSONLines()
 		if err != nil {
-			return "", fmt.Errorf("scan json output: %w", err)
+			return "", nil, fmt.Errorf("scan json output: %w", err)
 		}
-	} else if flags.Report && flags.AI && c.aiFunc != nil {
+	} else if flags.Report && flags.AI && c.reportFunc != nil {
 		out = c.generateAIReport(ctx, coll)
 	} else if flags.Report {
 		out = coll.ReportMarkdown()
@@ -230,12 +246,18 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 			len(coll.aiSkillResults), len(coll.errors))
 	}
 	if flags.OutputFile != "" && !flags.JSON {
-		plainOut := coll.TerminalString(false)
+		plainOut := coll.PlainTextWithFindings()
 		if err := writeOutputFile(flags.OutputFile, plainOut); err != nil {
 			c.logger.Errorf("%s", err.Error())
 		}
 	}
-	return out, nil
+	if flags.FindingsFile != "" {
+		assetOut := coll.AssetReport()
+		if err := writeOutputFile(flags.FindingsFile, assetOut); err != nil {
+			c.logger.Errorf("%s", err.Error())
+		}
+	}
+	return out, coll.StructuredResult(), nil
 }
 
 func (c *Command) applyAISkillConfig(flags *flags) {
@@ -272,7 +294,6 @@ func defaultVerifyModeFromConfig(mode string) string {
 	}
 }
 
-
 func (c *Command) resolveRelativePaths(args []string) []string {
 	if c.workDir == "" {
 		return args
@@ -280,6 +301,7 @@ func (c *Command) resolveRelativePaths(args []string) []string {
 	fileFlags := map[string]bool{
 		"-l": true, "--list": true,
 		"-f": true, "--file": true,
+		"-F": true, "--format": true,
 		"--dict": true, "--rule": true,
 	}
 	out := make([]string, 0, len(args))

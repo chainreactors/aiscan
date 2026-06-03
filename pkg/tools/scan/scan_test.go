@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,9 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/agent"
+	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
+	"github.com/chainreactors/logs"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
 	"github.com/chainreactors/fingers/common"
 	"github.com/chainreactors/neutron/operators"
@@ -25,8 +27,8 @@ import (
 	"github.com/chainreactors/parsers"
 	sdkgogo "github.com/chainreactors/sdk/gogo"
 	sdkneutron "github.com/chainreactors/sdk/neutron"
-	sdktypes "github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/sdk/pkg/association"
+	sdktypes "github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/sdk/spray"
 	sdkzombie "github.com/chainreactors/sdk/zombie"
 )
@@ -43,7 +45,6 @@ func newTestPipeline(ctx context.Context, caps []pipeline.Capability, coll *coll
 func testSeeds(events ...event) []pipeline.Event {
 	return seedsToEvents(events)
 }
-
 
 func TestScanRunsWithOnlySprayStage(t *testing.T) {
 	cmd := New(&engine.Set{Spray: spray.NewEngine(nil)})
@@ -66,8 +67,8 @@ func TestScanProfilesAssembleCapabilities(t *testing.T) {
 			t.Fatalf("quick profile missing %s", name)
 		}
 	}
-	if quick.CrawlDepth != 1 {
-		t.Fatalf("quick crawl depth = %d, want 1", quick.CrawlDepth)
+	if quick.CrawlDepth != 2 {
+		t.Fatalf("quick crawl depth = %d, want 2", quick.CrawlDepth)
 	}
 	for _, name := range []string{capSprayPlugins, capSprayBrute} {
 		if quick.Enabled(name) {
@@ -308,6 +309,36 @@ func TestApplyWebStrategyOptionsEnablesReconAndPreservesCapabilityDefaults(t *te
 	}
 	if !reflect.DeepEqual(opts.Dictionaries, web.Dictionaries) || !reflect.DeepEqual(opts.Rules, web.Rules) {
 		t.Fatalf("spray dictionaries/rules = %#v/%#v", opts.Dictionaries, opts.Rules)
+	}
+}
+
+func TestWebTargetScopeUsesAssetHost(t *testing.T) {
+	got := webTargetScope(newWebTarget("", "http://127.0.0.1:4200/", "app.local"))
+	want := []string{"127.0.0.1:4200", "app.local", "app.local:4200"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("scope = %#v, want %#v", got, want)
+	}
+}
+
+func TestSprayResultScopeRejectsExternalURLs(t *testing.T) {
+	base := "http://127.0.0.1:4200/"
+	if got := sanitizeSprayResultScope(base, &parsers.SprayResult{UrlString: "https://github.com/trending"}); got != nil {
+		t.Fatalf("external result kept: %#v", got)
+	}
+	got := sanitizeSprayResultScope(base, &parsers.SprayResult{
+		UrlString:   "http://127.0.0.1:4200/assets/app.js",
+		RedirectURL: "https://github.com/login",
+		IsValid:     true,
+		Status:      200,
+		BodyLength:  12,
+		ContentType: "text/javascript",
+		ReqDepth:    1,
+	})
+	if got == nil {
+		t.Fatal("same asset result was dropped")
+	}
+	if got.RedirectURL != "" {
+		t.Fatalf("external redirect was not cleared: %#v", got.RedirectURL)
 	}
 }
 
@@ -827,12 +858,13 @@ func TestAgentVerifyCapabilityAcceptsFocusFingerprint(t *testing.T) {
 	agentFn := func(_ context.Context, prompt, systemPrompt, model string, maxTokens int) (*AgentRunResult, error) {
 		promptSeen = prompt
 		return &AgentRunResult{
-			Raw: `{"status":"not_confirmed","target":"http://127.0.0.1","summary":"focus fingerprint requires vulnerability-specific evidence","detail":"safe validation should check exact version"}`,
-			Parsed: &agent.SkillResult{
-				Status:  "not_confirmed",
+			Raw: `not_confirmed`,
+			Checkpoint: &command.CheckpointResult{
+				Kind:    "verify",
+				Title:   "focus fingerprint requires vulnerability-specific evidence",
+				Content: "safe validation should check exact version",
 				Target:  "http://127.0.0.1",
-				Summary: "focus fingerprint requires vulnerability-specific evidence",
-				Detail:  "safe validation should check exact version",
+				Status:  "not_confirmed",
 			},
 		}, nil
 	}
@@ -858,12 +890,13 @@ func TestAgentVerifyCapabilityUsesProviderAndEmitsVerification(t *testing.T) {
 			t.Fatalf("model = %q, want test-model", model)
 		}
 		return &AgentRunResult{
-			Raw: `{"status":"confirmed","target":"http://127.0.0.1","summary":"direct evidence supports the vulnerability","detail":"template matched"}`,
-			Parsed: &agent.SkillResult{
-				Status:  "confirmed",
+			Raw: `confirmed`,
+			Checkpoint: &command.CheckpointResult{
+				Kind:    "verify",
+				Title:   "direct evidence supports the vulnerability",
+				Content: "template matched",
 				Target:  "http://127.0.0.1",
-				Summary: "direct evidence supports the vulnerability",
-				Detail:  "template matched",
+				Status:  "confirmed",
 			},
 		}, nil
 	}
@@ -891,6 +924,66 @@ func TestAgentVerifyCapabilityUsesProviderAndEmitsVerification(t *testing.T) {
 	}
 }
 
+func TestAISkillFailureIsStructured(t *testing.T) {
+	agentFn := func(_ context.Context, prompt, systemPrompt, model string, maxTokens int) (*AgentRunResult, error) {
+		return nil, errors.New("API error (402): Insufficient Balance")
+	}
+	cmd := New(&engine.Set{}, WithAgentFunc(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
+	deepSkill := scanAISkills[2]
+	cap := buildAISkillCap(cmd, deepSkill)
+	coll := newCollector([]string{"seed"}, nil, false, false)
+	p := newTestPipeline(context.Background(), []pipeline.Capability{cap}, coll, false)
+	p.Run(testSeeds(targetEvent(capGogoPortscan, "", newWebTarget("", "http://127.0.0.1:8080", ""))))
+
+	if len(coll.aiSkillResults) != 0 {
+		t.Fatalf("ai skill results = %d, want 0", len(coll.aiSkillResults))
+	}
+	if len(coll.aiSkillResponses) != 1 {
+		t.Fatalf("ai skill responses = %d, want 1", len(coll.aiSkillResponses))
+	}
+	got := coll.aiSkillResponses[0].Response
+	if got.Skill != "deep" || got.Status != "failed" || got.Target != "http://127.0.0.1:8080" {
+		t.Fatalf("ai failure = %#v", got)
+	}
+	if !strings.Contains(got.Detail, "Insufficient Balance") {
+		t.Fatalf("ai failure detail = %q", got.Detail)
+	}
+	result := coll.StructuredResult()
+	if len(result.AI) != 1 || len(result.Assets) == 0 {
+		t.Fatalf("structured result missing AI/assets: %#v", result)
+	}
+	var found bool
+	for _, asset := range result.Assets {
+		if asset.Target != "http://127.0.0.1:8080" {
+			continue
+		}
+		for _, item := range asset.Items {
+			if item.Source == "deep" && item.Status == "failed" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("asset did not contain failed deep item: %#v", result.Assets)
+	}
+}
+
+func TestDeepAssetTargetKeyUsesAssetOrigin(t *testing.T) {
+	root := deepAssetTargetKey(targetEvent(capCoreWeb, "", newWebTarget("", "http://127.0.0.1:8765/", "")))
+	path := deepAssetTargetKey(targetEvent(capCoreWeb, "", newWebTarget("", "http://127.0.0.1:8765/pages/a.html", "")))
+	otherPort := deepAssetTargetKey(targetEvent(capCoreWeb, "", newWebTarget("", "http://127.0.0.1:8766/pages/a.html", "")))
+
+	if root == "" {
+		t.Fatal("root deep asset key is empty")
+	}
+	if path != root {
+		t.Fatalf("path deep asset key = %q, want same as root %q", path, root)
+	}
+	if otherPort == root {
+		t.Fatalf("different port deep asset key = %q, want different from %q", otherPort, root)
+	}
+}
+
 func TestAISkillConfigVerifyModeDoesNotEnableSniper(t *testing.T) {
 	cmd := New(&engine.Set{}, WithAISkillConfig(AISkillConfig{VerifyMode: "medium"}))
 	var flags flags
@@ -914,6 +1007,121 @@ func TestAISkillConfigEnableKeepsFullAIBehavior(t *testing.T) {
 	}
 }
 
+func TestDeepAISkillIsExplicitOnly(t *testing.T) {
+	cmd := New(&engine.Set{})
+	profile := profile{}
+
+	aiCaps := cmd.buildCapabilities(flags{AI: true}, scanOptions{}, profile)
+	if capabilityNames(aiCaps)[capAgentDeep] {
+		t.Fatal("--ai should not enable deep testing")
+	}
+
+	deepCaps := cmd.buildCapabilities(flags{Deep: true}, scanOptions{}, profile)
+	if !capabilityNames(deepCaps)[capAgentDeep] {
+		t.Fatal("--deep should enable deep testing")
+	}
+}
+
+func TestDeepAISkillAcceptsWebAndFingerprintAssets(t *testing.T) {
+	deepSkill := scanAISkills[2]
+	if !deepSkill.Accept(targetEvent("test", "", newWebTarget("", "http://127.0.0.1:8080", ""))) {
+		t.Fatal("deep should accept discovered web targets")
+	}
+	if !deepSkill.Accept(findingEvent("test", fingerprintFinding{Target: "127.0.0.1:445", Fingers: []string{"smb"}})) {
+		t.Fatal("deep should accept fingerprinted assets")
+	}
+	if deepSkill.Accept(findingEvent("test", fingerprintFinding{Target: "127.0.0.1:445"})) {
+		t.Fatal("deep should reject fingerprint events without fingerprints")
+	}
+}
+
+func TestDeepAISkillRunsFingerprintAssessment(t *testing.T) {
+	var promptSeen string
+	agentFn := func(_ context.Context, prompt, systemPrompt, model string, maxTokens int) (*AgentRunResult, error) {
+		promptSeen = prompt
+		return &AgentRunResult{
+			Raw: `info`,
+			Checkpoint: &command.CheckpointResult{
+				Kind:    "deep",
+				Title:   "SMB fingerprint requires review",
+				Content: "SMB exposure is meaningful but not proof of exploitability.",
+				Status:  "info",
+			},
+		}, nil
+	}
+	cmd := New(&engine.Set{}, WithAgentFunc(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
+	deepSkill := scanAISkills[2]
+	cap := buildAISkillCap(cmd, deepSkill)
+	coll := newCollector([]string{"seed"}, nil, false, false)
+	p := newTestPipeline(context.Background(), []pipeline.Capability{cap}, coll, false)
+	p.Run(testSeeds(
+		findingEvent(capGogoPortscan, fingerprintFinding{Target: "127.0.0.1:445", Fingers: []string{"smb"}, Focus: true}),
+	))
+
+	if !strings.Contains(promptSeen, "fingerprinted asset") || !strings.Contains(promptSeen, "smb") {
+		t.Fatalf("deep fingerprint prompt = %q", promptSeen)
+	}
+	if len(coll.aiSkillResults) != 1 {
+		t.Fatalf("ai skill results = %d, want 1", len(coll.aiSkillResults))
+	}
+	got := coll.aiSkillResults[0].Finding
+	if got.Target != "127.0.0.1:445" {
+		t.Fatalf("deep fingerprint target = %q, want 127.0.0.1:445", got.Target)
+	}
+	if got.OriginalKind != findingFingerprint {
+		t.Fatalf("original kind = %s, want fingerprint", got.OriginalKind)
+	}
+}
+
+func TestDeepAISkillEmitsResponseWhenCheckpointMissing(t *testing.T) {
+	agentFn := func(_ context.Context, prompt, systemPrompt, model string, maxTokens int) (*AgentRunResult, error) {
+		return &AgentRunResult{
+			Raw: "I inspected the browser evidence, but did not submit checkpoint.",
+			Checkpoint: &command.CheckpointResult{
+				Title:  "agent did not submit checkpoint",
+				Status: "inconclusive",
+			},
+		}, nil
+	}
+	browserFn := func(context.Context, string) (string, error) {
+		return "Title: Directory listing for /\nForms: none\nLinks: pages/, export.yaml", nil
+	}
+
+	cmd := New(&engine.Set{},
+		WithAgentFunc(agentFn),
+		WithDeepBrowserFunc(browserFn),
+		WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}),
+	)
+	deepSkill := scanAISkills[2]
+	cap := buildAISkillCap(cmd, deepSkill)
+	coll := newCollector([]string{"seed"}, nil, false, false)
+	p := newTestPipeline(context.Background(), []pipeline.Capability{cap}, coll, false)
+	p.Run(testSeeds(targetEvent(capCoreWeb, "", newWebTarget("", "http://127.0.0.1:8765/pages/a.html", ""))))
+
+	if len(coll.aiSkillResults) != 0 {
+		t.Fatalf("checkpoint results = %d, want 0", len(coll.aiSkillResults))
+	}
+	if len(coll.aiSkillResponses) != 1 {
+		t.Fatalf("ai skill responses = %d, want 1", len(coll.aiSkillResponses))
+	}
+	got := coll.aiSkillResponses[0].Response
+	if got.Status != "response" || got.Summary != "agent response without checkpoint" {
+		t.Fatalf("agent response = %#v", got)
+	}
+	result := coll.StructuredResult()
+	if len(result.AI) != 1 || result.AI[0].Kind != string(findingAIResponse) {
+		t.Fatalf("structured AI response = %#v", result.AI)
+	}
+}
+
+func capabilityNames(caps []pipeline.Capability) map[string]bool {
+	out := make(map[string]bool, len(caps))
+	for _, cap := range caps {
+		out[cap.Name] = true
+	}
+	return out
+}
+
 func TestAgentVerifyCapabilityUsesFallbackPromptWhenSkillBodyMissing(t *testing.T) {
 	var calls int
 	var systemPromptSeen string
@@ -921,12 +1129,13 @@ func TestAgentVerifyCapabilityUsesFallbackPromptWhenSkillBodyMissing(t *testing.
 		calls++
 		systemPromptSeen = systemPrompt
 		return &AgentRunResult{
-			Raw: `{"status":"not_confirmed","target":"http://127.0.0.1","summary":"no exploit evidence","detail":"403"}`,
-			Parsed: &agent.SkillResult{
-				Status:  "not_confirmed",
+			Raw: `not_confirmed`,
+			Checkpoint: &command.CheckpointResult{
+				Kind:    "verify",
+				Title:   "no exploit evidence",
+				Content: "403",
 				Target:  "http://127.0.0.1",
-				Summary: "no exploit evidence",
-				Detail:  "403",
+				Status:  "not_confirmed",
 			},
 		}, nil
 	}
@@ -1394,13 +1603,13 @@ func TestScanColorizesWebProbePrefixOnly(t *testing.T) {
 
 	raw := buf.String()
 	for _, want := range []string{
-		ansiGreen + "[web]" + ansiReset,
+		logs.Green("[web]"),
 	} {
 		if !strings.Contains(raw, want) {
 			t.Fatalf("colored output missing %q in %q", want, raw)
 		}
 	}
-	if strings.Contains(raw, ansiYellow+"401") || strings.Contains(raw, ansiGreen+`"json data"`) {
+	if strings.Contains(raw, logs.Yellow("401")) || strings.Contains(raw, logs.Green(`"json data"`)) {
 		t.Fatalf("scan output should not parse and color parser fields: %q", raw)
 	}
 	out := stripANSI(raw)
@@ -1472,7 +1681,7 @@ func TestScanFindingPriorityUsesFocusOutputOnly(t *testing.T) {
 	if strings.Contains(stripANSI(colored), " high ") {
 		t.Fatalf("colored finding output should not print priority text: %q", colored)
 	}
-	if !strings.Contains(colored, ansiRed+"[fingerprint]"+ansiReset) {
+	if !strings.Contains(colored, logs.Red("[fingerprint]")) {
 		t.Fatalf("colored finding output should encode high priority in color: %q", colored)
 	}
 }
@@ -1632,6 +1841,103 @@ func TestScanPlainTextStripsANSI(t *testing.T) {
 	if !strings.Contains(out, "[web] http://127.0.0.1:80 200 12 sim:1") {
 		t.Fatalf("plain text output missing parser content: %q", out)
 	}
+}
+
+func TestScanAggregatesAssets(t *testing.T) {
+	coll := newCollector([]string{"seed"}, nil, false, false)
+	service := parsers.NewGOGOResult("127.0.0.1", "8080")
+	service.Protocol = "http"
+	service.Midware = "http"
+
+	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: targetEvent(capGogoPortscan, "", newServiceTarget("", service))})
+	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: targetEvent(capSprayCheck, "", newWebProbeTarget("", capSprayCheck, "", &parsers.SprayResult{
+		IsValid:   true,
+		UrlString: "http://127.0.0.1:8080/admin",
+		Status:    200,
+		Title:     "admin",
+		Distance:  1,
+	}))})
+	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capSprayCheck, fingerprintFinding{
+		Target:  "http://127.0.0.1:8080",
+		Fingers: []string{"nginx"},
+		Focus:   true,
+	})})
+	coll.Finish()
+
+	result := coll.StructuredResult()
+	if len(result.Assets) != 1 {
+		t.Fatalf("assets = %d, want 1: %#v", len(result.Assets), result.Assets)
+	}
+	kinds := assetItemKindCounts(result.Assets[0].Items)
+	for _, kind := range []string{assetItemService, assetItemPath, assetItemFingerprint} {
+		if kinds[kind] != 1 {
+			t.Fatalf("asset item %s count = %d, want 1 in %#v", kind, kinds[kind], result.Assets[0].Items)
+		}
+	}
+}
+
+func TestScanAggregatesAIAsAssetItems(t *testing.T) {
+	coll := newCollector([]string{"seed"}, nil, false, false)
+	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentDeep, aiSkillFinding{
+		Skill:   "deep",
+		Target:  "http://127.0.0.1:8080",
+		Status:  "confirmed",
+		Summary: "confirmed exposure",
+		Detail:  "evidence",
+	})})
+	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentSniper, aiSkillFinding{
+		Skill:   "sniper",
+		Target:  "http://127.0.0.1:8080",
+		Status:  "info",
+		Summary: "public CVE lead",
+	})})
+	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentDeep, aiSkillResponse{
+		Skill:   "deep",
+		Target:  "http://127.0.0.1:8080",
+		Status:  "response",
+		Summary: "agent response without checkpoint",
+		Raw:     "no checkpoint submitted",
+	})})
+	coll.Finish()
+
+	result := coll.StructuredResult()
+	if len(result.Assets) != 1 {
+		t.Fatalf("assets = %d, want 1: %#v", len(result.Assets), result.Assets)
+	}
+	kinds := assetItemKindCounts(result.Assets[0].Items)
+	if kinds[assetItemFinding] != 1 || kinds[assetItemNote] != 1 || kinds[assetItemResponse] != 1 {
+		t.Fatalf("AI asset item kinds = %#v, want one finding, one note, and one response", kinds)
+	}
+}
+
+func TestScanFormatFileWritesAssetReportWithoutAI(t *testing.T) {
+	cmd := New(&engine.Set{})
+	file := filepath.Join(t.TempDir(), "assets.txt")
+	_, err := cmd.Execute(context.Background(), []string{
+		"-i", "http://127.0.0.1:1",
+		"--mode", "quick",
+		"--verify=off",
+		"-F", file,
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("read -F output: %v", err)
+	}
+	out := string(data)
+	if !strings.Contains(out, "Assets:") || !strings.Contains(out, "Summary:") {
+		t.Fatalf("-F output missing asset report:\n%s", out)
+	}
+}
+
+func assetItemKindCounts(items []AssetItem) map[string]int {
+	counts := make(map[string]int)
+	for _, item := range items {
+		counts[item.Kind]++
+	}
+	return counts
 }
 
 func TestScanOutputFileWritesPlainTextWithoutChangingStdout(t *testing.T) {

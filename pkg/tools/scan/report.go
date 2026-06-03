@@ -1,7 +1,6 @@
 package scan
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -167,6 +166,15 @@ func formatMarkdown(d *collector) string {
 		}
 	}
 
+	if len(d.aiSkillResponses) > 0 {
+		sb.WriteString("\n## AI Agent Responses\n\n")
+		for _, item := range sortedCopy(d.aiSkillResponses, func(a, b aiSkillResponseResult) bool {
+			return a.Response.Skill+"|"+a.Response.Target < b.Response.Skill+"|"+b.Response.Target
+		}) {
+			writeMarkdownEventLine(&sb, findingEvent(item.Source, item.Response))
+		}
+	}
+
 	if len(d.errors) > 0 {
 		sb.WriteString("\n## Errors\n\n")
 		for _, line := range sortedCopy(d.errors, func(a, b string) bool { return a < b }) {
@@ -186,42 +194,6 @@ func formatMarkdown(d *collector) string {
 	return sb.String()
 }
 
-func formatJSONLines(d *collector) (string, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	var sb strings.Builder
-	for _, result := range d.gogoResults {
-		line, err := json.Marshal(result)
-		if err != nil {
-			return "", err
-		}
-		sb.Write(line)
-		sb.WriteByte('\n')
-	}
-	for _, item := range d.sprayResults {
-		line, err := json.Marshal(item.Result)
-		if err != nil {
-			return "", err
-		}
-		sb.Write(line)
-		sb.WriteByte('\n')
-	}
-	return sb.String(), nil
-}
-
-func formatPlainText(d *collector, fileLines []string) string {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	var sb strings.Builder
-	for _, line := range fileLines {
-		sb.WriteString(line)
-		sb.WriteByte('\n')
-	}
-	sb.WriteString(formatScanSummaryLine(d, d.statsSnapshotLocked(), false))
-	return sb.String()
-}
 
 func formatScanSummaryLine(d *collector, stats statsSnapshot, color bool) string {
 	parts := []string{"completed"}
@@ -237,8 +209,9 @@ func formatScanSummaryLine(d *collector, stats statsSnapshot, color bool) string
 	parts = appendCount64(parts, stats.Tasks, "task", "tasks")
 	parts = appendCount64(parts, stats.Requests, "request", "requests")
 	parts = append(parts, stats.Duration().Round(time.Millisecond).String())
+	rc := newRenderColor(color)
 	output := strings.Join(parts, " ")
-	return formatOutputLine(outputPrefix("summary", ansiDim, color), output, color) + "\n"
+	return formatOutputLine(outputPrefix("summary", rc.Dim), output, color) + "\n"
 }
 
 func appendCount(parts []string, n int, singular, plural string) []string {

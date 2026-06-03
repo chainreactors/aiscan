@@ -42,28 +42,34 @@ type aiSkillResult struct {
 	Source  string
 }
 
+type aiSkillResponseResult struct {
+	Response aiSkillResponse
+	Source   string
+}
+
 type collector struct {
-	mu             sync.Mutex
-	inputs         []string
-	debug          bool
-	stats          *statsCollector
-	recorder       *recorder
-	webEndpoints   []webEndpoint
-	gogoResults    []*parsers.GOGOResult
-	sprayResults   []sprayObservation
-	fingerprints   []fingerprint
-	zombieResults  []*parsers.ZombieResult
-	neutronMatches []vulnFinding
-	verifications  []verificationResult
-	aiSkillResults []aiSkillResult
-	verifyIndex    map[string]string // "kind|key" → status
-	errors         []string
-	trace          []string
-	seenWeb        map[string]struct{}
-	seenFinger     map[string]int
-	stream         io.Writer
-	streamColor    bool
-	fileLines      []string
+	mu               sync.Mutex
+	inputs           []string
+	debug            bool
+	stats            *statsCollector
+	recorder         *recorder
+	webEndpoints     []webEndpoint
+	gogoResults      []*parsers.GOGOResult
+	sprayResults     []sprayObservation
+	fingerprints     []fingerprint
+	zombieResults    []*parsers.ZombieResult
+	neutronMatches   []vulnFinding
+	verifications    []verificationResult
+	aiSkillResults   []aiSkillResult
+	aiSkillResponses []aiSkillResponseResult
+	verifyIndex      map[string]string // "kind|key" → status
+	errors           []string
+	trace            []string
+	seenWeb          map[string]struct{}
+	seenFinger       map[string]int
+	stream           io.Writer
+	streamColor      bool
+	fileLines        []string
 }
 
 func newCollector(inputs []string, stream io.Writer, streamColor, debug bool) *collector {
@@ -215,6 +221,13 @@ func (c *collector) recordFindingEvent(event event) {
 			indexKey := string(finding.OriginalKind) + "|" + finding.OriginalKey
 			c.verifyIndex[indexKey] = finding.Status
 		}
+	case aiSkillResponse:
+		if finding.Summary != "" || finding.Detail != "" || finding.Raw != "" {
+			c.aiSkillResponses = append(c.aiSkillResponses, aiSkillResponseResult{
+				Response: finding,
+				Source:   event.Source,
+			})
+		}
 	}
 }
 
@@ -272,6 +285,21 @@ func (c *collector) PlainText() string {
 	lines := append([]string(nil), c.fileLines...)
 	c.mu.Unlock()
 	return formatPlainText(c, lines)
+}
+
+func (c *collector) PlainTextWithFindings() string {
+	c.mu.Lock()
+	lines := append([]string(nil), c.fileLines...)
+	c.mu.Unlock()
+	return formatPlainTextWithFindings(c, lines)
+}
+
+func (c *collector) AssetReport() string {
+	return formatAssetReport(c.StructuredResult(), false)
+}
+
+func (c *collector) FindingsReport() string {
+	return c.AssetReport()
 }
 
 type statsSnapshot struct {
