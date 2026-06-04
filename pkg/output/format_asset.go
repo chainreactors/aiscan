@@ -1,26 +1,26 @@
-package scan
+package output
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-func formatAssetReport(result *StructuredResult, color bool) string {
+func FormatAssetReport(result *Result, color bool) string {
 	if result == nil {
 		return "Assets: 0 total\n"
 	}
-	rc := newRenderColor(color)
+	c := NewColor(color)
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Assets: %d total\n", len(result.Assets))
-	fmt.Fprintf(&sb, "Summary: %d target(s), %d service(s), %d web endpoint(s), %d probe(s), %d fingerprint(s), %d finding(s), %d AI item(s), %d error(s), %s\n\n",
+	fmt.Fprintf(&sb, "Summary: %d target(s), %d service(s), %d web endpoint(s), %d probe(s), %d finding(s), %d AI item(s), %d error(s), %s\n\n",
 		result.Summary.Targets,
 		result.Summary.Services,
 		result.Summary.Webs,
 		result.Summary.Probes,
-		result.Summary.Fingerprints,
 		result.Summary.Risks+result.Summary.Vulns,
 		len(result.AI),
 		result.Summary.Errors,
@@ -31,16 +31,16 @@ func formatAssetReport(result *StructuredResult, color bool) string {
 		return sb.String()
 	}
 	for i, asset := range result.Assets {
-		title := firstNonEmptyString(asset.Title, asset.Target, asset.Key)
-		fmt.Fprintf(&sb, "%d. %s\n", i+1, rc.GreenBold(title))
+		title := FirstNonEmpty(asset.Title, asset.Target, asset.Key)
+		fmt.Fprintf(&sb, "%d. %s\n", i+1, c.GreenBold(title))
 		if asset.Target != "" && asset.Target != title {
 			fmt.Fprintf(&sb, "   target: %s\n", asset.Target)
 		}
 		if asset.Status != "" {
 			fmt.Fprintf(&sb, "   status: %s\n", asset.Status)
 		}
-		writeAssetTopItems(&sb, asset.Items, rc)
-		writeAssetSitemap(&sb, asset, rc)
+		writeAssetTopItems(&sb, asset.Items, c)
+		writeAssetSitemap(&sb, asset, c)
 		if i < len(result.Assets)-1 {
 			sb.WriteByte('\n')
 		}
@@ -48,40 +48,40 @@ func formatAssetReport(result *StructuredResult, color bool) string {
 	return sb.String()
 }
 
-func writeAssetTopItems(sb *strings.Builder, items []AssetItem, rc renderColor) {
+func writeAssetTopItems(sb *strings.Builder, items []AssetItem, c Color) {
 	for _, item := range items {
 		switch item.Kind {
-		case assetItemPath:
+		case AssetItemPath:
 			continue
-		case assetItemService:
-			line := strings.Join(compactStrings(
-				assetDataString(item.Data, "protocol"),
-				assetDataString(item.Data, "service"),
-				assetDataString(item.Data, "port"),
+		case AssetItemService:
+			line := strings.Join(CompactStrings(
+				AssetDataString(item.Data, "protocol"),
+				AssetDataString(item.Data, "service"),
+				AssetDataString(item.Data, "port"),
 			), " ")
 			if line == "" {
-				line = firstNonEmptyString(item.Title, item.Target, item.Raw)
+				line = FirstNonEmpty(item.Title, item.Target, item.Raw)
 			}
-			fmt.Fprintf(sb, "   %s %s\n", rc.Cyan("service:"), line)
-		case assetItemFingerprint:
-			name := firstNonEmptyString(item.Title, item.Summary, item.Target)
-			fmt.Fprintf(sb, "   %s %s\n", rc.Cyan("fingerprint:"), name)
-		case assetItemFinding, assetItemNote, assetItemResponse:
-			line := firstNonEmptyString(item.Summary, item.Title, item.Detail, item.Raw)
+			fmt.Fprintf(sb, "   %s %s\n", c.Cyan("service:"), line)
+		case AssetItemFingerprint:
+			name := FirstNonEmpty(item.Title, item.Summary, item.Target)
+			fmt.Fprintf(sb, "   %s %s\n", c.Cyan("fingerprint:"), name)
+		case AssetItemFinding, AssetItemNote, AssetItemResponse:
+			line := FirstNonEmpty(item.Summary, item.Title, item.Detail, item.Raw)
 			if item.Status != "" {
-				line = rc.Yellow("["+item.Status+"]") + " " + line
+				line = c.Yellow("["+item.Status+"]") + " " + line
 			}
-			label := firstNonEmptyString(item.Source, item.Kind)
-			fmt.Fprintf(sb, "   %s %s\n", rc.Yellow(label+":"), line)
+			label := FirstNonEmpty(item.Source, item.Kind)
+			fmt.Fprintf(sb, "   %s %s\n", c.Yellow(label+":"), line)
 			if item.Detail != "" && item.Detail != line && !strings.Contains(line, item.Detail) {
 				for _, dl := range strings.Split(strings.TrimSpace(item.Detail), "\n") {
 					if dl = strings.TrimSpace(dl); dl != "" {
-						fmt.Fprintf(sb, "      %s\n", rc.Dim(dl))
+						fmt.Fprintf(sb, "      %s\n", c.Dim(dl))
 					}
 				}
 			}
-		case assetItemError:
-			fmt.Fprintf(sb, "   %s %s\n", rc.Red("error:"), item.Summary)
+		case AssetItemError:
+			fmt.Fprintf(sb, "   %s %s\n", c.Red("error:"), item.Summary)
 		}
 	}
 }
@@ -109,23 +109,23 @@ type sitemapNode struct {
 	children    []*sitemapNode
 }
 
-func writeAssetSitemap(sb *strings.Builder, asset Asset, rc renderColor) {
+func writeAssetSitemap(sb *strings.Builder, asset Asset, c Color) {
 	var entries []sitemapEntry
 	for _, item := range asset.Items {
-		if item.Kind != assetItemPath {
+		if item.Kind != AssetItemPath {
 			continue
 		}
-		p := firstNonEmptyString(assetDataString(item.Data, "path"), webPath(item.Target), item.Target)
+		p := FirstNonEmpty(AssetDataString(item.Data, "path"), WebPath(item.Target), item.Target)
 		if p == "" {
 			continue
 		}
 		entries = append(entries, sitemapEntry{
 			path:      p,
 			status:    item.Status,
-			length:    assetDataInt(item.Data, "length"),
+			length:    AssetDataInt(item.Data, "length"),
 			title:     item.Title,
-			fingers:   assetDataStrings(item.Data, "fingers"),
-			validated: hasTag(item.Tags, "validated"),
+			fingers:   AssetDataStrings(item.Data, "fingers"),
+			validated: HasTag(item.Tags, "validated"),
 		})
 	}
 	if len(entries) == 0 {
@@ -137,7 +137,7 @@ func writeAssetSitemap(sb *strings.Builder, asset Asset, rc renderColor) {
 	sb.WriteString("   sitemap:\n")
 	root := buildSitemapTree(entries)
 	attachAnnotations(root, collectAnnotations(asset))
-	renderNode(sb, root, "   ", true, rc)
+	renderNode(sb, root, "   ", true, c)
 }
 
 func buildSitemapTree(entries []sitemapEntry) *sitemapNode {
@@ -178,22 +178,22 @@ func collectAnnotations(asset Asset) map[string][]string {
 	out := make(map[string][]string)
 	for _, item := range asset.Items {
 		switch item.Kind {
-		case assetItemFingerprint:
+		case AssetItemFingerprint:
 			p := pathFromTarget(item.Target, asset.Target)
 			if p != "" {
 				out[p] = appendUniq(out[p], item.Title)
 			}
-		case assetItemFinding, assetItemNote, assetItemResponse:
+		case AssetItemFinding, AssetItemNote, AssetItemResponse:
 			p := pathFromTarget(item.Target, asset.Target)
 			if p == "" {
 				p = "/"
 			}
-			skill := firstNonEmptyString(item.Source, item.Kind)
+			skill := FirstNonEmpty(item.Source, item.Kind)
 			label := skill
 			if item.Status != "" {
 				label += ":" + item.Status
 			}
-			summary := firstNonEmptyString(item.Title, item.Summary)
+			summary := FirstNonEmpty(item.Title, item.Summary)
 			if summary != "" && len(summary) <= 40 {
 				label += " " + summary
 			}
@@ -225,13 +225,9 @@ func attachAnnotations(root *sitemapNode, anns map[string][]string) {
 	}
 }
 
-// renderNode renders a sitemap node in spray-inspired format:
-//
-//	[200] /path  10487 "title" [fingers] {annotations}
-func renderNode(sb *strings.Builder, node *sitemapNode, indent string, isRoot bool, rc renderColor) {
+func renderNode(sb *strings.Builder, node *sitemapNode, indent string, isRoot bool, c Color) {
 	var line strings.Builder
 
-	// tree prefix
 	if isRoot {
 		line.WriteString(indent)
 	} else {
@@ -239,61 +235,152 @@ func renderNode(sb *strings.Builder, node *sitemapNode, indent string, isRoot bo
 		line.WriteString("├── ")
 	}
 
-	// [STATUS] — fixed 5 chars, blank for directories
 	if node.isLeaf && node.status != "" {
-		line.WriteString(rc.Status(fmt.Sprintf("[%-3s]", node.status)))
+		line.WriteString(c.Status(fmt.Sprintf("[%-3s]", node.status)))
 	} else {
 		line.WriteString("     ")
 	}
 	line.WriteString(" ")
 
-	// PATH — validated=GreenBold, leaf=plain, directory=Dim
 	path := "/" + node.segment
 	if isRoot {
 		path = "/"
 	}
 	if node.validated {
-		line.WriteString(rc.GreenBold(path))
+		line.WriteString(c.GreenBold(path))
 	} else if node.isLeaf {
 		line.WriteString(path)
 	} else {
-		line.WriteString(rc.Dim(path))
+		line.WriteString(c.Dim(path))
 	}
 
-	// LENGTH — after path
 	if node.isLeaf && node.length > 0 {
-		line.WriteString("  " + rc.YellowBold(fmt.Sprintf("%d", node.length)))
+		line.WriteString("  " + c.YellowBold(fmt.Sprintf("%d", node.length)))
 	}
 
-	// TITLE — skip static resource titles
 	if node.title != "" && !isStaticTitle(node.title) {
-		line.WriteString("  " + rc.Green(strconv.Quote(node.title)))
+		line.WriteString("  " + c.Green(strconv.Quote(node.title)))
 	}
 
-	// FINGERPRINTS
 	if len(node.fingers) > 0 {
-		line.WriteString(" " + rc.Cyan("["+strings.Join(node.fingers, ",")+"]"))
+		line.WriteString(" " + c.Cyan("["+strings.Join(node.fingers, ",")+"]"))
 	}
 
-	// ANNOTATIONS (findings, AI results)
 	for _, ann := range node.annotations {
-		line.WriteString(" " + rc.Yellow("{"+ann+"}"))
+		line.WriteString(" " + c.Yellow("{"+ann+"}"))
 	}
 
 	sb.WriteString(line.String())
 	sb.WriteByte('\n')
 
-	// children
 	for _, child := range node.children {
 		childIndent := indent
 		if !isRoot {
 			childIndent += "│   "
 		}
-		renderNode(sb, child, childIndent, false, rc)
+		renderNode(sb, child, childIndent, false, c)
 	}
 }
 
-// --- helpers ---
+// --- shared helpers ---
+
+func WebPath(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return FirstNonEmpty(rawURL, "/")
+	}
+	path := parsed.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
+	if parsed.RawQuery != "" {
+		path += "?" + parsed.RawQuery
+	}
+	return path
+}
+
+func HasTag(tags []string, tag string) bool {
+	for _, t := range tags {
+		if strings.EqualFold(t, tag) {
+			return true
+		}
+	}
+	return false
+}
+
+func CompactStrings(values ...string) []string {
+	seen := make(map[string]struct{})
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func AssetDataString(data map[string]any, key string) string {
+	if len(data) == 0 {
+		return ""
+	}
+	switch value := data[key].(type) {
+	case string:
+		return value
+	case int:
+		if value == 0 {
+			return ""
+		}
+		return strconv.Itoa(value)
+	case float64:
+		if value == 0 {
+			return ""
+		}
+		return strconv.Itoa(int(value))
+	default:
+		return ""
+	}
+}
+
+func AssetDataInt(data map[string]any, key string) int {
+	if len(data) == 0 {
+		return 0
+	}
+	switch v := data[key].(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
+}
+
+func AssetDataStrings(data map[string]any, key string) []string {
+	if len(data) == 0 {
+		return nil
+	}
+	switch v := data[key].(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
 
 func findChild(node *sitemapNode, segment string) *sitemapNode {
 	for _, c := range node.children {
@@ -320,7 +407,7 @@ func pathFromTarget(target, assetTarget string) string {
 	if target == "" {
 		return ""
 	}
-	p := webPath(target)
+	p := WebPath(target)
 	if p == target && assetTarget != "" {
 		if strings.HasPrefix(target, assetTarget) {
 			p = strings.TrimPrefix(target, assetTarget)
@@ -364,60 +451,4 @@ func appendUniq(slice []string, val string) []string {
 		}
 	}
 	return append(slice, val)
-}
-
-func assetDataString(data map[string]any, key string) string {
-	if len(data) == 0 {
-		return ""
-	}
-	switch value := data[key].(type) {
-	case string:
-		return value
-	case int:
-		if value == 0 {
-			return ""
-		}
-		return strconv.Itoa(value)
-	case float64:
-		if value == 0 {
-			return ""
-		}
-		return strconv.Itoa(int(value))
-	default:
-		return ""
-	}
-}
-
-func assetDataInt(data map[string]any, key string) int {
-	if len(data) == 0 {
-		return 0
-	}
-	switch v := data[key].(type) {
-	case int:
-		return v
-	case float64:
-		return int(v)
-	default:
-		return 0
-	}
-}
-
-func assetDataStrings(data map[string]any, key string) []string {
-	if len(data) == 0 {
-		return nil
-	}
-	switch v := data[key].(type) {
-	case []string:
-		return v
-	case []any:
-		out := make([]string, 0, len(v))
-		for _, item := range v {
-			if s, ok := item.(string); ok && s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
 }

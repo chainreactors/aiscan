@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/parsers"
 	sdktypes "github.com/chainreactors/sdk/pkg/types"
 )
@@ -19,7 +20,7 @@ func formatSummary(d *collector, color bool) string {
 	var sb strings.Builder
 	if d.stream == nil {
 		for _, line := range d.fileLines {
-			sb.WriteString(sanitizeOutputLine(line, color))
+			sb.WriteString(output.SanitizeLine(line, output.NewColor(color)))
 			sb.WriteString("\n")
 		}
 	}
@@ -50,9 +51,9 @@ func formatMarkdown(d *collector) string {
 	sb.WriteString("| --- | ---: |\n")
 	sb.WriteString(fmt.Sprintf("| Inputs | %d |\n", stats.Inputs))
 	sb.WriteString(fmt.Sprintf("| Open services | %d |\n", len(d.gogoResults)))
-	sb.WriteString(fmt.Sprintf("| Web endpoints | %d |\n", len(d.webEndpoints)))
+	sb.WriteString(fmt.Sprintf("| Web endpoints | %d |\n", len(d.seenWeb)))
 	sb.WriteString(fmt.Sprintf("| Web probes | %d |\n", len(d.sprayResults)))
-	sb.WriteString(fmt.Sprintf("| Fingerprints | %d |\n", len(d.fingerprints)))
+	sb.WriteString(fmt.Sprintf("| Fingerprints | %d |\n", len(d.seenFinger)))
 	sb.WriteString(fmt.Sprintf("| Weakpass findings | %d |\n", len(d.zombieResults)))
 	sb.WriteString(fmt.Sprintf("| Vulnerability findings | %d |\n", len(d.neutronMatches)))
 	sb.WriteString(fmt.Sprintf("| AI verifications | %d |\n", d.confirmedVerificationCountLocked()))
@@ -81,18 +82,6 @@ func formatMarkdown(d *collector) string {
 		}
 	}
 
-	if len(d.webEndpoints) > 0 {
-		sb.WriteString("\n## Web Endpoints\n\n")
-		for _, endpoint := range sortedCopy(d.webEndpoints, func(a, b webEndpoint) bool {
-			if a.URL == b.URL {
-				return a.HostHeader < b.HostHeader
-			}
-			return a.URL < b.URL
-		}) {
-			writeMarkdownEventLine(&sb, targetEvent(endpoint.Source, "", newWebTarget("", endpoint.URL, endpoint.HostHeader)))
-		}
-	}
-
 	if len(d.sprayResults) > 0 {
 		sb.WriteString("\n## Web Evidence\n\n")
 		for _, item := range sortedCopy(d.sprayResults, func(a, b sprayObservation) bool {
@@ -102,22 +91,6 @@ func formatMarkdown(d *collector) string {
 				continue
 			}
 			writeMarkdownEventLine(&sb, targetEvent(item.Capability, "", newWebProbeTarget("", item.Capability, "", item.Result)))
-		}
-	}
-
-	if len(d.fingerprints) > 0 {
-		sb.WriteString("\n## Fingerprints\n\n")
-		for _, finger := range sortedCopy(d.fingerprints, func(a, b fingerprint) bool {
-			if a.Target == b.Target {
-				return a.Name < b.Name
-			}
-			return a.Target < b.Target
-		}) {
-			writeMarkdownEventLine(&sb, findingEvent(finger.Source, fingerprintFinding{
-				Target:  finger.Target,
-				Fingers: []string{finger.Name},
-				Focus:   finger.Focus,
-			}))
 		}
 	}
 
@@ -199,9 +172,9 @@ func formatScanSummaryLine(d *collector, stats statsSnapshot, color bool) string
 	parts := []string{"completed"}
 	parts = appendCount(parts, stats.Inputs, "target", "targets")
 	parts = appendCount(parts, len(d.gogoResults), "service", "services")
-	parts = appendCount(parts, len(d.webEndpoints), "web", "web")
+	parts = appendCount(parts, len(d.seenWeb), "web", "web")
 	parts = appendCount(parts, len(d.sprayResults), "probe", "probes")
-	parts = appendCount(parts, len(d.fingerprints), "fingerprint", "fingerprints")
+	parts = appendCount(parts, len(d.seenFinger), "fingerprint", "fingerprints")
 	parts = appendCount(parts, len(d.zombieResults), "risk", "risks")
 	parts = appendCount(parts, len(d.neutronMatches), "vuln", "vulns")
 	parts = appendCount(parts, d.confirmedVerificationCountLocked(), "verified", "verified")
@@ -209,9 +182,9 @@ func formatScanSummaryLine(d *collector, stats statsSnapshot, color bool) string
 	parts = appendCount64(parts, stats.Tasks, "task", "tasks")
 	parts = appendCount64(parts, stats.Requests, "request", "requests")
 	parts = append(parts, stats.Duration().Round(time.Millisecond).String())
-	rc := newRenderColor(color)
-	output := strings.Join(parts, " ")
-	return formatOutputLine(outputPrefix("summary", rc.Dim), output, color) + "\n"
+	c := output.NewColor(color)
+	body := strings.Join(parts, " ")
+	return output.FormatLine(output.OutputPrefix("summary", c.Dim), body, c) + "\n"
 }
 
 func appendCount(parts []string, n int, singular, plural string) []string {
@@ -291,7 +264,7 @@ func formatTraceEvent(event pipelineEvent) string {
 	if event.Event.Kind == eventError && event.Event.Error.Message != "" {
 		parts = append(parts, event.Event.Error.Message)
 	}
-	return formatOutputLine("[trace]", parsers.JoinOutput(parts...), false)
+	return output.FormatLine("[trace]", parsers.JoinOutput(parts...), output.NewColor(false))
 }
 
 func writeMarkdownEventLine(sb *strings.Builder, event event) {

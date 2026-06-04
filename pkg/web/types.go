@@ -3,7 +3,7 @@ package web
 import (
 	"time"
 
-	scanpkg "github.com/chainreactors/aiscan/pkg/tools/scan"
+	"github.com/chainreactors/aiscan/pkg/output"
 )
 
 type ScanStatus string
@@ -27,7 +27,7 @@ type ScanJob struct {
 	Status    ScanStatus                `json:"status"`
 	Progress  string                    `json:"progress,omitempty"`
 	Report    string                    `json:"report,omitempty"`
-	Result    *scanpkg.StructuredResult `json:"result,omitempty"`
+	Result    *output.Result `json:"result,omitempty"`
 	Error     string                    `json:"error,omitempty"`
 	CreatedAt time.Time                 `json:"created_at"`
 	UpdatedAt time.Time                 `json:"updated_at"`
@@ -77,5 +77,5 @@ type ScanEvent struct {
 	Data   string                    `json:"data,omitempty"`
 	Status string                    `json:"status,omitempty"`
 	Error  string                    `json:"error,omitempty"`
-	Result *scanpkg.StructuredResult `json:"result,omitempty"`
+	Result *output.Result `json:"result,omitempty"`
 }

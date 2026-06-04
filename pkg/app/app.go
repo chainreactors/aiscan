@@ -232,14 +232,18 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 				return nil, err
 			}
 			raw := ""
+			var messages []provider.ChatMessage
+			var usage *provider.Usage
 			if result != nil {
 				raw = result.Output
+				messages = result.NewMessages
+				usage = &result.TotalUsage
 			}
 
 			if r := cp.Result(); r != nil {
-				return &scan.AgentRunResult{Raw: raw, Checkpoint: r}, nil
+				return &scan.AgentRunResult{Raw: raw, Checkpoint: r, Messages: messages, Usage: usage}, nil
 			}
-			return &scan.AgentRunResult{Raw: raw}, nil
+			return &scan.AgentRunResult{Raw: raw, Messages: messages, Usage: usage}, nil
 		}))
 	}
 	scanOpts = append(scanOpts, scan.WithLogger(logger))

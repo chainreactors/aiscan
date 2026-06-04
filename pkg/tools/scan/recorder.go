@@ -5,8 +5,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/record"
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/parsers"
+	sdktypes "github.com/chainreactors/sdk/pkg/types"
 )
 
 type recorder struct {
@@ -29,7 +31,7 @@ func (r *recorder) Close() error {
 	return r.file.Close()
 }
 
-func (r *recorder) write(rec record.Record) {
+func (r *recorder) write(rec output.Record) {
 	if r == nil || r.file == nil {
 		return
 	}
@@ -40,7 +42,7 @@ func (r *recorder) write(rec record.Record) {
 }
 
 func (r *recorder) ScanStart(targets []string, mode string, flags []string) {
-	r.write(record.New(record.TypeScanStart, record.ScanStart{
+	r.write(output.NewRecord(output.TypeScanStart, output.ScanStart{
 		Targets: targets,
 		Mode:    mode,
 		Flags:   flags,
@@ -51,34 +53,32 @@ func (r *recorder) Service(result *parsers.GOGOResult) {
 	if result == nil {
 		return
 	}
-	r.write(record.New(record.TypeService, record.Service{
-		Target:   result.GetTarget(),
-		Protocol: result.Protocol,
-		Banner:   result.Midware,
-	}))
+	r.write(output.NewRecord(output.TypeService, result))
 }
 
-func (r *recorder) Web(url string, status int, title string, fingers []string) {
-	r.write(record.New(record.TypeWeb, record.Web{
-		URL:     url,
-		Status:  status,
-		Title:   title,
-		Fingers: fingers,
-	}))
+func (r *recorder) Web(result *parsers.SprayResult) {
+	if result == nil {
+		return
+	}
+	r.write(output.NewRecord(output.TypeWeb, result))
 }
 
-func (r *recorder) Finding(kind, target, priority, summary, detail string) {
-	r.write(record.New(record.TypeFinding, record.Finding{
-		Kind:     kind,
-		Target:   target,
-		Priority: priority,
-		Summary:  summary,
-		Detail:   detail,
-	}))
+func (r *recorder) Zombie(result *parsers.ZombieResult) {
+	if result == nil {
+		return
+	}
+	r.write(output.NewRecord(output.TypeFinding, result))
+}
+
+func (r *recorder) Vuln(result *sdktypes.VulnResult) {
+	if result == nil {
+		return
+	}
+	r.write(output.NewRecord(output.TypeFinding, result))
 }
 
 func (r *recorder) AISkill(skill, target, status, summary, detail string, duration time.Duration) {
-	r.write(record.New(record.TypeAISkill, record.AISkill{
+	r.write(output.NewRecord(output.TypeAISkill, output.AISkill{
 		Skill:    skill,
 		Target:   target,
 		Status:   status,
@@ -88,20 +88,19 @@ func (r *recorder) AISkill(skill, target, status, summary, detail string, durati
 	}))
 }
 
-func (r *recorder) AITurn(skill string, turn int, reqContent, respContent string, toolCalls []record.ToolCall, duration time.Duration, tokens record.TokenUsage) {
-	r.write(record.New(record.TypeAITurn, record.AITurn{
-		Skill:     skill,
-		Turn:      turn,
-		Request:   record.AIMessage{Role: "user", Content: reqContent},
-		Response:  record.AIMessage{Role: "assistant", Content: respContent},
-		ToolCalls: toolCalls,
-		Duration:  duration.Seconds(),
-		Tokens:    tokens,
+func (r *recorder) AITurn(skill string, turn int, prompt string, messages []provider.ChatMessage, usage *provider.Usage, duration time.Duration) {
+	r.write(output.NewRecord(output.TypeAITurn, output.AITurn{
+		Skill:    skill,
+		Turn:     turn,
+		Prompt:   prompt,
+		Messages: messages,
+		Usage:    usage,
+		Duration: duration.Seconds(),
 	}))
 }
 
 func (r *recorder) ScanEnd(duration time.Duration, targets, services, webs, findings, aiSkills, errors int) {
-	r.write(record.New(record.TypeScanEnd, record.ScanEnd{
+	r.write(output.NewRecord(output.TypeScanEnd, output.ScanEnd{
 		Duration: duration.Seconds(),
 		Targets:  targets,
 		Services: services,

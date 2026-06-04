@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/command"
-	"github.com/chainreactors/aiscan/pkg/record"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
 )
 
@@ -302,7 +302,13 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 			raw = strings.TrimSpace(agentResult.Raw)
 		}
 		if c.recorder != nil {
-			c.recorder.AITurn(skill.Name, 1, prompt, raw, nil, duration, record.TokenUsage{})
+			var msgs []provider.ChatMessage
+			var usage *provider.Usage
+			if agentResult != nil {
+				msgs = agentResult.Messages
+				usage = agentResult.Usage
+			}
+			c.recorder.AITurn(skill.Name, 1, prompt, msgs, usage, duration)
 		}
 		emitAISkillResponse(skill, e, "response", "agent response without checkpoint", raw, emit)
 		return
@@ -315,7 +321,7 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 	}
 
 	if c.recorder != nil {
-		c.recorder.AITurn(skill.Name, 1, prompt, agentResult.Raw, nil, duration, record.TokenUsage{})
+		c.recorder.AITurn(skill.Name, 1, prompt, agentResult.Messages, agentResult.Usage, duration)
 	}
 
 	status := checkpointStatus(cp)

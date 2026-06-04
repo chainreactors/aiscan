@@ -170,18 +170,8 @@ func (c *Command) runPOCCapability(ctx context.Context, flags flags, input targe
 		if result == nil || !result.Matched() {
 			continue
 		}
-		tmpl := result.Template()
-		templateID := ""
-		severity := ""
-		name := ""
-		if tmpl != nil {
-			templateID = tmpl.Id
-			severity = tmpl.Info.Severity
-			name = tmpl.Info.Name
-		}
 		emit(findingEvent(capNeutronPOC, vulnFinding{
-			Target: target.Target,
-			Output: parsers.JoinOutput(target.Target, templateID, severity, name),
+			Result: result.VulnResult(target.Target),
 		}))
 	}
 }

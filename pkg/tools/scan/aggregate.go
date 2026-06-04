@@ -7,22 +7,16 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-)
 
-const (
-	assetItemService     = "service"
-	assetItemPath        = "path"
-	assetItemFingerprint = "fingerprint"
-	assetItemFinding     = "finding"
-	assetItemNote        = "note"
-	assetItemResponse    = "response"
-	assetItemError       = "error"
+	"github.com/chainreactors/aiscan/pkg/output"
+	"github.com/chainreactors/parsers"
+	sdktypes "github.com/chainreactors/sdk/pkg/types"
 )
 
 var firstURLPattern = regexp.MustCompile(`https?://[^\s"'<>]+`)
 
 type assetBucket struct {
-	asset     Asset
+	asset     output.Asset
 	keys      map[string]struct{}
 	itemIndex map[string]int
 }
@@ -32,7 +26,7 @@ type assetBuilder struct {
 	byKey   map[string]*assetBucket
 }
 
-func AggregateStructuredResult(result *StructuredResult) []Asset {
+func AggregateStructuredResult(result *output.Result) []output.Asset {
 	if result == nil {
 		return nil
 	}
@@ -40,30 +34,40 @@ func AggregateStructuredResult(result *StructuredResult) []Asset {
 	builder := newAssetBuilder()
 	for _, service := range result.Services {
 		builder.addService(service)
+		if service != nil {
+			for _, fw := range service.Frameworks {
+				if fw == nil {
+					continue
+				}
+				builder.addFrameworkFingerprint(service.GetTarget(), fw.Name, fw.IsFocus, capGogoPortscan)
+			}
+		}
 	}
-	for _, endpoint := range result.WebEndpoints {
-		builder.addWebEndpoint(endpoint)
+	for _, probe := range result.WebProbes {
+		builder.addWebProbe(probe)
+		if probe != nil {
+			for _, fw := range probe.Frameworks {
+				if fw == nil {
+					continue
+				}
+				builder.addFrameworkFingerprint(probe.UrlString, fw.Name, fw.IsFocus, probe.Source.Name())
+			}
+		}
 	}
-	for _, endpoint := range result.WebProbes {
-		builder.addWebEndpoint(endpoint)
+	for _, risk := range result.Risks {
+		builder.addZombieFinding(risk)
 	}
-	for _, fingerprint := range result.Fingerprints {
-		builder.addFingerprint(fingerprint)
-	}
-	for _, finding := range result.Risks {
-		builder.addFinding(finding, assetItemFinding)
-	}
-	for _, finding := range result.Vulns {
-		builder.addFinding(finding, assetItemFinding)
+	for _, vuln := range result.Vulns {
+		builder.addVulnFinding(vuln)
 	}
 	for _, finding := range result.AI {
-		kind := assetItemNote
+		kind := output.AssetItemNote
 		if finding.Kind == string(findingAIResponse) {
-			kind = assetItemResponse
+			kind = output.AssetItemResponse
 		} else if finding.Status == string(verificationConfirmed) {
-			kind = assetItemFinding
+			kind = output.AssetItemFinding
 		}
-		builder.addFinding(finding, kind)
+		builder.addAIFinding(finding, kind)
 	}
 	for _, err := range result.Errors {
 		builder.addError(err)
@@ -75,71 +79,78 @@ func newAssetBuilder() *assetBuilder {
 	return &assetBuilder{byKey: make(map[string]*assetBucket)}
 }
 
-func (b *assetBuilder) addService(service StructuredService) {
-	target := serviceAssetTarget(service)
-	hostPort := ""
-	if service.IP != "" && service.Port != "" {
-		hostPort = service.IP + ":" + service.Port
+func (b *assetBuilder) addService(service *sdktypes.GOGOResult) {
+	if service == nil {
+		return
 	}
-	keys := targetKeys(target, service.Target, service.Raw, hostPort)
+	target := gogoServiceAssetTarget(service)
+	hostPort := ""
+	if service.Ip != "" && service.Port != "" {
+		hostPort = service.Ip + ":" + service.Port
+	}
+	serviceTarget := service.GetTarget()
+	keys := targetKeys(target, serviceTarget, hostPort)
+	svcName := output.FirstNonEmpty(service.Protocol, service.Midware)
 	data := assetData(
-		"ip", service.IP,
+		"ip", service.Ip,
 		"port", service.Port,
 		"protocol", service.Protocol,
-		"service", service.Service,
-		"banner", service.Banner,
-		"is_web", service.IsWeb,
+		"service", svcName,
+		"banner", service.Midware,
+		"is_web", service.IsHttp(),
 	)
-	item := AssetItem{
-		Kind:    assetItemService,
+	item := output.AssetItem{
+		Kind:    output.AssetItemService,
 		Source:  capGogoPortscan,
-		Target:  service.Target,
-		Title:   firstNonEmptyString(service.Service, service.Protocol, service.Banner),
-		Summary: service.Banner,
-		Tags:    compactStrings(service.Protocol, service.Service, service.Port),
+		Target:  serviceTarget,
+		Title:   output.FirstNonEmpty(svcName, service.Protocol, service.Midware),
+		Summary: service.Midware,
+		Tags:    output.CompactStrings(service.Protocol, svcName, service.Port),
 		Data:    data,
-		Raw:     service.Raw,
 	}
 	b.addItem(target, keys, "service|"+strings.Join(sortedStrings(keys), "|"), item)
 }
 
-func (b *assetBuilder) addWebEndpoint(endpoint StructuredWebEndpoint) {
-	if endpoint.URL != "" && !strings.Contains(endpoint.URL, "://") {
+func (b *assetBuilder) addWebProbe(probe *sdktypes.SprayResult) {
+	if probe == nil || probe.UrlString == "" {
 		return
 	}
-	target := webAssetTarget(endpoint.URL)
-	keys := targetKeys(target, endpoint.URL, endpoint.Raw)
-	status := ""
-	if endpoint.Status > 0 {
-		status = strconv.Itoa(endpoint.Status)
+	if !strings.Contains(probe.UrlString, "://") {
+		return
 	}
-	path := webPath(endpoint.URL)
+	target := webAssetTarget(probe.UrlString)
+	sourceName := probe.Source.Name()
+	keys := targetKeys(target, probe.UrlString)
+	status := ""
+	if probe.Status > 0 {
+		status = strconv.Itoa(probe.Status)
+	}
+	path := output.WebPath(probe.UrlString)
+	fingerNames := parsers.FrameworkNames(probe.Frameworks)
 	data := assetData(
-		"url", endpoint.URL,
+		"url", probe.UrlString,
 		"path", path,
-		"host_header", endpoint.HostHeader,
-		"status", endpoint.Status,
-		"length", endpoint.Length,
-		"title", endpoint.Title,
-		"fingers", endpoint.Fingers,
-		"validated", isSprayValidated(endpoint.Source),
+		"status", probe.Status,
+		"length", probe.BodyLength,
+		"title", probe.Title,
+		"fingers", fingerNames,
+		"validated", isSprayValidated(sourceName),
 	)
-	tags := append([]string{endpoint.Source}, endpoint.Fingers...)
-	if isSprayValidated(endpoint.Source) {
+	tags := append([]string{sourceName}, fingerNames...)
+	if isSprayValidated(sourceName) {
 		tags = append(tags, "validated")
 	}
-	item := AssetItem{
-		Kind:    assetItemPath,
-		Source:  endpoint.Source,
-		Target:  endpoint.URL,
+	item := output.AssetItem{
+		Kind:    output.AssetItemPath,
+		Source:  sourceName,
+		Target:  probe.UrlString,
 		Status:  status,
-		Title:   endpoint.Title,
+		Title:   probe.Title,
 		Summary: path,
-		Tags:    compactStrings(tags...),
+		Tags:    output.CompactStrings(tags...),
 		Data:    data,
-		Raw:     endpoint.Raw,
 	}
-	identity := "path|" + canonicalKey(endpoint.URL) + "|host=" + strings.ToLower(endpoint.HostHeader)
+	identity := "path|" + canonicalKey(probe.UrlString) + "|host=" + strings.ToLower(probe.Host)
 	b.addItem(target, keys, identity, item)
 }
 
@@ -157,33 +168,109 @@ func isSprayValidated(source string) bool {
 	}
 }
 
-func (b *assetBuilder) addFingerprint(fingerprint StructuredFingerprint) {
-	target := assetTargetFromValues(fingerprint.Target)
-	keys := targetKeys(target, fingerprint.Target)
+func (b *assetBuilder) addFrameworkFingerprint(targetStr, name string, focus bool, source string) {
+	if name == "" {
+		return
+	}
+	target := assetTargetFromValues(targetStr)
+	keys := targetKeys(target, targetStr)
 	data := assetData(
-		"name", fingerprint.Name,
-		"focus", fingerprint.Focus,
+		"name", name,
+		"focus", focus,
 	)
-	item := AssetItem{
-		Kind:   assetItemFingerprint,
-		Source: fingerprint.Source,
-		Target: fingerprint.Target,
-		Title:  fingerprint.Name,
-		Tags:   compactStrings(fingerprint.Source, fingerprint.Name),
+	item := output.AssetItem{
+		Kind:   output.AssetItemFingerprint,
+		Source: source,
+		Target: targetStr,
+		Title:  name,
+		Tags:   output.CompactStrings(source, name),
 		Data:   data,
 	}
-	identity := "fingerprint|" + canonicalKey(fingerprint.Target) + "|" + strings.ToLower(fingerprint.Name)
+	identity := "fingerprint|" + canonicalKey(targetStr) + "|" + strings.ToLower(name)
 	b.addItem(target, keys, identity, item)
 }
 
-func (b *assetBuilder) addFinding(finding StructuredFinding, itemKind string) {
+func (b *assetBuilder) addZombieFinding(zr *sdktypes.ZombieResult) {
+	if zr == nil {
+		return
+	}
+	target := assetTargetFromValues(zr.Address())
+	keys := targetKeys(target, zr.Address())
+	summary := zr.Service
+	if zr.Username != "" || zr.Password != "" {
+		summary += " " + zr.Username + "/" + zr.Password
+	}
+	data := assetData(
+		"kind", "zombie",
+		"service", zr.Service,
+		"username", zr.Username,
+		"password", zr.Password,
+	)
+	item := output.AssetItem{
+		Kind:    output.AssetItemFinding,
+		Source:  capZombieWeakpass,
+		Target:  zr.Address(),
+		Status:  output.AssetItemFinding,
+		Title:   summary,
+		Summary: summary,
+		Tags:    output.CompactStrings("zombie", zr.Service),
+		Data:    data,
+	}
+	identity := strings.Join(output.CompactStrings(
+		output.AssetItemFinding,
+		"zombie",
+		zr.Address(),
+		zr.Service,
+		zr.Username,
+		zr.Password,
+	), "|")
+	b.addItem(target, keys, identity, item)
+}
+
+func (b *assetBuilder) addVulnFinding(vr *sdktypes.VulnResult) {
+	if vr == nil {
+		return
+	}
+	target := assetTargetFromValues(vr.Target)
+	keys := targetKeys(target, vr.Target)
+	summary := vr.TemplateID
+	if vr.TemplateName != "" {
+		summary += " — " + vr.TemplateName
+	}
+	status := output.FirstNonEmpty(vr.Severity, output.AssetItemFinding)
+	data := assetData(
+		"kind", "vuln",
+		"template_id", vr.TemplateID,
+		"template_name", vr.TemplateName,
+		"severity", vr.Severity,
+	)
+	item := output.AssetItem{
+		Kind:    output.AssetItemFinding,
+		Source:  capNeutronPOC,
+		Target:  vr.Target,
+		Status:  status,
+		Title:   summary,
+		Summary: summary,
+		Tags:    output.CompactStrings("vuln", vr.Severity, vr.TemplateID),
+		Data:    data,
+	}
+	identity := strings.Join(output.CompactStrings(
+		output.AssetItemFinding,
+		"vuln",
+		vr.Target,
+		vr.TemplateID,
+	), "|")
+	b.addItem(target, keys, identity, item)
+}
+
+func (b *assetBuilder) addAIFinding(finding output.AIFinding, itemKind string) {
 	target := assetTargetFromValues(finding.Target, finding.OriginalKey, finding.Raw, finding.Summary)
 	keys := targetKeys(target, finding.Target, finding.OriginalKey, finding.Raw, finding.Summary)
-	status := firstNonEmptyString(finding.Status, finding.Priority)
-	if itemKind == assetItemFinding && status == "" {
-		status = assetItemFinding
+	status := output.FirstNonEmpty(finding.Status, finding.Priority)
+	if itemKind == output.AssetItemFinding && status == "" {
+		status = output.AssetItemFinding
 	}
-	title := firstNonEmptyString(finding.Summary, finding.Kind)
+	title := output.FirstNonEmpty(finding.Summary, finding.Kind)
 	data := assetData(
 		"kind", finding.Kind,
 		"priority", finding.Priority,
@@ -194,19 +281,19 @@ func (b *assetBuilder) addFinding(finding StructuredFinding, itemKind string) {
 		"original_key", finding.OriginalKey,
 		"evidence", finding.Evidence,
 	)
-	item := AssetItem{
+	item := output.AssetItem{
 		Kind:    itemKind,
-		Source:  firstNonEmptyString(finding.Skill, finding.Source),
+		Source:  output.FirstNonEmpty(finding.Skill, finding.Source),
 		Target:  finding.Target,
 		Status:  status,
 		Title:   title,
-		Summary: firstNonEmptyString(finding.Summary, finding.Raw),
-		Detail:  firstNonEmptyString(finding.Detail, finding.Evidence),
-		Tags:    compactStrings(finding.Kind, finding.Priority, finding.Status, finding.Skill, finding.Source),
+		Summary: output.FirstNonEmpty(finding.Summary, finding.Raw),
+		Detail:  output.FirstNonEmpty(finding.Detail, finding.Evidence),
+		Tags:    output.CompactStrings(finding.Kind, finding.Priority, finding.Status, finding.Skill, finding.Source),
 		Data:    data,
 		Raw:     finding.Raw,
 	}
-	identity := strings.Join(compactStrings(
+	identity := strings.Join(output.CompactStrings(
 		itemKind,
 		finding.Kind,
 		finding.Target,
@@ -220,13 +307,13 @@ func (b *assetBuilder) addFinding(finding StructuredFinding, itemKind string) {
 	b.addItem(target, keys, identity, item)
 }
 
-func (b *assetBuilder) addError(err StructuredError) {
+func (b *assetBuilder) addError(err output.Error) {
 	keys := targetKeys("scan")
-	item := AssetItem{
-		Kind:    assetItemError,
+	item := output.AssetItem{
+		Kind:    output.AssetItemError,
 		Source:  err.Source,
 		Target:  "scan",
-		Status:  assetItemError,
+		Status:  output.AssetItemError,
 		Summary: err.Message,
 		Data:    assetData("message", err.Message),
 	}
@@ -234,15 +321,15 @@ func (b *assetBuilder) addError(err StructuredError) {
 	b.addItem("Scan", keys, identity, item)
 }
 
-func (b *assetBuilder) addItem(target string, keys []string, identity string, item AssetItem) {
-	target = firstNonEmptyString(target, item.Target, "Scan")
+func (b *assetBuilder) addItem(target string, keys []string, identity string, item output.AssetItem) {
+	target = output.FirstNonEmpty(target, item.Target, "Scan")
 	if len(keys) == 0 {
 		keys = targetKeys(target)
 	}
 	bucket := b.findBucket(keys)
 	if bucket == nil {
 		bucket = &assetBucket{
-			asset: Asset{
+			asset: output.Asset{
 				Target: target,
 			},
 			keys:      make(map[string]struct{}),
@@ -278,12 +365,12 @@ func (b *assetBuilder) findBucket(keys []string) *assetBucket {
 	return nil
 }
 
-func (b *assetBuilder) assets() []Asset {
-	out := make([]Asset, 0, len(b.buckets))
+func (b *assetBuilder) assets() []output.Asset {
+	out := make([]output.Asset, 0, len(b.buckets))
 	for _, bucket := range b.buckets {
 		asset := bucket.asset
 		sortAssetItems(asset.Items)
-		asset.Target = firstNonEmptyString(asset.Target, "Scan")
+		asset.Target = output.FirstNonEmpty(asset.Target, "Scan")
 		asset.Key = preferredAssetKey(bucket.keys, asset.Target)
 		asset.ID = "asset:" + asset.Key
 		asset.Title = deriveAssetTitle(asset)
@@ -296,8 +383,8 @@ func (b *assetBuilder) assets() []Asset {
 	return out
 }
 
-func serviceAssetTarget(service StructuredService) string {
-	if service.IsWeb {
+func gogoServiceAssetTarget(service *sdktypes.GOGOResult) string {
+	if service.IsHttp() {
 		scheme := strings.ToLower(strings.TrimSpace(service.Protocol))
 		if !strings.HasPrefix(scheme, "http") {
 			if service.Port == "443" {
@@ -306,11 +393,11 @@ func serviceAssetTarget(service StructuredService) string {
 				scheme = "http"
 			}
 		}
-		if service.IP != "" && service.Port != "" {
-			return scheme + "://" + service.IP + ":" + service.Port
+		if service.Ip != "" && service.Port != "" {
+			return scheme + "://" + service.Ip + ":" + service.Port
 		}
 	}
-	return assetTargetFromValues(service.Target, service.Raw)
+	return assetTargetFromValues(service.GetTarget())
 }
 
 func webAssetTarget(rawURL string) string {
@@ -444,20 +531,6 @@ func firstURL(value string) string {
 	return strings.Trim(match, " \t\r\n\"'<>[](),")
 }
 
-func webPath(rawURL string) string {
-	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return firstNonEmptyString(rawURL, "/")
-	}
-	path := parsed.EscapedPath()
-	if path == "" {
-		path = "/"
-	}
-	if parsed.RawQuery != "" {
-		path += "?" + parsed.RawQuery
-	}
-	return path
-}
 
 func preferredAssetTarget(current, next string) string {
 	current = strings.TrimSpace(current)
@@ -489,32 +562,32 @@ func preferredAssetKey(keys map[string]struct{}, target string) string {
 	if len(sorted) > 0 {
 		return sorted[0]
 	}
-	return canonicalKey(firstNonEmptyString(target, "scan"))
+	return canonicalKey(output.FirstNonEmpty(target, "scan"))
 }
 
-func deriveAssetTitle(asset Asset) string {
-	if title := firstItemText(asset.Items, func(item AssetItem) bool {
-		return (item.Kind == assetItemFinding || item.Kind == assetItemNote) && item.Status == string(verificationConfirmed)
+func deriveAssetTitle(asset output.Asset) string {
+	if title := firstItemText(asset.Items, func(item output.AssetItem) bool {
+		return (item.Kind == output.AssetItemFinding || item.Kind == output.AssetItemNote) && item.Status == string(verificationConfirmed)
 	}); title != "" {
 		return title
 	}
-	if title := firstItemText(asset.Items, func(item AssetItem) bool {
-		return item.Kind == assetItemNote && item.Status == "info"
+	if title := firstItemText(asset.Items, func(item output.AssetItem) bool {
+		return item.Kind == output.AssetItemNote && item.Status == "info"
 	}); title != "" {
 		return title
 	}
-	if title := firstItemText(asset.Items, func(item AssetItem) bool {
-		return item.Kind == assetItemFinding || item.Kind == assetItemNote
+	if title := firstItemText(asset.Items, func(item output.AssetItem) bool {
+		return item.Kind == output.AssetItemFinding || item.Kind == output.AssetItemNote
 	}); title != "" {
 		return title
 	}
-	if title := firstItemText(asset.Items, func(item AssetItem) bool {
-		return item.Kind == assetItemPath && item.Title != ""
+	if title := firstItemText(asset.Items, func(item output.AssetItem) bool {
+		return item.Kind == output.AssetItemPath && item.Title != ""
 	}); title != "" {
 		return title
 	}
 	for _, item := range asset.Items {
-		if item.Kind != assetItemService || item.Data == nil {
+		if item.Kind != output.AssetItemService || item.Data == nil {
 			continue
 		}
 		if banner, ok := item.Data["banner"].(string); ok && strings.TrimSpace(banner) != "" {
@@ -524,28 +597,28 @@ func deriveAssetTitle(asset Asset) string {
 	return asset.Target
 }
 
-func firstItemText(items []AssetItem, match func(AssetItem) bool) string {
+func firstItemText(items []output.AssetItem, match func(output.AssetItem) bool) string {
 	for _, item := range items {
 		if !match(item) {
 			continue
 		}
-		if text := firstNonEmptyString(item.Title, item.Summary); text != "" {
+		if text := output.FirstNonEmpty(item.Title, item.Summary); text != "" {
 			return text
 		}
 	}
 	return ""
 }
 
-func deriveAssetStatus(items []AssetItem) string {
+func deriveAssetStatus(items []output.AssetItem) string {
 	bestStatus := ""
 	bestRank := 0
 	for _, item := range items {
 		status := item.Status
-		if item.Kind == assetItemFinding && status == "" {
-			status = assetItemFinding
+		if item.Kind == output.AssetItemFinding && status == "" {
+			status = output.AssetItemFinding
 		}
-		if item.Kind == assetItemError && status == "" {
-			status = assetItemError
+		if item.Kind == output.AssetItemError && status == "" {
+			status = output.AssetItemError
 		}
 		rank := assetStatusRank(item.Kind, status)
 		if rank > bestRank {
@@ -565,7 +638,7 @@ func assetStatusRank(kind, status string) int {
 		return 95
 	case string(priorityHigh):
 		return 90
-	case assetItemFinding:
+	case output.AssetItemFinding:
 		return 85
 	case string(priorityMedium):
 		return 70
@@ -577,28 +650,28 @@ func assetStatusRank(kind, status string) int {
 		return 40
 	case string(verificationNotConfirmed):
 		return 30
-	case string(verificationFailed), assetItemError:
+	case string(verificationFailed), output.AssetItemError:
 		return 20
 	}
-	if kind == assetItemFinding {
+	if kind == output.AssetItemFinding {
 		return 85
 	}
-	if kind == assetItemError {
+	if kind == output.AssetItemError {
 		return 20
 	}
-	if kind == assetItemResponse {
+	if kind == output.AssetItemResponse {
 		return 10
 	}
 	return 0
 }
 
-func sortAssetItems(items []AssetItem) {
+func sortAssetItems(items []output.AssetItem) {
 	sort.SliceStable(items, func(i, j int) bool {
 		ri, rj := assetItemRank(items[i].Kind), assetItemRank(items[j].Kind)
 		if ri != rj {
 			return ri < rj
 		}
-		vi, vj := hasTag(items[i].Tags, "validated"), hasTag(items[j].Tags, "validated")
+		vi, vj := output.HasTag(items[i].Tags, "validated"), output.HasTag(items[j].Tags, "validated")
 		if vi != vj {
 			return vi
 		}
@@ -608,46 +681,38 @@ func sortAssetItems(items []AssetItem) {
 	})
 }
 
-func hasTag(tags []string, tag string) bool {
-	for _, t := range tags {
-		if strings.EqualFold(t, tag) {
-			return true
-		}
-	}
-	return false
-}
 
 func assetItemRank(kind string) int {
 	switch kind {
-	case assetItemService:
+	case output.AssetItemService:
 		return 10
-	case assetItemFingerprint:
+	case output.AssetItemFingerprint:
 		return 20
-	case assetItemFinding:
+	case output.AssetItemFinding:
 		return 30
-	case assetItemNote:
+	case output.AssetItemNote:
 		return 40
-	case assetItemResponse:
+	case output.AssetItemResponse:
 		return 45
-	case assetItemPath:
+	case output.AssetItemPath:
 		return 50
-	case assetItemError:
+	case output.AssetItemError:
 		return 60
 	default:
 		return 90
 	}
 }
 
-func mergeAssetItem(current, next AssetItem) AssetItem {
-	current.Kind = firstNonEmptyString(current.Kind, next.Kind)
-	current.Source = firstNonEmptyString(current.Source, next.Source)
-	current.Target = firstNonEmptyString(current.Target, next.Target)
-	current.Status = firstNonEmptyString(current.Status, next.Status)
-	current.Title = firstNonEmptyString(current.Title, next.Title)
-	current.Summary = firstNonEmptyString(current.Summary, next.Summary)
-	current.Detail = firstNonEmptyString(current.Detail, next.Detail)
-	current.Raw = firstNonEmptyString(current.Raw, next.Raw)
-	current.Tags = compactStrings(append(current.Tags, next.Tags...)...)
+func mergeAssetItem(current, next output.AssetItem) output.AssetItem {
+	current.Kind = output.FirstNonEmpty(current.Kind, next.Kind)
+	current.Source = output.FirstNonEmpty(current.Source, next.Source)
+	current.Target = output.FirstNonEmpty(current.Target, next.Target)
+	current.Status = output.FirstNonEmpty(current.Status, next.Status)
+	current.Title = output.FirstNonEmpty(current.Title, next.Title)
+	current.Summary = output.FirstNonEmpty(current.Summary, next.Summary)
+	current.Detail = output.FirstNonEmpty(current.Detail, next.Detail)
+	current.Raw = output.FirstNonEmpty(current.Raw, next.Raw)
+	current.Tags = output.CompactStrings(append(current.Tags, next.Tags...)...)
 	if current.Data == nil {
 		current.Data = next.Data
 	} else {
@@ -663,7 +728,7 @@ func mergeAssetItem(current, next AssetItem) AssetItem {
 	return normalizeAssetItem(current)
 }
 
-func normalizeAssetItem(item AssetItem) AssetItem {
+func normalizeAssetItem(item output.AssetItem) output.AssetItem {
 	item.Kind = strings.TrimSpace(item.Kind)
 	item.Source = strings.TrimSpace(item.Source)
 	item.Target = strings.TrimSpace(item.Target)
@@ -672,15 +737,15 @@ func normalizeAssetItem(item AssetItem) AssetItem {
 	item.Summary = strings.TrimSpace(item.Summary)
 	item.Detail = strings.TrimSpace(item.Detail)
 	item.Raw = strings.TrimSpace(item.Raw)
-	item.Tags = compactStrings(item.Tags...)
+	item.Tags = output.CompactStrings(item.Tags...)
 	if len(item.Data) == 0 {
 		item.Data = nil
 	}
 	return item
 }
 
-func itemIdentity(item AssetItem) string {
-	return strings.Join(compactStrings(item.Kind, item.Source, item.Target, item.Status, item.Title, item.Summary, item.Raw), "|")
+func itemIdentity(item output.AssetItem) string {
+	return strings.Join(output.CompactStrings(item.Kind, item.Source, item.Target, item.Status, item.Title, item.Summary, item.Raw), "|")
 }
 
 func assetData(values ...any) map[string]any {
@@ -709,29 +774,12 @@ func isEmptyAssetData(value any) bool {
 	case bool:
 		return !v
 	case []string:
-		return len(compactStrings(v...)) == 0
+		return len(output.CompactStrings(v...)) == 0
 	default:
 		return false
 	}
 }
 
-func compactStrings(values ...string) []string {
-	seen := make(map[string]struct{})
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		key := strings.ToLower(value)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, value)
-	}
-	return out
-}
 
 func sortedStrings(values []string) []string {
 	out := append([]string(nil), values...)

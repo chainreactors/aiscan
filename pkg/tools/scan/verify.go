@@ -29,7 +29,9 @@ func findingTarget(finding finding) string {
 			return f.Result.URI()
 		}
 	case vulnFinding:
-		return f.Target
+		if f.Result != nil {
+			return f.Result.Target
+		}
 	case verificationFinding:
 		return f.Target
 	case aiSkillFinding:

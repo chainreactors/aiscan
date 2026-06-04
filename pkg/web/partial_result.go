@@ -6,20 +6,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chainreactors/aiscan/pkg/output"
 	scanpkg "github.com/chainreactors/aiscan/pkg/tools/scan"
+	sdktypes "github.com/chainreactors/sdk/pkg/types"
 )
 
 type partialStructuredBuilder struct {
 	target    string
 	startedAt time.Time
-	services  map[string]scanpkg.StructuredService
-	endpoints map[string]scanpkg.StructuredWebEndpoint
-	probes    map[string]scanpkg.StructuredWebEndpoint
-	fingers   map[string]scanpkg.StructuredFingerprint
-	risks     map[string]scanpkg.StructuredFinding
-	vulns     map[string]scanpkg.StructuredFinding
-	ai        map[string]scanpkg.StructuredFinding
-	errors    map[string]scanpkg.StructuredError
+	services  map[string]*sdktypes.GOGOResult
+	probes    map[string]*sdktypes.SprayResult
+	risks     map[string]*sdktypes.ZombieResult
+	vulns     map[string]*sdktypes.VulnResult
+	ai        map[string]output.AIFinding
+	errors    map[string]output.Error
 	lineCount int
 }
 
@@ -30,14 +30,12 @@ func newPartialStructuredBuilder(target string, startedAt time.Time) *partialStr
 	return &partialStructuredBuilder{
 		target:    target,
 		startedAt: startedAt,
-		services:  make(map[string]scanpkg.StructuredService),
-		endpoints: make(map[string]scanpkg.StructuredWebEndpoint),
-		probes:    make(map[string]scanpkg.StructuredWebEndpoint),
-		fingers:   make(map[string]scanpkg.StructuredFingerprint),
-		risks:     make(map[string]scanpkg.StructuredFinding),
-		vulns:     make(map[string]scanpkg.StructuredFinding),
-		ai:        make(map[string]scanpkg.StructuredFinding),
-		errors:    make(map[string]scanpkg.StructuredError),
+		services:  make(map[string]*sdktypes.GOGOResult),
+		probes:    make(map[string]*sdktypes.SprayResult),
+		risks:     make(map[string]*sdktypes.ZombieResult),
+		vulns:     make(map[string]*sdktypes.VulnResult),
+		ai:        make(map[string]output.AIFinding),
+		errors:    make(map[string]output.Error),
 	}
 }
 
@@ -55,48 +53,43 @@ func (b *partialStructuredBuilder) ObserveLine(line string) {
 		b.observeService(body, line)
 	case label == "web":
 		b.observeWeb(body, line)
-	case label == "fingerprint":
-		b.observeFingerprint(body, line)
 	case label == "risk":
-		b.observeFinding(b.risks, "weakpass-finding", "high", body, line)
+		b.observeRisk(body)
 	case label == "vuln":
-		b.observeFinding(b.vulns, "vuln-finding", "high", body, line)
+		b.observeVuln(body)
 	case label == "error":
 		key := canonicalPartialKey(body)
-		b.errors[key] = scanpkg.StructuredError{Message: body}
+		b.errors[key] = output.Error{Message: body}
 	case isAILabel(label):
 		b.observeAI(label, body, line)
 	}
 }
 
-func (b *partialStructuredBuilder) Result(now time.Time) *scanpkg.StructuredResult {
+func (b *partialStructuredBuilder) Result(now time.Time) *output.Result {
 	if b == nil {
 		return nil
 	}
 	if now.IsZero() {
 		now = time.Now()
 	}
-	result := &scanpkg.StructuredResult{
-		Summary: scanpkg.StructuredSummary{
-			Targets:      boolCount(strings.TrimSpace(b.target) != ""),
-			Services:     len(b.services),
-			Webs:         len(b.endpoints),
-			Probes:       len(b.probes),
-			Fingerprints: len(b.fingers),
-			Risks:        len(b.risks),
-			Vulns:        len(b.vulns),
-			Verified:     partialVerifiedCount(b.ai),
-			Errors:       len(b.errors),
-			Requests:     int64(len(b.probes)),
-			Tasks:        int64(b.lineCount),
-			Duration:     now.Sub(b.startedAt).Round(time.Millisecond).String(),
-			StartedAt:    b.startedAt,
+	result := &output.Result{
+		Summary: output.Summary{
+			Targets:  boolCount(strings.TrimSpace(b.target) != ""),
+			Services: len(b.services),
+			Webs:     len(b.probes),
+			Probes:   len(b.probes),
+			Risks:    len(b.risks),
+			Vulns:    len(b.vulns),
+			Verified: partialVerifiedCount(b.ai),
+			Errors:   len(b.errors),
+			Requests: int64(len(b.probes)),
+			Tasks:    int64(b.lineCount),
+			Duration: now.Sub(b.startedAt).Round(time.Millisecond).String(),
+			StartedAt: b.startedAt,
 		},
 	}
 	result.Services = mapValues(b.services)
-	result.WebEndpoints = mapValues(b.endpoints)
 	result.WebProbes = mapValues(b.probes)
-	result.Fingerprints = mapValues(b.fingers)
 	result.Risks = mapValues(b.risks)
 	result.Vulns = mapValues(b.vulns)
 	result.AI = mapValues(b.ai)
@@ -112,20 +105,19 @@ func (b *partialStructuredBuilder) observeService(body, raw string) {
 	}
 	target := fields[0]
 	host, port := splitHostPortLoose(target)
-	service := ""
 	protocol := ""
+	midware := ""
 	if len(fields) > 2 {
 		protocol = fields[2]
-		service = fields[2]
 	}
-	item := scanpkg.StructuredService{
-		Target:   target,
-		IP:       host,
+	if len(fields) > 1 {
+		midware = strings.Join(fields[1:], " ")
+	}
+	item := &sdktypes.GOGOResult{
+		Ip:       host,
 		Port:     port,
 		Protocol: protocol,
-		Service:  service,
-		Banner:   strings.Join(fields[1:], " "),
-		Raw:      strings.TrimSpace(strings.TrimPrefix(raw, "[service]")),
+		Midware:  midware,
 	}
 	b.services[canonicalPartialKey(target)] = item
 }
@@ -135,65 +127,73 @@ func (b *partialStructuredBuilder) observeWeb(body, raw string) {
 	if len(fields) == 0 {
 		return
 	}
-	endpoint := scanpkg.StructuredWebEndpoint{
-		URL:    fields[0],
-		Source: "stream",
-		Raw:    strings.TrimSpace(strings.TrimPrefix(raw, "[web]")),
-	}
+	urlStr := fields[0]
 	if len(fields) > 1 && isStatusCode(fields[1]) {
-		endpoint.Status, _ = strconv.Atoi(fields[1])
+		status, _ := strconv.Atoi(fields[1])
+		bodyLength := 0
 		if len(fields) > 2 && isPositiveInt(fields[2]) {
-			endpoint.Length, _ = strconv.Atoi(fields[2])
+			bodyLength, _ = strconv.Atoi(fields[2])
 		}
-		endpoint.Title = titleFromWebFields(fields)
-		endpoint.Fingers = fingersFromFields(fields)
-		b.probes[webProbeKey(endpoint)] = endpoint
-		for _, finger := range endpoint.Fingers {
-			b.addFingerprint(endpoint.URL, finger, endpoint.Source, false)
+		title := titleFromWebFields(fields)
+		probe := &sdktypes.SprayResult{
+			UrlString:  urlStr,
+			Status:     status,
+			BodyLength: bodyLength,
+			Title:      title,
 		}
-		return
-	}
-	b.endpoints[canonicalPartialKey(endpoint.URL)] = endpoint
-}
-
-func (b *partialStructuredBuilder) observeFingerprint(body, raw string) {
-	fields := progressFields(body)
-	if len(fields) == 0 {
-		return
-	}
-	target := fields[0]
-	for _, finger := range fingersFromFields(fields[1:]) {
-		b.addFingerprint(target, finger, "stream", true)
-	}
-	if len(fields) == 1 {
-		b.addFingerprint(target, strings.TrimSpace(strings.TrimPrefix(raw, "[fingerprint] "+target)), "stream", true)
+		key := webProbeKeyFromFields(urlStr, "stream", status, title)
+		b.probes[key] = probe
 	}
 }
 
-func (b *partialStructuredBuilder) addFingerprint(target, name, source string, focus bool) {
-	name = strings.TrimSpace(name)
-	if target == "" || name == "" {
-		return
-	}
-	key := canonicalPartialKey(target) + "|" + strings.ToLower(name) + "|" + source
-	b.fingers[key] = scanpkg.StructuredFingerprint{Target: target, Name: name, Source: source, Focus: focus}
-}
-
-func (b *partialStructuredBuilder) observeFinding(bucket map[string]scanpkg.StructuredFinding, kind, priority, body, raw string) {
+func (b *partialStructuredBuilder) observeRisk(body string) {
 	fields := progressFields(body)
 	target := firstField(fields)
-	summary := strings.TrimSpace(body)
+	host, port := splitHostPortLoose(target)
+	service := ""
+	username := ""
+	password := ""
 	if len(fields) > 1 {
-		summary = strings.Join(fields[1:], " ")
+		service = fields[1]
 	}
-	item := scanpkg.StructuredFinding{
-		Kind:     kind,
-		Target:   target,
-		Priority: priority,
-		Summary:  summary,
-		Raw:      strings.TrimSpace(raw),
+	if len(fields) > 2 {
+		username = fields[2]
 	}
-	bucket[canonicalPartialKey(kind+"|"+raw)] = item
+	if len(fields) > 3 {
+		password = fields[3]
+	}
+	item := &sdktypes.ZombieResult{
+		IP:       host,
+		Port:     port,
+		Service:  service,
+		Username: username,
+		Password: password,
+	}
+	b.risks[canonicalPartialKey("risk|"+body)] = item
+}
+
+func (b *partialStructuredBuilder) observeVuln(body string) {
+	fields := progressFields(body)
+	target := firstField(fields)
+	templateID := ""
+	severity := ""
+	templateName := ""
+	if len(fields) > 1 {
+		templateID = fields[1]
+	}
+	if len(fields) > 2 {
+		severity = fields[2]
+	}
+	if len(fields) > 3 {
+		templateName = strings.Join(fields[3:], " ")
+	}
+	item := &sdktypes.VulnResult{
+		Target:       target,
+		TemplateID:   templateID,
+		Severity:     severity,
+		TemplateName: templateName,
+	}
+	b.vulns[canonicalPartialKey("vuln|"+body)] = item
 }
 
 func (b *partialStructuredBuilder) observeAI(label, body, raw string) {
@@ -220,7 +220,7 @@ func (b *partialStructuredBuilder) observeAI(label, body, raw string) {
 	if len(fields) > start+1 {
 		detail = strings.Join(fields[start+1:], " ")
 	}
-	item := scanpkg.StructuredFinding{
+	item := output.AIFinding{
 		Kind:     kind,
 		Target:   target,
 		Priority: aiPriority(status, kind),
@@ -322,8 +322,8 @@ func splitHostPortLoose(target string) (string, string) {
 	return target[:idx], target[idx+1:]
 }
 
-func webProbeKey(endpoint scanpkg.StructuredWebEndpoint) string {
-	return canonicalPartialKey(endpoint.URL) + "|" + endpoint.Source + "|" + strconv.Itoa(endpoint.Status) + "|" + endpoint.Title
+func webProbeKeyFromFields(url, source string, status int, title string) string {
+	return canonicalPartialKey(url) + "|" + source + "|" + strconv.Itoa(status) + "|" + title
 }
 
 func canonicalPartialKey(value string) string {
@@ -394,7 +394,7 @@ func aiPriority(status, kind string) string {
 	return "medium"
 }
 
-func partialVerifiedCount(ai map[string]scanpkg.StructuredFinding) int {
+func partialVerifiedCount(ai map[string]output.AIFinding) int {
 	count := 0
 	for _, item := range ai {
 		if item.Status == "confirmed" {

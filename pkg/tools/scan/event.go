@@ -225,18 +225,34 @@ func (f weakpassFinding) Key() string {
 }
 
 type vulnFinding struct {
-	Target string
-	Output string
+	Result *sdktypes.VulnResult
 }
 
 func (f vulnFinding) Kind() findingKind { return findingVuln }
 
-func (f vulnFinding) Priority() priority { return priorityHigh }
+func (f vulnFinding) Priority() priority {
+	if f.Result != nil {
+		switch f.Result.Severity {
+		case "critical":
+			return priorityCritical
+		case "high":
+			return priorityHigh
+		case "medium":
+			return priorityMedium
+		case "info":
+			return priorityLow
+		}
+	}
+	return priorityHigh
+}
 
 func (f vulnFinding) Key() string { return f.String() }
 
 func (f vulnFinding) String() string {
-	return strings.TrimSpace(f.Output)
+	if f.Result == nil {
+		return ""
+	}
+	return strings.TrimSpace(parsers.JoinOutput(f.Result.Target, f.Result.TemplateID, f.Result.Severity, f.Result.TemplateName))
 }
 
 type aiSkillFinding struct {

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
 	"github.com/chainreactors/aiscan/pkg/util"
 	"github.com/chainreactors/parsers"
@@ -14,18 +15,6 @@ import (
 	"github.com/chainreactors/utils"
 )
 
-type webEndpoint struct {
-	URL        string
-	HostHeader string
-	Source     string
-}
-
-type fingerprint struct {
-	Target string
-	Name   string
-	Source string
-	Focus  bool
-}
 
 type sprayObservation struct {
 	Result     *parsers.SprayResult
@@ -53,10 +42,8 @@ type collector struct {
 	debug            bool
 	stats            *statsCollector
 	recorder         *recorder
-	webEndpoints     []webEndpoint
 	gogoResults      []*parsers.GOGOResult
 	sprayResults     []sprayObservation
-	fingerprints     []fingerprint
 	zombieResults    []*parsers.ZombieResult
 	neutronMatches   []vulnFinding
 	verifications    []verificationResult
@@ -141,14 +128,6 @@ func (c *collector) recordTargetEvent(event event) {
 		key := utils.NormalizeURL(target.URL) + "|host=" + strings.ToLower(target.HostHeader)
 		if _, ok := c.seenWeb[key]; !ok {
 			c.seenWeb[key] = struct{}{}
-			c.webEndpoints = append(c.webEndpoints, webEndpoint{
-				URL:        target.URL,
-				HostHeader: target.HostHeader,
-				Source:     event.Source,
-			})
-			if c.recorder != nil {
-				c.recorder.Web(target.URL, 0, "", nil)
-			}
 		}
 	case serviceTarget:
 		if target.Result != nil {
@@ -168,7 +147,7 @@ func (c *collector) recordTargetEvent(event event) {
 				Capability: source,
 			})
 			if c.recorder != nil && target.Result != nil {
-				c.recorder.Web(target.Result.UrlString, target.Result.Status, target.Result.Title, parsers.FrameworkNames(target.Result.Frameworks))
+				c.recorder.Web(target.Result)
 			}
 		}
 	}
@@ -179,28 +158,24 @@ func (c *collector) recordFindingEvent(event event) {
 	case fingerprintFinding:
 		for _, name := range parsers.NormalizeNames(finding.Fingers) {
 			key := strings.ToLower(finding.Target) + "|" + strings.ToLower(name)
-			if index, ok := c.seenFinger[key]; ok {
-				if finding.Focus && index >= 0 && index < len(c.fingerprints) && !c.fingerprints[index].Focus {
-					c.fingerprints[index].Focus = true
-					c.fingerprints[index].Source = event.Source
-				}
+			if _, ok := c.seenFinger[key]; ok {
 				continue
 			}
-			c.seenFinger[key] = len(c.fingerprints)
-			c.fingerprints = append(c.fingerprints, fingerprint{
-				Target: finding.Target,
-				Name:   name,
-				Source: event.Source,
-				Focus:  finding.Focus,
-			})
+			c.seenFinger[key] = len(c.seenFinger)
 		}
 	case weakpassFinding:
 		if finding.Result != nil {
 			c.zombieResults = append(c.zombieResults, finding.Result)
+			if c.recorder != nil {
+				c.recorder.Zombie(finding.Result)
+			}
 		}
 	case vulnFinding:
 		if finding.String() != "" {
 			c.neutronMatches = append(c.neutronMatches, finding)
+			if c.recorder != nil {
+				c.recorder.Vuln(finding.Result)
+			}
 		}
 	case verificationFinding:
 		if reportableVerificationFinding(finding) {
@@ -295,7 +270,7 @@ func (c *collector) PlainTextWithFindings() string {
 }
 
 func (c *collector) AssetReport() string {
-	return formatAssetReport(c.StructuredResult(), false)
+	return output.FormatAssetReport(c.StructuredResult(), false)
 }
 
 func (c *collector) FindingsReport() string {

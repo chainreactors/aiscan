@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
@@ -768,8 +769,8 @@ func TestScanPipelineDoesNotDispatchFindingOrError(t *testing.T) {
 	if runs != 0 {
 		t.Fatalf("capability runs = %d, want 0", runs)
 	}
-	if len(coll.fingerprints) != 1 {
-		t.Fatalf("fingerprints = %d, want 1", len(coll.fingerprints))
+	if len(coll.seenFinger) != 1 {
+		t.Fatalf("fingerprints = %d, want 1", len(coll.seenFinger))
 	}
 	if len(coll.errors) != 1 {
 		t.Fatalf("errors = %d, want 1", len(coll.errors))
@@ -786,7 +787,7 @@ func TestFindingPriorityDefaults(t *testing.T) {
 	if got := (weakpassFinding{Result: &parsers.ZombieResult{IP: "127.0.0.1", Port: "22", Service: "ssh"}}).Priority(); got != priorityHigh {
 		t.Fatalf("weakpass priority = %s, want %s", got, priorityHigh)
 	}
-	if got := (vulnFinding{Target: "http://127.0.0.1", Output: "http://127.0.0.1 test high"}).Priority(); got != priorityHigh {
+	if got := (vulnFinding{Result: &sdktypes.VulnResult{Target: "http://127.0.0.1", TemplateID: "test", Severity: "high", TemplateName: "test high"}}).Priority(); got != priorityHigh {
 		t.Fatalf("vuln priority = %s, want %s", got, priorityHigh)
 	}
 	if got := (aiSkillFinding{Skill: "sniper", Status: "info", Summary: "CVE lead"}).Priority(); got != priorityMedium {
@@ -839,7 +840,7 @@ func TestScanPipelineDispatchesHighPriorityFindingToAgentVerifier(t *testing.T) 
 	p := newTestPipeline(context.Background(), capabilities, coll, false)
 	p.Run(testSeeds(
 		findingEvent("test", fingerprintFinding{Target: "http://127.0.0.1", Fingers: []string{"nginx"}}),
-		findingEvent("test", vulnFinding{Target: "http://127.0.0.1", Output: "http://127.0.0.1 test high"}),
+		findingEvent("test", vulnFinding{Result: &sdktypes.VulnResult{Target: "http://127.0.0.1", TemplateID: "test", Severity: "high", TemplateName: "test high"}}),
 	))
 
 	if runs != 1 {
@@ -906,7 +907,7 @@ func TestAgentVerifyCapabilityUsesProviderAndEmitsVerification(t *testing.T) {
 	coll := newCollector([]string{"seed"}, nil, false, false)
 	p := newTestPipeline(context.Background(), []pipeline.Capability{cap}, coll, false)
 	p.Run(testSeeds(
-		findingEvent(capNeutronPOC, vulnFinding{Target: "http://127.0.0.1", Output: "http://127.0.0.1 test high"}),
+		findingEvent(capNeutronPOC, vulnFinding{Result: &sdktypes.VulnResult{Target: "http://127.0.0.1", TemplateID: "test", Severity: "high", TemplateName: "test high"}}),
 	))
 
 	if len(coll.aiSkillResults) != 1 {
@@ -1145,7 +1146,7 @@ func TestAgentVerifyCapabilityUsesFallbackPromptWhenSkillBodyMissing(t *testing.
 	coll := newCollector([]string{"seed"}, nil, false, false)
 	p := newTestPipeline(context.Background(), []pipeline.Capability{cap}, coll, false)
 	p.Run(testSeeds(
-		findingEvent(capNeutronPOC, vulnFinding{Target: "http://127.0.0.1", Output: "http://127.0.0.1 test high"}),
+		findingEvent(capNeutronPOC, vulnFinding{Result: &sdktypes.VulnResult{Target: "http://127.0.0.1", TemplateID: "test", Severity: "high", TemplateName: "test high"}}),
 	))
 
 	if calls != 1 {
@@ -1243,7 +1244,7 @@ func TestVerifyPromptTailoredForSniperFindings(t *testing.T) {
 	}
 
 	// Regular vulnFinding should get the standard prompt.
-	vulnEvent := findingEvent(capNeutronPOC, vulnFinding{Target: "http://10.0.0.1", Output: "test vuln"})
+	vulnEvent := findingEvent(capNeutronPOC, vulnFinding{Result: &sdktypes.VulnResult{Target: "http://10.0.0.1", TemplateID: "test-vuln"}})
 	regularPrompt := verifySkill.Prompt(vulnEvent)
 	if !strings.Contains(regularPrompt, "Finding to verify") {
 		t.Fatalf("regular prompt should use standard format, got: %s", regularPrompt)
@@ -1289,11 +1290,11 @@ func TestScanPipelineFanoutAndDedup(t *testing.T) {
 	if !reflect.DeepEqual(seen, []string{"service-to-web", "web-to-finger"}) {
 		t.Fatalf("seen capability runs = %#v", seen)
 	}
-	if len(coll.webEndpoints) != 1 {
-		t.Fatalf("web endpoints = %d, want 1", len(coll.webEndpoints))
+	if len(coll.seenWeb) != 1 {
+		t.Fatalf("web endpoints = %d, want 1", len(coll.seenWeb))
 	}
-	if len(coll.fingerprints) != 1 {
-		t.Fatalf("fingerprints = %d, want 1", len(coll.fingerprints))
+	if len(coll.seenFinger) != 1 {
+		t.Fatalf("fingerprints = %d, want 1", len(coll.seenFinger))
 	}
 	if len(coll.gogoResults) != 1 {
 		t.Fatalf("gogo results = %d, want 1", len(coll.gogoResults))
@@ -1579,7 +1580,7 @@ func TestScanStreamsAcceptedResults(t *testing.T) {
 	if !hasANSI(raw) {
 		t.Fatalf("colored stream output missing ANSI: %q", raw)
 	}
-	out := stripANSI(raw)
+	out := output.StripANSI(raw)
 	if !strings.Contains(out, "[web] http://127.0.0.1:80 200 http") {
 		t.Fatalf("stream output = %q", out)
 	}
@@ -1612,7 +1613,7 @@ func TestScanColorizesWebProbePrefixOnly(t *testing.T) {
 	if strings.Contains(raw, logs.Yellow("401")) || strings.Contains(raw, logs.Green(`"json data"`)) {
 		t.Fatalf("scan output should not parse and color parser fields: %q", raw)
 	}
-	out := stripANSI(raw)
+	out := output.StripANSI(raw)
 	if !strings.Contains(out, `[web] http://127.0.0.1:32768/test.war 401 64 26ms "json data"`) {
 		t.Fatalf("plain colored output shape changed: %q", out)
 	}
@@ -1678,7 +1679,7 @@ func TestScanFindingPriorityUsesFocusOutputOnly(t *testing.T) {
 		Fingers: []string{"struts2"},
 		Focus:   true,
 	}), true)
-	if strings.Contains(stripANSI(colored), " high ") {
+	if strings.Contains(output.StripANSI(colored), " high ") {
 		t.Fatalf("colored finding output should not print priority text: %q", colored)
 	}
 	if !strings.Contains(colored, logs.Red("[fingerprint]")) {
@@ -1851,17 +1852,13 @@ func TestScanAggregatesAssets(t *testing.T) {
 
 	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: targetEvent(capGogoPortscan, "", newServiceTarget("", service))})
 	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: targetEvent(capSprayCheck, "", newWebProbeTarget("", capSprayCheck, "", &parsers.SprayResult{
-		IsValid:   true,
-		UrlString: "http://127.0.0.1:8080/admin",
-		Status:    200,
-		Title:     "admin",
-		Distance:  1,
+		IsValid:    true,
+		UrlString:  "http://127.0.0.1:8080/admin",
+		Status:     200,
+		Title:      "admin",
+		Distance:   1,
+		Frameworks: common.Frameworks{"nginx": {Name: "nginx", IsFocus: true}},
 	}))})
-	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capSprayCheck, fingerprintFinding{
-		Target:  "http://127.0.0.1:8080",
-		Fingers: []string{"nginx"},
-		Focus:   true,
-	})})
 	coll.Finish()
 
 	result := coll.StructuredResult()
@@ -1869,7 +1866,7 @@ func TestScanAggregatesAssets(t *testing.T) {
 		t.Fatalf("assets = %d, want 1: %#v", len(result.Assets), result.Assets)
 	}
 	kinds := assetItemKindCounts(result.Assets[0].Items)
-	for _, kind := range []string{assetItemService, assetItemPath, assetItemFingerprint} {
+	for _, kind := range []string{output.AssetItemService, output.AssetItemPath, output.AssetItemFingerprint} {
 		if kinds[kind] != 1 {
 			t.Fatalf("asset item %s count = %d, want 1 in %#v", kind, kinds[kind], result.Assets[0].Items)
 		}
@@ -1905,7 +1902,7 @@ func TestScanAggregatesAIAsAssetItems(t *testing.T) {
 		t.Fatalf("assets = %d, want 1: %#v", len(result.Assets), result.Assets)
 	}
 	kinds := assetItemKindCounts(result.Assets[0].Items)
-	if kinds[assetItemFinding] != 1 || kinds[assetItemNote] != 1 || kinds[assetItemResponse] != 1 {
+	if kinds[output.AssetItemFinding] != 1 || kinds[output.AssetItemNote] != 1 || kinds[output.AssetItemResponse] != 1 {
 		t.Fatalf("AI asset item kinds = %#v, want one finding, one note, and one response", kinds)
 	}
 }
@@ -1932,7 +1929,7 @@ func TestScanFormatFileWritesAssetReportWithoutAI(t *testing.T) {
 	}
 }
 
-func assetItemKindCounts(items []AssetItem) map[string]int {
+func assetItemKindCounts(items []output.AssetItem) map[string]int {
 	counts := make(map[string]int)
 	for _, item := range items {
 		counts[item.Kind]++
@@ -1960,16 +1957,16 @@ func TestScanOutputFileWritesPlainTextWithoutChangingStdout(t *testing.T) {
 	if !strings.Contains(fileOut, "[summary] completed") {
 		t.Fatalf("file output missing summary: %q", fileOut)
 	}
-	if !strings.Contains(stripANSI(out), "[summary] completed") {
+	if !strings.Contains(output.StripANSI(out), "[summary] completed") {
 		t.Fatalf("stdout output missing summary: %q", out)
 	}
 	if strings.Contains(out, "[scan.web] ") {
 		t.Fatalf("stdout output should not repeat streamed events: %q", out)
 	}
-	if !strings.Contains(stripANSI(stream.String()), "http://127.0.0.1:1") {
+	if !strings.Contains(output.StripANSI(stream.String()), "http://127.0.0.1:1") {
 		t.Fatalf("stream output missing event line: %q", stream.String())
 	}
-	if strings.Contains(stripANSI(stream.String()), "type=web") {
+	if strings.Contains(output.StripANSI(stream.String()), "type=web") {
 		t.Fatalf("stream output contains key/value pollution: %q", stream.String())
 	}
 }
@@ -2023,7 +2020,7 @@ func TestScanReportMarkdown(t *testing.T) {
 
 func TestGenerateAIReportUsesAnnotatedMarkdown(t *testing.T) {
 	coll := newCollector([]string{"seed"}, nil, false, false)
-	finding := vulnFinding{Target: "http://127.0.0.1", Output: "http://127.0.0.1 CVE-2016-4437"}
+	finding := vulnFinding{Result: &sdktypes.VulnResult{Target: "http://127.0.0.1", TemplateID: "CVE-2016-4437", Severity: "high"}}
 	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capNeutronPOC, finding)})
 	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentVerify, aiSkillFinding{
 		Skill:        "verify",
@@ -2046,14 +2043,14 @@ func TestGenerateAIReportUsesAnnotatedMarkdown(t *testing.T) {
 	if out != "report body\n" {
 		t.Fatalf("report output = %q, want generated report", out)
 	}
-	if !strings.Contains(promptSeen, "~~[vuln] http://127.0.0.1 CVE-2016-4437~~ *(not confirmed)*") {
+	if !strings.Contains(promptSeen, "~~[vuln] http://127.0.0.1 CVE-2016-4437 high~~ *(not confirmed)*") {
 		t.Fatalf("AI report prompt missing not_confirmed markdown annotation:\n%s", promptSeen)
 	}
 }
 
 func TestReportMarkdownMarksInconclusiveVerification(t *testing.T) {
 	coll := newCollector([]string{"seed"}, nil, false, false)
-	finding := vulnFinding{Target: "http://127.0.0.1", Output: "http://127.0.0.1 CVE lead"}
+	finding := vulnFinding{Result: &sdktypes.VulnResult{Target: "http://127.0.0.1", TemplateID: "CVE-lead", Severity: "high"}}
 	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capNeutronPOC, finding)})
 	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentVerify, aiSkillFinding{
 		Skill:        "verify",
@@ -2066,7 +2063,7 @@ func TestReportMarkdownMarksInconclusiveVerification(t *testing.T) {
 	coll.Finish()
 
 	report := coll.ReportMarkdown()
-	if !strings.Contains(report, "**[inconclusive]** [vuln] http://127.0.0.1 CVE lead") {
+	if !strings.Contains(report, "**[inconclusive]** [vuln] http://127.0.0.1 CVE-lead high") {
 		t.Fatalf("report missing inconclusive annotation:\n%s", report)
 	}
 }

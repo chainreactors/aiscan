@@ -12,6 +12,7 @@ import (
 
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
+	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/charmbracelet/glamour"
 	"github.com/muesli/termenv"
 	"golang.org/x/term"
@@ -24,19 +25,11 @@ const (
 	toolResultPreviewWidth  = 160
 )
 
-var (
-	colorReset = "\033[0m"
-	colorDim   = "\033[2m"
-	colorBold  = "\033[1m"
-	colorRed   = "\033[31m"
-	colorCyan  = "\033[36m"
-)
-
 type AgentOutput struct {
 	stdout   io.Writer
 	stderr   io.Writer
 	markdown bool
-	color    bool
+	color    output.Color
 	debug    bool
 	Quiet    bool
 	tools    map[string]agentToolSummary
@@ -58,18 +51,11 @@ func NewAgentOutput(option *cfg.Option) *AgentOutput {
 		noColor = option.NoColor
 	}
 	useColor := !noColor && term.IsTerminal(int(os.Stderr.Fd()))
-	if !useColor {
-		colorReset = ""
-		colorDim = ""
-		colorBold = ""
-		colorRed = ""
-		colorCyan = ""
-	}
 	return &AgentOutput{
 		stdout:   os.Stdout,
 		stderr:   os.Stderr,
 		markdown: markdown,
-		color:    useColor,
+		color:    output.NewColor(useColor),
 		debug:    debug,
 		Quiet:    quiet,
 		tools:    make(map[string]agentToolSummary),
@@ -93,17 +79,20 @@ func (o *AgentOutput) Start(label, text string) {
 	}
 	text = compactAgentLine(text, agentStatusPreviewLimit)
 	if text == "" {
-		fmt.Fprintf(o.stderr, "%s> %s%s\n", colorBold, label, colorReset)
+		fmt.Fprintf(o.stderr, "%s> %s%s\n",
+			o.color.Code(output.ANSIBold), label, o.color.Code(output.ANSIReset))
 		return
 	}
-	fmt.Fprintf(o.stderr, "%s> %s:%s %s\n", colorBold, label, colorReset, text)
+	fmt.Fprintf(o.stderr, "%s> %s:%s %s\n",
+		o.color.Code(output.ANSIBold), label, o.color.Code(output.ANSIReset), text)
 }
 
 func (o *AgentOutput) Empty() {
 	if o == nil || o.Quiet {
 		return
 	}
-	fmt.Fprintf(o.stderr, "%sNo output.%s\n", colorDim, colorReset)
+	fmt.Fprintf(o.stderr, "%sNo output.%s\n",
+		o.color.Code(output.ANSIDim), o.color.Code(output.ANSIReset))
 }
 
 func (o *AgentOutput) Final(content string) {
@@ -143,10 +132,10 @@ func (o *AgentOutput) turnEnd(event agent.Event) {
 			event.Usage.CacheHitRatio()*100)
 	}
 	fmt.Fprintf(o.stderr, "%s[turn %d] prompt=%d completion=%d total=%d context=%d%s%s\n",
-		colorDim, event.Turn,
+		o.color.Code(output.ANSIDim), event.Turn,
 		event.Usage.PromptTokens, event.Usage.CompletionTokens, event.Usage.TotalTokens,
 		event.ContextTokens, cache,
-		colorReset)
+		o.color.Code(output.ANSIReset))
 }
 
 func (o *AgentOutput) toolStart(event agent.Event) {
@@ -165,15 +154,18 @@ func (o *AgentOutput) toolStart(event agent.Event) {
 		return
 	}
 
-	header := fmt.Sprintf("%s⎿ %s%s%s", colorDim, colorCyan, name, colorReset)
+	header := fmt.Sprintf("%s⎿ %s%s%s",
+		o.color.Code(output.ANSIDim), o.color.Code(output.ANSICyan), name, o.color.Code(output.ANSIReset))
 	if summary != "" {
-		header += fmt.Sprintf("%s: %s%s", colorDim, colorReset, summary)
+		header += fmt.Sprintf("%s: %s%s",
+			o.color.Code(output.ANSIDim), o.color.Code(output.ANSIReset), summary)
 	}
 	fmt.Fprintln(o.stderr, header)
 
 	if o.debug {
 		if args := compactAgentJSON(event.Arguments, agentDebugPreviewLimit); args != "" {
-			fmt.Fprintf(o.stderr, "  %sargs: %s%s\n", colorDim, args, colorReset)
+			fmt.Fprintf(o.stderr, "  %sargs: %s%s\n",
+				o.color.Code(output.ANSIDim), args, o.color.Code(output.ANSIReset))
 		}
 	}
 }
@@ -191,7 +183,9 @@ func (o *AgentOutput) toolEnd(event agent.Event) {
 		if errText == "" {
 			errText = "tool execution failed"
 		}
-		fmt.Fprintf(o.stderr, "  %s⎿ %s%s%s\n", colorDim, colorRed, compactAgentLine(errText, agentStatusPreviewLimit), colorReset)
+		fmt.Fprintf(o.stderr, "  %s⎿ %s%s%s\n",
+			o.color.Code(output.ANSIDim), o.color.Code(output.ANSIRed),
+			compactAgentLine(errText, agentStatusPreviewLimit), o.color.Code(output.ANSIReset))
 		return
 	}
 
@@ -230,12 +224,14 @@ func (o *AgentOutput) renderToolResult(toolName, result string) {
 		if len(display) > toolResultPreviewWidth {
 			display = display[:toolResultPreviewWidth] + "…"
 		}
-		fmt.Fprintf(o.stderr, "  %s⎿%s %s\n", colorDim, colorReset, display)
+		fmt.Fprintf(o.stderr, "  %s⎿%s %s\n",
+			o.color.Code(output.ANSIDim), o.color.Code(output.ANSIReset), display)
 	}
 
 	if truncated {
 		remaining := len(lines) - maxLines
-		fmt.Fprintf(o.stderr, "  %s⎿ … +%d lines%s\n", colorDim, remaining, colorReset)
+		fmt.Fprintf(o.stderr, "  %s⎿ … +%d lines%s\n",
+			o.color.Code(output.ANSIDim), remaining, o.color.Code(output.ANSIReset))
 	}
 }
 

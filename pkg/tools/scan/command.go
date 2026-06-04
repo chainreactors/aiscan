@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
@@ -148,11 +149,11 @@ func (c *Command) ExecuteStreaming(ctx context.Context, args []string, stream io
 	return out, err
 }
 
-func (c *Command) ExecuteStructured(ctx context.Context, args []string, stream io.Writer) (string, *StructuredResult, error) {
+func (c *Command) ExecuteStructured(ctx context.Context, args []string, stream io.Writer) (string, *output.Result, error) {
 	return c.execute(ctx, c.resolveRelativePaths(args), stream)
 }
 
-func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) (string, *StructuredResult, error) {
+func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) (string, *output.Result, error) {
 	var flags flags
 	parser := goflags.NewParser(&flags, goflags.Default&^goflags.PrintErrors)
 	if _, err := parser.ParseArgs(args); err != nil {
@@ -186,7 +187,7 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 	}
 	if len(rawInputs) == 0 {
 		if flags.FindingsFile != "" {
-			return renderRecordFile(flags.FindingsFile, flags.NoColor)
+			return output.RenderRecordFileAsAsset(flags.FindingsFile, !flags.NoColor, AggregateStructuredResult)
 		}
 		return "", nil, fmt.Errorf("scan: no input targets")
 	}
@@ -242,7 +243,7 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		coll.mu.Lock()
 		stats := coll.statsSnapshotLocked()
 		gogoCount := len(coll.gogoResults)
-		webCount := len(coll.webEndpoints)
+		webCount := len(coll.seenWeb)
 		vulnCount := len(coll.neutronMatches) + len(coll.zombieResults)
 		aiCount := len(coll.aiSkillResults)
 		errCount := len(coll.errors)

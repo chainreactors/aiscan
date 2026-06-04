@@ -12,7 +12,7 @@ import (
 
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/core/runner"
-	"github.com/chainreactors/aiscan/pkg/record"
+	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	goflags "github.com/jessevdk/go-flags"
 )
@@ -80,7 +80,7 @@ func AiScan() {
 		return
 	}
 	if option.ViewFile != "" {
-		if err := record.RenderFile(option.ViewFile, option.ViewFormat, option.ViewOutput); err != nil {
+		if err := output.RenderFile(option.ViewFile, option.ViewFormat, option.ViewOutput); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %s\n", err)
 			os.Exit(1)
 		}

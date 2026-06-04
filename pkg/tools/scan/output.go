@@ -1,13 +1,12 @@
 package scan
 
 import (
-	"strings"
-
+	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/parsers"
 )
 
 func formatEventLine(event event, color bool) string {
-	rc := newRenderColor(color)
+	c := output.NewColor(color)
 	switch event.Kind {
 	case eventTarget:
 		switch target := event.Target.(type) {
@@ -19,17 +18,17 @@ func formatEventLine(event event, color bool) string {
 			if target.Result.IsHttp() {
 				label = "web"
 			}
-			return formatOutputLine(outputPrefix(label, rc.Green), target.Result.OutputLine(), color)
+			return output.FormatLine(output.OutputPrefix(label, c.Green), target.Result.OutputLine(), c)
 		case webTarget:
 			if target.URL == "" {
 				return ""
 			}
-			return formatOutputLine(outputPrefix("web", rc.Green), parsers.JoinOutput(target.URL, target.HostHeader), color)
+			return output.FormatLine(output.OutputPrefix("web", c.Green), parsers.JoinOutput(target.URL, target.HostHeader), c)
 		case webProbeTarget:
 			if !reportableSprayResultForCapability(target.Result, target.Capability) {
 				return ""
 			}
-			return formatOutputLine(outputPrefix("web", rc.Green), target.Result.OutputLine(), color)
+			return output.FormatLine(output.OutputPrefix("web", c.Green), target.Result.OutputLine(), c)
 		}
 	case eventFinding:
 		switch finding := event.Finding.(type) {
@@ -38,61 +37,40 @@ func formatEventLine(event event, color bool) string {
 			if len(names) == 0 || !finding.Focus {
 				return ""
 			}
-			return formatOutputLine(outputPrefix("fingerprint", rc.ForPriority(finding.Priority())), parsers.JoinOutput(finding.Target, parsers.NamesOutput(names)), color)
+			return output.FormatLine(output.OutputPrefix("fingerprint", c.ForPriority(string(finding.Priority()))), parsers.JoinOutput(finding.Target, parsers.NamesOutput(names)), c)
 		case weakpassFinding:
 			if finding.Result == nil {
 				return ""
 			}
-			return formatOutputLine(outputPrefix("risk", rc.ForPriority(finding.Priority())), finding.Result.OutputLine(), color)
+			return output.FormatLine(output.OutputPrefix("risk", c.ForPriority(string(finding.Priority()))), finding.Result.OutputLine(), c)
 		case vulnFinding:
 			if finding.String() == "" {
 				return ""
 			}
-			return formatOutputLine(outputPrefix("vuln", rc.ForPriority(finding.Priority())), finding.String(), color)
+			return output.FormatLine(output.OutputPrefix("vuln", c.ForPriority(string(finding.Priority()))), finding.String(), c)
 		case verificationFinding:
 			if !reportableVerificationFinding(finding) {
 				return ""
 			}
-			return formatOutputLine(outputPrefix("ai", rc.ForVerificationStatus(finding.Status)), verificationOutput(finding), color)
+			return output.FormatLine(output.OutputPrefix("ai", c.ForStatus(string(finding.Status))), verificationOutput(finding), c)
 		case aiSkillFinding:
 			if finding.Summary == "" && finding.Detail == "" {
 				return ""
 			}
-			return formatOutputLine(outputPrefix(aiSkillOutputLabelWithStatus(finding), rc.ForAISkill(finding.Status)), aiSkillOutput(finding), color)
+			return output.FormatLine(output.OutputPrefix(aiSkillOutputLabelWithStatus(finding), c.ForStatus(finding.Status)), aiSkillOutput(finding), c)
 		case aiSkillResponse:
 			if finding.Summary == "" && finding.Detail == "" && finding.Raw == "" {
 				return ""
 			}
-			return formatOutputLine(outputPrefix(aiSkillResponseLabel(finding), rc.Dim), aiSkillResponseOutput(finding), color)
+			return output.FormatLine(output.OutputPrefix(aiSkillResponseLabel(finding), c.Dim), aiSkillResponseOutput(finding), c)
 		}
 	case eventError:
 		if event.Error.Message == "" {
 			return ""
 		}
-		return formatOutputLine(outputPrefix("error", rc.Red), parsers.JoinOutput(event.Error.Message), color)
+		return output.FormatLine(output.OutputPrefix("error", c.Red), parsers.JoinOutput(event.Error.Message), c)
 	}
 	return ""
-}
-
-func outputPrefix(source string, colorFn func(string) string) string {
-	return colorFn("[" + source + "]")
-}
-
-func formatOutputLine(prefix, output string, color bool) string {
-	output = strings.TrimSpace(output)
-	parts := []string{prefix}
-	if output != "" {
-		parts = append(parts, output)
-	}
-	return sanitizeOutputLine(strings.Join(parts, " "), color)
-}
-
-func sanitizeOutputLine(line string, color bool) string {
-	line = strings.TrimSpace(line)
-	if !color {
-		line = stripANSI(line)
-	}
-	return line
 }
 
 func verificationOutput(finding verificationFinding) string {

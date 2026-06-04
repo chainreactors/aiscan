@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/app"
-	scanpkg "github.com/chainreactors/aiscan/pkg/tools/scan"
+	"github.com/chainreactors/aiscan/pkg/output"
 )
 
 type LLMConfigStore interface {
@@ -326,10 +326,10 @@ func scanArgsForJob(job *ScanJob) []string {
 }
 
 type structuredScanCommand interface {
-	ExecuteStructured(ctx context.Context, args []string, stream io.Writer) (string, *scanpkg.StructuredResult, error)
+	ExecuteStructured(ctx context.Context, args []string, stream io.Writer) (string, *output.Result, error)
 }
 
-func (s *Service) executeScan(ctx context.Context, args []string, stream io.Writer) (string, *scanpkg.StructuredResult, error) {
+func (s *Service) executeScan(ctx context.Context, args []string, stream io.Writer) (string, *output.Result, error) {
 	app := s.appSnapshot()
 	if app == nil || app.Commands == nil {
 		return "", nil, fmt.Errorf("aiscan runtime is not ready")

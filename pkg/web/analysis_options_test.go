@@ -114,7 +114,7 @@ func TestPartialStructuredBuilderAggregatesStreamLines(t *testing.T) {
 	if result == nil {
 		t.Fatal("partial result is nil")
 	}
-	if result.Summary.Services != 1 || result.Summary.Probes != 1 || result.Summary.Fingerprints != 2 || len(result.AI) != 1 {
+	if result.Summary.Services != 1 || result.Summary.Probes != 1 || len(result.AI) != 1 {
 		t.Fatalf("summary = %#v", result.Summary)
 	}
 	if len(result.Assets) != 2 {

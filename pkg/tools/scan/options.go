@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
@@ -54,6 +55,8 @@ func (c *Command) Configure(opts ...Option) {
 type AgentRunResult struct {
 	Raw        string
 	Checkpoint *command.CheckpointResult
+	Messages   []provider.ChatMessage
+	Usage      *provider.Usage
 }
 
 // AgentFunc runs a multi-turn agent with tool access and returns both raw output and parsed result.
