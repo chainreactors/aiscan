@@ -11,23 +11,10 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
 )
 
-type PseudoCommand interface {
+type Command interface {
 	Name() string
 	Usage() string
-	Execute(ctx context.Context, args []string) (string, error)
-}
-
-type StreamingCommand interface {
-	PseudoCommand
-	ExecuteStreaming(ctx context.Context, args []string, stream io.Writer) (string, error)
-}
-
-// InProcessCommand marks a PseudoCommand that must run in-process (not as
-// a subprocess). Used for control-plane commands like tmux that operate on
-// shared in-memory state.
-type InProcessCommand interface {
-	PseudoCommand
-	InProcess()
+	Execute(ctx context.Context, args []string, w io.Writer) error
 }
 
 type AgentTool interface {
@@ -37,26 +24,16 @@ type AgentTool interface {
 	Execute(ctx context.Context, arguments string) (ToolResult, error)
 }
 
-type ToolContext struct {
-	SystemPrompt string
-	Messages     []provider.ChatMessage
-}
-
-type ContextAwareAgentTool interface {
-	AgentTool
-	ExecuteWithContext(ctx context.Context, arguments string, toolCtx ToolContext) (ToolResult, error)
-}
-
 type WorkDirAware interface {
 	SetWorkDir(dir string)
 }
 
 type CommandRegistry struct {
-	mu      sync.RWMutex
-	items   map[string]PseudoCommand
-	order   []string
-	groups  map[string][]string
-	workDir string
+	mu        sync.RWMutex
+	items     map[string]Command
+	order     []string
+	groups    map[string][]string
+	workDir   string
 
 	tools     map[string]AgentTool
 	toolOrder []string
@@ -64,10 +41,21 @@ type CommandRegistry struct {
 
 func NewRegistry() *CommandRegistry {
 	return &CommandRegistry{
-		items:  make(map[string]PseudoCommand),
+		items: make(map[string]Command),
 		groups: make(map[string][]string),
 		tools:  make(map[string]AgentTool),
 	}
+}
+
+func (r *CommandRegistry) CloneTools() *CommandRegistry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	clone := NewRegistry()
+	for _, name := range r.toolOrder {
+		clone.tools[name] = r.tools[name]
+		clone.toolOrder = append(clone.toolOrder, name)
+	}
+	return clone
 }
 
 func (r *CommandRegistry) RegisterTool(t AgentTool) {
@@ -106,13 +94,10 @@ func (r *CommandRegistry) ToolDefinitions() []provider.ToolDefinition {
 	return defs
 }
 
-func (r *CommandRegistry) ExecuteTool(ctx context.Context, name, arguments string, toolCtx ...ToolContext) (ToolResult, error) {
+func (r *CommandRegistry) ExecuteTool(ctx context.Context, name, arguments string) (ToolResult, error) {
 	t, ok := r.GetTool(name)
 	if !ok {
 		return ToolResult{}, fmt.Errorf("unknown tool: %s", name)
-	}
-	if ca, ok := t.(ContextAwareAgentTool); ok && len(toolCtx) > 0 {
-		return ca.ExecuteWithContext(ctx, arguments, toolCtx[0])
 	}
 	return t.Execute(ctx, arguments)
 }
@@ -128,7 +113,7 @@ func (r *CommandRegistry) SetWorkDir(dir string) {
 	}
 }
 
-func (r *CommandRegistry) Register(cmd PseudoCommand, group string) {
+func (r *CommandRegistry) Register(cmd Command, group string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	name := cmd.Name()
@@ -146,7 +131,7 @@ func (r *CommandRegistry) Register(cmd PseudoCommand, group string) {
 	}
 }
 
-func (r *CommandRegistry) Get(name string) (PseudoCommand, bool) {
+func (r *CommandRegistry) Get(name string) (Command, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	cmd, ok := r.items[name]
@@ -160,10 +145,10 @@ func (r *CommandRegistry) Has(name string) bool {
 	return ok
 }
 
-func (r *CommandRegistry) All() []PseudoCommand {
+func (r *CommandRegistry) All() []Command {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	result := make([]PseudoCommand, 0, len(r.order))
+	result := make([]Command, 0, len(r.order))
 	for _, name := range r.order {
 		result = append(result, r.items[name])
 	}
@@ -212,16 +197,20 @@ func (r *CommandRegistry) ExecuteArgsStreaming(ctx context.Context, tokens []str
 		return "", fmt.Errorf("unknown command: %s", name)
 	}
 
-	args, err := stripShellSyntax(tokens[1:])
-	if err != nil {
-		return "", err
+	args, parseErr := stripShellSyntax(tokens[1:])
+	if parseErr != nil {
+		return "", parseErr
 	}
+
+	var buf strings.Builder
+	var w io.Writer = &buf
 	if stream != nil {
-		if streaming, ok := cmd.(StreamingCommand); ok {
-			return streaming.ExecuteStreaming(ctx, args, stream)
-		}
+		w = io.MultiWriter(&buf, stream)
 	}
-	return cmd.Execute(ctx, args)
+	if execErr := cmd.Execute(ctx, args, w); execErr != nil {
+		return buf.String(), execErr
+	}
+	return buf.String(), nil
 }
 
 // stripShellSyntax processes shell-style tokens that LLMs frequently append

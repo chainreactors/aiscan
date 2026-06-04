@@ -26,10 +26,12 @@ func TestUsageNotEmpty(t *testing.T) {
 func TestNoArgsReturnsUsage(t *testing.T) {
 	state := NewState("")
 	cmd := New(state)
-	out, err := cmd.Execute(context.Background(), nil)
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), nil, &buf)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+	out := buf.String()
 	if !strings.Contains(out, "proxy") {
 		t.Fatalf("expected usage, got: %q", out)
 	}
@@ -38,10 +40,12 @@ func TestNoArgsReturnsUsage(t *testing.T) {
 func TestCurrentNoProxy(t *testing.T) {
 	state := NewState("")
 	cmd := New(state)
-	out, err := cmd.Execute(context.Background(), []string{"current"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"current"}, &buf)
 	if err != nil {
 		t.Fatalf("current error = %v", err)
 	}
+	out := buf.String()
 	if !strings.Contains(out, "no proxy") {
 		t.Fatalf("expected 'no proxy', got: %q", out)
 	}
@@ -50,10 +54,12 @@ func TestCurrentNoProxy(t *testing.T) {
 func TestCurrentWithOriginalProxy(t *testing.T) {
 	state := NewState("socks5://127.0.0.1:1080")
 	cmd := New(state)
-	out, err := cmd.Execute(context.Background(), []string{"current"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"current"}, &buf)
 	if err != nil {
 		t.Fatalf("current error = %v", err)
 	}
+	out := buf.String()
 	if !strings.Contains(out, "socks5://127.0.0.1:1080") {
 		t.Fatalf("expected original proxy in output, got: %q", out)
 	}
@@ -62,10 +68,12 @@ func TestCurrentWithOriginalProxy(t *testing.T) {
 func TestListNoSubscription(t *testing.T) {
 	state := NewState("")
 	cmd := New(state)
-	out, err := cmd.Execute(context.Background(), []string{"list"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"list"}, &buf)
 	if err != nil {
 		t.Fatalf("list error = %v", err)
 	}
+	out := buf.String()
 	if !strings.Contains(out, "no subscription") {
 		t.Fatalf("expected 'no subscription', got: %q", out)
 	}
@@ -74,7 +82,8 @@ func TestListNoSubscription(t *testing.T) {
 func TestSwitchNoSubscription(t *testing.T) {
 	state := NewState("")
 	cmd := New(state)
-	_, err := cmd.Execute(context.Background(), []string{"switch", "node1"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"switch", "node1"}, &buf)
 	if err == nil {
 		t.Fatal("expected error for switch without subscription")
 	}
@@ -89,10 +98,12 @@ func TestClear(t *testing.T) {
 	var lastProxy string
 	cmd.SetOnProxyChange(func(p string) { lastProxy = p })
 
-	out, err := cmd.Execute(context.Background(), []string{"clear"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"clear"}, &buf)
 	if err != nil {
 		t.Fatalf("clear error = %v", err)
 	}
+	out := buf.String()
 	if !strings.Contains(out, "cleared") {
 		t.Fatalf("expected 'cleared', got: %q", out)
 	}
@@ -104,7 +115,8 @@ func TestClear(t *testing.T) {
 func TestPassthroughMissingCommand(t *testing.T) {
 	state := NewState("")
 	cmd := New(state)
-	_, err := cmd.Execute(context.Background(), []string{"socks5://127.0.0.1:1080"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"socks5://127.0.0.1:1080"}, &buf)
 	if err == nil {
 		t.Fatal("expected error for passthrough without command")
 	}
@@ -116,7 +128,8 @@ func TestPassthroughMissingCommand(t *testing.T) {
 func TestPassthroughNoExecutor(t *testing.T) {
 	state := NewState("")
 	cmd := New(state)
-	_, err := cmd.Execute(context.Background(), []string{"socks5://127.0.0.1:1080", "gogo", "-i", "10.0.0.1"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"socks5://127.0.0.1:1080", "gogo", "-i", "10.0.0.1"}, &buf)
 	if err == nil {
 		t.Fatal("expected error when no executor set")
 	}
@@ -135,10 +148,12 @@ func TestPassthroughSetsAndRevertsProxy(t *testing.T) {
 		return "executed: " + strings.Join(tokens, " "), nil
 	})
 
-	out, err := cmd.Execute(context.Background(), []string{"socks5://127.0.0.1:9999", "echo", "hello"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"socks5://127.0.0.1:9999", "echo", "hello"}, &buf)
 	if err != nil {
 		t.Fatalf("passthrough error = %v", err)
 	}
+	out := buf.String()
 	if !strings.Contains(out, "executed: echo hello") {
 		t.Fatalf("expected command output, got: %q", out)
 	}
@@ -156,7 +171,8 @@ func TestPassthroughSetsAndRevertsProxy(t *testing.T) {
 func TestUnknownSubcommand(t *testing.T) {
 	state := NewState("")
 	cmd := New(state)
-	_, err := cmd.Execute(context.Background(), []string{"invalid"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"invalid"}, &buf)
 	if err == nil {
 		t.Fatal("expected error for unknown subcommand")
 	}
@@ -168,7 +184,8 @@ func TestUnknownSubcommand(t *testing.T) {
 func TestSubscribeMissingURL(t *testing.T) {
 	state := NewState("")
 	cmd := New(state)
-	_, err := cmd.Execute(context.Background(), []string{"subscribe"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"subscribe"}, &buf)
 	if err == nil {
 		t.Fatal("expected error for subscribe without URL")
 	}
@@ -177,7 +194,8 @@ func TestSubscribeMissingURL(t *testing.T) {
 func TestAutoMissingURL(t *testing.T) {
 	state := NewState("")
 	cmd := New(state)
-	_, err := cmd.Execute(context.Background(), []string{"auto"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"auto"}, &buf)
 	if err == nil {
 		t.Fatal("expected error for auto without URL")
 	}
@@ -186,7 +204,8 @@ func TestAutoMissingURL(t *testing.T) {
 func TestTestNoSubscription(t *testing.T) {
 	state := NewState("")
 	cmd := New(state)
-	_, err := cmd.Execute(context.Background(), []string{"test"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"test"}, &buf)
 	if err == nil {
 		t.Fatal("expected error for test without subscription")
 	}
@@ -198,7 +217,8 @@ func TestTestNoSubscription(t *testing.T) {
 func TestSwitchMissingArg(t *testing.T) {
 	state := NewState("")
 	cmd := New(state)
-	_, err := cmd.Execute(context.Background(), []string{"switch"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"switch"}, &buf)
 	if err == nil {
 		t.Fatal("expected error for switch without arg")
 	}

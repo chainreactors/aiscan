@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
@@ -93,15 +92,6 @@ type AfterToolCallResult struct {
 	Flow    ToolFlowDecision
 }
 
-type ShouldStopAfterTurnContext struct {
-	Message      provider.ChatMessage
-	ToolResults  []provider.ChatMessage
-	SystemPrompt string
-	Messages     []provider.ChatMessage
-	Tools        *command.CommandRegistry
-	NewMessages  []provider.ChatMessage
-}
-
 type Config struct {
 	Provider            provider.Provider
 	Tools               *command.CommandRegistry
@@ -117,9 +107,9 @@ type Config struct {
 	Logger              telemetry.Logger
 	TransformContext    TransformContextFunc
 	Emit                EventHandler
-	BeforeToolCall      func(context.Context, BeforeToolCallContext) (*BeforeToolCallResult, error)
-	AfterToolCall       func(context.Context, AfterToolCallContext) (*AfterToolCallResult, error)
-	ShouldStopAfterTurn func(context.Context, ShouldStopAfterTurnContext) (bool, error)
+	BeforeToolCall func(context.Context, BeforeToolCallContext) (*BeforeToolCallResult, error)
+	AfterToolCall  func(context.Context, AfterToolCallContext) (*AfterToolCallResult, error)
+	MaxTurns       int
 	LoopScheduler  *LoopScheduler
 	Inbox          inbox.Inbox
 	Expander       *inbox.Expander
@@ -156,78 +146,28 @@ func (c Config) WithLoopScheduler(s *LoopScheduler) Config {
 	return c
 }
 
-// DeriveChild creates a child config inheriting provider, tools, model,
-// and logger from the parent. Per-session fields (Inbox, LoopScheduler, Emit,
-// SystemPrompt, Messages, hooks) are not inherited.
-func (c Config) DeriveChild() Config {
-	return Config{
-		Provider:       c.Provider,
-		Tools:          c.Tools,
-		Model:          c.Model,
-		Logger:         c.Logger,
-		MaxRetries:     c.MaxRetries,
-		Stream:         c.Stream,
-		Temperature:    c.Temperature,
-		CacheRetention: c.CacheRetention,
-		SessionID:      c.SessionID,
-	}
-}
-
-// RunWithContext executes a one-shot agent task inheriting parent messages.
-// Used by fork mode: child sees parent's full conversation + new directive,
-// maximizing prompt cache hit on the shared prefix.
-func (c Config) RunWithContext(ctx context.Context, prompt string, parentMessages []provider.ChatMessage) (*Result, error) {
+func prepareConfig(c Config) Config {
 	cfg := normalizeConfig(c)
 	if cfg.Tools == nil {
 		cfg.Tools = command.NewRegistry()
 	}
 	if cfg.Inbox == nil {
-		cfg.Inbox = inbox.NewBuffered(8)
+		cfg.Inbox = inbox.NewBuffered(SubInboxCapacity)
 	}
-	if err := cfg.Inbox.Push(inbox.NewUserMessage(prompt)); err != nil {
-		return nil, fmt.Errorf("push initial prompt: %w", err)
-	}
-	cfg.Messages = parentMessages
-	return runLoop(ctx, cfg)
+	return cfg
 }
 
-// Run executes a one-shot agent task and returns the result.
-func (c Config) Run(ctx context.Context, prompt string) (*Result, error) {
-	cfg := normalizeConfig(c)
-	if cfg.Tools == nil {
-		cfg.Tools = command.NewRegistry()
-	}
-	if cfg.Inbox == nil {
-		cfg.Inbox = inbox.NewBuffered(8)
-	}
-	if err := cfg.Inbox.Push(inbox.NewUserMessage(prompt)); err != nil {
-		return nil, fmt.Errorf("push initial prompt: %w", err)
-	}
-	return runLoop(ctx, cfg)
-}
-
-// NewAgent creates a reusable Agent instance for multi-turn interaction.
-func (c Config) NewAgent() *Agent {
-	cfg := normalizeConfig(c)
-	if cfg.Tools == nil {
-		cfg.Tools = command.NewRegistry()
-	}
+// NewAgent creates an Agent from a Config.
+func NewAgent(cfg Config) *Agent {
+	cfg = prepareConfig(cfg)
 	return &Agent{
-		provider: cfg.Provider,
-		tools:    cfg.Tools,
-		config:   cfg,
-		emit:     cfg.Emit,
+		Cfg: cfg,
 		state: State{
-			SystemPrompt:     cfg.SystemPrompt,
-			Tools:            cfg.Tools,
-			PendingToolCalls: make(map[string]struct{}),
+			SystemPrompt: cfg.SystemPrompt,
+			Tools:        cfg.Tools,
 		},
-		done: closedChan(),
 	}
 }
-
-// NewAgent creates a reusable Agent from a Config.
-func NewAgent(cfg Config) *Agent { return cfg.NewAgent() }
 
 type TurnUsage struct {
 	Turn             int `json:"turn"`
@@ -250,12 +190,9 @@ type Result struct {
 }
 
 type State struct {
-	SystemPrompt     string
-	Messages         []provider.ChatMessage
-	Tools            *command.CommandRegistry
-	IsRunning        bool
-	StreamingMessage *provider.ChatMessage
-	PendingToolCalls map[string]struct{}
-	ErrorMessage     string
-	LastError        error
+	SystemPrompt string
+	Messages     []provider.ChatMessage
+	Tools        *command.CommandRegistry
+	ErrorMessage string
+	LastError    error
 }

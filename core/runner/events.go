@@ -166,7 +166,7 @@ func truncate(s string, limit int) string {
 	return s[:limit] + fmt.Sprintf("...[truncated %d bytes]", len(s)-limit)
 }
 
-func CombineEventHandlers(handlers ...agent.EventHandler) agent.EventHandler {
+func combineEventHandlers(handlers ...agent.EventHandler) agent.EventHandler {
 	cleaned := make([]agent.EventHandler, 0, len(handlers))
 	for _, h := range handlers {
 		if h != nil {

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	"github.com/chainreactors/aiscan/pkg/command"
@@ -74,39 +75,6 @@ func TestCommandRegistryOnlyExposesCoreTrueTools(t *testing.T) {
 	}
 }
 
-func TestScanAISystemPromptDefault(t *testing.T) {
-	prompt := buildScanAISystemPrompt(nil, nil, "")
-	if prompt == "" {
-		t.Fatal("expected non-empty default scan AI system prompt")
-	}
-}
-
-func TestScanAISystemPromptCustom(t *testing.T) {
-	custom := "custom skill prompt"
-	prompt := buildScanAISystemPrompt(nil, nil, custom)
-	if prompt != custom {
-		t.Fatalf("expected custom prompt %q, got %q", custom, prompt)
-	}
-}
-
-func TestScanVerifyBlocksRecursiveScannerCommands(t *testing.T) {
-	for _, tc := range []struct {
-		command string
-		blocked bool
-	}{
-		{command: "scan -i 127.0.0.1", blocked: true},
-		{command: "aiscan scan -i 127.0.0.1", blocked: true},
-		{command: "spray -u https://example.test", blocked: true},
-		{command: `search tavily "kingdee k3 cloud cve"`, blocked: false},
-		{command: "search fetch https://example.test/advisory", blocked: false},
-		{command: "echo scan", blocked: false},
-	} {
-		if got := scanVerifyBlocksCommand(tc.command); got != tc.blocked {
-			t.Fatalf("scanVerifyBlocksCommand(%q) = %v, want %v", tc.command, got, tc.blocked)
-		}
-	}
-}
-
 func TestAppCloseClosesPseudoCommands(t *testing.T) {
 	reg := command.NewRegistry()
 	closed := false
@@ -128,8 +96,8 @@ func (c *closeRecordingCommand) Name() string { return "closer" }
 
 func (c *closeRecordingCommand) Usage() string { return "" }
 
-func (c *closeRecordingCommand) Execute(context.Context, []string) (string, error) {
-	return "", nil
+func (c *closeRecordingCommand) Execute(_ context.Context, _ []string, _ io.Writer) error {
+	return nil
 }
 
 func (c *closeRecordingCommand) Close() {

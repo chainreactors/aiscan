@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 
@@ -49,7 +50,7 @@ func (c *Command) Usage() string {
 	return zombiecore.Help()
 }
 
-func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
+func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error {
 	args = c.resolveRelativePaths(args)
 	var buf bytes.Buffer
 	if toolargs.BoolFlagEnabled(args, "--debug") {
@@ -59,9 +60,13 @@ func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
 	}
 	runOpts := zombiecore.RunOptions{Output: &buf}
 	if err := zombiecore.RunWithArgs(ctx, args, runOpts); err != nil {
-		return buf.String(), fmt.Errorf("zombie: %w", err)
+		if buf.Len() > 0 {
+			_, _ = io.WriteString(w, buf.String())
+		}
+		return fmt.Errorf("zombie: %w", err)
 	}
-	return buf.String(), nil
+	_, _ = io.WriteString(w, buf.String())
+	return nil
 }
 
 

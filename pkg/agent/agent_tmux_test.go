@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/command"
 )
 
@@ -40,10 +41,14 @@ func TestAgentTmuxMultiRoundInteraction(t *testing.T) {
 
 	dir := t.TempDir()
 	registry := command.NewRegistry()
-	bash := command.NewBashTool(dir, 30, registry)
+	bash := command.NewBashTool(dir, 30)
+	bash.Manager().SetCommands(func(name string) (tmuxpkg.Command, bool) {
+		return registry.Get(name)
+	})
+	bash.Manager().SetWorkDir(dir)
 	registry.RegisterTool(bash)
-	tmux := command.NewTmuxCommand(bash.Manager(), registry)
-	registry.Register(tmux, "core")
+	tmuxCmd := command.NewTmuxCommand(bash.Manager())
+	registry.Register(tmuxCmd, "core")
 	t.Cleanup(bash.Close)
 
 	// Each LLM response is a single bash tool call, except the last which is text.
@@ -194,7 +199,7 @@ func TestAgentTmuxMultiRoundInteraction(t *testing.T) {
 		},
 	}
 
-	result, err := (Config{
+	result, err := NewAgent(Config{
 		Provider: llm,
 		Tools:    registry,
 		Model:    "test",
@@ -221,10 +226,14 @@ func TestAgentTmuxCtrlCInterrupt(t *testing.T) {
 
 	dir := t.TempDir()
 	registry := command.NewRegistry()
-	bash := command.NewBashTool(dir, 30, registry)
+	bash := command.NewBashTool(dir, 30)
+	bash.Manager().SetCommands(func(name string) (tmuxpkg.Command, bool) {
+		return registry.Get(name)
+	})
+	bash.Manager().SetWorkDir(dir)
 	registry.RegisterTool(bash)
-	tmux := command.NewTmuxCommand(bash.Manager(), registry)
-	registry.Register(tmux, "core")
+	tmuxCmd := command.NewTmuxCommand(bash.Manager())
+	registry.Register(tmuxCmd, "core")
 	t.Cleanup(bash.Close)
 
 	turnIndex := 0
@@ -314,7 +323,7 @@ func TestAgentTmuxCtrlCInterrupt(t *testing.T) {
 		},
 	}
 
-	result, err := (Config{
+	result, err := NewAgent(Config{
 		Provider: llm,
 		Tools:    registry,
 		Model:    "test",
@@ -337,10 +346,14 @@ func TestAgentTmuxInteractiveProgram(t *testing.T) {
 
 	dir := t.TempDir()
 	registry := command.NewRegistry()
-	bash := command.NewBashTool(dir, 30, registry)
+	bash := command.NewBashTool(dir, 30)
+	bash.Manager().SetCommands(func(name string) (tmuxpkg.Command, bool) {
+		return registry.Get(name)
+	})
+	bash.Manager().SetWorkDir(dir)
 	registry.RegisterTool(bash)
-	tmux := command.NewTmuxCommand(bash.Manager(), registry)
-	registry.Register(tmux, "core")
+	tmuxCmd := command.NewTmuxCommand(bash.Manager())
+	registry.Register(tmuxCmd, "core")
 	t.Cleanup(bash.Close)
 
 	turnIndex := 0
@@ -443,7 +456,7 @@ func TestAgentTmuxInteractiveProgram(t *testing.T) {
 		},
 	}
 
-	result, err := (Config{
+	result, err := NewAgent(Config{
 		Provider: llm,
 		Tools:    registry,
 		Model:    "test",

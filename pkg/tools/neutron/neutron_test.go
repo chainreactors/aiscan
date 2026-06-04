@@ -64,10 +64,12 @@ func TestCommandTemplateListSupportsNucleiStyleFlagsAndJSON(t *testing.T) {
 		testTemplate("low-info", "low", "info", "php"),
 	), nil)
 
-	out, err := cmd.Execute(context.Background(), []string{"-tl", "-severity", "critical", "-tags", "cve", "-j"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"-tl", "-severity", "critical", "-tags", "cve", "-j"}, &buf)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+	out := buf.String()
 	var finding neutronFinding
 	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &finding); err != nil {
 		t.Fatalf("json output = %q, error = %v", out, err)
@@ -99,10 +101,12 @@ http:
 	}
 
 	cmd := New(newTestNeutronEngine(t, testTemplate("embedded", "low", "embedded", "")), nil)
-	out, err := cmd.Execute(context.Background(), []string{"--template-list", "-t", templatePath})
+	var buf strings.Builder
+	err = cmd.Execute(context.Background(), []string{"--template-list", "-t", templatePath}, &buf)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+	out := buf.String()
 	if !strings.Contains(out, "custom-poc") || strings.Contains(out, "embedded") {
 		t.Fatalf("output = %q", out)
 	}

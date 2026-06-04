@@ -1,5 +1,7 @@
 package command
 
+import "github.com/chainreactors/aiscan/pkg/agent/tmux"
+
 func init() {
 	RegisterFactory(Factory{
 		Group: "core",
@@ -25,12 +27,17 @@ func init() {
 			reg.RegisterTool(NewReadTool(workDir, readers...))
 			reg.RegisterTool(NewWriteTool(workDir))
 			reg.RegisterTool(NewGlobTool(workDir, globbers...))
-			bash := NewBashTool(workDir, timeout, reg).WithScannerProxy(deps.ScannerProxy)
+
+			bash := NewBashTool(workDir, timeout).WithScannerProxy(deps.ScannerProxy)
+			bash.SetCommandNames(reg.Names)
+			bash.Manager().SetCommands(func(name string) (tmux.Command, bool) {
+				return reg.Get(name)
+			})
+			bash.Manager().SetWorkDir(workDir)
 			reg.RegisterTool(bash)
 
-			tmux := NewTmuxCommand(bash.Manager(), reg)
-			tmux.SetProxy(deps.ScannerProxy)
-			reg.Register(tmux, "core")
+			tmuxCmd := NewTmuxCommand(bash.Manager())
+			reg.Register(tmuxCmd, "core")
 		},
 	})
 }

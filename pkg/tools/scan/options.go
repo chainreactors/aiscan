@@ -4,14 +4,11 @@ import (
 	"context"
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
 type Option func(*Command)
-
-type ReportFunc func(ctx context.Context, prompt, systemPrompt, model string, maxTokens int) (string, error)
 
 type DeepBrowserFunc func(ctx context.Context, targetURL string) (string, error)
 
@@ -23,8 +20,8 @@ type AISkillConfig struct {
 	VerifyMode string
 }
 
-func WithReportFunc(fn ReportFunc) Option {
-	return func(c *Command) { c.reportFunc = fn }
+func WithParent(a *agent.Agent) Option {
+	return func(c *Command) { c.parent = a }
 }
 
 func WithAISkillConfig(cfg AISkillConfig) Option {
@@ -49,21 +46,6 @@ func (c *Command) Configure(opts ...Option) {
 			opt(c)
 		}
 	}
-}
-
-// AgentRunResult carries raw LLM output (for recording) and the checkpoint submitted by the agent.
-type AgentRunResult struct {
-	Raw        string
-	Checkpoint *command.CheckpointResult
-	Messages   []provider.ChatMessage
-	Usage      *provider.Usage
-}
-
-// AgentFunc runs a multi-turn agent with tool access and returns both raw output and parsed result.
-type AgentFunc func(ctx context.Context, prompt, systemPrompt, model string, maxTokens int) (*AgentRunResult, error)
-
-func WithAgentFunc(fn AgentFunc) Option {
-	return func(c *Command) { c.agentFunc = fn }
 }
 
 func WithDeepBrowserFunc(fn DeepBrowserFunc) Option {

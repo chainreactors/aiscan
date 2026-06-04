@@ -66,7 +66,7 @@ func TestMultiTurnContextInheritanceAndCache(t *testing.T) {
 	}
 
 	// --- Turn 1: fresh context ---
-	result1, err := agentCfg.Run(context.Background(), "What is 10+20? Just the number.")
+	result1, err := NewAgent(agentCfg).Run(context.Background(), "What is 10+20? Just the number.")
 	if err != nil {
 		t.Fatalf("turn 1 failed: %v", err)
 	}
@@ -82,12 +82,11 @@ func TestMultiTurnContextInheritanceAndCache(t *testing.T) {
 		t.Fatal("expected non-zero prompt tokens")
 	}
 
-	// --- Turn 2: inherits turn 1 context via RunWithContext ---
+	// --- Turn 2: inherits turn 1 context ---
 	events = nil
-	result2, err := agentCfg.RunWithContext(
+	result2, err := NewAgent(agentCfg.WithMessages(result1.Messages)).Run(
 		context.Background(),
 		"What is 30+40? Just the number.",
-		result1.Messages,
 	)
 	if err != nil {
 		t.Fatalf("turn 2 failed: %v", err)
@@ -106,10 +105,9 @@ func TestMultiTurnContextInheritanceAndCache(t *testing.T) {
 	// --- Turn 3: inherits turn 1+2 context ---
 	allMessages := append(result1.Messages, result2.NewMessages...)
 	events = nil
-	result3, err := agentCfg.RunWithContext(
+	result3, err := NewAgent(agentCfg.WithMessages(allMessages)).Run(
 		context.Background(),
 		"What is the sum of all three answers you gave? Just the number.",
-		allMessages,
 	)
 	if err != nil {
 		t.Fatalf("turn 3 failed: %v", err)
@@ -165,7 +163,7 @@ func TestMultiTurnStreamingCache(t *testing.T) {
 	}
 
 	// Turn 1
-	result1, err := agentCfg.Run(context.Background(), "Hello")
+	result1, err := NewAgent(agentCfg).Run(context.Background(), "Hello")
 	if err != nil {
 		t.Fatalf("stream turn 1 failed: %v", err)
 	}
@@ -173,7 +171,7 @@ func TestMultiTurnStreamingCache(t *testing.T) {
 		truncateOutput(result1.Output, 40), result1.TotalUsage.PromptTokens, result1.TotalUsage.CacheReadTokens)
 
 	// Turn 2 with context
-	result2, err := agentCfg.RunWithContext(context.Background(), "Goodbye", result1.Messages)
+	result2, err := NewAgent(agentCfg.WithMessages(result1.Messages)).Run(context.Background(), "Goodbye")
 	if err != nil {
 		t.Fatalf("stream turn 2 failed: %v", err)
 	}
@@ -182,7 +180,7 @@ func TestMultiTurnStreamingCache(t *testing.T) {
 
 	// Turn 3
 	allMsgs := append(result1.Messages, result2.NewMessages...)
-	result3, err := agentCfg.RunWithContext(context.Background(), "Thank you", allMsgs)
+	result3, err := NewAgent(agentCfg.WithMessages(allMsgs)).Run(context.Background(), "Thank you")
 	if err != nil {
 		t.Fatalf("stream turn 3 failed: %v", err)
 	}
@@ -231,7 +229,7 @@ func TestMultiTurnWithToolCallsCache(t *testing.T) {
 		MaxRetries:     1,
 	}
 
-	result, err := agentCfg.Run(context.Background(),
+	result, err := NewAgent(agentCfg).Run(context.Background(),
 		"Use the calculate tool to compute 6*7. Then tell me the result.")
 	if err != nil {
 		t.Fatalf("tool call run failed: %v", err)
@@ -281,7 +279,7 @@ func TestMultiTurnWithToolCallsCache(t *testing.T) {
 }
 
 // TestCacheConfigInheritance verifies that CacheRetention and SessionID
-// are correctly threaded through Config → DeriveChild → request.
+// are correctly threaded through Config → Derive → request.
 func TestCacheConfigInheritance(t *testing.T) {
 	llm := &scriptedProvider{
 		responses: []*provider.ChatCompletionResponse{
@@ -298,13 +296,13 @@ func TestCacheConfigInheritance(t *testing.T) {
 		SessionID:      "parent-session-123",
 	}
 
-	child := parentCfg.DeriveChild()
+	child := NewAgent(parentCfg).Derive()
 
-	if child.CacheRetention != provider.CacheShort {
-		t.Errorf("child CacheRetention = %q, want %q", child.CacheRetention, provider.CacheShort)
+	if child.Cfg.CacheRetention != provider.CacheShort {
+		t.Errorf("child CacheRetention = %q, want %q", child.Cfg.CacheRetention, provider.CacheShort)
 	}
-	if child.SessionID != "parent-session-123" {
-		t.Errorf("child SessionID = %q, want parent-session-123", child.SessionID)
+	if child.Cfg.SessionID != "parent-session-123" {
+		t.Errorf("child SessionID = %q, want parent-session-123", child.Cfg.SessionID)
 	}
 
 	// Run the child and verify the request carries cache fields
@@ -381,14 +379,14 @@ func TestTurnUsageCacheAccumulation(t *testing.T) {
 	tools := command.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "read", output: "file content"})
 
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider:       llm,
 		Tools:          tools,
 		Model:          "test",
 		SystemPrompt:   "sys",
 		CacheRetention: provider.CacheShort,
 		Logger:         telemetry.NopLogger(),
-	}).Run(context.Background(), "read something")
+	})).Run(context.Background(), "read something")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,14 +446,14 @@ func TestEventCarriesCacheUsage(t *testing.T) {
 		return nil
 	}
 
-	_, err := (Config{
+	_, err := (NewAgent(Config{
 		Provider:     llm,
 		Tools:        command.NewRegistry(),
 		Model:        "test",
 		SystemPrompt: "sys",
 		Emit:         handler,
 		Logger:       telemetry.NopLogger(),
-	}).Run(context.Background(), "test")
+	})).Run(context.Background(), "test")
 	if err != nil {
 		t.Fatal(err)
 	}

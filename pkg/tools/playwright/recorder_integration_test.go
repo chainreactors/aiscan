@@ -5,6 +5,7 @@ package playwright
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -63,6 +64,23 @@ func loginTestServer() *httptest.Server {
 	}))
 }
 
+// recExecString is a test helper that runs cmd.Execute and returns the output as a string.
+func recExecString(t *testing.T, cmd *Command, ctx context.Context, args []string) string {
+	t.Helper()
+	var buf strings.Builder
+	if err := cmd.Execute(ctx, args, &buf); err != nil {
+		t.Fatalf("Execute(%v) error = %v", args, err)
+	}
+	return buf.String()
+}
+
+// recExecStringErr is a test helper that runs cmd.Execute and returns (output, error).
+func recExecStringErr(cmd *Command, ctx context.Context, args []string) (string, error) {
+	var buf strings.Builder
+	err := cmd.Execute(ctx, args, &buf)
+	return buf.String(), err
+}
+
 // TestIntegration_RecordOpenWithFlag tests --record flag on open.
 func TestIntegration_RecordOpenWithFlag(t *testing.T) {
 	skipIfNoBrowserR(t)
@@ -74,21 +92,15 @@ func TestIntegration_RecordOpenWithFlag(t *testing.T) {
 	defer cmd.Close()
 
 	// Open with --record
-	out, err := cmd.Execute(context.Background(), []string{
+	out := recExecString(t, cmd, context.Background(), []string{
 		"open", srv.URL + "/login", "--session", "rec1", "--record", "--timeout", "10",
 	})
-	if err != nil {
-		t.Fatalf("open --record failed: %v", err)
-	}
 	if !strings.Contains(out, "Recording: on") {
 		t.Fatalf("expected 'Recording: on' in output, got:\n%s", out)
 	}
 
 	// Verify initial navigate was auto-recorded
-	out, err = cmd.Execute(context.Background(), []string{"record", "rec1", "--dump"})
-	if err != nil {
-		t.Fatalf("record --dump failed: %v", err)
-	}
+	out = recExecString(t, cmd, context.Background(), []string{"record", "rec1", "--dump"})
 	if !strings.Contains(out, "action: navigate") {
 		t.Fatalf("expected navigate in dump, got:\n%s", out)
 	}
@@ -111,48 +123,35 @@ func TestIntegration_RecordFullLoginFlow(t *testing.T) {
 	ctx := context.Background()
 
 	// Open with recording
-	if _, err := cmd.Execute(ctx, []string{
+	recExecString(t, cmd, ctx, []string{
 		"open", srv.URL + "/login", "--session", "login", "--record", "--timeout", "10",
-	}); err != nil {
-		t.Fatalf("open: %v", err)
-	}
+	})
 
 	// Fill username
-	if _, err := cmd.Execute(ctx, []string{"fill", "login", "#username", "admin"}); err != nil {
-		t.Fatalf("fill username: %v", err)
-	}
+	recExecString(t, cmd, ctx, []string{"fill", "login", "#username", "admin"})
 
 	// Fill password
-	if _, err := cmd.Execute(ctx, []string{"fill", "login", "#password", "secret123"}); err != nil {
-		t.Fatalf("fill password: %v", err)
-	}
+	recExecString(t, cmd, ctx, []string{"fill", "login", "#password", "secret123"})
 
 	// Select role
-	if _, err := cmd.Execute(ctx, []string{"select-option", "login", "#role", "admin"}); err != nil {
+	if err := cmd.Execute(ctx, []string{"select-option", "login", "#role", "admin"}, io.Discard); err != nil {
 		// select might fail depending on rod version, skip if error
 		t.Logf("select-option skipped: %v", err)
 	}
 
 	// Click submit
-	if _, err := cmd.Execute(ctx, []string{"click", "login", "#submit-btn"}); err != nil {
-		t.Fatalf("click submit: %v", err)
-	}
+	recExecString(t, cmd, ctx, []string{"click", "login", "#submit-btn"})
 
 	// Wait for page stable
-	if _, err := cmd.Execute(ctx, []string{"wait", "login", "--stable"}); err != nil {
-		t.Fatalf("wait stable: %v", err)
-	}
+	recExecString(t, cmd, ctx, []string{"wait", "login", "--stable"})
 
 	// Extract text
-	if _, err := cmd.Execute(ctx, []string{"text-content", "login", "#status"}); err != nil {
+	if err := cmd.Execute(ctx, []string{"text-content", "login", "#status"}, io.Discard); err != nil {
 		t.Logf("text-content skipped: %v", err)
 	}
 
 	// Dump recorded YAML
-	out, err := cmd.Execute(ctx, []string{"record", "login", "--dump"})
-	if err != nil {
-		t.Fatalf("record --dump: %v", err)
-	}
+	out := recExecString(t, cmd, ctx, []string{"record", "login", "--dump"})
 
 	t.Logf("=== Recorded YAML ===\n%s", out)
 
@@ -185,14 +184,11 @@ func TestIntegration_RecordFullLoginFlow(t *testing.T) {
 
 	// Save to file
 	outPath := filepath.Join(workDir, "login-poc.yaml")
-	saveOut, err := cmd.Execute(ctx, []string{
+	saveOut := recExecString(t, cmd, ctx, []string{
 		"record", "login", "--save", outPath,
 		"--id", "login-bypass",
 		"--name", "Login bypass POC",
 	})
-	if err != nil {
-		t.Fatalf("record --save: %v", err)
-	}
 	if !strings.Contains(saveOut, "Template saved") {
 		t.Fatalf("expected 'Template saved' in output, got:\n%s", saveOut)
 	}
@@ -245,56 +241,44 @@ func TestIntegration_RecordStartStop(t *testing.T) {
 	ctx := context.Background()
 
 	// Open without --record
-	out, err := cmd.Execute(ctx, []string{
+	out := recExecString(t, cmd, ctx, []string{
 		"open", srv.URL + "/login", "--session", "s2", "--timeout", "10",
 	})
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
 	if !strings.Contains(out, "Recording: off") {
 		t.Fatalf("expected 'Recording: off' in output, got:\n%s", out)
 	}
 
 	// record --dump should fail when not recording
-	_, err = cmd.Execute(ctx, []string{"record", "s2", "--dump"})
+	_, err := recExecStringErr(cmd, ctx, []string{"record", "s2", "--dump"})
 	if err == nil {
 		t.Fatal("expected error for dump without recording")
 	}
 
 	// Start recording
-	out, err = cmd.Execute(ctx, []string{"record", "s2", "--start"})
-	if err != nil {
-		t.Fatalf("record --start: %v", err)
-	}
+	out = recExecString(t, cmd, ctx, []string{"record", "s2", "--start"})
 	if !strings.Contains(out, "Recording started") {
 		t.Fatalf("expected 'Recording started', got:\n%s", out)
 	}
 
 	// Do some actions
-	if _, err := cmd.Execute(ctx, []string{"click", "s2", "#about-link"}); err != nil {
+	if err := cmd.Execute(ctx, []string{"click", "s2", "#about-link"}, io.Discard); err != nil {
 		t.Logf("click about link: %v (continuing)", err)
 	}
 
 	// Dump should now work
-	out, err = cmd.Execute(ctx, []string{"record", "s2", "--dump"})
-	if err != nil {
-		t.Fatalf("record --dump after start: %v", err)
-	}
+	out = recExecString(t, cmd, ctx, []string{"record", "s2", "--dump"})
 	if !strings.Contains(out, "action: click") {
 		t.Logf("dump output: %s", out)
 	}
 
 	// Stop recording
-	out, err = cmd.Execute(ctx, []string{"record", "s2", "--stop"})
-	if err != nil {
-		t.Fatalf("record --stop: %v", err)
-	}
+	out = recExecString(t, cmd, ctx, []string{"record", "s2", "--stop"})
 	if !strings.Contains(out, "Recording stopped") {
 		t.Fatalf("expected 'Recording stopped', got:\n%s", out)
 	}
 
 	// Dump should fail again after stop
-	_, err = cmd.Execute(ctx, []string{"record", "s2", "--dump"})
+	_, err = recExecStringErr(cmd, ctx, []string{"record", "s2", "--dump"})
 	if err == nil {
 		t.Fatal("expected error for dump after stop")
 	}
@@ -311,31 +295,21 @@ func TestIntegration_RecordClear(t *testing.T) {
 	defer cmd.Close()
 	ctx := context.Background()
 
-	if _, err := cmd.Execute(ctx, []string{
+	recExecString(t, cmd, ctx, []string{
 		"open", srv.URL + "/login", "--session", "s3", "--record", "--timeout", "10",
-	}); err != nil {
-		t.Fatalf("open: %v", err)
-	}
+	})
 
 	// Should have 1 action (navigate)
-	if _, err := cmd.Execute(ctx, []string{"click", "s3", "#submit-btn"}); err != nil {
-		t.Fatalf("click: %v", err)
-	}
+	recExecString(t, cmd, ctx, []string{"click", "s3", "#submit-btn"})
 
 	// Clear
-	out, err := cmd.Execute(ctx, []string{"record", "s3", "--clear"})
-	if err != nil {
-		t.Fatalf("record --clear: %v", err)
-	}
+	out := recExecString(t, cmd, ctx, []string{"record", "s3", "--clear"})
 	if !strings.Contains(out, "Recording cleared") {
 		t.Fatalf("expected 'Recording cleared', got:\n%s", out)
 	}
 
 	// Dump should show "No actions recorded"
-	out, err = cmd.Execute(ctx, []string{"record", "s3", "--dump"})
-	if err != nil {
-		t.Fatalf("record --dump after clear: %v", err)
-	}
+	out = recExecString(t, cmd, ctx, []string{"record", "s3", "--dump"})
 	if !strings.Contains(out, "No actions recorded") {
 		t.Fatalf("expected 'No actions recorded', got:\n%s", out)
 	}
@@ -352,21 +326,14 @@ func TestIntegration_RecordXPath(t *testing.T) {
 	defer cmd.Close()
 	ctx := context.Background()
 
-	if _, err := cmd.Execute(ctx, []string{
+	recExecString(t, cmd, ctx, []string{
 		"open", srv.URL + "/login", "--session", "xpath", "--record", "--timeout", "10",
-	}); err != nil {
-		t.Fatalf("open: %v", err)
-	}
+	})
 
 	// Use xpath selector
-	if _, err := cmd.Execute(ctx, []string{"click", "xpath", "xpath://button[@id='submit-btn']"}); err != nil {
-		t.Fatalf("click xpath: %v", err)
-	}
+	recExecString(t, cmd, ctx, []string{"click", "xpath", "xpath://button[@id='submit-btn']"})
 
-	out, err := cmd.Execute(ctx, []string{"record", "xpath", "--dump"})
-	if err != nil {
-		t.Fatalf("dump: %v", err)
-	}
+	out := recExecString(t, cmd, ctx, []string{"record", "xpath", "--dump"})
 
 	// Verify xpath is recorded correctly
 	if !strings.Contains(out, "by: xpath") {
@@ -388,26 +355,17 @@ func TestIntegration_RecordExtract(t *testing.T) {
 	defer cmd.Close()
 	ctx := context.Background()
 
-	if _, err := cmd.Execute(ctx, []string{
+	recExecString(t, cmd, ctx, []string{
 		"open", srv.URL + "/login", "--session", "ext", "--record", "--timeout", "10",
-	}); err != nil {
-		t.Fatalf("open: %v", err)
-	}
+	})
 
 	// Extract text content
-	if _, err := cmd.Execute(ctx, []string{"text-content", "ext", "#version"}); err != nil {
-		t.Fatalf("text-content: %v", err)
-	}
+	recExecString(t, cmd, ctx, []string{"text-content", "ext", "#version"})
 
 	// Get attribute
-	if _, err := cmd.Execute(ctx, []string{"get-attribute", "ext", "#about-link", "href"}); err != nil {
-		t.Fatalf("get-attribute: %v", err)
-	}
+	recExecString(t, cmd, ctx, []string{"get-attribute", "ext", "#about-link", "href"})
 
-	out, err := cmd.Execute(ctx, []string{"record", "ext", "--dump"})
-	if err != nil {
-		t.Fatalf("dump: %v", err)
-	}
+	out := recExecString(t, cmd, ctx, []string{"record", "ext", "--dump"})
 
 	t.Logf("=== Extract Recording ===\n%s", out)
 
@@ -431,21 +389,14 @@ func TestIntegration_RecordEval(t *testing.T) {
 	defer cmd.Close()
 	ctx := context.Background()
 
-	if _, err := cmd.Execute(ctx, []string{
+	recExecString(t, cmd, ctx, []string{
 		"open", srv.URL + "/login", "--session", "js", "--record", "--timeout", "10",
-	}); err != nil {
-		t.Fatalf("open: %v", err)
-	}
+	})
 
 	// Run JS
-	if _, err := cmd.Execute(ctx, []string{"evaluate", "js", "document.title"}); err != nil {
-		t.Fatalf("evaluate: %v", err)
-	}
+	recExecString(t, cmd, ctx, []string{"evaluate", "js", "document.title"})
 
-	out, err := cmd.Execute(ctx, []string{"record", "js", "--dump"})
-	if err != nil {
-		t.Fatalf("dump: %v", err)
-	}
+	out := recExecString(t, cmd, ctx, []string{"record", "js", "--dump"})
 
 	if !strings.Contains(out, "action: script") {
 		t.Errorf("expected script action in dump, got:\n%s", out)
@@ -466,16 +417,11 @@ func TestIntegration_RecordSessionsList(t *testing.T) {
 	defer cmd.Close()
 	ctx := context.Background()
 
-	if _, err := cmd.Execute(ctx, []string{
+	recExecString(t, cmd, ctx, []string{
 		"open", srv.URL + "/login", "--session", "r1", "--record", "--timeout", "10",
-	}); err != nil {
-		t.Fatalf("open: %v", err)
-	}
+	})
 
-	out, err := cmd.Execute(ctx, []string{"sessions"})
-	if err != nil {
-		t.Fatalf("sessions: %v", err)
-	}
+	out := recExecString(t, cmd, ctx, []string{"sessions"})
 
 	// Should show recording indicator
 	if !strings.Contains(out, "rec=") {
@@ -494,24 +440,19 @@ func TestIntegration_RecordCloseWarning(t *testing.T) {
 	defer cmd.Close()
 	ctx := context.Background()
 
-	if _, err := cmd.Execute(ctx, []string{
+	recExecString(t, cmd, ctx, []string{
 		"open", srv.URL + "/login", "--session", "warn", "--record", "--timeout", "10",
-	}); err != nil {
-		t.Fatalf("open: %v", err)
-	}
+	})
 
 	// Close without saving
-	out, err := cmd.Execute(ctx, []string{"close", "warn"})
-	if err != nil {
-		t.Fatalf("close: %v", err)
-	}
+	out := recExecString(t, cmd, ctx, []string{"close", "warn"})
 
 	if !strings.Contains(out, "recorded actions not saved") {
 		t.Fatalf("expected unsaved recording warning, got:\n%s", out)
 	}
 }
 
-// TestIntegration_RecordRoundTrip tests the full record → save → parse → execute cycle.
+// TestIntegration_RecordRoundTrip tests the full record -> save -> parse -> execute cycle.
 func TestIntegration_RecordRoundTrip(t *testing.T) {
 	skipIfNoBrowserR(t)
 
@@ -524,29 +465,19 @@ func TestIntegration_RecordRoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	// Step 1: Record
-	if _, err := cmd.Execute(ctx, []string{
+	recExecString(t, cmd, ctx, []string{
 		"open", srv.URL + "/login", "--session", "rt", "--record", "--timeout", "10",
-	}); err != nil {
-		t.Fatalf("open: %v", err)
-	}
+	})
 
-	if _, err := cmd.Execute(ctx, []string{"fill", "rt", "#username", "testuser"}); err != nil {
-		t.Fatalf("fill: %v", err)
-	}
-	if _, err := cmd.Execute(ctx, []string{"click", "rt", "#submit-btn"}); err != nil {
-		t.Fatalf("click: %v", err)
-	}
-	if _, err := cmd.Execute(ctx, []string{"wait", "rt", "--stable"}); err != nil {
-		t.Fatalf("wait: %v", err)
-	}
+	recExecString(t, cmd, ctx, []string{"fill", "rt", "#username", "testuser"})
+	recExecString(t, cmd, ctx, []string{"click", "rt", "#submit-btn"})
+	recExecString(t, cmd, ctx, []string{"wait", "rt", "--stable"})
 
 	// Step 2: Save
 	templatePath := filepath.Join(workDir, "roundtrip.yaml")
-	if _, err := cmd.Execute(ctx, []string{
+	recExecString(t, cmd, ctx, []string{
 		"record", "rt", "--save", templatePath, "--id", "roundtrip-test",
-	}); err != nil {
-		t.Fatalf("save: %v", err)
-	}
+	})
 
 	// Step 3: Parse with headless engine
 	data, _ := os.ReadFile(templatePath)
@@ -601,12 +532,9 @@ func TestIntegration_RecordRoundTrip(t *testing.T) {
 	}
 
 	// Step 4: Execute the generated template with playwright template command
-	out, err := cmd.Execute(ctx, []string{
+	out := recExecString(t, cmd, ctx, []string{
 		"template", templatePath, srv.URL + "/login",
 	})
-	if err != nil {
-		t.Fatalf("template execute: %v", err)
-	}
 	t.Logf("=== Template Execution ===\n%s", out)
 
 	if !strings.Contains(out, "Template: roundtrip-test") {

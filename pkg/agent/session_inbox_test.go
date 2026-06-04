@@ -48,7 +48,7 @@ func TestSessionCompletionInjectedIntoAgentLoop(t *testing.T) {
 		},
 	}
 
-	result, err := (Config{
+	result, err := NewAgent(Config{
 		Provider:     scripted,
 		Tools:        tools,
 		Model:        "test",

@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -181,23 +180,12 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 
 	var scanOpts []any
 	if scanCfg.AIEnabled && llmProvider != nil {
-		p := llmProvider
-		scanOpts = append(scanOpts, scan.WithReportFunc(func(ctx context.Context, prompt, systemPrompt, model string, maxTokens int) (string, error) {
-			cfg := agent.Config{
-				Provider:       p,
-				Tools:          cmdReg,
-				Model:          model,
-				MaxTokens:      maxTokens,
-				SystemPrompt:   buildScanAISystemPrompt(cmdReg, skillStore, systemPrompt),
-				BeforeToolCall: scanVerifyBeforeToolCall,
-				Logger:         logger,
-			}
-			result, err := cfg.Run(ctx, prompt)
-			if err != nil {
-				return "", err
-			}
-			return result.Output, nil
-		}))
+		scanOpts = append(scanOpts, scan.WithParent(agent.NewAgent(agent.Config{
+			Provider: llmProvider,
+			Tools:    cmdReg,
+			Model:    model,
+			Logger:   logger,
+		})))
 		scanOpts = append(scanOpts, scan.WithAISkillConfig(scan.AISkillConfig{
 			Model:      model,
 			Timeout:    scanCfg.AITimeout,
@@ -207,43 +195,6 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 		}))
 		scanOpts = append(scanOpts, scan.WithDeepBrowserFunc(func(ctx context.Context, targetURL string) (string, error) {
 			return collectDeepBrowserArtifacts(ctx, cmdReg, targetURL, logger)
-		}))
-		scanOpts = append(scanOpts, scan.WithAgentFunc(func(ctx context.Context, prompt, systemPrompt, model string, maxTokens int) (*scan.AgentRunResult, error) {
-			cp := command.NewCheckpointTool()
-
-			verifyReg := command.NewRegistry()
-			for _, t := range cmdReg.Tools() {
-				verifyReg.RegisterTool(t)
-			}
-			verifyReg.RegisterTool(cp)
-
-			cfg := agent.Config{
-				Provider:            p,
-				Tools:               verifyReg,
-				Model:               model,
-				MaxTokens:           maxTokens,
-				SystemPrompt:        buildScanVerifySystemPrompt(systemPrompt),
-				BeforeToolCall:      scanVerifyBeforeToolCall,
-				Logger:              logger,
-				ShouldStopAfterTurn: makeMaxTurnStop(10),
-			}
-			result, err := cfg.Run(ctx, prompt)
-			if err != nil {
-				return nil, err
-			}
-			raw := ""
-			var messages []provider.ChatMessage
-			var usage *provider.Usage
-			if result != nil {
-				raw = result.Output
-				messages = result.NewMessages
-				usage = &result.TotalUsage
-			}
-
-			if r := cp.Result(); r != nil {
-				return &scan.AgentRunResult{Raw: raw, Checkpoint: r, Messages: messages, Usage: usage}, nil
-			}
-			return &scan.AgentRunResult{Raw: raw, Messages: messages, Usage: usage}, nil
 		}))
 	}
 	scanOpts = append(scanOpts, scan.WithLogger(logger))
@@ -269,22 +220,6 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 	return cmdReg
 }
 
-func buildScanAISystemPrompt(_ *command.CommandRegistry, _ *skills.Store, skillPrompt string) string {
-	if strings.TrimSpace(skillPrompt) != "" {
-		return skillPrompt
-	}
-	return "You are aiscan's scan AI skill agent. Analyze the provided scan finding using your knowledge. Do not call any tools. Return only the requested JSON output."
-}
-
-func buildScanVerifySystemPrompt(skillPrompt string) string {
-	if strings.TrimSpace(skillPrompt) != "" {
-		return skillPrompt
-	}
-	return "You are aiscan's active verification agent. Probe the target to confirm or deny the finding. " +
-		"When you have reached your conclusion, call the checkpoint tool with target, status, title, and content. " +
-		"Use labels for severity tags only (e.g. high, critical). " +
-		"Do not output raw JSON directly."
-}
 
 func collectDeepBrowserArtifacts(ctx context.Context, reg *command.CommandRegistry, targetURL string, logger telemetry.Logger) (string, error) {
 	if reg == nil || !reg.Has("playwright") {
@@ -415,55 +350,7 @@ func truncateDeepBrowserArtifact(value string, max int) string {
 	return value[:max] + fmt.Sprintf("\n\n[truncated: showing %d of %d bytes]", max, len(value))
 }
 
-func makeMaxTurnStop(maxTurns int) func(context.Context, agent.ShouldStopAfterTurnContext) (bool, error) {
-	turn := 0
-	return func(_ context.Context, _ agent.ShouldStopAfterTurnContext) (bool, error) {
-		turn++
-		return turn >= maxTurns, nil
-	}
-}
 
-func scanVerifyBeforeToolCall(_ context.Context, call agent.BeforeToolCallContext) (*agent.BeforeToolCallResult, error) {
-	if call.ToolCall.Function.Name != "bash" {
-		return nil, nil
-	}
-	var args struct {
-		Command string `json:"command"`
-	}
-	if err := json.Unmarshal([]byte(call.ToolCall.Function.Arguments), &args); err != nil {
-		return nil, err
-	}
-	if !scanVerifyBlocksCommand(args.Command) {
-		return nil, nil
-	}
-	return &agent.BeforeToolCallResult{
-		Block:  true,
-		Reason: "scan verification may use search (tavily/fetch), but scanner pseudo-commands are blocked to avoid recursive or active scanning",
-	}, nil
-}
-
-func scanVerifyBlocksCommand(commandLine string) bool {
-	tokens, err := command.SplitCommandLine(commandLine)
-	if err != nil {
-		tokens = strings.Fields(commandLine)
-	}
-	if len(tokens) == 0 {
-		return false
-	}
-	if isScanVerifyBlockedCommand(tokens[0]) {
-		return true
-	}
-	return strings.EqualFold(tokens[0], "aiscan") && len(tokens) > 1 && isScanVerifyBlockedCommand(tokens[1])
-}
-
-func isScanVerifyBlockedCommand(name string) bool {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "scan", "passive", "gogo", "spray", "zombie", "neutron":
-		return true
-	default:
-		return false
-	}
-}
 
 func (a *App) InitIOA(ctx context.Context, cfg IOAConfig) error {
 	client, err := newIOAClient(cfg)

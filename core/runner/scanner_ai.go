@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"slices"
 	"strings"
 
 	cfg "github.com/chainreactors/aiscan/core/config"
@@ -12,6 +11,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/app"
 	"github.com/chainreactors/aiscan/pkg/pidlock"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
+	"github.com/chainreactors/aiscan/pkg/tools/scan"
 	"github.com/chainreactors/aiscan/skills"
 )
 
@@ -34,7 +34,7 @@ func RunScannerWithAgent(ctx context.Context, option *cfg.Option, application *a
 
 	rt, err := NewAgentRuntime(ctx, option, logger, &RuntimeConfig{
 		ExistingApp: application,
-		PromptConfig: &agent.PromptConfig{
+		PromptConfig: &PromptConfig{
 			Tools:            application.Commands,
 			ScannerDocs:      application.Commands.UsageDocs(),
 			Skills:           application.Skills.Skills,
@@ -47,13 +47,13 @@ func RunScannerWithAgent(ctx context.Context, option *cfg.Option, application *a
 	}
 	defer rt.Close()
 
-	prompt := formatScannerTaskPrompt(scannerArgs, intent)
+	prompt := scan.FormatAgentTaskPrompt(scannerArgs, intent)
 	rt.Output.Start("scanner", strings.Join(scannerArgs, " "))
 
-	result, err := rt.Session.Config.
+	result, err := agent.NewAgent(rt.Config.
 		WithSystemPrompt(rt.SystemPrompt).
 		WithStream(false).
-		WithEventHandler(rt.EventHandler()).
+		WithEventHandler(rt.EventHandler())).
 		Run(ctx, prompt)
 	if err != nil {
 		return err
@@ -66,8 +66,11 @@ func RunScannerWithAgent(ctx context.Context, option *cfg.Option, application *a
 
 func resolveScannerIntent(option *cfg.Option, store *skills.Store, command string) (string, error) {
 	var sections []string
-	if skill, ok := store.ByName(scannerSkillName(command)); ok {
-		sections = append(sections, skills.FormatInvocation(skill, ""))
+	skillName := scan.ScannerSkillName(command)
+	if skillName != "" && cfg.ScannerCommandAvailable(command) {
+		if skill, ok := store.ByName(skillName); ok {
+			sections = append(sections, skills.FormatInvocation(skill, ""))
+		}
 	}
 
 	intent := strings.TrimSpace(option.Prompt)
@@ -81,45 +84,10 @@ func resolveScannerIntent(option *cfg.Option, store *skills.Store, command strin
 	if intent == "" {
 		intent = "Process the scanner output according to the user's intent. If no specific intent is provided, briefly explain the important evidence in the output."
 	}
-	intent, err := cfg.ApplySelectedSkills(intent, filterAutoSkill(option.Skills, command), store)
+	intent, err := cfg.ApplySelectedSkills(intent, scan.FilterAutoSkill(option.Skills, command), store)
 	if err != nil {
 		return "", err
 	}
 	sections = append(sections, intent)
 	return strings.Join(sections, "\n\n"), nil
-}
-
-func scannerSkillName(command string) string {
-	switch command {
-	case "gogo", "spray", "katana", "zombie", "neutron", "passive", "scan":
-		if !cfg.ScannerCommandAvailable(command) {
-			return ""
-		}
-		return command
-	default:
-		return ""
-	}
-}
-
-func filterAutoSkill(selected []string, command string) []string {
-	auto := scannerSkillName(command)
-	if auto == "" {
-		return selected
-	}
-	out := make([]string, 0, len(selected))
-	for _, name := range selected {
-		if strings.TrimSpace(name) == auto {
-			continue
-		}
-		out = append(out, name)
-	}
-	return slices.Clip(out)
-}
-
-func formatScannerTaskPrompt(scannerArgs []string, intent string) string {
-	command := strings.Join(scannerArgs, " ")
-	if strings.TrimSpace(intent) == "" {
-		return fmt.Sprintf("Execute: %s", command)
-	}
-	return fmt.Sprintf("Execute: %s\n\nUser intent: %s", command, strings.TrimSpace(intent))
 }

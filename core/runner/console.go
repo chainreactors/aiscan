@@ -36,9 +36,6 @@ func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.A
 	c := console.New("aiscan")
 	c.NewlineAfter = true
 	output := NewAgentOutput(option)
-	if session != nil {
-		session.Subscribe(output.HandleEvent)
-	}
 
 	menu := c.NewMenu("agent")
 	menu.Prompt().Primary = func() string { return "aiscan> " }
@@ -235,7 +232,7 @@ func (r *AgentConsole) runPrompt(ctx context.Context, input string) error {
 		return err
 	}
 	r.ensureOutput().Start("prompt", input)
-	result, err := r.session.Prompt(ctx, prompt)
+	result, err := r.session.Run(ctx, prompt)
 	if err != nil {
 		return err
 	}
@@ -250,7 +247,7 @@ func (r *AgentConsole) runSkill(ctx context.Context, skill skillpkg.Skill, input
 		return err
 	}
 	r.ensureOutput().Start("skill "+skill.Name, input)
-	result, err := r.session.Prompt(ctx, prompt)
+	result, err := r.session.Run(ctx, prompt)
 	if err != nil {
 		return err
 	}

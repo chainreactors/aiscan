@@ -137,24 +137,10 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		}
 		transcript.completedTurns = turn
 
-		if cfg.ShouldStopAfterTurn != nil {
-			messages, newMessages := transcript.snapshot()
-			stop, err := cfg.ShouldStopAfterTurn(ctx, ShouldStopAfterTurnContext{
-				Message:      assistantMsg,
-				ToolResults:  append([]provider.ChatMessage(nil), toolResults...),
-				SystemPrompt: cfg.SystemPrompt,
-				Messages:     messages,
-				Tools:        cfg.Tools,
-				NewMessages:  newMessages,
-			})
-			if err != nil {
-				return end(nil, err, StopReasonError)
-			}
-			if stop {
-				cfg.Logger.Importantf("agent status=stopped turns=%d tokens=%d", turn, transcript.totalUsage.TotalTokens)
-				result := transcript.result(messageContent(assistantMsg), turn, nil)
-				return end(result, nil, StopReasonStopped)
-			}
+		if cfg.MaxTurns > 0 && turn >= cfg.MaxTurns {
+			cfg.Logger.Importantf("agent status=stopped turns=%d/%d tokens=%d", turn, cfg.MaxTurns, transcript.totalUsage.TotalTokens)
+			result := transcript.result(messageContent(assistantMsg), turn, nil)
+			return end(result, nil, StopReasonStopped)
 		}
 
 		if terminate {
@@ -367,8 +353,7 @@ type toolExecution struct {
 func runToolCall(ctx context.Context, cfg Config, assistantMsg provider.ChatMessage, tc provider.ToolCall) toolExecution {
 	execution := beforeToolCall(ctx, cfg, assistantMsg, tc)
 	if execution.result == "" && !execution.isError {
-		toolResult, execErr := cfg.Tools.ExecuteTool(ctx, tc.Function.Name, tc.Function.Arguments,
-			command.ToolContext{SystemPrompt: cfg.SystemPrompt, Messages: cfg.Messages})
+		toolResult, execErr := cfg.Tools.ExecuteTool(ctx, tc.Function.Name, tc.Function.Arguments)
 		execution.result = toolResult.Text()
 		execution.err = execErr
 		execution.isError = execErr != nil || toolResult.IsError

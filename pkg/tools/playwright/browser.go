@@ -27,7 +27,7 @@ const (
 	waitStableDur  = 300 * time.Millisecond
 )
 
-// Command implements command.PseudoCommand for headless browser operations.
+// Command implements command.Command for headless browser operations.
 type Command struct {
 	mu      sync.Mutex
 	browser *rod.Browser
@@ -58,8 +58,6 @@ func (c *Command) SetProxy(proxyURLStr string) {
 }
 
 func (c *Command) Name() string { return "playwright" }
-
-func (c *Command) InProcess() {}
 
 func (c *Command) Usage() string {
 	return `playwright - Headless browser for JS-rendered pages, screenshots, network capture, and interactive vulnerability verification
@@ -169,9 +167,9 @@ Examples:
 }
 
 // Execute dispatches to the appropriate sub-command.
-func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
+func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error {
 	if len(args) == 0 {
-		return "", fmt.Errorf("playwright: subcommand required\n\n%s", c.Usage())
+		return fmt.Errorf("playwright: subcommand required\n\n%s", c.Usage())
 	}
 
 	sub := args[0]
@@ -336,17 +334,19 @@ func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
 		result, err = c.execTemplate(ctx, subArgs)
 
 	default:
-		return "", fmt.Errorf("playwright: unknown subcommand %q\n\n%s", sub, c.Usage())
+		return fmt.Errorf("playwright: unknown subcommand %q\n\n%s", sub, c.Usage())
 	}
 
-	// Record successful session commands for template codegen.
 	if err == nil && len(subArgs) > 0 {
 		if sess, sessErr := c.getSession(subArgs[0]); sessErr == nil && sess.rec != nil {
 			recordCommand(sess, sub, subArgs)
 		}
 	}
 
-	return result, err
+	if result != "" {
+		_, _ = io.WriteString(w, result)
+	}
+	return err
 }
 
 // Close shuts down the browser process if running.

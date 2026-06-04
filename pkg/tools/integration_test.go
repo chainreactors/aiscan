@@ -17,6 +17,15 @@ import (
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 )
 
+func passiveExecString(t *testing.T, cmd *passivecmd.Command, ctx context.Context, args []string) string {
+	t.Helper()
+	var buf strings.Builder
+	if err := cmd.Execute(ctx, args, &buf); err != nil {
+		t.Fatalf("Execute(%v) error = %v", args, err)
+	}
+	return buf.String()
+}
+
 func TestIntegrationPassiveFofa(t *testing.T) {
 	if os.Getenv("AISCAN_INTEGRATION") == "" {
 		t.Skip("set AISCAN_INTEGRATION=1 to run")
@@ -34,10 +43,7 @@ func TestIntegrationPassiveFofa(t *testing.T) {
 	cmd := passivecmd.New(set.Uncover)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	out, err := cmd.Execute(ctx, []string{"-s", "fofa", `domain="anthropic.com"`})
-	if err != nil {
-		t.Fatalf("passive fofa Execute: %v", err)
-	}
+	out := passiveExecString(t, cmd, ctx, []string{"-s", "fofa", `domain="anthropic.com"`})
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) == 0 || lines[0] == "" {
 		t.Fatalf("no assets returned: %q", out)
@@ -74,10 +80,7 @@ func TestIntegrationPassiveHunter(t *testing.T) {
 	cmd := passivecmd.New(set.Uncover)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	out, err := cmd.Execute(ctx, []string{"-s", "hunter", `domain.suffix="anthropic.com"`})
-	if err != nil {
-		t.Fatalf("passive hunter Execute: %v", err)
-	}
+	out := passiveExecString(t, cmd, ctx, []string{"-s", "hunter", `domain.suffix="anthropic.com"`})
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) == 0 || lines[0] == "" {
 		t.Logf("hunter returned empty (may be quota/WAF); output: %q", out)

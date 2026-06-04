@@ -10,8 +10,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -47,12 +49,13 @@ type Info struct {
 
 type session struct {
 	Info
-	cmd       *exec.Cmd
+	cmd       *exec.Cmd          // nil for func sessions
 	output    *OutputBuffer
-	pty       *ptyHandle
-	pumpDone  <-chan struct{}
+	pty       *ptyHandle         // nil for func sessions
+	pumpDone  <-chan struct{}     // nil for func sessions
 	done      chan struct{}
 	peekOff   int64
+	cancel    context.CancelFunc // non-nil for func sessions
 }
 
 type Manager struct {
@@ -60,6 +63,9 @@ type Manager struct {
 	sessions map[string]*session
 	onDone   func(Info)
 	bufCap   int
+
+	commands func(name string) (Command, bool)
+	workDir  string
 }
 
 func NewManager() *Manager {
@@ -70,6 +76,115 @@ func (m *Manager) SetOnDone(fn func(Info)) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.onDone = fn
+}
+
+// RunOpts controls how RunCommand creates a session.
+type RunOpts struct {
+	Name    string
+	Timeout time.Duration
+	WorkDir string
+	Env     []string
+}
+
+// SetCommands injects the lookup function used by RunCommand to detect
+// in-process commands. The function is typically a closure over a
+// CommandRegistry in the calling package.
+func (m *Manager) SetCommands(fn func(name string) (Command, bool)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.commands = fn
+}
+
+// SetWorkDir sets the default working directory for shell sessions created
+// by RunCommand.
+func (m *Manager) SetWorkDir(dir string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.workDir = dir
+}
+
+// CommandNames returns the names of all registered in-process commands,
+// or nil if no command resolver is set. Used by BashTool to generate
+// its LLM-visible description.
+func (m *Manager) CommandNames() []string {
+	m.mu.Lock()
+	fn := m.commands
+	m.mu.Unlock()
+	if fn == nil {
+		return nil
+	}
+	// The commands function is a point lookup, not an iterator.
+	// Callers that need a full list should use the registry directly.
+	return nil
+}
+
+// RunCommand creates a session for the given command line. If the first
+// token matches a registered in-process Command, the command runs in a
+// goroutine-based session (CreateFunc). Otherwise it runs as a shell
+// command in a PTY session (Create).
+//
+// This is the SINGLE place where command → session wrapping occurs.
+// Both BashTool (inline execution) and TmuxCommand (session management)
+// delegate here.
+func (m *Manager) RunCommand(cmdLine string, opts RunOpts) (Info, error) {
+	cmdLine = stripCommentsAndBlanks(cmdLine)
+	if strings.TrimSpace(cmdLine) == "" {
+		return Info{}, errors.New("empty command")
+	}
+
+	timeout := opts.Timeout
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+	workDir := opts.WorkDir
+	if workDir == "" {
+		m.mu.Lock()
+		workDir = m.workDir
+		m.mu.Unlock()
+	}
+
+	token := firstCommandToken(cmdLine)
+
+	m.mu.Lock()
+	resolve := m.commands
+	m.mu.Unlock()
+
+	if resolve != nil && token != "" {
+		if cmd, ok := resolve(token); ok {
+			tokens, err := SplitCommandLine(cmdLine)
+			if err != nil {
+				return Info{}, err
+			}
+			if len(tokens) > 1 {
+				if _, valErr := stripShellSyntax(tokens[1:]); valErr != nil {
+					return Info{}, valErr
+				}
+			}
+			name := opts.Name
+			if name == "" {
+				name = token
+			}
+			args := tokens[1:]
+			return m.CreateFunc(name, timeout, func(ctx context.Context, w io.Writer) error {
+				return cmd.Execute(ctx, args, w)
+			})
+		}
+	}
+
+	return m.Create(workDir, cmdLine, opts.Name, timeout, opts.Env, "")
+}
+
+func stripCommentsAndBlanks(input string) string {
+	lines := strings.Split(input, "\n")
+	var kept []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
 }
 
 // Create starts a shell command in a PTY session.
@@ -83,6 +198,99 @@ func (m *Manager) Create(workDir, cmdLine, name string, timeout time.Duration, e
 		c.Env = mergeEnv(os.Environ(), env)
 	}
 	return m.start(c, cmdLine, name, timeout, outputFile)
+}
+
+// CreateFunc starts a goroutine-based session. The function fn runs in a
+// goroutine; its output (written to w) is captured in the same OutputBuffer
+// used by PTY sessions, so Peek/Kill/Wait/Done work identically.
+func (m *Manager) CreateFunc(name string, timeout time.Duration, fn func(ctx context.Context, w io.Writer) error) (Info, error) {
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+	if name == "" {
+		name = "func"
+	}
+
+	id, err := genID()
+	if err != nil {
+		return Info{}, err
+	}
+
+	buf, err := m.newBuffer("")
+	if err != nil {
+		return Info{}, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+
+	info := Info{
+		ID:        id,
+		Name:      name,
+		Command:   name,
+		StartedAt: time.Now(),
+		State:     StateRunning,
+	}
+	s := &session{Info: info, output: buf, done: make(chan struct{}), cancel: cancel}
+
+	m.mu.Lock()
+	m.sessions[id] = s
+	m.mu.Unlock()
+
+	go m.superviseFunc(s, ctx, fn)
+	return info, nil
+}
+
+func (m *Manager) superviseFunc(s *session, ctx context.Context, fn func(context.Context, io.Writer) error) {
+	defer s.cancel()
+
+	var fnErr error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fnErr = fmt.Errorf("panic: %v\n%s", r, debug.Stack())
+			}
+		}()
+		fnErr = fn(ctx, s.output)
+	}()
+
+	state, exitCode := StateCompleted, 0
+	killCause := ""
+
+	if fnErr != nil {
+		if errors.Is(fnErr, context.DeadlineExceeded) {
+			state = StateKilled
+			killCause = "timeout"
+		} else if errors.Is(fnErr, context.Canceled) {
+			state = StateKilled
+			killCause = m.getKillCause(s)
+			if killCause == "" {
+				killCause = "canceled"
+			}
+		} else {
+			state = StateFailed
+			exitCode = 1
+			s.output.AppendError(fnErr.Error())
+		}
+	}
+
+	m.mu.Lock()
+	s.EndedAt = time.Now()
+	s.ExitCode = exitCode
+	s.State = state
+	s.KillCause = killCause
+	infoCopy := s.Info
+	m.mu.Unlock()
+
+	s.output.Close()
+	close(s.done)
+
+	m.mu.Lock()
+	onDone := m.onDone
+	m.mu.Unlock()
+	if onDone != nil {
+		defer func() { _ = recover() }()
+		onDone(infoCopy)
+	}
 }
 
 // CreateCmd starts a command with explicit binary and args in a PTY session.
@@ -267,6 +475,10 @@ func (m *Manager) Kill(id string) error {
 		return nil
 	default:
 	}
+	if s.cancel != nil {
+		s.cancel()
+		return nil
+	}
 	go m.forceKill(s)
 	return nil
 }
@@ -285,7 +497,9 @@ func (m *Manager) Shutdown() {
 
 	for _, s := range running {
 		m.setKillCause(s, "shutdown")
-		if s.cmd != nil && s.cmd.Process != nil {
+		if s.cancel != nil {
+			s.cancel()
+		} else if s.cmd != nil && s.cmd.Process != nil {
 			_ = signalProcessGroup(s.cmd.Process.Pid, false)
 		}
 	}
@@ -428,7 +642,7 @@ func (m *Manager) Write(id string, data []byte) error {
 	default:
 	}
 	if s.pty == nil {
-		return fmt.Errorf("session %s has no PTY", id)
+		return fmt.Errorf("session %s does not accept input", id)
 	}
 	_, err := s.pty.Write(data)
 	return err

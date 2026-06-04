@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 	"time"
@@ -11,7 +12,7 @@ import (
 
 const defaultTimeout = 120 * time.Second
 
-// Command implements command.PseudoCommand for the katana web crawler.
+// Command implements command.Command for the katana web crawler.
 // Unlike SDK-based tools (gogo, spray, neutron), katana runs as an
 // external binary — this wrapper locates it at execution time and
 // injects agent-friendly defaults.
@@ -57,10 +58,10 @@ Examples:
   katana -list urls.txt -d 2 -jc -timeout 60`
 }
 
-func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
+func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error {
 	katanaPath, err := exec.LookPath("katana")
 	if err != nil {
-		return "", fmt.Errorf("katana: binary not found in PATH — install with: go install github.com/projectdiscovery/katana/cmd/katana@latest")
+		return fmt.Errorf("katana: binary not found in PATH — install with: go install github.com/projectdiscovery/katana/cmd/katana@latest")
 	}
 
 	args = withDefaultFlags(args)
@@ -77,17 +78,21 @@ func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		if stdout.Len() > 0 {
+			_, _ = io.WriteString(w, stdout.String())
+		}
 		if ctx.Err() != nil {
-			return stdout.String(), fmt.Errorf("katana: timed out")
+			return fmt.Errorf("katana: timed out")
 		}
 		errMsg := strings.TrimSpace(stderr.String())
 		if errMsg != "" {
-			return stdout.String(), fmt.Errorf("katana: %s", errMsg)
+			return fmt.Errorf("katana: %s", errMsg)
 		}
-		return stdout.String(), fmt.Errorf("katana: %w", err)
+		return fmt.Errorf("katana: %w", err)
 	}
 
-	return stdout.String(), nil
+	_, _ = io.WriteString(w, stdout.String())
+	return nil
 }
 
 // withDefaultFlags injects -silent and -no-color when not already present,

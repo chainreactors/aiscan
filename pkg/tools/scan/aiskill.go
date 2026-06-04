@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
 )
@@ -255,8 +254,12 @@ You must call the checkpoint tool exactly once with kind="deep".`,
 }
 
 func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit func(event)) {
-	if c.agentFunc == nil {
-		c.logger.Debugf("scan capability=%s status=skipped reason=agent_func_unconfigured", skill.CapName)
+	if c.testAgent != nil {
+		c.runAISkillTest(ctx, skill, e, emit)
+		return
+	}
+	if c.parent == nil {
+		c.logger.Debugf("scan capability=%s status=skipped reason=no_provider", skill.CapName)
 		return
 	}
 
@@ -286,46 +289,50 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 			}
 		}
 	}
+	cp := command.NewCheckpointTool()
 	start := time.Now()
 
-	agentResult, agentErr := c.agentFunc(skillCtx, prompt, "", c.aiConfig.Model, 1600)
+	a := c.parent.Derive()
+	a.Cfg.Tools = a.Cfg.Tools.CloneTools()
+	a.Cfg.Tools.RegisterTool(cp)
+	a.Cfg.SystemPrompt = verifySystemPrompt()
+	a.Cfg.BeforeToolCall = verifyBeforeToolCall
+	a.Cfg.MaxTurns = 10
+	if c.aiConfig.Model != "" {
+		a.Cfg.Model = c.aiConfig.Model
+	}
+	result, agentErr := a.Run(skillCtx, prompt)
 	duration := time.Since(start)
 	if agentErr != nil {
 		c.logger.Debugf("scan capability=%s status=failed error=%q", skill.CapName, agentErr)
 		emitAISkillResponse(skill, e, "failed", "LLM call failed", agentErr.Error(), emit)
 		return
 	}
-	if agentResult == nil || agentResult.Checkpoint == nil || isMissingAISkillCheckpoint(agentResult.Checkpoint) {
+	checkpoint := cp.Result()
+	if checkpoint == nil || isMissingAISkillCheckpoint(checkpoint) {
 		c.logger.Debugf("scan capability=%s status=failed error=no_checkpoint", skill.CapName)
 		raw := ""
-		if agentResult != nil {
-			raw = strings.TrimSpace(agentResult.Raw)
+		if result != nil {
+			raw = strings.TrimSpace(result.Output)
 		}
-		if c.recorder != nil {
-			var msgs []provider.ChatMessage
-			var usage *provider.Usage
-			if agentResult != nil {
-				msgs = agentResult.Messages
-				usage = agentResult.Usage
-			}
-			c.recorder.AITurn(skill.Name, 1, prompt, msgs, usage, duration)
+		if c.recorder != nil && result != nil {
+			c.recorder.AITurn(skill.Name, 1, prompt, result.NewMessages, &result.TotalUsage, duration)
 		}
 		emitAISkillResponse(skill, e, "response", "agent response without checkpoint", raw, emit)
 		return
 	}
-	cp := agentResult.Checkpoint
-	c.hydrateAISkillCheckpoint(skill, e, cp)
+	c.hydrateAISkillCheckpoint(skill, e, checkpoint)
 
-	if cp.Title == "" && cp.Content == "" {
+	if checkpoint.Title == "" && checkpoint.Content == "" {
 		return
 	}
 
-	if c.recorder != nil {
-		c.recorder.AITurn(skill.Name, 1, prompt, agentResult.Messages, agentResult.Usage, duration)
+	if c.recorder != nil && result != nil {
+		c.recorder.AITurn(skill.Name, 1, prompt, result.NewMessages, &result.TotalUsage, duration)
 	}
 
-	status := checkpointStatus(cp)
-	target := checkpointTarget(cp)
+	status := checkpointStatus(checkpoint)
+	target := checkpointTarget(checkpoint)
 
 	originalKey := ""
 	originalKind := findingKind("")
@@ -335,15 +342,50 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 	}
 
 	if c.recorder != nil {
-		c.recorder.AISkill(skill.Name, target, status, cp.Title, cp.Content, duration)
+		c.recorder.AISkill(skill.Name, target, status, checkpoint.Title, checkpoint.Content, duration)
 	}
 
 	emit(findingEvent(skill.CapName, aiSkillFinding{
 		Skill:        skill.Name,
 		Target:       target,
 		Status:       status,
-		Summary:      cp.Title,
-		Detail:       cp.Content,
+		Summary:      checkpoint.Title,
+		Detail:       checkpoint.Content,
+		OriginalKey:  originalKey,
+		OriginalKind: originalKind,
+	}))
+}
+
+func (c *Command) runAISkillTest(ctx context.Context, skill AISkill, e event, emit func(event)) {
+	prompt := skill.Prompt(e)
+	result, err := c.testAgent(ctx, prompt)
+	if err != nil {
+		emitAISkillResponse(skill, e, "failed", "test agent failed", err.Error(), emit)
+		return
+	}
+	checkpoint := result.checkpoint
+	if checkpoint == nil || isMissingAISkillCheckpoint(checkpoint) {
+		emitAISkillResponse(skill, e, "response", "agent response without checkpoint", result.raw, emit)
+		return
+	}
+	c.hydrateAISkillCheckpoint(skill, e, checkpoint)
+	if checkpoint.Title == "" && checkpoint.Content == "" {
+		return
+	}
+	status := checkpointStatus(checkpoint)
+	target := checkpointTarget(checkpoint)
+	originalKey := ""
+	originalKind := findingKind("")
+	if e.Finding != nil {
+		originalKey = e.Finding.Key()
+		originalKind = e.Finding.Kind()
+	}
+	emit(findingEvent(skill.CapName, aiSkillFinding{
+		Skill:        skill.Name,
+		Target:       target,
+		Status:       status,
+		Summary:      checkpoint.Title,
+		Detail:       checkpoint.Content,
 		OriginalKey:  originalKey,
 		OriginalKind: originalKind,
 	}))
@@ -474,14 +516,22 @@ func checkpointTarget(cp *command.CheckpointResult) string {
 }
 
 func (c *Command) generateAIReport(ctx context.Context, coll *collector) string {
-	if c.reportFunc == nil {
+	if c.testReport != nil {
+		scanData := coll.ReportMarkdown()
+		if scanData == "" {
+			scanData = coll.TerminalString(false)
+		}
+		prompt := fmt.Sprintf("Generate a security scan report:\n%s", scanData)
+		result, err := c.testReport(ctx, prompt)
+		if err != nil {
+			return coll.ReportMarkdown()
+		}
+		return result + "\n"
+	}
+	if c.parent == nil {
 		return coll.ReportMarkdown()
 	}
 
-	// Use ReportMarkdown so the LLM sees verification annotations:
-	// ~~strikethrough~~ for not_confirmed, **[verified]** for confirmed.
-	// PlainText lacks these annotations, causing the LLM to treat
-	// unverified fingerprints/sniper CVE lookups as confirmed vulns.
 	scanData := coll.ReportMarkdown()
 	if scanData == "" {
 		scanData = coll.TerminalString(false)
@@ -503,7 +553,16 @@ Scan results:
 	reportCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	result, err := c.reportFunc(reportCtx, prompt, "", c.aiConfig.Model, 4000)
+	ra := c.parent.Derive()
+	ra.Cfg.SystemPrompt = reportSystemPrompt()
+	if c.aiConfig.Model != "" {
+		ra.Cfg.Model = c.aiConfig.Model
+	}
+	agentResult, err := ra.Run(reportCtx, prompt)
+	result := ""
+	if agentResult != nil {
+		result = agentResult.Output
+	}
 	if err != nil {
 		c.logger.Debugf("scan report skill failed: %v", err)
 		return coll.ReportMarkdown()

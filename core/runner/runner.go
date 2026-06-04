@@ -13,6 +13,7 @@ import (
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	inboxpkg "github.com/chainreactors/aiscan/pkg/agent/inbox"
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/app"
 	cmdpkg "github.com/chainreactors/aiscan/pkg/command"
@@ -29,16 +30,17 @@ import (
 type AgentRuntime struct {
 	App          *app.App
 	SystemPrompt string
-	Session      *AgentSession
+	Config       agent.Config
 	Events       *EventsWriter
 	Output       *AgentOutput
 	ownsApp      bool
+	cleanup      func()
 }
 
 type RuntimeConfig struct {
 	ExistingApp  *app.App
 	IOA          *app.IOAConfig
-	PromptConfig *agent.PromptConfig
+	PromptConfig *PromptConfig
 	NoOutput     bool
 }
 
@@ -76,7 +78,7 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		}
 	}
 
-	pc := &agent.PromptConfig{
+	pc := &PromptConfig{
 		Tools:       rt.App.Commands,
 		ScannerDocs: rt.App.Commands.UsageDocs(),
 		Skills:      rt.App.Skills.Skills,
@@ -86,7 +88,7 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 	if rc != nil && rc.PromptConfig != nil {
 		pc = rc.PromptConfig
 	}
-	rt.SystemPrompt = agent.BuildSystemPrompt(pc)
+	rt.SystemPrompt = BuildSystemPrompt(pc)
 	logger.Debugf("system prompt length: %d chars", len(rt.SystemPrompt))
 
 	events, err := NewEventsWriter(option.EventsFile)
@@ -102,19 +104,76 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		rt.Output = NewAgentOutput(option)
 	}
 
-	rt.Session = NewAgentSession(SessionConfig{
-		Application: rt.App,
-		Option:      option,
-		Logger:      logger,
-		Events:      events,
+	ib := inboxpkg.NewBuffered(agent.DefaultInboxCapacity)
+
+	sessMgr := bashSessionManager(rt.App.Commands)
+	if sessMgr != nil {
+		sessMgr.SetOnDone(func(info tmuxpkg.Info) {
+			tail := sessMgr.PeekOrEmpty(info.ID, 20)
+			msg := inboxpkg.NewMessage(inboxpkg.OriginSession, "user",
+				tmuxpkg.FormatCompletion(info, tail))
+			msg.Meta = map[string]any{
+				"session_id":   info.ID,
+				"session_name": info.Name,
+				"exit_code":    info.ExitCode,
+			}
+			if err := ib.Push(msg); err != nil {
+				logger.Warnf("inbox push session completion: %s", err)
+			}
+		})
+	}
+
+	scheduler := agent.NewLoopScheduler(ib, logger)
+
+	rt.Config = agent.Config{
+		Provider:       rt.App.Provider,
+		Tools:          rt.App.Commands,
+		Model:          option.Model,
+		Logger:         logger,
+		Inbox:          ib,
+		LoopScheduler:  scheduler,
+		CacheRetention: provider.CacheShort,
+	}
+
+	rt.App.Commands.RegisterTool(agent.NewLoopTool(scheduler))
+
+	parentAgent := agent.NewAgent(rt.Config)
+	subAgentTool := agent.NewSubAgentTool(parentAgent, ib, func(name string) (agent.AgentType, error) {
+		if rt.App.Skills == nil {
+			return agent.AgentType{}, fmt.Errorf("agent type %q not found", name)
+		}
+		s, ok := rt.App.Skills.ByName(name)
+		if !ok {
+			return agent.AgentType{}, fmt.Errorf("agent type %q not found", name)
+		}
+		if !s.Agent {
+			return agent.AgentType{}, fmt.Errorf("skill %q is not configured as an agent type", name)
+		}
+		return agent.AgentType{
+			FormattedPrompt: skills.FormatInvocation(s, ""),
+			Model:           s.AgentModel,
+			Background:      s.AgentBackground,
+		}, nil
 	})
+	rt.App.Commands.RegisterTool(subAgentTool)
+
+	if events != nil {
+		rt.Config.Emit = events.HandleEvent
+	}
+
+	rt.cleanup = func() {
+		scheduler.Stop()
+		if sessMgr != nil {
+			sessMgr.Shutdown()
+		}
+	}
 
 	return rt, nil
 }
 
 func (rt *AgentRuntime) Close() {
-	if rt.Session != nil {
-		rt.Session.Cleanup()
+	if rt.cleanup != nil {
+		rt.cleanup()
 	}
 	if rt.Events != nil {
 		rt.Events.Close()
@@ -129,7 +188,7 @@ func (rt *AgentRuntime) EventHandler() agent.EventHandler {
 	if rt.Output != nil {
 		outputHandler = rt.Output.HandleEvent
 	}
-	return CombineEventHandlers(outputHandler, rt.Events.HandleEvent)
+	return combineEventHandlers(outputHandler, rt.Events.HandleEvent)
 }
 
 // ---------------------------------------------------------------------------
@@ -169,10 +228,10 @@ func runOneShotMode(ctx context.Context, option *cfg.Option, logger telemetry.Lo
 	}
 
 	rt.Output.Start("task", task)
-	result, err := rt.Session.Config.
+	result, err := agent.NewAgent(rt.Config.
 		WithSystemPrompt(rt.SystemPrompt).
 		WithStream(false).
-		WithEventHandler(rt.EventHandler()).
+		WithEventHandler(rt.EventHandler())).
 		Run(ctx, task)
 	if err != nil {
 		return err
@@ -198,10 +257,10 @@ func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetr
 		return err
 	}
 
-	session := rt.Session.Config.
+	session := agent.NewAgent(rt.Config.
 		WithSystemPrompt(rt.SystemPrompt).
 		WithStream(false).
-		NewAgent()
+		WithEventHandler(combineEventHandlers(rt.Output.HandleEvent, rt.Events.HandleEvent)))
 
 	repl := NewAgentConsole(ctx, option, rt.App, session)
 	return repl.Start()
@@ -250,7 +309,10 @@ func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) e
 		return err
 	}
 
-	loopCfg := rt.Session.Config.WithSystemPrompt(rt.SystemPrompt).WithStream(true)
+	loopCfg := rt.Config.WithSystemPrompt(rt.SystemPrompt).WithStream(true)
+	runOnce := func(ctx context.Context, prompt string) (*agent.Result, error) {
+		return agent.NewAgent(loopCfg).Run(ctx, prompt)
+	}
 
 	node := swarm.NewNode(swarm.NodeConfig{
 		Client:                streamClient,
@@ -264,17 +326,17 @@ func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) e
 		Skills:                option.Skills,
 		SkillRefs:             skillRefs,
 		OnTask: func(ctx context.Context, st swarm.Task) (string, error) {
-			result, err := loopCfg.Run(ctx, st.Prompt())
+			result, err := runOnce(ctx, st.Prompt())
 			if err != nil {
 				return "", err
 			}
 			return result.Output, nil
 		},
 		OnPeer: func(peer swarm.PeerMessage) bool {
-			return rt.Session.Config.Inbox.Push(peerToInboxMessage(peer)) == nil
+			return rt.Config.Inbox.Push(peerToInboxMessage(peer)) == nil
 		},
 		OnHeartbeat: func(ctx context.Context, prompt string) (string, error) {
-			result, err := loopCfg.Run(ctx, prompt)
+			result, err := runOnce(ctx, prompt)
 			if err != nil {
 				return "", err
 			}
@@ -284,7 +346,7 @@ func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) e
 	})
 
 	if option.Heartbeat > 0 {
-		_ = rt.Session.Config.LoopScheduler.Add(ctx, agent.LoopEntry{
+		_ = rt.Config.LoopScheduler.Add(ctx, agent.LoopEntry{
 			Name:     "heartbeat",
 			Interval: time.Duration(option.Heartbeat) * time.Minute,
 			Mode:     agent.ModeIndependent,

@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 	"time"
@@ -66,18 +67,23 @@ Options:
   -h            Show this help`
 }
 
-func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
+func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error {
 	src, rest, help, err := splitSource(args)
 	if err != nil {
-		return "", err
+		return err
 	}
 	if help {
-		return c.Usage(), nil
+		_, _ = io.WriteString(w, c.Usage())
+		return nil
 	}
 	if c.sources[src] {
-		return c.runQuery(ctx, src, rest)
+		result, err := c.runQuery(ctx, src, rest)
+		if result != "" {
+			_, _ = io.WriteString(w, result)
+		}
+		return err
 	}
-	return "", fmt.Errorf("passive: unknown source %q (available: %v)", src, c.sourceList())
+	return fmt.Errorf("passive: unknown source %q (available: %v)", src, c.sourceList())
 }
 
 // --------------- query dispatch ----------------------------------------------

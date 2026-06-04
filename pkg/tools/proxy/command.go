@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"strings"
 
@@ -61,43 +62,51 @@ Auto mode options:
   --strategy,-s adaptive      Load balance strategy (adaptive, url-test, round-robin, random)`
 }
 
-func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
+func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error {
 	if len(args) == 0 {
-		return c.Usage(), nil
+		_, _ = io.WriteString(w, c.Usage())
+		return nil
 	}
 	subcmd := strings.ToLower(args[0])
 	rest := args[1:]
 
-	// proxy <url> <command> [args...] — proxychain passthrough with explicit URL
-	if strings.Contains(args[0], "://") {
-		return c.execPassthrough(ctx, args[0], rest)
-	}
+	var result string
+	var err error
 
-	switch subcmd {
-	case "auto":
-		return c.execAuto(ctx, rest)
-	case "subscribe", "sub":
-		return c.execSubscribe(ctx, rest)
-	case "list", "ls":
-		return c.execList()
-	case "switch", "sw":
-		return c.execSwitch(rest)
-	case "test":
-		return c.execTest(ctx, rest)
-	case "current":
-		return c.execCurrent()
-	case "clear":
-		return c.execClear()
-	default:
-		// proxy <node-name-or-index> <command> [args...] — resolve from subscription
-		if len(rest) > 0 {
-			if node, _, err := c.findNode(args[0]); err == nil {
-				proxyURL := node.URL.String()
-				return c.execPassthrough(ctx, proxyURL, rest)
+	if strings.Contains(args[0], "://") {
+		result, err = c.execPassthrough(ctx, args[0], rest)
+	} else {
+		switch subcmd {
+		case "auto":
+			result, err = c.execAuto(ctx, rest)
+		case "subscribe", "sub":
+			result, err = c.execSubscribe(ctx, rest)
+		case "list", "ls":
+			result, err = c.execList()
+		case "switch", "sw":
+			result, err = c.execSwitch(rest)
+		case "test":
+			result, err = c.execTest(ctx, rest)
+		case "current":
+			result, err = c.execCurrent()
+		case "clear":
+			result, err = c.execClear()
+		default:
+			if len(rest) > 0 {
+				if node, _, findErr := c.findNode(args[0]); findErr == nil {
+					result, err = c.execPassthrough(ctx, node.URL.String(), rest)
+				} else {
+					return fmt.Errorf("unknown proxy subcommand: %s\n%s", subcmd, c.Usage())
+				}
+			} else {
+				return fmt.Errorf("unknown proxy subcommand: %s\n%s", subcmd, c.Usage())
 			}
 		}
-		return "", fmt.Errorf("unknown proxy subcommand: %s\n%s", subcmd, c.Usage())
 	}
+	if result != "" {
+		_, _ = io.WriteString(w, result)
+	}
+	return err
 }
 
 // execPassthrough runs a command with a one-shot proxy override.

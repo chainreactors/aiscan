@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -49,10 +50,12 @@ func testSeeds(events ...event) []pipeline.Event {
 
 func TestScanRunsWithOnlySprayStage(t *testing.T) {
 	cmd := New(&engine.Set{Spray: spray.NewEngine(nil)})
-	out, err := cmd.Execute(context.Background(), []string{"-i", "http://127.0.0.1:1", "--mode", "quick", "--timeout", "1"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"-i", "http://127.0.0.1:1", "--mode", "quick", "--timeout", "1"}, &buf)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+	out := buf.String()
 	if !strings.Contains(out, "[summary] completed") {
 		t.Fatalf("output missing summary: %q", out)
 	}
@@ -163,12 +166,12 @@ func TestScanUsageHidesDeprecatedAliases(t *testing.T) {
 
 func TestScanAcceptsDeprecatedCompatibilityFlags(t *testing.T) {
 	cmd := New(&engine.Set{})
-	_, err := cmd.Execute(context.Background(), []string{
+	err := cmd.Execute(context.Background(), []string{
 		"-i", "http://127.0.0.1",
 		"--verify-timeout", "1",
 		"--port", "top100",
 		"--no-color",
-	})
+	}, io.Discard)
 	if err != nil {
 		t.Fatalf("Execute() with deprecated compatibility flags error = %v", err)
 	}
@@ -856,11 +859,11 @@ func TestScanPipelineDispatchesHighPriorityFindingToAgentVerifier(t *testing.T) 
 
 func TestAgentVerifyCapabilityAcceptsFocusFingerprint(t *testing.T) {
 	var promptSeen string
-	agentFn := func(_ context.Context, prompt, systemPrompt, model string, maxTokens int) (*AgentRunResult, error) {
+	agentFn := func(_ context.Context, prompt string) (*agentRunResult, error) {
 		promptSeen = prompt
-		return &AgentRunResult{
-			Raw: `not_confirmed`,
-			Checkpoint: &command.CheckpointResult{
+		return &agentRunResult{
+			raw: `not_confirmed`,
+			checkpoint: &command.CheckpointResult{
 				Kind:    "verify",
 				Title:   "focus fingerprint requires vulnerability-specific evidence",
 				Content: "safe validation should check exact version",
@@ -869,7 +872,7 @@ func TestAgentVerifyCapabilityAcceptsFocusFingerprint(t *testing.T) {
 			},
 		}, nil
 	}
-	cmd := New(&engine.Set{}, WithAgentFunc(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
+	cmd := New(&engine.Set{}, withTestAgent(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
 	verifySkill := scanAISkills[0]
 	cap := buildAISkillCap(cmd, verifySkill)
 	coll := newCollector([]string{"seed"}, nil, false, false)
@@ -885,14 +888,11 @@ func TestAgentVerifyCapabilityAcceptsFocusFingerprint(t *testing.T) {
 
 func TestAgentVerifyCapabilityUsesProviderAndEmitsVerification(t *testing.T) {
 	var calls int
-	agentFn := func(_ context.Context, prompt, systemPrompt, model string, maxTokens int) (*AgentRunResult, error) {
+	agentFn := func(_ context.Context, prompt string) (*agentRunResult, error) {
 		calls++
-		if model != "test-model" {
-			t.Fatalf("model = %q, want test-model", model)
-		}
-		return &AgentRunResult{
-			Raw: `confirmed`,
-			Checkpoint: &command.CheckpointResult{
+		return &agentRunResult{
+			raw: `confirmed`,
+			checkpoint: &command.CheckpointResult{
 				Kind:    "verify",
 				Title:   "direct evidence supports the vulnerability",
 				Content: "template matched",
@@ -901,7 +901,7 @@ func TestAgentVerifyCapabilityUsesProviderAndEmitsVerification(t *testing.T) {
 			},
 		}, nil
 	}
-	cmd := New(&engine.Set{}, WithAgentFunc(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
+	cmd := New(&engine.Set{}, withTestAgent(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
 	verifySkill := scanAISkills[0]
 	cap := buildAISkillCap(cmd, verifySkill)
 	coll := newCollector([]string{"seed"}, nil, false, false)
@@ -926,10 +926,10 @@ func TestAgentVerifyCapabilityUsesProviderAndEmitsVerification(t *testing.T) {
 }
 
 func TestAISkillFailureIsStructured(t *testing.T) {
-	agentFn := func(_ context.Context, prompt, systemPrompt, model string, maxTokens int) (*AgentRunResult, error) {
+	agentFn := func(_ context.Context, prompt string) (*agentRunResult, error) {
 		return nil, errors.New("API error (402): Insufficient Balance")
 	}
-	cmd := New(&engine.Set{}, WithAgentFunc(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
+	cmd := New(&engine.Set{}, withTestAgent(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
 	deepSkill := scanAISkills[2]
 	cap := buildAISkillCap(cmd, deepSkill)
 	coll := newCollector([]string{"seed"}, nil, false, false)
@@ -1038,11 +1038,11 @@ func TestDeepAISkillAcceptsWebAndFingerprintAssets(t *testing.T) {
 
 func TestDeepAISkillRunsFingerprintAssessment(t *testing.T) {
 	var promptSeen string
-	agentFn := func(_ context.Context, prompt, systemPrompt, model string, maxTokens int) (*AgentRunResult, error) {
+	agentFn := func(_ context.Context, prompt string) (*agentRunResult, error) {
 		promptSeen = prompt
-		return &AgentRunResult{
-			Raw: `info`,
-			Checkpoint: &command.CheckpointResult{
+		return &agentRunResult{
+			raw: `info`,
+			checkpoint: &command.CheckpointResult{
 				Kind:    "deep",
 				Title:   "SMB fingerprint requires review",
 				Content: "SMB exposure is meaningful but not proof of exploitability.",
@@ -1050,7 +1050,7 @@ func TestDeepAISkillRunsFingerprintAssessment(t *testing.T) {
 			},
 		}, nil
 	}
-	cmd := New(&engine.Set{}, WithAgentFunc(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
+	cmd := New(&engine.Set{}, withTestAgent(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
 	deepSkill := scanAISkills[2]
 	cap := buildAISkillCap(cmd, deepSkill)
 	coll := newCollector([]string{"seed"}, nil, false, false)
@@ -1075,10 +1075,10 @@ func TestDeepAISkillRunsFingerprintAssessment(t *testing.T) {
 }
 
 func TestDeepAISkillEmitsResponseWhenCheckpointMissing(t *testing.T) {
-	agentFn := func(_ context.Context, prompt, systemPrompt, model string, maxTokens int) (*AgentRunResult, error) {
-		return &AgentRunResult{
-			Raw: "I inspected the browser evidence, but did not submit checkpoint.",
-			Checkpoint: &command.CheckpointResult{
+	agentFn := func(_ context.Context, prompt string) (*agentRunResult, error) {
+		return &agentRunResult{
+			raw: "I inspected the browser evidence, but did not submit checkpoint.",
+			checkpoint: &command.CheckpointResult{
 				Title:  "agent did not submit checkpoint",
 				Status: "inconclusive",
 			},
@@ -1089,7 +1089,7 @@ func TestDeepAISkillEmitsResponseWhenCheckpointMissing(t *testing.T) {
 	}
 
 	cmd := New(&engine.Set{},
-		WithAgentFunc(agentFn),
+		withTestAgent(agentFn),
 		WithDeepBrowserFunc(browserFn),
 		WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}),
 	)
@@ -1125,13 +1125,11 @@ func capabilityNames(caps []pipeline.Capability) map[string]bool {
 
 func TestAgentVerifyCapabilityUsesFallbackPromptWhenSkillBodyMissing(t *testing.T) {
 	var calls int
-	var systemPromptSeen string
-	agentFn := func(_ context.Context, prompt, systemPrompt, model string, maxTokens int) (*AgentRunResult, error) {
+	agentFn := func(_ context.Context, prompt string) (*agentRunResult, error) {
 		calls++
-		systemPromptSeen = systemPrompt
-		return &AgentRunResult{
-			Raw: `not_confirmed`,
-			Checkpoint: &command.CheckpointResult{
+		return &agentRunResult{
+			raw: `not_confirmed`,
+			checkpoint: &command.CheckpointResult{
 				Kind:    "verify",
 				Title:   "no exploit evidence",
 				Content: "403",
@@ -1140,7 +1138,7 @@ func TestAgentVerifyCapabilityUsesFallbackPromptWhenSkillBodyMissing(t *testing.
 			},
 		}, nil
 	}
-	cmd := New(&engine.Set{}, WithAgentFunc(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
+	cmd := New(&engine.Set{}, withTestAgent(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
 	verifySkill := scanAISkills[0]
 	cap := buildAISkillCap(cmd, verifySkill)
 	coll := newCollector([]string{"seed"}, nil, false, false)
@@ -1151,9 +1149,6 @@ func TestAgentVerifyCapabilityUsesFallbackPromptWhenSkillBodyMissing(t *testing.
 
 	if calls != 1 {
 		t.Fatalf("verify calls = %d, want 1", calls)
-	}
-	if systemPromptSeen != "" {
-		t.Fatalf("system prompt = %q, want empty so app-level fallback can apply", systemPromptSeen)
 	}
 }
 
@@ -1910,12 +1905,12 @@ func TestScanAggregatesAIAsAssetItems(t *testing.T) {
 func TestScanFormatFileWritesAssetReportWithoutAI(t *testing.T) {
 	cmd := New(&engine.Set{})
 	file := filepath.Join(t.TempDir(), "assets.txt")
-	_, err := cmd.Execute(context.Background(), []string{
+	err := cmd.Execute(context.Background(), []string{
 		"-i", "http://127.0.0.1:1",
 		"--mode", "quick",
 		"--verify=off",
 		"-F", file,
-	})
+	}, io.Discard)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -1942,9 +1937,9 @@ func TestScanOutputFileWritesPlainTextWithoutChangingStdout(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "scan.txt")
 	var stream bytes.Buffer
 
-	out, err := cmd.ExecuteStreaming(context.Background(), []string{"-i", "http://127.0.0.1:1", "--mode", "quick", "--timeout", "1", "-f", file}, &stream)
+	out, _, err := cmd.ExecuteStructured(context.Background(), []string{"-i", "http://127.0.0.1:1", "--mode", "quick", "--timeout", "1", "-f", file}, &stream)
 	if err != nil {
-		t.Fatalf("ExecuteStreaming() error = %v", err)
+		t.Fatalf("ExecuteStructured() error = %v", err)
 	}
 	data, err := os.ReadFile(file)
 	if err != nil {
@@ -2034,7 +2029,7 @@ func TestGenerateAIReportUsesAnnotatedMarkdown(t *testing.T) {
 	coll.Finish()
 
 	var promptSeen string
-	cmd := New(&engine.Set{}, WithReportFunc(func(_ context.Context, prompt, systemPrompt, model string, maxTokens int) (string, error) {
+	cmd := New(&engine.Set{}, withTestReport(func(_ context.Context, prompt string) (string, error) {
 		promptSeen = prompt
 		return "report body", nil
 	}))
@@ -2066,4 +2061,12 @@ func TestReportMarkdownMarksInconclusiveVerification(t *testing.T) {
 	if !strings.Contains(report, "**[inconclusive]** [vuln] http://127.0.0.1 CVE-lead high") {
 		t.Fatalf("report missing inconclusive annotation:\n%s", report)
 	}
+}
+
+func withTestAgent(fn func(context.Context, string) (*agentRunResult, error)) Option {
+	return func(c *Command) { c.testAgent = fn }
+}
+
+func withTestReport(fn func(context.Context, string) (string, error)) Option {
+	return func(c *Command) { c.testReport = fn }
 }

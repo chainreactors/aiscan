@@ -17,10 +17,12 @@ import (
 func TestCyberhubSearchesFingerprints(t *testing.T) {
 	cmd := newTestSearchCommand()
 
-	out, err := cmd.Execute(context.Background(), []string{"cyberhub", "search", "finger", "nginx"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"cyberhub", "search", "finger", "nginx"}, &buf)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+	out := buf.String()
 	if !strings.Contains(out, "[cyberhub] finger nginx http focus active 1") {
 		t.Fatalf("output missing nginx fingerprint: %q", out)
 	}
@@ -35,10 +37,12 @@ func TestCyberhubSearchesFingerprints(t *testing.T) {
 func TestCyberhubListsPOCsWithFilters(t *testing.T) {
 	cmd := newTestSearchCommand()
 
-	out, err := cmd.Execute(context.Background(), []string{"cyberhub", "list", "poc", "--severity", "critical,high", "--finger", "spring", "--limit", "0"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"cyberhub", "list", "poc", "--severity", "critical,high", "--finger", "spring", "--limit", "0"}, &buf)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+	out := buf.String()
 	if !strings.Contains(out, "spring-rce critical spring") {
 		t.Fatalf("output missing spring poc: %q", out)
 	}
@@ -50,10 +54,12 @@ func TestCyberhubListsPOCsWithFilters(t *testing.T) {
 func TestCyberhubSearchJSONLines(t *testing.T) {
 	cmd := newTestSearchCommand()
 
-	out, err := cmd.Execute(context.Background(), []string{"cyberhub", "search", "poc", "spring", "--json"})
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"cyberhub", "search", "poc", "spring", "--json"}, &buf)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+	out := buf.String()
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) != 1 {
 		t.Fatalf("lines = %d, want 1: %q", len(lines), out)

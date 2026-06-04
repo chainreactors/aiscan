@@ -5,6 +5,7 @@ package playwright
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -197,7 +198,7 @@ func TestParseOpenOpts_DefaultIsPersistent(t *testing.T) {
 
 func TestExecute_NoSubcommand(t *testing.T) {
 	cmd := New(t.TempDir())
-	_, err := cmd.Execute(context.Background(), nil)
+	err := cmd.Execute(context.Background(), nil, io.Discard)
 	if err == nil {
 		t.Fatal("expected error for no subcommand")
 	}
@@ -208,7 +209,7 @@ func TestExecute_NoSubcommand(t *testing.T) {
 
 func TestExecute_UnknownSubcommand(t *testing.T) {
 	cmd := New(t.TempDir())
-	_, err := cmd.Execute(context.Background(), []string{"bogus"})
+	err := cmd.Execute(context.Background(), []string{"bogus"}, io.Discard)
 	if err == nil {
 		t.Fatal("expected error for unknown subcommand")
 	}
@@ -277,6 +278,23 @@ func newTestServer(handler http.HandlerFunc) *httptest.Server {
 	return httptest.NewServer(handler)
 }
 
+// execString is a test helper that runs cmd.Execute and returns the output as a string.
+func execString(t *testing.T, cmd *Command, ctx context.Context, args []string) string {
+	t.Helper()
+	var buf strings.Builder
+	if err := cmd.Execute(ctx, args, &buf); err != nil {
+		t.Fatalf("Execute(%v) error = %v", args, err)
+	}
+	return buf.String()
+}
+
+// execStringErr is a test helper that runs cmd.Execute and returns (output, error).
+func execStringErr(cmd *Command, ctx context.Context, args []string) (string, error) {
+	var buf strings.Builder
+	err := cmd.Execute(ctx, args, &buf)
+	return buf.String(), err
+}
+
 func TestIntegration_Navigate(t *testing.T) {
 	skipIfNoBrowser(t)
 
@@ -293,10 +311,7 @@ func TestIntegration_Navigate(t *testing.T) {
 	cmd := New(t.TempDir())
 	defer cmd.Close()
 
-	out, err := cmd.Execute(context.Background(), []string{"navigate", srv.URL})
-	if err != nil {
-		t.Fatalf("navigate failed: %v", err)
-	}
+	out := execString(t, cmd, context.Background(), []string{"navigate", srv.URL})
 	if !strings.Contains(out, "JS rendered content") {
 		t.Fatalf("expected JS-rendered content in output, got:\n%s", out)
 	}
@@ -315,12 +330,9 @@ func TestIntegration_Screenshot(t *testing.T) {
 	cmd := New(workDir)
 	defer cmd.Close()
 
-	out, err := cmd.Execute(context.Background(), []string{
+	out := execString(t, cmd, context.Background(), []string{
 		"screenshot", srv.URL, "--output", "test.png",
 	})
-	if err != nil {
-		t.Fatalf("screenshot failed: %v", err)
-	}
 	if !strings.Contains(out, "test.png") {
 		t.Fatalf("expected output to mention test.png, got:\n%s", out)
 	}
@@ -349,10 +361,7 @@ func TestIntegration_Content(t *testing.T) {
 	cmd := New(t.TempDir())
 	defer cmd.Close()
 
-	out, err := cmd.Execute(context.Background(), []string{"content", srv.URL})
-	if err != nil {
-		t.Fatalf("content failed: %v", err)
-	}
+	out := execString(t, cmd, context.Background(), []string{"content", srv.URL})
 	if !strings.Contains(out, "dynamic") || !strings.Contains(out, "injected") {
 		t.Fatalf("expected JS-injected element in HTML, got:\n%s", out)
 	}
@@ -370,10 +379,7 @@ func TestIntegration_Eval(t *testing.T) {
 	cmd := New(t.TempDir())
 	defer cmd.Close()
 
-	out, err := cmd.Execute(context.Background(), []string{"eval", srv.URL, "document.title"})
-	if err != nil {
-		t.Fatalf("eval failed: %v", err)
-	}
+	out := execString(t, cmd, context.Background(), []string{"eval", srv.URL, "document.title"})
 	if !strings.Contains(out, "Test Page") {
 		t.Fatalf("expected 'Test Page' in eval result, got:\n%s", out)
 	}
@@ -398,10 +404,7 @@ func TestIntegration_Network(t *testing.T) {
 	cmd := New(t.TempDir())
 	defer cmd.Close()
 
-	out, err := cmd.Execute(context.Background(), []string{"network", srv.URL, "--timeout", "10"})
-	if err != nil {
-		t.Fatalf("network failed: %v", err)
-	}
+	out := execString(t, cmd, context.Background(), []string{"network", srv.URL, "--timeout", "10"})
 	// At minimum, the page itself should be captured.
 	if !strings.Contains(out, "Captured:") {
 		t.Fatalf("expected network capture output, got:\n%s", out)
@@ -427,12 +430,9 @@ func TestIntegration_PDF(t *testing.T) {
 	cmd := New(workDir)
 	defer cmd.Close()
 
-	out, err := cmd.Execute(context.Background(), []string{
+	out := execString(t, cmd, context.Background(), []string{
 		"pdf", srv.URL, "--output", "test.pdf",
 	})
-	if err != nil {
-		t.Fatalf("pdf failed: %v", err)
-	}
 	if !strings.Contains(out, "test.pdf") {
 		t.Fatalf("expected output to mention test.pdf, got:\n%s", out)
 	}
@@ -460,16 +460,10 @@ func TestIntegration_BrowserReuse(t *testing.T) {
 	defer cmd.Close()
 
 	// First call launches browser.
-	_, err := cmd.Execute(context.Background(), []string{"navigate", srv.URL})
-	if err != nil {
-		t.Fatalf("first navigate failed: %v", err)
-	}
+	execString(t, cmd, context.Background(), []string{"navigate", srv.URL})
 
 	// Second call should reuse the same browser.
-	_, err = cmd.Execute(context.Background(), []string{"navigate", srv.URL})
-	if err != nil {
-		t.Fatalf("second navigate failed: %v", err)
-	}
+	execString(t, cmd, context.Background(), []string{"navigate", srv.URL})
 }
 
 func TestIntegration_UnifiedSessionCommands(t *testing.T) {
@@ -497,46 +491,29 @@ func TestIntegration_UnifiedSessionCommands(t *testing.T) {
 	cmd := New(workDir)
 	defer cmd.Close()
 
-	if _, err := cmd.Execute(context.Background(), []string{"open", srv.URL, "--session", "s1", "--timeout", "10"}); err != nil {
-		t.Fatalf("open failed: %v", err)
-	}
+	execString(t, cmd, context.Background(), []string{"open", srv.URL, "--session", "s1", "--timeout", "10"})
 
-	out, err := cmd.Execute(context.Background(), []string{"navigate", "s1", "xpath://*[@id='app']"})
-	if err != nil {
-		t.Fatalf("session navigate failed: %v", err)
-	}
+	out := execString(t, cmd, context.Background(), []string{"navigate", "s1", "xpath://*[@id='app']"})
 	if !strings.Contains(out, "Session text") {
 		t.Fatalf("expected session text, got:\n%s", out)
 	}
 
-	out, err = cmd.Execute(context.Background(), []string{"text", "s1", "#app"})
-	if err != nil {
-		t.Fatalf("session text alias failed: %v", err)
-	}
+	out = execString(t, cmd, context.Background(), []string{"text", "s1", "#app"})
 	if !strings.Contains(out, "Session text") {
 		t.Fatalf("expected session text via alias, got:\n%s", out)
 	}
 
-	out, err = cmd.Execute(context.Background(), []string{"content", "s1", "#app"})
-	if err != nil {
-		t.Fatalf("session content failed: %v", err)
-	}
+	out = execString(t, cmd, context.Background(), []string{"content", "s1", "#app"})
 	if !strings.Contains(out, `id="app"`) {
 		t.Fatalf("expected selected HTML, got:\n%s", out)
 	}
 
-	out, err = cmd.Execute(context.Background(), []string{"eval", "s1", "document.title"})
-	if err != nil {
-		t.Fatalf("session eval failed: %v", err)
-	}
+	out = execString(t, cmd, context.Background(), []string{"eval", "s1", "document.title"})
 	if !strings.Contains(out, "Session Page") {
 		t.Fatalf("expected title in eval result, got:\n%s", out)
 	}
 
-	out, err = cmd.Execute(context.Background(), []string{"screenshot", "s1", "--selector", "#app", "--output", "session.png"})
-	if err != nil {
-		t.Fatalf("session screenshot failed: %v", err)
-	}
+	out = execString(t, cmd, context.Background(), []string{"screenshot", "s1", "--selector", "#app", "--output", "session.png"})
 	if !strings.Contains(out, "session.png") {
 		t.Fatalf("expected screenshot output path, got:\n%s", out)
 	}
@@ -544,35 +521,19 @@ func TestIntegration_UnifiedSessionCommands(t *testing.T) {
 		t.Fatalf("session screenshot missing or empty: info=%v err=%v", info, err)
 	}
 
-	if _, err := cmd.Execute(context.Background(), []string{"network", "s1", "--start"}); err != nil {
-		t.Fatalf("session network start failed: %v", err)
-	}
+	execString(t, cmd, context.Background(), []string{"network", "s1", "--start"})
 	time.Sleep(100 * time.Millisecond)
-	if _, err := cmd.Execute(context.Background(), []string{"click", "s1", "#fetcher"}); err != nil {
-		t.Fatalf("session click failed: %v", err)
-	}
-	_, _ = cmd.Execute(context.Background(), []string{"wait", "s1", "--idle"})
-	out, err = cmd.Execute(context.Background(), []string{"network", "s1", "--dump"})
-	if err != nil {
-		t.Fatalf("session network dump failed: %v", err)
-	}
+	execString(t, cmd, context.Background(), []string{"click", "s1", "#fetcher"})
+	_, _ = execStringErr(cmd, context.Background(), []string{"wait", "s1", "--idle"})
+	out = execString(t, cmd, context.Background(), []string{"network", "s1", "--dump"})
 	if !strings.Contains(out, "/api/data") {
 		t.Fatalf("expected captured API request, got:\n%s", out)
 	}
-	if _, err := cmd.Execute(context.Background(), []string{"network", "s1", "--stop"}); err != nil {
-		t.Fatalf("session network stop failed: %v", err)
-	}
+	execString(t, cmd, context.Background(), []string{"network", "s1", "--stop"})
 
-	if _, err := cmd.Execute(context.Background(), []string{"dialog", "s1", "--arm"}); err != nil {
-		t.Fatalf("dialog arm failed: %v", err)
-	}
-	if _, err := cmd.Execute(context.Background(), []string{"eval", "s1", "alert('aiscan_dialog_canary')"}); err != nil {
-		t.Fatalf("dialog eval failed: %v", err)
-	}
-	out, err = cmd.Execute(context.Background(), []string{"dialog", "s1", "--check"})
-	if err != nil {
-		t.Fatalf("dialog check failed: %v", err)
-	}
+	execString(t, cmd, context.Background(), []string{"dialog", "s1", "--arm"})
+	execString(t, cmd, context.Background(), []string{"eval", "s1", "alert('aiscan_dialog_canary')"})
+	out = execString(t, cmd, context.Background(), []string{"dialog", "s1", "--check"})
 	if !strings.Contains(out, "aiscan_dialog_canary") {
 		t.Fatalf("expected captured dialog, got:\n%s", out)
 	}
@@ -605,14 +566,9 @@ func TestIntegration_DiscoverKatanaHooks(t *testing.T) {
 	cmd := New(t.TempDir())
 	defer cmd.Close()
 
-	if _, err := cmd.Execute(context.Background(), []string{"open", srv.URL, "--session", "hooks", "--timeout", "10"}); err != nil {
-		t.Fatalf("open failed: %v", err)
-	}
+	execString(t, cmd, context.Background(), []string{"open", srv.URL, "--session", "hooks", "--timeout", "10"})
 
-	out, err := cmd.Execute(context.Background(), []string{"discover", "hooks"})
-	if err != nil {
-		t.Fatalf("discover failed: %v", err)
-	}
+	out := execString(t, cmd, context.Background(), []string{"discover", "hooks"})
 	for _, want := range []string{
 		"Event Listeners",
 		"click on <button>",
@@ -639,23 +595,16 @@ func TestIntegration_NoSpeedUpDisablesTimerAcceleration(t *testing.T) {
 	cmd := New(t.TempDir())
 	defer cmd.Close()
 
-	if _, err := cmd.Execute(context.Background(), []string{"open", srv.URL, "--session", "fast", "--timeout", "10"}); err != nil {
-		t.Fatalf("open fast failed: %v", err)
-	}
-	if _, err := cmd.Execute(context.Background(), []string{"open", srv.URL, "--session", "native", "--timeout", "10", "--no-speed-up"}); err != nil {
-		t.Fatalf("open native failed: %v", err)
-	}
+	execString(t, cmd, context.Background(), []string{"open", srv.URL, "--session", "fast", "--timeout", "10"})
+	execString(t, cmd, context.Background(), []string{"open", srv.URL, "--session", "native", "--timeout", "10", "--no-speed-up"})
 
 	measure := func(session string) time.Duration {
 		t.Helper()
 		start := time.Now()
-		_, err := cmd.Execute(context.Background(), []string{
+		execString(t, cmd, context.Background(), []string{
 			"evaluate", session,
 			"new Promise(resolve => setTimeout(() => resolve('done'), 300))",
 		})
-		if err != nil {
-			t.Fatalf("timer eval %s failed: %v", session, err)
-		}
 		return time.Since(start)
 	}
 

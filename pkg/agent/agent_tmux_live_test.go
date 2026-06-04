@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/command"
 )
 
@@ -48,10 +49,14 @@ func TestLiveLLMTmuxInteraction(t *testing.T) {
 
 	dir := t.TempDir()
 	registry := command.NewRegistry()
-	bash := command.NewBashTool(dir, 60, registry)
+	bash := command.NewBashTool(dir, 60)
+	bash.Manager().SetCommands(func(name string) (tmuxpkg.Command, bool) {
+		return registry.Get(name)
+	})
+	bash.Manager().SetWorkDir(dir)
 	registry.RegisterTool(bash)
-	tmux := command.NewTmuxCommand(bash.Manager(), registry)
-	registry.Register(tmux, "core")
+	tmuxCmd := command.NewTmuxCommand(bash.Manager())
+	registry.Register(tmuxCmd, "core")
 	t.Cleanup(bash.Close)
 
 	systemPrompt := buildTmuxTestPrompt(registry)
@@ -76,7 +81,7 @@ func TestLiveLLMTmuxInteraction(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	result, err := (Config{
+	result, err := NewAgent(Config{
 		Provider:     llm,
 		Tools:        registry,
 		Model:        model,

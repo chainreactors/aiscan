@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -11,8 +12,8 @@ import (
 	ioaclient "github.com/chainreactors/ioa/client"
 )
 
-func NewCommands(client ioaclient.API, nodeName string, meta map[string]any) []command.PseudoCommand {
-	var cmds []command.PseudoCommand
+func NewCommands(client ioaclient.API, nodeName string, meta map[string]any) []command.Command {
+	var cmds []command.Command
 	for _, t := range ioaclient.NewTools(client, ioaclient.ToolOptions{NodeName: nodeName, NodeMeta: meta}) {
 		cmds = append(cmds, &toolAdapter{tool: t, descOverride: toolDescOverrides[t.Name()]})
 	}
@@ -80,12 +81,16 @@ func (a *toolAdapter) Usage() string {
 	return sb.String()
 }
 
-func (a *toolAdapter) Execute(ctx context.Context, args []string) (string, error) {
+func (a *toolAdapter) Execute(ctx context.Context, args []string, w io.Writer) error {
 	jsonArgs, err := argsToJSON(args)
 	if err != nil {
-		return "", fmt.Errorf("%s: %w\n\n%s", a.tool.Name(), err, a.Usage())
+		return fmt.Errorf("%s: %w\n\n%s", a.tool.Name(), err, a.Usage())
 	}
-	return a.tool.Execute(ctx, jsonArgs)
+	result, execErr := a.tool.Execute(ctx, jsonArgs)
+	if result != "" {
+		_, _ = io.WriteString(w, result)
+	}
+	return execErr
 }
 
 func argsToJSON(args []string) (string, error) {

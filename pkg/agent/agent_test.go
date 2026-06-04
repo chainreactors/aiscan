@@ -12,7 +12,6 @@ import (
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
-	"github.com/chainreactors/aiscan/skills"
 )
 
 func TestRunWithoutToolsReturnsFinalText(t *testing.T) {
@@ -23,12 +22,12 @@ func TestRunWithoutToolsReturnsFinalText(t *testing.T) {
 		},
 	}
 
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider:     llm,
 		Tools:        tools,
 		Model:        "test",
 		SystemPrompt: "system",
-	}).Run(context.Background(), "hello")
+	})).Run(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -41,42 +40,6 @@ func TestRunWithoutToolsReturnsFinalText(t *testing.T) {
 	}
 	if requests[0].Messages[0].Role != "system" || *requests[0].Messages[0].Content != "system" {
 		t.Fatalf("system message not injected: %#v", requests[0].Messages)
-	}
-}
-
-func TestBuildSystemPromptIncludesSkills(t *testing.T) {
-	tools := command.NewRegistry()
-	tools.RegisterTool(&recordingTool{name: "read", output: "unused"})
-	loaded, diagnostics := skills.LoadEmbedded()
-	if len(diagnostics) != 0 {
-		t.Fatalf("diagnostics = %#v", diagnostics)
-	}
-
-	prompt := BuildSystemPrompt(&PromptConfig{
-		Tools:  tools,
-		Skills: loaded,
-	})
-	for _, want := range []string{
-		"## Available Skills",
-		"<available_skills>",
-		"<name>aiscan</name>",
-		"aiscan://skills/aiscan/SKILL.md",
-	} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("prompt missing %q:\n%s", want, prompt)
-		}
-	}
-	for _, internal := range []string{"scan", "gogo", "spray", "katana", "fuzz", "zombie", "neutron"} {
-		if strings.Contains(prompt, "<name>"+internal+"</name>") {
-			t.Fatalf("prompt includes internal skill %q:\n%s", internal, prompt)
-		}
-	}
-}
-
-func TestBuildSystemPromptAllowsNilConfig(t *testing.T) {
-	prompt := BuildSystemPrompt(nil)
-	if !strings.Contains(prompt, "## Available Tools") {
-		t.Fatalf("prompt missing tools section:\n%s", prompt)
 	}
 }
 
@@ -106,12 +69,12 @@ func TestRunExecutesToolLoop(t *testing.T) {
 		events = append(events, event.Type)
 		return nil
 	}
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
 		Emit:     emit,
-	}).Run(context.Background(), "use tool")
+	})).Run(context.Background(), "use tool")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -154,7 +117,7 @@ func TestRunEmitsTurnEndAfterToolResults(t *testing.T) {
 	}
 
 	var events []EventType
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
@@ -162,7 +125,7 @@ func TestRunEmitsTurnEndAfterToolResults(t *testing.T) {
 			events = append(events, event.Type)
 			return nil
 		},
-	}).Run(context.Background(), "use tool")
+	})).Run(context.Background(), "use tool")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -196,7 +159,7 @@ func TestRunEmitsTurnEndAfterToolResults(t *testing.T) {
 func TestContinueRequiresNonAssistantLastMessage(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{}
-	a := New(llm, tools, Config{Model: "test"})
+	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test"})
 
 	if _, err := a.Continue(context.Background()); err == nil || !strings.Contains(err.Error(), "no messages") {
 		t.Fatalf("Continue() error = %v, want no messages", err)
@@ -216,11 +179,11 @@ func TestAgentReusesConversationAcrossPrompts(t *testing.T) {
 			chatResponse(provider.NewTextMessage("assistant", "second")),
 		},
 	}
-	a := New(llm, tools, Config{Model: "test"})
-	if _, err := a.Prompt(context.Background(), "one"); err != nil {
+	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test"})
+	if _, err := a.Run(context.Background(), "one"); err != nil {
 		t.Fatalf("first prompt error = %v", err)
 	}
-	if _, err := a.Prompt(context.Background(), "two"); err != nil {
+	if _, err := a.Run(context.Background(), "two"); err != nil {
 		t.Fatalf("second prompt error = %v", err)
 	}
 	requests := llm.requestsSnapshot()
@@ -242,9 +205,9 @@ func TestAgentPromptReturnsRunScopedNewMessages(t *testing.T) {
 			chatResponse(provider.NewTextMessage("assistant", "next")),
 		},
 	}
-	ag := New(llm, tools, Config{Model: "test"})
+	ag := NewAgent(Config{Provider: llm, Tools: tools, Model: "test"})
 	ag.state.Messages = []provider.ChatMessage{provider.NewTextMessage("user", "base")}
-	result, err := ag.Prompt(context.Background(), "prompt")
+	result, err := ag.Run(context.Background(), "prompt")
 	if err != nil {
 		t.Fatalf("Prompt() error = %v", err)
 	}
@@ -264,8 +227,10 @@ func TestTransformContextAppliesOnlyToProviderRequest(t *testing.T) {
 			chatResponse(provider.NewTextMessage("assistant", "two")),
 		},
 	}
-	a := New(llm, tools, Config{
-		Model: "test",
+	a := NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
 		TransformContext: func(messages []provider.ChatMessage) []provider.ChatMessage {
 			if len(messages) <= 1 {
 				return messages
@@ -273,17 +238,17 @@ func TestTransformContextAppliesOnlyToProviderRequest(t *testing.T) {
 			return messages[len(messages)-1:]
 		},
 	})
-	if _, err := a.Prompt(context.Background(), "one"); err != nil {
+	if _, err := a.Run(context.Background(), "one"); err != nil {
 		t.Fatalf("first prompt error = %v", err)
 	}
-	if _, err := a.Prompt(context.Background(), "two"); err != nil {
+	if _, err := a.Run(context.Background(), "two"); err != nil {
 		t.Fatalf("second prompt error = %v", err)
 	}
 	requests := llm.requestsSnapshot()
 	if len(requests[1].Messages) != 1 || *requests[1].Messages[0].Content != "two" {
 		t.Fatalf("transform not applied to request: %#v", requests[1].Messages)
 	}
-	if got := len(a.State().Messages); got != 4 {
+	if got := len(a.state.Messages); got != 4 {
 		t.Fatalf("agent state messages = %d, want 4", got)
 	}
 }
@@ -291,15 +256,18 @@ func TestTransformContextAppliesOnlyToProviderRequest(t *testing.T) {
 func TestProviderErrorEmitsAgentEndAndUpdatesState(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{err: fmt.Errorf("boom")}
-	a := New(llm, tools, Config{Model: "test"})
-
 	var events []Event
-	a.Subscribe(func(_ context.Context, event Event) error {
-		events = append(events, event)
-		return nil
+	a := NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+		Emit: func(_ context.Context, event Event) error {
+			events = append(events, event)
+			return nil
+		},
 	})
 
-	result, err := a.Prompt(context.Background(), "hello")
+	result, err := a.Run(context.Background(), "hello")
 	if err == nil {
 		t.Fatal("Prompt() error = nil, want error")
 	}
@@ -324,16 +292,15 @@ func TestProviderErrorEmitsAgentEndAndUpdatesState(t *testing.T) {
 	if len(events) == 0 || events[len(events)-1].Type != EventAgentEnd || events[len(events)-1].Err == nil {
 		t.Fatalf("last event = %#v, want agent_end with error", lastEvent(events))
 	}
-	state := a.State()
-	if state.IsRunning {
-		t.Fatal("state.IsRunning = true, want false")
+	if a.running {
+		t.Fatal("running = true, want false")
 	}
-	if !strings.Contains(state.ErrorMessage, "boom") {
-		t.Fatalf("state.ErrorMessage = %q, want boom", state.ErrorMessage)
+	if !strings.Contains(a.state.ErrorMessage, "boom") {
+		t.Fatalf("state.ErrorMessage = %q, want boom", a.state.ErrorMessage)
 	}
 }
 
-func TestShouldStopAfterTurnStopsBeforeNextModelCall(t *testing.T) {
+func TestMaxTurnsStopsBeforeNextModelCall(t *testing.T) {
 	tools := command.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
 	llm := &scriptedProvider{
@@ -353,21 +320,14 @@ func TestShouldStopAfterTurnStopsBeforeNextModelCall(t *testing.T) {
 		},
 	}
 
-	var sawToolResults bool
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
-		ShouldStopAfterTurn: func(_ context.Context, ctx ShouldStopAfterTurnContext) (bool, error) {
-			sawToolResults = len(ctx.ToolResults) == 1 && hasToolMessage(ctx.Messages, "call-1", "tool output")
-			return true, nil
-		},
-	}).Run(context.Background(), "use tool")
+		MaxTurns: 1,
+	})).Run(context.Background(), "use tool")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
-	}
-	if !sawToolResults {
-		t.Fatal("shouldStopAfterTurn did not receive completed turn context")
 	}
 	if result.Turns != 1 {
 		t.Fatalf("turns = %d, want 1", result.Turns)
@@ -388,7 +348,7 @@ func TestStreamingProviderEmitsMessageUpdates(t *testing.T) {
 		},
 	}
 	var updates int
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
@@ -399,7 +359,7 @@ func TestStreamingProviderEmitsMessageUpdates(t *testing.T) {
 			}
 			return nil
 		},
-	}).Run(context.Background(), "stream")
+	})).Run(context.Background(), "stream")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -421,41 +381,40 @@ func TestStatefulAgentTracksStreamingMessage(t *testing.T) {
 			{Done: true},
 		},
 	}
-	a := New(llm, tools, Config{Model: "test", Stream: true})
-
-	sawStreaming := false
-	a.Subscribe(func(_ context.Context, event Event) error {
-		if event.Type == EventMessageUpdate && messageContent(event.Message) != "" {
-			state := a.State()
-			sawStreaming = state.StreamingMessage != nil && strings.Contains(messageContent(*state.StreamingMessage), "hel")
-		}
-		return nil
+	var sawUpdate bool
+	a := NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+		Stream:   true,
+		Emit: func(_ context.Context, event Event) error {
+			if event.Type == EventMessageUpdate && messageContent(event.Message) != "" {
+				sawUpdate = true
+			}
+			return nil
+		},
 	})
 
-	result, err := a.Prompt(context.Background(), "stream")
+	result, err := a.Run(context.Background(), "stream")
 	if err != nil {
 		t.Fatalf("Prompt() error = %v", err)
 	}
 	if result.Output != "hello" {
 		t.Fatalf("output = %q, want hello", result.Output)
 	}
-	if !sawStreaming {
-		t.Fatal("streaming state was not visible during message_update")
-	}
-	state := a.State()
-	if state.StreamingMessage != nil || state.IsRunning {
-		t.Fatalf("state after run = %#v, want idle without streaming message", state)
+	if !sawUpdate {
+		t.Fatal("no message_update event during streaming")
 	}
 }
 
 func TestResetDoesNotAllowConcurrentPrompt(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &blockingProvider{started: make(chan struct{}), release: make(chan struct{})}
-	a := New(llm, tools, Config{Model: "test"})
+	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test"})
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := a.Prompt(context.Background(), "first")
+		_, err := a.Run(context.Background(), "first")
 		done <- err
 	}()
 
@@ -466,66 +425,13 @@ func TestResetDoesNotAllowConcurrentPrompt(t *testing.T) {
 	}
 
 	a.Reset()
-	if _, err := a.Prompt(context.Background(), "second"); err == nil || !strings.Contains(err.Error(), "already running") {
+	if _, err := a.Run(context.Background(), "second"); err == nil || !strings.Contains(err.Error(), "already running") {
 		t.Fatalf("second Prompt() error = %v, want already running", err)
 	}
 
 	close(llm.release)
 	if err := <-done; err != nil {
 		t.Fatalf("first Prompt() error = %v", err)
-	}
-}
-
-func TestWaitForIdleIncludesAgentEndListeners(t *testing.T) {
-	tools := command.NewRegistry()
-	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.NewTextMessage("assistant", "done")),
-		},
-	}
-	a := New(llm, tools, Config{Model: "test"})
-	releaseListener := make(chan struct{})
-	listenerStarted := make(chan struct{})
-	a.Subscribe(func(_ context.Context, event Event) error {
-		if event.Type == EventAgentEnd {
-			close(listenerStarted)
-			<-releaseListener
-		}
-		return nil
-	})
-
-	runDone := make(chan error, 1)
-	go func() {
-		_, err := a.Prompt(context.Background(), "hello")
-		runDone <- err
-	}()
-
-	select {
-	case <-listenerStarted:
-	case <-time.After(time.Second):
-		t.Fatal("agent_end listener did not start")
-	}
-
-	idleDone := make(chan struct{})
-	go func() {
-		a.WaitForIdle()
-		close(idleDone)
-	}()
-
-	select {
-	case <-idleDone:
-		t.Fatal("WaitForIdle returned before agent_end listener settled")
-	case <-time.After(20 * time.Millisecond):
-	}
-
-	close(releaseListener)
-	select {
-	case <-idleDone:
-	case <-time.After(time.Second):
-		t.Fatal("WaitForIdle did not return after listener settled")
-	}
-	if err := <-runDone; err != nil {
-		t.Fatalf("Prompt() error = %v", err)
 	}
 }
 
@@ -559,12 +465,12 @@ func TestStreamingToolCallDeltasAreAggregated(t *testing.T) {
 			},
 		},
 	}
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
 		Stream:   true,
-	}).Run(context.Background(), "stream tool")
+	})).Run(context.Background(), "stream tool")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -598,7 +504,7 @@ func TestToolHooksCanBlockRewriteAndTerminate(t *testing.T) {
 	rewritten := "rewritten result"
 	isError := false
 
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
@@ -608,7 +514,7 @@ func TestToolHooksCanBlockRewriteAndTerminate(t *testing.T) {
 		AfterToolCall: func(context.Context, AfterToolCallContext) (*AfterToolCallResult, error) {
 			return &AfterToolCallResult{Result: &rewritten, IsError: &isError, Flow: ToolFlowTerminate}, nil
 		},
-	}).Run(context.Background(), "use tool")
+	})).Run(context.Background(), "use tool")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -812,12 +718,12 @@ func TestRetryOnTransientError(t *testing.T) {
 		},
 	}
 
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider:   llm,
 		Tools:      tools,
 		Model:      "test",
 		MaxRetries: 2,
-	}).Run(context.Background(), "hello")
+	})).Run(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Run() error = %v, want success after retry", err)
 	}
@@ -839,12 +745,12 @@ func TestNoRetryOnAuthError(t *testing.T) {
 		},
 	}
 
-	_, err := (Config{
+	_, err := (NewAgent(Config{
 		Provider:   llm,
 		Tools:      tools,
 		Model:      "test",
 		MaxRetries: 3,
-	}).Run(context.Background(), "hello")
+	})).Run(context.Background(), "hello")
 	if err == nil {
 		t.Fatal("Run() error = nil, want auth error")
 	}
@@ -863,12 +769,12 @@ func TestRetryExhaustedReturnsLastError(t *testing.T) {
 		},
 	}
 
-	_, err := (Config{
+	_, err := (NewAgent(Config{
 		Provider:   llm,
 		Tools:      tools,
 		Model:      "test",
 		MaxRetries: 2,
-	}).Run(context.Background(), "hello")
+	})).Run(context.Background(), "hello")
 	if err == nil {
 		t.Fatal("Run() error = nil, want error after retries exhausted")
 	}
@@ -923,7 +829,7 @@ func TestTokenBudgetWarning(t *testing.T) {
 	}
 
 	var sawWarning bool
-	_, err := (Config{
+	_, err := (NewAgent(Config{
 		Provider:    llm,
 		Tools:       tools,
 		Model:       "test",
@@ -934,7 +840,7 @@ func TestTokenBudgetWarning(t *testing.T) {
 			}
 			return nil
 		},
-	}).Run(context.Background(), "hello")
+	})).Run(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -970,12 +876,12 @@ func TestTokenBudgetExceeded(t *testing.T) {
 	}
 	tools.RegisterTool(&recordingTool{name: "echo", output: "ok"})
 
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider:    llm,
 		Tools:       tools,
 		Model:       "test",
 		TokenBudget: 1000,
-	}).Run(context.Background(), "hello")
+	})).Run(context.Background(), "hello")
 	if err == nil {
 		t.Fatal("Run() error = nil, want budget exceeded error")
 	}
@@ -1009,11 +915,11 @@ func TestResultIncludesTotalUsage(t *testing.T) {
 		},
 	}
 
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
-	}).Run(context.Background(), "hello")
+	})).Run(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -1049,11 +955,11 @@ func TestResultIncludesPerTurnUsageAndContextTokens(t *testing.T) {
 		},
 	}
 
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
-	}).Run(context.Background(), "hello")
+	})).Run(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -1091,7 +997,7 @@ func TestTurnEndEventCarriesUsage(t *testing.T) {
 
 	var turnEndUsage *provider.Usage
 	var turnEndContext int
-	_, err := (Config{
+	_, err := (NewAgent(Config{
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
@@ -1102,7 +1008,7 @@ func TestTurnEndEventCarriesUsage(t *testing.T) {
 			}
 			return nil
 		},
-	}).Run(context.Background(), "hello")
+	})).Run(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}

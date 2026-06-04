@@ -3,13 +3,13 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
+	"io"
 	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/skills"
 )
@@ -22,20 +22,19 @@ func TestAgentAutomaticWorkflowUsesScan(t *testing.T) {
 	scanOutput := "[scan.summary] completed inputs 1 services 1"
 
 	dir := t.TempDir()
-	stubScript := filepath.Join(dir, "aiscan-stub")
-	scriptContent := "#!/bin/sh\nprintf '" + strings.ReplaceAll(scanOutput, "'", "'\\''") + "'\n"
-	os.WriteFile(stubScript, []byte(scriptContent), 0o755)
 
 	registry := command.NewRegistry()
-	registry.Register(&stubPseudoCommand{name: "scan"}, "")
+	registry.Register(&stubPseudoCommand{name: "scan", output: scanOutput}, "")
 
-	bash := command.NewBashTool(dir, 5, registry)
-	bash.SetSelfBinary(stubScript)
+	bash := command.NewBashTool(dir, 5)
+	bash.Manager().SetCommands(func(name string) (tmuxpkg.Command, bool) {
+		return registry.Get(name)
+	})
+	bash.Manager().SetWorkDir(dir)
 	registry.RegisterTool(bash)
 
-	tmux := command.NewTmuxCommand(bash.Manager(), registry)
-	tmux.SetSelfBin(stubScript)
-	registry.Register(tmux, "core")
+	tmuxCmd := command.NewTmuxCommand(bash.Manager())
+	registry.Register(tmuxCmd, "core")
 
 	llm := &scriptedProvider{
 		responses: []*provider.ChatCompletionResponse{
@@ -56,17 +55,14 @@ func TestAgentAutomaticWorkflowUsesScan(t *testing.T) {
 		},
 	}
 
-	systemPrompt := BuildSystemPrompt(&PromptConfig{
-		Tools:       registry,
-		ScannerDocs: registry.UsageDocs(),
-	})
+	systemPrompt := buildTestSystemPrompt(registry, nil)
 
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider:     llm,
 		Tools:        registry,
 		SystemPrompt: systemPrompt,
 		Model:        "test-model",
-	}).Run(context.Background(), "scan 127.0.0.1")
+	})).Run(context.Background(), "scan 127.0.0.1")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -83,11 +79,17 @@ func TestAgentAutomaticWorkflowUsesScan(t *testing.T) {
 	}
 }
 
-type stubPseudoCommand struct{ name string }
+type stubPseudoCommand struct {
+	name   string
+	output string
+}
 
-func (c *stubPseudoCommand) Name() string                                         { return c.name }
-func (c *stubPseudoCommand) Usage() string                                        { return c.name }
-func (c *stubPseudoCommand) Execute(_ context.Context, _ []string) (string, error) { return "", nil }
+func (c *stubPseudoCommand) Name() string  { return c.name }
+func (c *stubPseudoCommand) Usage() string { return c.name }
+func (c *stubPseudoCommand) Execute(_ context.Context, _ []string, w io.Writer) error {
+	_, _ = io.WriteString(w, c.output)
+	return nil
+}
 
 func TestAgentPromptIncludesEmbeddedSkillIndexAndExpansion(t *testing.T) {
 	registry := command.NewRegistry()
@@ -102,18 +104,15 @@ func TestAgentPromptIncludesEmbeddedSkillIndexAndExpansion(t *testing.T) {
 			chatResponse(provider.NewTextMessage("assistant", "done")),
 		},
 	}
-	systemPrompt := BuildSystemPrompt(&PromptConfig{
-		Tools:  registry,
-		Skills: store.Skills,
-	})
+	systemPrompt := buildTestSystemPrompt(registry, store.Skills)
 	task := skills.ExpandCommand("/skill:scan scan 127.0.0.1", store)
 
-	result, err := (Config{
+	result, err := (NewAgent(Config{
 		Provider:     llm,
 		Tools:        registry,
 		SystemPrompt: systemPrompt,
 		Model:        "test-model",
-	}).Run(context.Background(), task)
+	})).Run(context.Background(), task)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -137,4 +136,22 @@ func TestAgentPromptIncludesEmbeddedSkillIndexAndExpansion(t *testing.T) {
 func scannerBashArgs(cmd string) string {
 	data, _ := json.Marshal(map[string]string{"command": cmd})
 	return string(data)
+}
+
+func buildTestSystemPrompt(tools *command.CommandRegistry, ss []skills.Skill) string {
+	var sb strings.Builder
+	sb.WriteString("You are a test agent.\n\n## Available Tools\n\n")
+	if tools != nil {
+		for _, t := range tools.Tools() {
+			sb.WriteString("### " + t.Name() + "\n" + t.Description() + "\n\n")
+		}
+		if docs := tools.UsageDocs(); docs != "" {
+			sb.WriteString("## Pseudo-Commands\n\n" + docs + "\n\n")
+		}
+	}
+	if skillPrompt := skills.FormatForPrompt(ss); skillPrompt != "" {
+		sb.WriteString(skillPrompt)
+		sb.WriteString("\n\n")
+	}
+	return sb.String()
 }

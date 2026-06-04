@@ -22,7 +22,7 @@ func TestInboxDrainedBeforeFirstTurnLLMCall(t *testing.T) {
 	ib.Push(inbox.NewMessage(inbox.OriginPeer, "user", "[peer] hello"))
 	ib.Push(inbox.NewMessage(inbox.OriginPeer, "user", "[peer] status?"))
 
-	result, err := (Config{
+	result, err := NewAgent(Config{
 		Provider:     llm,
 		Tools:        tools,
 		Model:        "test",
@@ -66,7 +66,7 @@ func TestInboxClosedDoesNotBlock(t *testing.T) {
 		},
 	}
 
-	result, err := (Config{
+	result, err := NewAgent(Config{
 		Provider:     llm,
 		Tools:        tools,
 		Model:        "test",
@@ -122,7 +122,7 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 		push:  inbox.NewMessage(inbox.OriginPeer, "user", "[peer] watch out for example.com"),
 	}
 
-	result, err := (Config{
+	result, err := NewAgent(Config{
 		Provider:     pushing,
 		Tools:        tools,
 		Model:        "test",
@@ -178,7 +178,7 @@ func TestRunWaitsWhenKeepAliveIsTrue(t *testing.T) {
 		ib.Push(inbox.NewMessage(inbox.OriginSession, "user", "<session_completion>scan done</session_completion>"))
 	}()
 
-	result, err := (Config{
+	result, err := NewAgent(Config{
 		Provider:     llm,
 		Tools:        tools,
 		Model:        "test",

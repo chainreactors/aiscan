@@ -153,7 +153,7 @@ func TestCombineEventHandlersRunsAllAndReportsFirstError(t *testing.T) {
 		calls = append(calls, "c")
 		return errors.New("c-failed")
 	}
-	handler := CombineEventHandlers(nil, a, b, c)
+	handler := combineEventHandlers(nil, a, b, c)
 	err := handler(context.Background(), agent.Event{Type: agent.EventAgentStart})
 	if err == nil || err.Error() != "a-failed" {
 		t.Fatalf("err = %v, want a-failed", err)
@@ -164,7 +164,7 @@ func TestCombineEventHandlersRunsAllAndReportsFirstError(t *testing.T) {
 }
 
 func TestCombineEventHandlersNilWhenAllNil(t *testing.T) {
-	if h := CombineEventHandlers(nil, nil); h != nil {
+	if h := combineEventHandlers(nil, nil); h != nil {
 		t.Fatalf("expected nil handler when all inputs nil, got %#v", h)
 	}
 }

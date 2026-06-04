@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -71,7 +72,7 @@ func (c *Command) Usage() string {
 	return gogocore.Help()
 }
 
-func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
+func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error {
 	args = c.normalizeArgs(args)
 	args = c.injectProxy(args)
 
@@ -84,24 +85,24 @@ func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
 		c.engine.InstallResourceProvider()
 	}
 
-	// Prefer the SDK engine path: it runs the scan in a goroutine with
-	// proper context cancellation at every IP×port dispatch.  The old
-	// gogocore.RunWithArgs CLI path calls runner.Run() synchronously and
-	// never checks ctx.Done() once scanning starts, so a large port sweep
-	// through a slow SOCKS proxy blocks the agent indefinitely.
 	if c.engine != nil {
 		if opts, ok, err := parseSDKScanArgs(args); err != nil {
-			return "", err
+			return err
 		} else if ok {
-			return c.executeViaSDK(ctx, opts)
+			result, err := c.executeViaSDK(ctx, opts)
+			if result != "" {
+				_, _ = io.WriteString(w, result)
+			}
+			return err
 		}
 		c.logger.Debugf("gogo: args contain unsupported flags, falling back to RunWithArgs wrapper")
 	}
 
-	// Fallback for SDK-uncovered invocations (workflow files, JSON input,
-	// print/help modes) or when no engine is available. RunWithArgs is still
-	// isolated in a goroutine because upstream only checks ctx before Run().
-	return c.executeViaRunWithArgs(ctx, args)
+	result, err := c.executeViaRunWithArgs(ctx, args)
+	if result != "" {
+		_, _ = io.WriteString(w, result)
+	}
+	return err
 }
 
 // sdkScanArgs holds the parsed subset of gogo CLI flags that map directly

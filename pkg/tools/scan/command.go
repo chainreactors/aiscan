@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/chainreactors/aiscan/pkg/agent"
+	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
@@ -17,14 +19,21 @@ import (
 
 type Command struct {
 	engines     *engine.Set
-	agentFunc   AgentFunc
-	reportFunc  ReportFunc
+	parent      *agent.Agent
 	aiConfig    AISkillConfig
 	deepBrowser DeepBrowserFunc
 	recorder    *recorder
 	logger      telemetry.Logger
 	proxy       string
 	workDir     string
+
+	testAgent  func(ctx context.Context, prompt string) (*agentRunResult, error)
+	testReport func(ctx context.Context, prompt string) (string, error)
+}
+
+type agentRunResult struct {
+	raw        string
+	checkpoint *command.CheckpointResult
 }
 
 func (c *Command) SetWorkDir(dir string) { c.workDir = dir }
@@ -139,14 +148,12 @@ Examples:
   scan -l targets.txt --mode full --zombie-top 5`
 }
 
-func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
+func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error {
 	out, _, err := c.execute(ctx, c.resolveRelativePaths(args), nil)
-	return out, err
-}
-
-func (c *Command) ExecuteStreaming(ctx context.Context, args []string, stream io.Writer) (string, error) {
-	out, _, err := c.execute(ctx, c.resolveRelativePaths(args), stream)
-	return out, err
+	if out != "" {
+		_, _ = io.WriteString(w, out)
+	}
+	return err
 }
 
 func (c *Command) ExecuteStructured(ctx context.Context, args []string, stream io.Writer) (string, *output.Result, error) {
@@ -232,7 +239,7 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		if err != nil {
 			return "", nil, fmt.Errorf("scan json output: %w", err)
 		}
-	} else if flags.Report && flags.AI && c.reportFunc != nil {
+	} else if flags.Report && flags.AI && c.parent != nil {
 		out = c.generateAIReport(ctx, coll)
 	} else if flags.Report {
 		out = coll.ReportMarkdown()

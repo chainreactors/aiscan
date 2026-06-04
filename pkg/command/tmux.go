@@ -3,7 +3,7 @@ package command
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -12,22 +12,14 @@ import (
 )
 
 type TmuxCommand struct {
-	manager  *tmux.Manager
-	registry *CommandRegistry
-	workDir  string
-	selfBin  string
-	proxy    string
+	manager *tmux.Manager
 }
 
-func NewTmuxCommand(mgr *tmux.Manager, registry *CommandRegistry) *TmuxCommand {
-	return &TmuxCommand{manager: mgr, registry: registry}
+func NewTmuxCommand(mgr *tmux.Manager) *TmuxCommand {
+	return &TmuxCommand{manager: mgr}
 }
 
-func (t *TmuxCommand) Name() string     { return "tmux" }
-func (t *TmuxCommand) InProcess()       {}
-func (t *TmuxCommand) SetWorkDir(d string) { t.workDir = d }
-func (t *TmuxCommand) SetSelfBin(b string) { t.selfBin = b }
-func (t *TmuxCommand) SetProxy(p string)   { t.proxy = p }
+func (t *TmuxCommand) Name() string { return "tmux" }
 
 func (t *TmuxCommand) Usage() string {
 	return `tmux - PTY session manager
@@ -51,26 +43,44 @@ func (t *TmuxCommand) Usage() string {
       Block until session completes.`
 }
 
-func (t *TmuxCommand) Execute(ctx context.Context, args []string) (string, error) {
+func (t *TmuxCommand) Execute(ctx context.Context, args []string, w io.Writer) error {
+	var result string
+	var err error
 	if len(args) == 0 {
-		return t.Usage(), nil
+		result = t.Usage()
+	} else {
+		switch args[0] {
+		case "new", "new-session":
+			result, err = t.cmdNewSession(ctx, args[1:])
+		case "ls", "list-sessions":
+			result, err = t.cmdListSessions()
+		case "send", "send-keys":
+			result, err = t.cmdSendKeys(args[1:])
+		case "peek", "capture-pane":
+			result, err = t.cmdCapturePane(args[1:])
+		case "kill", "kill-session":
+			result, err = t.cmdKillSession(args[1:])
+		case "wait", "wait-for":
+			result, err = t.cmdWaitFor(ctx, args[1:])
+		default:
+			result, err = t.cmdImplicitNewSession(args)
+		}
 	}
-	switch args[0] {
-	case "new", "new-session":
-		return t.cmdNewSession(ctx, args[1:])
-	case "ls", "list-sessions":
-		return t.cmdListSessions()
-	case "send", "send-keys":
-		return t.cmdSendKeys(args[1:])
-	case "peek", "capture-pane":
-		return t.cmdCapturePane(args[1:])
-	case "kill", "kill-session":
-		return t.cmdKillSession(args[1:])
-	case "wait", "wait-for":
-		return t.cmdWaitFor(ctx, args[1:])
-	default:
-		return "", fmt.Errorf("tmux: unknown subcommand %q\n%s", args[0], t.Usage())
+	if err != nil {
+		return err
 	}
+	_, err = io.WriteString(w, result)
+	return err
+}
+
+func (t *TmuxCommand) cmdImplicitNewSession(args []string) (string, error) {
+	cmdLine := strings.Join(args, " ")
+	info, err := t.createSession(cmdLine, "", tmux.DefaultTimeout)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s: 1 windows (created %s) [detached]\nUse `tmux capture-pane -t %s` to inspect output.",
+		info.ID, info.StartedAt.Format("Mon Jan 2 15:04:05 2006"), info.ID), nil
 }
 
 // new-session [-d] [-s name] [--timeout 30m] "command args..."
@@ -134,39 +144,10 @@ func (t *TmuxCommand) cmdNewSession(ctx context.Context, args []string) (string,
 }
 
 func (t *TmuxCommand) createSession(cmdLine, name string, timeout time.Duration) (tmux.Info, error) {
-	token := firstCommandToken(cmdLine)
-	isPseudo := false
-	if t.registry != nil && token != "tmux" {
-		if cmd, ok := t.registry.Get(token); ok {
-			if _, inProc := cmd.(InProcessCommand); !inProc {
-				isPseudo = true
-			}
-		}
-	}
-
-	if isPseudo {
-		tokens, err := SplitCommandLine(cmdLine)
-		if err != nil {
-			return tmux.Info{}, fmt.Errorf("tmux new-session: %w", err)
-		}
-		if len(tokens) > 1 {
-			if _, valErr := stripShellSyntax(tokens[1:]); valErr != nil {
-				return tmux.Info{}, valErr
-			}
-		}
-		subArgs := append(tokens, "--no-color")
-		self := t.selfBin
-		if self == "" {
-			var err error
-			self, err = os.Executable()
-			if err != nil {
-				return tmux.Info{}, fmt.Errorf("tmux new-session: resolve self: %w", err)
-			}
-		}
-		return t.manager.CreateCmd(t.workDir, self, subArgs, name, timeout, t.buildEnv(), "")
-	}
-
-	return t.manager.Create(t.workDir, cmdLine, name, timeout, nil, "")
+	return t.manager.RunCommand(cmdLine, tmux.RunOpts{
+		Name:    name,
+		Timeout: timeout,
+	})
 }
 
 // ls / list-sessions
@@ -325,17 +306,6 @@ func (t *TmuxCommand) cmdWaitFor(ctx context.Context, args []string) (string, er
 	}
 	duration := info.EndedAt.Sub(info.StartedAt).Round(time.Second)
 	return fmt.Sprintf("%s: %s (exit %d, %s)", info.ID, info.State, info.ExitCode, duration), nil
-}
-
-func (t *TmuxCommand) buildEnv() []string {
-	var env []string
-	if t.proxy != "" {
-		for _, k := range []string{"ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"} {
-			env = append(env, k+"="+t.proxy)
-		}
-	}
-	env = append(env, "AISCAN_PARENT=1")
-	return env
 }
 
 func parseTarget(args []string) (string, []string) {
