@@ -10,19 +10,15 @@ import (
 	"github.com/chainreactors/sdk/gogo"
 	"github.com/chainreactors/sdk/spray"
 
-	_ "github.com/chainreactors/aiscan/pkg/tools/webfetch"
-	_ "github.com/chainreactors/aiscan/pkg/tools/websearch"
+	_ "github.com/chainreactors/aiscan/pkg/tools/search"
 )
 
-func TestInitCommandRegistryRegistersWebToolsAlways(t *testing.T) {
+func TestInitCommandRegistryRegistersSearchAlways(t *testing.T) {
 	logger := telemetry.NopLogger()
 	reg := initCommandRegistry(nil, ScannerConfig{}, ToolConfig{}, nil, "", nil, logger)
 
-	if !reg.Has("web_fetch") {
-		t.Fatal("web_fetch command should always be registered")
-	}
-	if !reg.Has("web_search") {
-		t.Fatal("web_search command should always be registered")
+	if !reg.Has("search") {
+		t.Fatal("search command should always be registered")
 	}
 }
 
@@ -101,8 +97,8 @@ func TestScanVerifyBlocksRecursiveScannerCommands(t *testing.T) {
 		{command: "scan -i 127.0.0.1", blocked: true},
 		{command: "aiscan scan -i 127.0.0.1", blocked: true},
 		{command: "spray -u https://example.test", blocked: true},
-		{command: `web_search "kingdee k3 cloud cve"`, blocked: false},
-		{command: "web_fetch https://example.test/advisory", blocked: false},
+		{command: `search tavily "kingdee k3 cloud cve"`, blocked: false},
+		{command: "search fetch https://example.test/advisory", blocked: false},
 		{command: "echo scan", blocked: false},
 	} {
 		if got := scanVerifyBlocksCommand(tc.command); got != tc.blocked {

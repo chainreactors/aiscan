@@ -1,4 +1,4 @@
-package webfetch
+package search
 
 import (
 	"context"
@@ -9,15 +9,15 @@ import (
 	"time"
 )
 
-func TestExecutePreservesExplicitHTTPURL(t *testing.T) {
+func TestFetchExecutePreservesExplicitHTTPURL(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		_, _ = w.Write([]byte("<html><body><h1>HTTP target</h1><p>plain service</p></body></html>"))
 	}))
 	defer server.Close()
 
-	cmd := New()
-	out, err := cmd.Execute(context.Background(), []string{server.URL})
+	cmd := New(Opts{})
+	out, err := cmd.Execute(context.Background(), []string{"fetch", server.URL})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -29,7 +29,7 @@ func TestExecutePreservesExplicitHTTPURL(t *testing.T) {
 	}
 }
 
-func TestCacheHitReturnsCachedContent(t *testing.T) {
+func TestFetchCacheHitReturnsCachedContent(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
@@ -38,14 +38,14 @@ func TestCacheHitReturnsCachedContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New()
+	cmd := New(Opts{})
 
-	out1, err := cmd.Execute(context.Background(), []string{server.URL})
+	out1, err := cmd.Execute(context.Background(), []string{"fetch", server.URL})
 	if err != nil {
 		t.Fatalf("first Execute() error = %v", err)
 	}
 
-	out2, err := cmd.Execute(context.Background(), []string{server.URL})
+	out2, err := cmd.Execute(context.Background(), []string{"fetch", server.URL})
 	if err != nil {
 		t.Fatalf("second Execute() error = %v", err)
 	}
@@ -58,7 +58,7 @@ func TestCacheHitReturnsCachedContent(t *testing.T) {
 	}
 }
 
-func TestClearCacheInvalidatesEntries(t *testing.T) {
+func TestFetchClearCacheInvalidatesEntries(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
@@ -67,12 +67,12 @@ func TestClearCacheInvalidatesEntries(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New()
-	if _, err := cmd.Execute(context.Background(), []string{server.URL}); err != nil {
+	cmd := New(Opts{})
+	if _, err := cmd.Execute(context.Background(), []string{"fetch", server.URL}); err != nil {
 		t.Fatal(err)
 	}
-	cmd.ClearCache()
-	if _, err := cmd.Execute(context.Background(), []string{server.URL}); err != nil {
+	cmd.ClearFetchCache()
+	if _, err := cmd.Execute(context.Background(), []string{"fetch", server.URL}); err != nil {
 		t.Fatal(err)
 	}
 	if callCount != 2 {
@@ -80,7 +80,7 @@ func TestClearCacheInvalidatesEntries(t *testing.T) {
 	}
 }
 
-func TestCacheMarksRecentGetsAsMostRecent(t *testing.T) {
+func TestFetchCacheMarksRecentGetsAsMostRecent(t *testing.T) {
 	cache := newURLCache()
 	cache.Set("a", &cacheEntry{content: "a", size: 1, fetchedAt: time.Now()})
 	cache.Set("b", &cacheEntry{content: "b", size: 1, fetchedAt: time.Now()})
@@ -98,7 +98,7 @@ func TestCacheMarksRecentGetsAsMostRecent(t *testing.T) {
 	}
 }
 
-func TestSameHostRedirectIsFollowed(t *testing.T) {
+func TestFetchSameHostRedirectIsFollowed(t *testing.T) {
 	mux := http.NewServeMux()
 	var serverURL string
 	mux.HandleFunc("/old", func(w http.ResponseWriter, r *http.Request) {
@@ -112,8 +112,8 @@ func TestSameHostRedirectIsFollowed(t *testing.T) {
 	serverURL = server.URL
 	defer server.Close()
 
-	cmd := New()
-	out, err := cmd.Execute(context.Background(), []string{server.URL + "/old"})
+	cmd := New(Opts{})
+	out, err := cmd.Execute(context.Background(), []string{"fetch", server.URL + "/old"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -122,7 +122,7 @@ func TestSameHostRedirectIsFollowed(t *testing.T) {
 	}
 }
 
-func TestSeeOtherRedirectIsFollowed(t *testing.T) {
+func TestFetchSeeOtherRedirectIsFollowed(t *testing.T) {
 	mux := http.NewServeMux()
 	var serverURL string
 	mux.HandleFunc("/old", func(w http.ResponseWriter, r *http.Request) {
@@ -136,8 +136,8 @@ func TestSeeOtherRedirectIsFollowed(t *testing.T) {
 	serverURL = server.URL
 	defer server.Close()
 
-	cmd := New()
-	out, err := cmd.Execute(context.Background(), []string{server.URL + "/old"})
+	cmd := New(Opts{})
+	out, err := cmd.Execute(context.Background(), []string{"fetch", server.URL + "/old"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -146,14 +146,14 @@ func TestSeeOtherRedirectIsFollowed(t *testing.T) {
 	}
 }
 
-func TestCrossHostRedirectReportsToAgent(t *testing.T) {
+func TestFetchCrossHostRedirectReportsToAgent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "https://other.example.com/page", http.StatusFound)
 	}))
 	defer server.Close()
 
-	cmd := New()
-	out, err := cmd.Execute(context.Background(), []string{server.URL})
+	cmd := New(Opts{})
+	out, err := cmd.Execute(context.Background(), []string{"fetch", server.URL})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -165,7 +165,7 @@ func TestCrossHostRedirectReportsToAgent(t *testing.T) {
 	}
 }
 
-func TestValidateURLRejectsLongURL(t *testing.T) {
+func TestFetchValidateURLRejectsLongURL(t *testing.T) {
 	long := "https://example.com/" + strings.Repeat("a", maxURLLength)
 	err := validateURL(long)
 	if err == nil {
@@ -176,7 +176,7 @@ func TestValidateURLRejectsLongURL(t *testing.T) {
 	}
 }
 
-func TestValidateURLRejectsUserInfo(t *testing.T) {
+func TestFetchValidateURLRejectsUserInfo(t *testing.T) {
 	err := validateURL("https://user:pass@example.com/")
 	if err == nil {
 		t.Fatal("expected error for URL with userinfo")
@@ -186,14 +186,14 @@ func TestValidateURLRejectsUserInfo(t *testing.T) {
 	}
 }
 
-func TestValidateURLRejectsSinglePartHostname(t *testing.T) {
+func TestFetchValidateURLRejectsSinglePartHostname(t *testing.T) {
 	err := validateURL("https://localhost/path")
 	if err == nil {
 		t.Fatal("expected error for single-part hostname")
 	}
 }
 
-func TestBinaryContentDetection(t *testing.T) {
+func TestFetchBinaryContentDetection(t *testing.T) {
 	for _, ct := range []string{
 		"application/pdf",
 		"image/png",
@@ -219,15 +219,15 @@ func TestBinaryContentDetection(t *testing.T) {
 	}
 }
 
-func TestBinaryContentReturnsDescription(t *testing.T) {
+func TestFetchBinaryContentReturnsDescription(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
 		_, _ = w.Write([]byte("%PDF-1.4 fake pdf content"))
 	}))
 	defer server.Close()
 
-	cmd := New()
-	out, err := cmd.Execute(context.Background(), []string{server.URL})
+	cmd := New(Opts{})
+	out, err := cmd.Execute(context.Background(), []string{"fetch", server.URL})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -239,7 +239,7 @@ func TestBinaryContentReturnsDescription(t *testing.T) {
 	}
 }
 
-func TestBinaryContentIsCached(t *testing.T) {
+func TestFetchBinaryContentIsCached(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
@@ -248,12 +248,12 @@ func TestBinaryContentIsCached(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New()
-	out1, err := cmd.Execute(context.Background(), []string{server.URL})
+	cmd := New(Opts{})
+	out1, err := cmd.Execute(context.Background(), []string{"fetch", server.URL})
 	if err != nil {
 		t.Fatalf("first Execute() error = %v", err)
 	}
-	out2, err := cmd.Execute(context.Background(), []string{server.URL})
+	out2, err := cmd.Execute(context.Background(), []string{"fetch", server.URL})
 	if err != nil {
 		t.Fatalf("second Execute() error = %v", err)
 	}
@@ -265,7 +265,7 @@ func TestBinaryContentIsCached(t *testing.T) {
 	}
 }
 
-func TestIsPermittedRedirect(t *testing.T) {
+func TestFetchIsPermittedRedirect(t *testing.T) {
 	tests := []struct {
 		original string
 		redirect string
@@ -275,8 +275,8 @@ func TestIsPermittedRedirect(t *testing.T) {
 		{"https://example.com/a", "https://www.example.com/b", true},
 		{"https://www.example.com/a", "https://example.com/b", true},
 		{"https://example.com/a", "https://other.com/b", false},
-		{"https://example.com/a", "http://example.com/b", false},           // scheme change
-		{"https://example.com:443/a", "https://example.com:8080/b", false}, // port change
+		{"https://example.com/a", "http://example.com/b", false},
+		{"https://example.com:443/a", "https://example.com:8080/b", false},
 	}
 	for _, tt := range tests {
 		got := isPermittedRedirect(tt.original, tt.redirect)
@@ -286,15 +286,15 @@ func TestIsPermittedRedirect(t *testing.T) {
 	}
 }
 
-func TestOutputIncludesContentType(t *testing.T) {
+func TestFetchOutputIncludesContentType(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"key":"value"}`))
 	}))
 	defer server.Close()
 
-	cmd := New()
-	out, err := cmd.Execute(context.Background(), []string{server.URL})
+	cmd := New(Opts{})
+	out, err := cmd.Execute(context.Background(), []string{"fetch", server.URL})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -303,15 +303,15 @@ func TestOutputIncludesContentType(t *testing.T) {
 	}
 }
 
-func TestExtractHintFiltersContent(t *testing.T) {
+func TestFetchExtractHintFiltersContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte("Section A: irrelevant\n\nSection B: CVSS 9.8 critical\n\nSection C: also irrelevant"))
 	}))
 	defer server.Close()
 
-	cmd := New()
-	out, err := cmd.Execute(context.Background(), []string{server.URL, "--extract", "CVSS"})
+	cmd := New(Opts{})
+	out, err := cmd.Execute(context.Background(), []string{"fetch", server.URL, "--extract", "CVSS"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}

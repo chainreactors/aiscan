@@ -1,4 +1,4 @@
-package webfetch
+package search
 
 import (
 	"context"
@@ -15,18 +15,18 @@ import (
 
 const (
 	fetchTimeout      = 60 * time.Second
-	maxFetchBody      = 10 * 1024 * 1024 // 10 MB per CC: MAX_HTTP_CONTENT_LENGTH
-	maxMarkdownLength = 100_000          // chars returned to LLM — matches CC
-	maxURLLength      = 2000             // CC: MAX_URL_LENGTH
-	maxRedirects      = 10               // CC: MAX_REDIRECTS
+	maxFetchBody      = 10 * 1024 * 1024
+	maxMarkdownLength = 100_000
+	maxURLLength      = 2000
+	maxRedirects      = 10
 	fetchUserAgent    = "Mozilla/5.0 (compatible; aiscan/1.0; +https://github.com/chainreactors/aiscan)"
 
-	cacheTTL      = 15 * time.Minute // CC: CACHE_TTL_MS
-	maxCacheBytes = 50 * 1024 * 1024 // CC: MAX_CACHE_SIZE_BYTES
+	cacheTTL      = 15 * time.Minute
+	maxCacheBytes = 50 * 1024 * 1024
 )
 
 // ---------------------------------------------------------------------------
-// URL cache — hand-rolled TTL + size-bounded map, mirrors CC's LRUCache
+// URL cache
 // ---------------------------------------------------------------------------
 
 type cacheEntry struct {
@@ -36,14 +36,14 @@ type cacheEntry struct {
 	bytes       int
 	code        int
 	codeText    string
-	size        int // approximate memory footprint used for eviction
+	size        int
 	fetchedAt   time.Time
 }
 
 type urlCache struct {
 	mu        sync.Mutex
 	entries   map[string]*cacheEntry
-	order     []string // least-recently-used order; oldest at index 0
+	order     []string
 	totalSize int
 }
 
@@ -70,14 +70,12 @@ func (c *urlCache) Set(key string, e *cacheEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Evict existing entry for the same key first.
 	if old, ok := c.entries[key]; ok {
 		c.totalSize -= old.size
 		delete(c.entries, key)
 		c.removeFromOrderLocked(key)
 	}
 
-	// Evict stale + oldest entries until we have room.
 	for c.totalSize+e.size > maxCacheBytes && len(c.order) > 0 {
 		victim := c.order[0]
 		c.order = c.order[1:]
@@ -114,7 +112,6 @@ func (c *urlCache) removeFromOrderLocked(key string) {
 	}
 }
 
-// Clear drops all cached entries. Exported for tests.
 func (c *urlCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -124,28 +121,22 @@ func (c *urlCache) Clear() {
 }
 
 // ---------------------------------------------------------------------------
-// Command
+// FetchCommand
 // ---------------------------------------------------------------------------
 
-// Command implements command.PseudoCommand for fetching web pages.
-type Command struct {
+type FetchCommand struct {
 	client *http.Client
 	cache  *urlCache
 }
 
-// New creates a web_fetch pseudo-command with proxy support via
-// standard HTTP_PROXY / HTTPS_PROXY environment variables.
-func New() *Command {
+func NewFetchCommand() *FetchCommand {
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 	}
-	return &Command{
+	return &FetchCommand{
 		client: &http.Client{
 			Transport: transport,
 			Timeout:   fetchTimeout,
-			// Disable automatic redirects — we handle them manually so
-			// cross-host redirects can be reported back to the agent.
-			// Mirrors CC's getWithPermittedRedirects pattern.
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
@@ -154,34 +145,14 @@ func New() *Command {
 	}
 }
 
-// ClearCache drops all cached entries. Useful for tests.
-func (c *Command) ClearCache() { c.cache.Clear() }
+func (c *FetchCommand) ClearCache() { c.cache.Clear() }
 
-func (c *Command) Name() string { return "web_fetch" }
-
-func (c *Command) Usage() string {
-	return `web_fetch - Fetch content from a URL and return as readable text
-Usage:
-  web_fetch <url> [options]
-
-Options:
-  --extract <hint>   Return matching sections from the page when possible
-
-Examples:
-  web_fetch https://example.com/advisory
-  web_fetch https://nvd.nist.gov/vuln/detail/CVE-2024-1234 --extract "CVSS score and description"`
-}
-
-// Execute parses CLI-style arguments and fetches the URL.
-//
-//	web_fetch <url> [--extract <hint>]
-func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
-	rawURL, extract, err := parseArgs(args, c.Usage())
+func (c *FetchCommand) Execute(ctx context.Context, args []string) (string, error) {
+	rawURL, extract, err := parseFetchArgs(args)
 	if err != nil {
 		return "", err
 	}
 
-	// ---- Validate & normalise URL ----
 	normalizedURL, err := normalizeURL(rawURL)
 	if err != nil {
 		return "", err
@@ -190,26 +161,22 @@ func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
 		return "", err
 	}
 
-	// ---- Cache lookup (keyed on original URL, matching CC) ----
 	if cached, ok := c.cache.Get(normalizedURL); ok {
 		if cached.binary {
 			return formatBinaryCacheOutput(normalizedURL, cached), nil
 		}
-		return formatOutput(normalizedURL, cached, extract), nil
+		return formatFetchOutput(normalizedURL, cached, extract), nil
 	}
 
-	// ---- Fetch with redirect handling ----
 	result, redir, err := c.fetchWithRedirects(ctx, normalizedURL, 0)
 	if err != nil {
 		return "", err
 	}
 
-	// Cross-host redirect: report back to agent so it can re-fetch.
 	if redir != nil {
 		return formatRedirectMessage(redir), nil
 	}
 
-	// ---- Binary detection ----
 	if isBinaryContentType(result.contentType) {
 		entry := &cacheEntry{
 			contentType: result.contentType,
@@ -224,13 +191,11 @@ func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
 		return formatBinaryCacheOutput(normalizedURL, entry), nil
 	}
 
-	// ---- HTML → markdown ----
 	content := result.body
 	if strings.Contains(result.contentType, "text/html") || strings.Contains(result.contentType, "application/xhtml") {
 		content = htmlToMarkdown(content)
 	}
 
-	// ---- Cache the result ----
 	entry := &cacheEntry{
 		content:     content,
 		contentType: result.contentType,
@@ -242,11 +207,11 @@ func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
 	}
 	c.cache.Set(normalizedURL, entry)
 
-	return formatOutput(normalizedURL, entry, extract), nil
+	return formatFetchOutput(normalizedURL, entry, extract), nil
 }
 
 // ---------------------------------------------------------------------------
-// Redirect handling — mirrors CC's getWithPermittedRedirects
+// Redirect handling
 // ---------------------------------------------------------------------------
 
 type fetchResult struct {
@@ -263,7 +228,7 @@ type redirectInfo struct {
 	statusCode  int
 }
 
-func (c *Command) fetchWithRedirects(ctx context.Context, targetURL string, depth int) (*fetchResult, *redirectInfo, error) {
+func (c *FetchCommand) fetchWithRedirects(ctx context.Context, targetURL string, depth int) (*fetchResult, *redirectInfo, error) {
 	if depth > maxRedirects {
 		return nil, nil, fmt.Errorf("too many redirects (exceeded %d)", maxRedirects)
 	}
@@ -282,7 +247,6 @@ func (c *Command) fetchWithRedirects(ctx context.Context, targetURL string, dept
 	}
 	defer resp.Body.Close()
 
-	// Handle redirects.
 	if isRedirectStatus(resp.StatusCode) {
 		location := resp.Header.Get("Location")
 		if location == "" {
@@ -294,10 +258,8 @@ func (c *Command) fetchWithRedirects(ctx context.Context, targetURL string, dept
 		}
 
 		if isPermittedRedirect(targetURL, redirectURL) {
-			// Same-host redirect — follow it.
 			return c.fetchWithRedirects(ctx, redirectURL, depth+1)
 		}
-		// Cross-host redirect — report back to agent.
 		return nil, &redirectInfo{
 			originalURL: targetURL,
 			redirectURL: redirectURL,
@@ -339,8 +301,6 @@ func resolveRedirectURL(base, location string) (string, error) {
 	return baseURL.ResolveReference(ref).String(), nil
 }
 
-// isPermittedRedirect mirrors CC's logic: same host (ignoring www. prefix),
-// same protocol, same port. Path/query changes are always allowed.
 func isPermittedRedirect(originalURL, redirectURL string) bool {
 	orig, err := url.Parse(originalURL)
 	if err != nil {
@@ -367,7 +327,7 @@ func stripWWW(host string) string {
 }
 
 // ---------------------------------------------------------------------------
-// URL validation — mirrors CC's validateURL
+// URL validation
 // ---------------------------------------------------------------------------
 
 func normalizeURL(raw string) (string, error) {
@@ -409,7 +369,7 @@ func validateURL(normalized string) error {
 }
 
 // ---------------------------------------------------------------------------
-// Binary content detection — mirrors CC's isBinaryContentType
+// Binary content detection
 // ---------------------------------------------------------------------------
 
 func isBinaryContentType(ct string) bool {
@@ -441,7 +401,7 @@ func isBinaryContentType(ct string) bool {
 // Output formatting
 // ---------------------------------------------------------------------------
 
-func formatOutput(fetchedURL string, entry *cacheEntry, extract string) string {
+func formatFetchOutput(fetchedURL string, entry *cacheEntry, extract string) string {
 	content := entry.content
 	if strings.TrimSpace(extract) != "" {
 		content = extractRelevantContent(content, extract)
@@ -494,7 +454,7 @@ func formatRedirectMessage(redir *redirectInfo) string {
 	sb.WriteString(fmt.Sprintf("Original URL: %s\n", redir.originalURL))
 	sb.WriteString(fmt.Sprintf("Redirect URL: %s\n", redir.redirectURL))
 	sb.WriteString(fmt.Sprintf("Status: %d %s\n\n", redir.statusCode, statusText))
-	sb.WriteString(fmt.Sprintf("To fetch the redirected content, run:\n  web_fetch %s", redir.redirectURL))
+	sb.WriteString(fmt.Sprintf("To fetch the redirected content, run:\n  search fetch %s", redir.redirectURL))
 	return sb.String()
 }
 
@@ -502,20 +462,20 @@ func formatRedirectMessage(redir *redirectInfo) string {
 // Argument parsing
 // ---------------------------------------------------------------------------
 
-func parseArgs(args []string, usage string) (rawURL, extract string, err error) {
+func parseFetchArgs(args []string) (rawURL, extract string, err error) {
 	var extractParts []string
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--extract":
 			if i+1 >= len(args) {
-				return "", "", fmt.Errorf("web_fetch: --extract requires a value")
+				return "", "", fmt.Errorf("search fetch: --extract requires a value")
 			}
 			i++
 			extract = args[i]
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return "", "", fmt.Errorf("web_fetch: unknown flag: %s", args[i])
+				return "", "", fmt.Errorf("search fetch: unknown flag: %s", args[i])
 			}
 			if rawURL == "" {
 				rawURL = args[i]
@@ -526,7 +486,7 @@ func parseArgs(args []string, usage string) (rawURL, extract string, err error) 
 	}
 
 	if rawURL == "" {
-		return "", "", fmt.Errorf("web_fetch: url is required\n\n%s", usage)
+		return "", "", fmt.Errorf("search fetch: url is required\n\nUsage: search fetch <url> [--extract <hint>]")
 	}
 	if extract == "" && len(extractParts) > 0 {
 		extract = strings.Join(extractParts, " ")
@@ -535,7 +495,7 @@ func parseArgs(args []string, usage string) (rawURL, extract string, err error) 
 }
 
 // ---------------------------------------------------------------------------
-// HTML → Markdown conversion (pure Go, no external dependencies)
+// HTML → Markdown conversion
 // ---------------------------------------------------------------------------
 
 var (
@@ -593,7 +553,7 @@ func htmlToMarkdown(html string) string {
 		inner := codeBlockRe.FindStringSubmatch(match)
 		if len(inner) > 1 {
 			code := allTagRe.ReplaceAllString(inner[1], "")
-			code = decodeHTMLEntities(code)
+			code = fetchDecodeHTMLEntities(code)
 			return "\n```\n" + strings.TrimSpace(code) + "\n```\n"
 		}
 		return match
@@ -633,7 +593,7 @@ func htmlToMarkdown(html string) string {
 
 	s = blockEndRe.ReplaceAllString(s, "\n")
 	s = allTagRe.ReplaceAllString(s, "")
-	s = decodeHTMLEntities(s)
+	s = fetchDecodeHTMLEntities(s)
 	s = multiSpaceRe.ReplaceAllString(s, " ")
 
 	lines := strings.Split(s, "\n")
@@ -648,7 +608,7 @@ func htmlToMarkdown(html string) string {
 	return s
 }
 
-func decodeHTMLEntities(s string) string {
+func fetchDecodeHTMLEntities(s string) string {
 	replacer := strings.NewReplacer(
 		"&amp;", "&",
 		"&lt;", "<",

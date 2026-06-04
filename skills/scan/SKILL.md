@@ -45,3 +45,4 @@ The scan AI sub-skills are independent options:
 - `aiscan://skills/scan/verify.md` — Active finding validation: probes targets to confirm or reject scanner findings
 - `aiscan://skills/scan/sniper.md` — Vulnerability intelligence: searches for known CVEs based on discovered fingerprints
 - `aiscan://skills/scan/deep.md` — Deep testing for discovered web endpoints and fingerprinted assets
+- `aiscan://skills/scan/fuzz.md` — Post-scan parameter fuzzing for injection vulnerabilities

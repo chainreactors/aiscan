@@ -1,3 +1,3 @@
-//go:build !browser && !full
+//go:build !browser
 
 package scan

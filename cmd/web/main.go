@@ -118,9 +118,9 @@ type yamlConfig struct {
 		Verify        string `yaml:"verify" config:"verify"`
 		VerifyTimeout int    `yaml:"verify_timeout" config:"verify_timeout"`
 	} `yaml:"scan" config:"scan"`
-	WebSearch struct {
+	Search struct {
 		TavilyKeys string `yaml:"tavily_keys" config:"tavily_keys"`
-	} `yaml:"websearch" config:"websearch"`
+	} `yaml:"search" config:"search"`
 }
 
 type llmConfigFileStore struct {
@@ -356,7 +356,7 @@ func initApp(ctx context.Context, configFile string, logger telemetry.Logger) (*
 		Tools: app.ToolConfig{
 			Enabled:     true,
 			BashTimeout: 300,
-			TavilyKeys:  ycfg.WebSearch.TavilyKeys,
+			TavilyKeys:  ycfg.Search.TavilyKeys,
 		},
 		Logger: logger,
 	}
@@ -423,10 +423,10 @@ func parseSimpleYAML(data []byte, cfg *yamlConfig) {
 			case "verify":
 				cfg.Scan.Verify = value
 			}
-		case "websearch":
+		case "search":
 			switch key {
 			case "tavily_keys":
-				cfg.WebSearch.TavilyKeys = value
+				cfg.Search.TavilyKeys = value
 			}
 		}
 	}

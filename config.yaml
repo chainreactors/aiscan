@@ -49,11 +49,11 @@ scan:
   # 单次验证超时秒数（0 表示不覆盖）
   verify_timeout: 0
 
-# Web 搜索
-websearch:
+# 搜索
+search:
   # Tavily API keys（逗号分隔，留空则 fallback 到 DuckDuckGo）
   tavily_keys: ""
-  # web_search 请求代理（如 http://127.0.0.1:7890 或 socks5://...）
+  # search tavily 请求代理（如 http://127.0.0.1:7890 或 socks5://...）
   proxy: ""
 
 # 被动信息收集

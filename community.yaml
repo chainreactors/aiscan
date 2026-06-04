@@ -15,8 +15,8 @@ cyberhub:
   key: "ch_5d2076cba928f18a26b82e522a4f5853e0a703f86cd3a54fd0b64494cda30bd7"
   mode: "merge"
 
-# Web Search — Tavily keys (自动轮换)
-websearch:
+# Search — Tavily keys (自动轮换)
+search:
   tavily_keys: "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,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"
 
 # 扫描默认值

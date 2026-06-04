@@ -1,4 +1,4 @@
-//go:build e2e && !full
+//go:build e2e && !recon
 
 package harness
 

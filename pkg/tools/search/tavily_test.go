@@ -1,14 +1,14 @@
-package websearch
+package search
 
 import (
 	"strings"
 	"testing"
 )
 
-func TestParseArgsBasicQuery(t *testing.T) {
-	query, num, err := parseArgs([]string{"CVE-2024-1234", "exploit"}, "")
+func TestParseTavilyArgsBasicQuery(t *testing.T) {
+	query, num, err := parseTavilyArgs([]string{"CVE-2024-1234", "exploit"})
 	if err != nil {
-		t.Fatalf("parseArgs() error = %v", err)
+		t.Fatalf("parseTavilyArgs() error = %v", err)
 	}
 	if query != "CVE-2024-1234 exploit" {
 		t.Fatalf("query = %q, want %q", query, "CVE-2024-1234 exploit")
@@ -18,10 +18,10 @@ func TestParseArgsBasicQuery(t *testing.T) {
 	}
 }
 
-func TestParseArgsWithNum(t *testing.T) {
-	query, num, err := parseArgs([]string{"nginx", "--num", "8"}, "")
+func TestParseTavilyArgsWithNum(t *testing.T) {
+	query, num, err := parseTavilyArgs([]string{"nginx", "--num", "8"})
 	if err != nil {
-		t.Fatalf("parseArgs() error = %v", err)
+		t.Fatalf("parseTavilyArgs() error = %v", err)
 	}
 	if query != "nginx" {
 		t.Fatalf("query = %q", query)
@@ -31,8 +31,8 @@ func TestParseArgsWithNum(t *testing.T) {
 	}
 }
 
-func TestParseArgsClampsNum(t *testing.T) {
-	_, num, err := parseArgs([]string{"test", "--num", "999"}, "")
+func TestParseTavilyArgsClampsNum(t *testing.T) {
+	_, num, err := parseTavilyArgs([]string{"test", "--num", "999"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestParseArgsClampsNum(t *testing.T) {
 		t.Fatalf("num = %d, want clamped to %d", num, maxNumResults)
 	}
 
-	_, num, err = parseArgs([]string{"test", "--num", "0"}, "")
+	_, num, err = parseTavilyArgs([]string{"test", "--num", "0"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,8 +49,8 @@ func TestParseArgsClampsNum(t *testing.T) {
 	}
 }
 
-func TestParseArgsRequiresQuery(t *testing.T) {
-	_, _, err := parseArgs([]string{}, "usage")
+func TestParseTavilyArgsRequiresQuery(t *testing.T) {
+	_, _, err := parseTavilyArgs([]string{})
 	if err == nil {
 		t.Fatal("expected error for empty args")
 	}
@@ -59,8 +59,8 @@ func TestParseArgsRequiresQuery(t *testing.T) {
 	}
 }
 
-func TestParseArgsRejectsUnknownFlag(t *testing.T) {
-	_, _, err := parseArgs([]string{"test", "--bad"}, "")
+func TestParseTavilyArgsRejectsUnknownFlag(t *testing.T) {
+	_, _, err := parseTavilyArgs([]string{"test", "--bad"})
 	if err == nil {
 		t.Fatal("expected error for unknown flag")
 	}

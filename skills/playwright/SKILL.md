@@ -256,12 +256,12 @@ playwright record sqli --save sqli-poc.yaml --id sqli-login
 playwright close sqli
 ```
 
-### CAPTCHA + Weak Password (with vision tool)
+### CAPTCHA + Weak Password
 ```bash
 playwright open http://target.com/login --session s1 --ttl 0
 playwright discover s1
 playwright screenshot s1 --selector "img#captcha" --output captcha.png
-# Then use vision tool: vision captcha.png "Return ONLY the CAPTCHA text"
+# Use the LLM's vision capability to read the CAPTCHA from captcha.png
 playwright autofill s1 --form 0 --data "username=admin,password=admin123,captcha=<solved>"
 playwright click s1 "button[type=submit]"
 playwright wait-for s1 --stable

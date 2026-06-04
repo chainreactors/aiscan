@@ -434,7 +434,7 @@ func scanVerifyBeforeToolCall(_ context.Context, call agent.BeforeToolCallContex
 	}
 	return &agent.BeforeToolCallResult{
 		Block:  true,
-		Reason: "scan verification may use web_search/web_fetch, but scanner pseudo-commands are blocked to avoid recursive or active scanning",
+		Reason: "scan verification may use search (tavily/fetch), but scanner pseudo-commands are blocked to avoid recursive or active scanning",
 	}, nil
 }
 

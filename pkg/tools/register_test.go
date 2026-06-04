@@ -5,7 +5,7 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/resources"
-	_ "github.com/chainreactors/aiscan/pkg/tools/cyberhub"
+	_ "github.com/chainreactors/aiscan/pkg/tools/search"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	fingerslib "github.com/chainreactors/fingers/fingers"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
@@ -40,7 +40,7 @@ func TestRegisterAllTreatsNeutronAsOptional(t *testing.T) {
 	}
 }
 
-func TestRegisterAllRegistersCyberhubWhenResourcesAvailable(t *testing.T) {
+func TestRegisterAllRegistersSearchWithResources(t *testing.T) {
 	engineSet := &engine.Set{
 		Resources: &resources.Set{
 			FingersConfig: sdkfingers.NewConfig().WithFingers(fingerslib.Fingers{{Name: "nginx", Protocol: "http"}}),
@@ -48,7 +48,7 @@ func TestRegisterAllRegistersCyberhubWhenResourcesAvailable(t *testing.T) {
 	}
 	reg := buildRegistry(engineSet)
 
-	if !reg.Has("cyberhub") {
-		t.Fatal("expected cyberhub to be registered")
+	if !reg.Has("search") {
+		t.Fatal("expected search to be registered")
 	}
 }

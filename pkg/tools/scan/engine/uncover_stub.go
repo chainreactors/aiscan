@@ -1,4 +1,4 @@
-//go:build !full
+//go:build !recon
 
 package engine
 

@@ -1,4 +1,4 @@
-//go:build !full
+// proxy command registers unconditionally
 
 package proxy
 

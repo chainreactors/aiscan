@@ -106,7 +106,7 @@ aiscan 构建脚本
   --output DIR          输出目录 (默认: dist)
   --embed               嵌入扫描资源（不加 emptytemplates/noembed tag）
   --ioa                 同时编译 ioa server 二进制
-  --profile PROFILE     构建配置: mini (默认, 核心工具) 或 full (包含 katana/uncover/ioa)
+  --profile PROFILE     构建配置: mini (默认, 核心工具) 或 full (browser+recon+ioa)
 
 LLM 覆盖（优先级高于 config.yaml）:
   --llm-provider NAME
@@ -141,7 +141,7 @@ Web Search:
   ./build.sh --embed                            # 嵌入资源的完整构建
   ./build.sh -g                                 # 打印 ldflags（用于自定义构建命令）
   ./build.sh --ioa -o linux/amd64               # 同时编译 ioa server
-  ./build.sh --profile full -o linux/amd64      # full 构建 (含 katana/uncover/ioa)
+  ./build.sh --profile full -o linux/amd64      # full 构建 (browser+recon+ioa)
 HELP
             exit 0
             ;;
@@ -241,7 +241,7 @@ echo "profile:  $PROFILE"
 case "$PROFILE" in
     mini) ;;
     full)
-        EXTRA_TAGS="full${EXTRA_TAGS:+,$EXTRA_TAGS}"
+        EXTRA_TAGS="browser,recon${EXTRA_TAGS:+,$EXTRA_TAGS}"
         BUILD_IOA=true
         AISCAN_BIN="aiscan-full"
         ;;

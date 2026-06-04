@@ -1,11 +1,22 @@
-//go:build !full
-
 package skills
 
+var baseExpectedSkills = []string{"aiscan", "ioa", "playwright", "scan", "gogo", "spray", "zombie", "neutron", "report", "search"}
+var baseInternalSkills = []string{"playwright", "scan", "gogo", "spray", "zombie", "neutron", "search"}
+
+var extraExpected []string
+var extraInternal []string
+
+func addExpectedSkill(name string, internal bool) {
+	extraExpected = append(extraExpected, name)
+	if internal {
+		extraInternal = append(extraInternal, name)
+	}
+}
+
 func expectedEmbeddedSkillNames() []string {
-	return []string{"aiscan", "ioa", "playwright", "scan", "gogo", "spray", "fuzz", "zombie", "neutron", "report", "web_search", "web_fetch"}
+	return append(append([]string(nil), baseExpectedSkills...), extraExpected...)
 }
 
 func internalPromptSkillNames() []string {
-	return []string{"playwright", "scan", "gogo", "spray", "fuzz", "zombie", "neutron", "web_search", "web_fetch", "vision"}
+	return append(append([]string(nil), baseInternalSkills...), extraInternal...)
 }

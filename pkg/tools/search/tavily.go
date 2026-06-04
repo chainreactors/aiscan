@@ -1,4 +1,4 @@
-package websearch
+package search
 
 import (
 	"context"
@@ -19,7 +19,7 @@ const (
 	ddgSearchURL    = "https://html.duckduckgo.com/html/"
 	ddgUserAgent    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 	searchTimeout   = 30 * time.Second
-	maxResponseBody = 1024 * 1024 // 1MB for HTML
+	maxResponseBody = 1024 * 1024
 
 	defaultNumResults = 5
 	maxNumResults     = 10
@@ -31,35 +31,26 @@ type searchBackend int
 
 const (
 	backendDDG    searchBackend = iota
-	backendTavily               // requires TAVILY_API_KEY
+	backendTavily
 )
 
-// Command implements command.PseudoCommand for web search.
-type Command struct {
-	client      *http.Client
-	backend     searchBackend
-	apiKey      string
-	apiKeys     []string // multiple Tavily keys for rotation
-	currentKey  int      // index into apiKeys
-	mu          sync.Mutex
+type TavilySearch struct {
+	client     *http.Client
+	backend    searchBackend
+	apiKey     string
+	apiKeys    []string
+	currentKey int
+	mu         sync.Mutex
 }
 
-// New creates a web_search pseudo-command. It auto-detects the backend:
-// TAVILY_API_KEY set → Tavily, otherwise → DuckDuckGo.
-// Multiple keys can be provided via TAVILY_API_KEYS (comma-separated) for
-// automatic rotation when a key is exhausted (HTTP 401/429).
-// An optional builtinKeys string (comma-separated) supplies build-time
-// fallback keys that are appended after any environment-sourced keys.
-// Proxy is managed via SetProxy() and the proxy command's OnProxyChange callback.
-func New(builtinKeys string) *Command {
-	c := &Command{
+func NewTavilySearch(builtinKeys string) *TavilySearch {
+	c := &TavilySearch{
 		client: &http.Client{
 			Timeout:   searchTimeout,
 			Transport: &http.Transport{Proxy: http.ProxyFromEnvironment},
 		},
 	}
 
-	// Collect all available Tavily keys: env vars first, then build-time defaults.
 	var keys []string
 	seen := make(map[string]struct{})
 
@@ -77,11 +68,8 @@ func New(builtinKeys string) *Command {
 		}
 	}
 
-	// 1. Environment (highest priority).
 	addKeys(os.Getenv("TAVILY_API_KEY"))
 	addKeys(os.Getenv("TAVILY_API_KEYS"))
-
-	// 2. Build-time fallback keys (via ldflags → Deps → register.go).
 	addKeys(builtinKeys)
 
 	if len(keys) > 0 {
@@ -92,9 +80,7 @@ func New(builtinKeys string) *Command {
 	return c
 }
 
-// SetProxy updates the HTTP proxy used for web search requests.
-// Implements the interface used by the proxy command's OnProxyChange callback.
-func (c *Command) SetProxy(proxyURLStr string) {
+func (c *TavilySearch) SetProxy(proxyURLStr string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	transport := &http.Transport{}
@@ -111,9 +97,7 @@ func (c *Command) SetProxy(proxyURLStr string) {
 	c.client.Transport = transport
 }
 
-// rotateKey advances to the next Tavily API key. Returns false if all keys
-// have been exhausted (wrapped around to the starting key).
-func (c *Command) rotateKey() bool {
+func (c *TavilySearch) rotateKey() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if len(c.apiKeys) <= 1 {
@@ -121,55 +105,33 @@ func (c *Command) rotateKey() bool {
 	}
 	c.currentKey = (c.currentKey + 1) % len(c.apiKeys)
 	c.apiKey = c.apiKeys[c.currentKey]
-	return true // still have keys to try
+	return true
 }
 
-func (c *Command) Name() string { return "web_search" }
-
-func (c *Command) Usage() string {
-	return `web_search - Search the web for information
-Usage:
-  web_search <query> [options]
-
-Options:
-  --num <N>   Number of results to return (1-10, default 5)
-
-Examples:
-  web_search "CVE-2024-1234 exploit"
-  web_search "nginx reverse proxy config" --num 10`
-}
-
-// Execute parses CLI-style arguments and performs a web search.
-//
-//	web_search <query> [--num <N>]
-func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
-	query, num, err := parseArgs(args, c.Usage())
+func (c *TavilySearch) Execute(ctx context.Context, args []string) (string, error) {
+	query, num, err := parseTavilyArgs(args)
 	if err != nil {
 		return "", err
 	}
 
 	switch c.backend {
 	case backendTavily:
-		// Try current key; on auth/quota failure rotate through remaining keys.
 		startKey := c.currentKey
 		for {
 			result, err := c.searchTavily(ctx, query, num)
 			if err == nil {
 				return result, nil
 			}
-			// Only rotate on key-exhaustion errors (401 Unauthorized, 429 Rate Limit).
 			if !isKeyExhausted(err) {
-				// Non-key error — fall through to DDG.
 				break
 			}
 			if !c.rotateKey() {
-				break // single key, nothing to rotate
+				break
 			}
 			if c.currentKey == startKey {
-				break // wrapped around, all keys exhausted
+				break
 			}
 		}
-		// All Tavily keys failed — fallback to DuckDuckGo.
 		fallback, fbErr := c.searchDDG(ctx, query, num)
 		if fbErr != nil {
 			return "", fmt.Errorf("tavily keys exhausted; ddg fallback: %w", fbErr)
@@ -180,30 +142,25 @@ func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Argument parsing
-// ---------------------------------------------------------------------------
-
-func parseArgs(args []string, usage string) (query string, num int, err error) {
+func parseTavilyArgs(args []string) (query string, num int, err error) {
 	num = defaultNumResults
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--num":
 			if i+1 >= len(args) {
-				return "", 0, fmt.Errorf("web_search: --num requires a value")
+				return "", 0, fmt.Errorf("search tavily: --num requires a value")
 			}
-			// #nosec G602 -- i+1 is checked immediately above.
 			value := args[i+1]
 			i++
 			n, parseErr := strconv.Atoi(value)
 			if parseErr != nil {
-				return "", 0, fmt.Errorf("web_search: invalid --num value: %s", value)
+				return "", 0, fmt.Errorf("search tavily: invalid --num value: %s", value)
 			}
 			num = n
 		default:
 			if strings.HasPrefix(args[i], "--") {
-				return "", 0, fmt.Errorf("web_search: unknown flag: %s", args[i])
+				return "", 0, fmt.Errorf("search tavily: unknown flag: %s", args[i])
 			}
 			if query == "" {
 				query = args[i]
@@ -214,7 +171,7 @@ func parseArgs(args []string, usage string) (query string, num int, err error) {
 	}
 
 	if query == "" {
-		return "", 0, fmt.Errorf("web_search: query is required\n\n%s", usage)
+		return "", 0, fmt.Errorf("search tavily: query is required\n\nUsage: search tavily <query> [--num <N>]")
 	}
 	if num <= 0 {
 		num = defaultNumResults
@@ -225,8 +182,6 @@ func parseArgs(args []string, usage string) (query string, num int, err error) {
 	return query, num, nil
 }
 
-// isKeyExhausted checks whether a Tavily error indicates the API key is
-// invalid or rate-limited (HTTP 401 / 429), meaning we should rotate.
 func isKeyExhausted(err error) bool {
 	if err == nil {
 		return false
@@ -263,7 +218,7 @@ type tavilyResult struct {
 	Score   float64 `json:"score"`
 }
 
-func (c *Command) searchTavily(ctx context.Context, query string, num int) (string, error) {
+func (c *TavilySearch) searchTavily(ctx context.Context, query string, num int) (string, error) {
 	reqBody := tavilyRequest{
 		Query:             query,
 		MaxResults:        num,
@@ -338,7 +293,7 @@ func formatTavilyResults(resp tavilyResponse, query string) string {
 // DuckDuckGo HTML backend (fallback)
 // ---------------------------------------------------------------------------
 
-func (c *Command) searchDDG(ctx context.Context, query string, num int) (string, error) {
+func (c *TavilySearch) searchDDG(ctx context.Context, query string, num int) (string, error) {
 	form := url.Values{"q": {query}, "b": {""}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ddgSearchURL,
 		strings.NewReader(form.Encode()))

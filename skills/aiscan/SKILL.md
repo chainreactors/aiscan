@@ -37,11 +37,11 @@ use `passive` first only in full builds. Otherwise start from user-provided doma
 
 Utility commands:
 
-- `web_search`: search the web.
-- `web_fetch`: fetch and read a URL.
-- `vision`: analyze an image with a vision LLM.
+- `search tavily`: search the web.
+- `search fetch`: fetch and read a URL.
+- `search cyberhub`: search loaded fingerprints and POC templates.
 
-Read the corresponding skill file for each command's usage: `aiscan://skills/<command>/SKILL.md`.
+Read the search skill for usage: `aiscan://skills/search/SKILL.md`.
 
 ## Scan Output Consumption
 
@@ -86,7 +86,7 @@ When moving data off a target, prefer in order:
 
 ## Post-Scan Analysis
 
-After `scan` or `spray --crawl`, review discovered web endpoints for parameters worth fuzzing. The scanner pipeline finds surfaces; the agent tests them for injection vulnerabilities that template-based scanning misses. See `fuzz` skill for methodology.
+After `scan` or `spray --crawl`, review discovered web endpoints for parameters worth fuzzing. The scanner pipeline finds surfaces; the agent tests them for injection vulnerabilities that template-based scanning misses. See `aiscan://skills/scan/fuzz.md` for methodology.
 
 ## Verification
 

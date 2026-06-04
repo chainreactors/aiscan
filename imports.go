@@ -5,9 +5,7 @@ package main
 
 import (
 	_ "github.com/chainreactors/aiscan/pkg/tools"
-	_ "github.com/chainreactors/aiscan/pkg/tools/cyberhub"
 	_ "github.com/chainreactors/aiscan/pkg/tools/ioa"
 	_ "github.com/chainreactors/aiscan/pkg/tools/proxy"
-	_ "github.com/chainreactors/aiscan/pkg/tools/webfetch"
-	_ "github.com/chainreactors/aiscan/pkg/tools/websearch"
+	_ "github.com/chainreactors/aiscan/pkg/tools/search"
 )

@@ -40,7 +40,7 @@ Test the specific vulnerability claim:
 | Open management console | Fetch URL, confirm it returns admin/management interface content |
 | **XSS (reflected/stored)** | Use playwright session: `open --record` → `discover` → `dialog --arm` → `fill` payload → `click` submit → `dialog --check` for alert → if confirmed, `record --save` |
 | **SQLi via login** | Use playwright session: `open --record` → `autofill --data "username=admin' OR 1=1--"` → `click` submit → check `url`/`goto` for admin content → if confirmed, `record --save` |
-| **Weak creds + CAPTCHA** | Use playwright session: `open --record` → `discover` → `screenshot --selector` captcha → `vision` to solve → `autofill --data` with creds + captcha → `click` submit → if confirmed, `record --save` |
+| **Weak creds + CAPTCHA** | Use playwright session: `open --record` → `discover` → `screenshot --selector` captcha → LLM vision to solve → `autofill --data` with creds + captcha → `click` submit → if confirmed, `record --save` |
 | **Auth bypass via cookies** | Use playwright session: `open --record` → `cookies --set role=admin` → `eval` navigate to admin → check `goto` text → if confirmed, `record --save` |
 
 ### Tool Selection Decision Tree
@@ -54,7 +54,7 @@ Is the target a simple HTTP endpoint?
     │   └── playwright template <poc.yaml> <target-url>
     └── Need multi-step interaction?
         └── playwright open --record → discover → fill/autofill → click → check results
-            ├── Page has CAPTCHA? → playwright screenshot --selector + vision tool
+            ├── Page has CAPTCHA? → playwright screenshot --selector + LLM vision
             ├── Need XSS dialog detection? → playwright dialog --arm before payload
             ├── Need to track requests? → playwright network --start before action
             └── Confirmed? → playwright record --save <poc.yaml> to persist the POC

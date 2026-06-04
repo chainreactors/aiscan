@@ -75,7 +75,7 @@ func TestE2ETwoSwarmNodesCoordinated(t *testing.T) {
 		SpaceDescription: "vulnerability recon and fingerprinting",
 		PollInterval:     100 * time.Millisecond,
 		Prompt:           "identify vulnerabilities and fingerprints",
-		Skills:           []string{"neutron", "cyberhub"},
+		Skills:           []string{"neutron", "search"},
 		Network:          map[string]any{"hostname": "recon-host", "cidr": "10.0.0.0/24"},
 		OnTask: func(ctx context.Context, task Task) (string, error) {
 			reconRec.record(task.Content)

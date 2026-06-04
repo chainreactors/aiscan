@@ -1,4 +1,4 @@
-package cyberhub
+package search
 
 import (
 	"context"
@@ -15,9 +15,9 @@ import (
 )
 
 func TestCyberhubSearchesFingerprints(t *testing.T) {
-	cmd := newTestCommand()
+	cmd := newTestSearchCommand()
 
-	out, err := cmd.Execute(context.Background(), []string{"search", "finger", "nginx"})
+	out, err := cmd.Execute(context.Background(), []string{"cyberhub", "search", "finger", "nginx"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -33,9 +33,9 @@ func TestCyberhubSearchesFingerprints(t *testing.T) {
 }
 
 func TestCyberhubListsPOCsWithFilters(t *testing.T) {
-	cmd := newTestCommand()
+	cmd := newTestSearchCommand()
 
-	out, err := cmd.Execute(context.Background(), []string{"list", "poc", "--severity", "critical,high", "--finger", "spring", "--limit", "0"})
+	out, err := cmd.Execute(context.Background(), []string{"cyberhub", "list", "poc", "--severity", "critical,high", "--finger", "spring", "--limit", "0"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -48,9 +48,9 @@ func TestCyberhubListsPOCsWithFilters(t *testing.T) {
 }
 
 func TestCyberhubSearchJSONLines(t *testing.T) {
-	cmd := newTestCommand()
+	cmd := newTestSearchCommand()
 
-	out, err := cmd.Execute(context.Background(), []string{"search", "poc", "spring", "--json"})
+	out, err := cmd.Execute(context.Background(), []string{"cyberhub", "search", "poc", "spring", "--json"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -58,7 +58,7 @@ func TestCyberhubSearchJSONLines(t *testing.T) {
 	if len(lines) != 1 {
 		t.Fatalf("lines = %d, want 1: %q", len(lines), out)
 	}
-	var got item
+	var got cyberhubItem
 	if err := json.Unmarshal([]byte(lines[0]), &got); err != nil {
 		t.Fatalf("json unmarshal error = %v", err)
 	}
@@ -67,7 +67,7 @@ func TestCyberhubSearchJSONLines(t *testing.T) {
 	}
 }
 
-func newTestCommand() *Command {
+func newTestSearchCommand() *Command {
 	fingerCfg := sdkfingers.NewConfig().WithFingers(fingerslib.Fingers{
 		{
 			Name:        "nginx",
@@ -110,8 +110,10 @@ func newTestCommand() *Command {
 			},
 		},
 	})
-	return New(&resources.Set{
-		FingersConfig: fingerCfg,
-		NeutronConfig: neutronCfg,
+	return New(Opts{
+		Resources: &resources.Set{
+			FingersConfig: fingerCfg,
+			NeutronConfig: neutronCfg,
+		},
 	})
 }

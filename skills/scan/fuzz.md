@@ -1,10 +1,6 @@
----
-name: fuzz
-description: Post-scan parameter fuzzing methodology. After scan/spray discovers web endpoints, evaluate and fuzz interesting parameters for injection vulnerabilities.
-internal: true
----
+# Fuzz
 
-# Parameter Fuzzing
+Post-scan parameter fuzzing. After scan/spray discovers web endpoints, evaluate and fuzz interesting parameters for injection vulnerabilities.
 
 ## Timing
 
