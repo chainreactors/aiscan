@@ -1,4 +1,4 @@
-package cmd
+package runner
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/skills"
 )
-
 
 type SubAgentConfig struct {
 	ParentConfig agent.Config
@@ -150,7 +149,7 @@ func (t *SubAgentTool) create(ctx context.Context, prompt, typeName, name, mode,
 		return t.runSync(ctx, cfg, prompt, name, typeName, toolCtx, timeout)
 	case "fork":
 		return t.runFork(ctx, cfg, prompt, name, typeName, toolCtx)
-	default: // async
+	default:
 		return t.runAsync(ctx, cfg, prompt, name, typeName)
 	}
 }

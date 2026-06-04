@@ -1,4 +1,4 @@
-package cmd
+package config
 
 import (
 	"os"
@@ -7,7 +7,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
-type runtimeFeatures struct {
+type RuntimeFeatures struct {
 	ProviderEnabled  bool
 	ProviderOptional bool
 	ToolsEnabled     bool
@@ -16,11 +16,11 @@ type runtimeFeatures struct {
 	Warning          string
 }
 
-func appConfig(option *Option, features runtimeFeatures, logger telemetry.Logger) app.Config {
+func AppConfig(option *Option, features RuntimeFeatures, logger telemetry.Logger) app.Config {
 	return app.Config{
 		Provider: app.ProviderConfig{
 			Enabled:  features.ProviderEnabled,
-			Config:   providerConfig(option),
+			Config:   ProviderConfig(option),
 			Optional: features.ProviderOptional,
 		},
 		Scanner: app.ScannerConfig{
@@ -29,14 +29,14 @@ func appConfig(option *Option, features runtimeFeatures, logger telemetry.Logger
 			CyberhubMode:      option.CyberhubMode,
 			AIEnabled:         features.AIEnabled,
 			EnableAllAISkills: option.AI,
-			AITimeout:         defaultInt(DefaultVerifyTimeout, 120),
+			AITimeout:         DefaultInt(DefaultVerifyTimeout, 120),
 			VerifyMode:        DefaultVerify,
 			Proxy:             option.Proxy,
-			FofaEmail:         resolveString(option.FofaEmail, os.Getenv("FOFA_EMAIL")),
-			FofaKey:           resolveString(option.FofaKey, os.Getenv("FOFA_KEY")),
-			HunterToken:       resolveString(option.HunterToken, os.Getenv("HUNTER_TOKEN")),
-			HunterAPIKey:      resolveString(option.HunterAPIKey, os.Getenv("HUNTER_API_KEY")),
-			ReconProxy:        resolveString(option.ReconProxy, os.Getenv("RECON_PROXY")),
+			FofaEmail:         ResolveString(option.FofaEmail, os.Getenv("FOFA_EMAIL")),
+			FofaKey:           ResolveString(option.FofaKey, os.Getenv("FOFA_KEY")),
+			HunterToken:       ResolveString(option.HunterToken, os.Getenv("HUNTER_TOKEN")),
+			HunterAPIKey:      ResolveString(option.HunterAPIKey, os.Getenv("HUNTER_API_KEY")),
+			ReconProxy:        ResolveString(option.ReconProxy, os.Getenv("RECON_PROXY")),
 			ReconLimit:        intOptionValue(option.ReconLimit),
 		},
 		Tools: app.ToolConfig{
@@ -46,4 +46,11 @@ func appConfig(option *Option, features runtimeFeatures, logger telemetry.Logger
 		},
 		Logger: logger,
 	}
+}
+
+func intOptionValue(p *int) int {
+	if p != nil {
+		return *p
+	}
+	return 0
 }

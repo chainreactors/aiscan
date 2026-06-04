@@ -1,4 +1,4 @@
-package cmd
+package pidlock
 
 import (
 	"os"
@@ -6,50 +6,48 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
-	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
-func TestAcquireAgentPIDFileRejectsHeldLock(t *testing.T) {
+func TestAcquireRejectsHeldLock(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agent.pid")
-	first, err := acquireAgentPIDFile(path, telemetry.NopLogger())
+	first, err := Acquire(path, nil)
 	if err != nil {
-		t.Fatalf("first acquireAgentPIDFile() error = %v", err)
+		t.Fatalf("first Acquire() error = %v", err)
 	}
 	defer first.Release()
 
-	_, err = acquireAgentPIDFile(path, telemetry.NopLogger())
+	_, err = Acquire(path, nil)
 	if err == nil || !strings.Contains(err.Error(), "already running") {
-		t.Fatalf("acquireAgentPIDFile() error = %v, want already running", err)
+		t.Fatalf("Acquire() error = %v, want already running", err)
 	}
 }
 
-func TestAcquireAgentPIDFileReclaimsInvalidPIDFile(t *testing.T) {
+func TestAcquireReclaimsInvalidPIDFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agent.pid")
 	if err := os.WriteFile(path, []byte("not-a-pid\n"), 0644); err != nil {
 		t.Fatalf("write pidfile: %v", err)
 	}
 
-	lock, err := acquireAgentPIDFile(path, telemetry.NopLogger())
+	lock, err := Acquire(path, nil)
 	if err != nil {
-		t.Fatalf("acquireAgentPIDFile() error = %v", err)
+		t.Fatalf("Acquire() error = %v", err)
 	}
 	defer lock.Release()
 
-	got, err := readAgentPIDFile(path)
+	got, err := ReadPIDFile(path)
 	if err != nil {
-		t.Fatalf("readAgentPIDFile() error = %v", err)
+		t.Fatalf("ReadPIDFile() error = %v", err)
 	}
 	if got != os.Getpid() {
 		t.Fatalf("pidfile pid = %d, want %d", got, os.Getpid())
 	}
 }
 
-func TestAcquireAgentPIDFileIsAtomic(t *testing.T) {
+func TestAcquireIsAtomic(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agent.pid")
 	const workers = 8
 	type result struct {
-		lock *agentPIDLock
+		lock *Lock
 		err  error
 	}
 
@@ -59,7 +57,7 @@ func TestAcquireAgentPIDFileIsAtomic(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			lock, err := acquireAgentPIDFile(path, telemetry.NopLogger())
+			lock, err := Acquire(path, nil)
 			results <- result{lock: lock, err: err}
 		}()
 	}
@@ -82,11 +80,11 @@ func TestAcquireAgentPIDFileIsAtomic(t *testing.T) {
 	}
 }
 
-func TestReleaseAgentPIDFileOnlyRemovesOwnedFile(t *testing.T) {
+func TestReleaseOnlyRemovesOwnedFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agent.pid")
-	lock, err := acquireAgentPIDFile(path, telemetry.NopLogger())
+	lock, err := Acquire(path, nil)
 	if err != nil {
-		t.Fatalf("acquireAgentPIDFile() error = %v", err)
+		t.Fatalf("Acquire() error = %v", err)
 	}
 	if err := os.WriteFile(path, []byte("1\n"), 0644); err != nil {
 		t.Fatalf("write pidfile: %v", err)

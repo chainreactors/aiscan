@@ -1,4 +1,4 @@
-package cmd
+package runner
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/charmbracelet/glamour"
 	"github.com/muesli/termenv"
@@ -23,7 +24,6 @@ const (
 	toolResultPreviewWidth  = 160
 )
 
-// ANSI escape helpers
 var (
 	colorReset = "\033[0m"
 	colorDim   = "\033[2m"
@@ -32,13 +32,13 @@ var (
 	colorCyan  = "\033[36m"
 )
 
-type agentOutput struct {
+type AgentOutput struct {
 	stdout   io.Writer
 	stderr   io.Writer
 	markdown bool
 	color    bool
 	debug    bool
-	quiet    bool
+	Quiet    bool
 	tools    map[string]agentToolSummary
 }
 
@@ -47,7 +47,7 @@ type agentToolSummary struct {
 	summary string
 }
 
-func newAgentOutput(option *Option) *agentOutput {
+func NewAgentOutput(option *cfg.Option) *AgentOutput {
 	markdown := stdoutMarkdownEnabled(option)
 	debug := false
 	quiet := false
@@ -65,26 +65,26 @@ func newAgentOutput(option *Option) *agentOutput {
 		colorRed = ""
 		colorCyan = ""
 	}
-	return &agentOutput{
+	return &AgentOutput{
 		stdout:   os.Stdout,
 		stderr:   os.Stderr,
 		markdown: markdown,
 		color:    useColor,
 		debug:    debug,
-		quiet:    quiet,
+		Quiet:    quiet,
 		tools:    make(map[string]agentToolSummary),
 	}
 }
 
-func stdoutMarkdownEnabled(option *Option) bool {
+func stdoutMarkdownEnabled(option *cfg.Option) bool {
 	if option != nil && option.NoColor {
 		return false
 	}
 	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
-func (o *agentOutput) Start(label, text string) {
-	if o == nil || o.quiet {
+func (o *AgentOutput) Start(label, text string) {
+	if o == nil || o.Quiet {
 		return
 	}
 	label = strings.TrimSpace(label)
@@ -99,14 +99,14 @@ func (o *agentOutput) Start(label, text string) {
 	fmt.Fprintf(o.stderr, "%s> %s:%s %s\n", colorBold, label, colorReset, text)
 }
 
-func (o *agentOutput) Empty() {
-	if o == nil || o.quiet {
+func (o *AgentOutput) Empty() {
+	if o == nil || o.Quiet {
 		return
 	}
 	fmt.Fprintf(o.stderr, "%sNo output.%s\n", colorDim, colorReset)
 }
 
-func (o *agentOutput) Final(content string) {
+func (o *AgentOutput) Final(content string) {
 	if o == nil {
 		return
 	}
@@ -117,7 +117,7 @@ func (o *agentOutput) Final(content string) {
 	fmt.Fprintln(o.stdout, rendered)
 }
 
-func (o *agentOutput) HandleEvent(_ context.Context, event agent.Event) error {
+func (o *AgentOutput) HandleEvent(_ context.Context, event agent.Event) error {
 	if o == nil {
 		return nil
 	}
@@ -132,8 +132,8 @@ func (o *agentOutput) HandleEvent(_ context.Context, event agent.Event) error {
 	return nil
 }
 
-func (o *agentOutput) turnEnd(event agent.Event) {
-	if o.quiet || event.Usage == nil {
+func (o *AgentOutput) turnEnd(event agent.Event) {
+	if o.Quiet || event.Usage == nil {
 		return
 	}
 	cache := ""
@@ -149,7 +149,7 @@ func (o *agentOutput) turnEnd(event agent.Event) {
 		colorReset)
 }
 
-func (o *agentOutput) toolStart(event agent.Event) {
+func (o *AgentOutput) toolStart(event agent.Event) {
 	name := strings.TrimSpace(event.ToolName)
 	if name == "" {
 		name = "tool"
@@ -161,11 +161,10 @@ func (o *agentOutput) toolStart(event agent.Event) {
 	if event.ToolCallID != "" {
 		o.tools[event.ToolCallID] = agentToolSummary{name: name, summary: summary}
 	}
-	if o.quiet {
+	if o.Quiet {
 		return
 	}
 
-	// Render tool header: ⎿ tool_name: summary
 	header := fmt.Sprintf("%s⎿ %s%s%s", colorDim, colorCyan, name, colorReset)
 	if summary != "" {
 		header += fmt.Sprintf("%s: %s%s", colorDim, colorReset, summary)
@@ -179,13 +178,16 @@ func (o *agentOutput) toolStart(event agent.Event) {
 	}
 }
 
-func (o *agentOutput) toolEnd(event agent.Event) {
-	if o.quiet {
+func (o *AgentOutput) toolEnd(event agent.Event) {
+	if o.Quiet {
 		return
 	}
 
 	if event.IsError || event.Err != nil {
-		errText := toolErrorText(event)
+		errText := strings.TrimSpace(event.Result)
+		if event.Err != nil {
+			errText = event.Err.Error()
+		}
 		if errText == "" {
 			errText = "tool execution failed"
 		}
@@ -201,21 +203,19 @@ func (o *agentOutput) toolEnd(event agent.Event) {
 	o.renderToolResult(event.ToolName, result)
 }
 
-func (o *agentOutput) renderToolResult(toolName, result string) {
+func (o *AgentOutput) renderToolResult(toolName, result string) {
 	lines := strings.Split(result, "\n")
 
-	// Determine how many preview lines to show
 	maxLines := toolResultPreviewLines
 	if o.debug {
 		maxLines = 20
 	}
 
-	// Adjust for specific tool types that benefit from more context
 	switch toolName {
 	case "read":
 		maxLines = 5
 	case "write":
-		maxLines = 6 // edit summary can have multiple lines
+		maxLines = 6
 	}
 
 	showLines := lines
@@ -237,13 +237,6 @@ func (o *agentOutput) renderToolResult(toolName, result string) {
 		remaining := len(lines) - maxLines
 		fmt.Fprintf(o.stderr, "  %s⎿ … +%d lines%s\n", colorDim, remaining, colorReset)
 	}
-}
-
-func toolErrorText(event agent.Event) string {
-	if event.Err != nil {
-		return event.Err.Error()
-	}
-	return strings.TrimSpace(event.Result)
 }
 
 func renderAgentMarkdown(content string, enabled bool) string {

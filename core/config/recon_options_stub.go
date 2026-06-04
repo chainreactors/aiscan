@@ -1,6 +1,6 @@
 //go:build !full
 
-package cmd
+package config
 
 type ReconOptions struct {
 	FofaEmail    string `long:"fofa-email" config:"fofa_email" hidden:"true"`

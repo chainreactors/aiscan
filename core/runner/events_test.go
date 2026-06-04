@@ -1,4 +1,4 @@
-package cmd
+package runner
 
 import (
 	"bufio"
@@ -17,9 +17,9 @@ import (
 func TestEventsWriterAppendsJSONL(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "events.jsonl")
-	w, err := newEventsWriter(path)
+	w, err := NewEventsWriter(path)
 	if err != nil {
-		t.Fatalf("newEventsWriter() error = %v", err)
+		t.Fatalf("NewEventsWriter() error = %v", err)
 	}
 	t.Cleanup(func() { _ = w.Close() })
 
@@ -79,7 +79,6 @@ func TestEventsWriterAppendsJSONL(t *testing.T) {
 		t.Fatalf("line count = %d, want %d", got, want)
 	}
 
-	// Spot-check a few events.
 	if lines[0]["type"] != string(agent.EventAgentStart) {
 		t.Errorf("line[0].type = %v, want %s", lines[0]["type"], agent.EventAgentStart)
 	}
@@ -89,7 +88,6 @@ func TestEventsWriterAppendsJSONL(t *testing.T) {
 	if lines[2]["tool_name"] != "bash" {
 		t.Errorf("line[2].tool_name = %v, want bash", lines[2]["tool_name"])
 	}
-	// agent_end records the new-message count, not the messages themselves.
 	if v, _ := lines[5]["new_messages"].(float64); v != 3 {
 		t.Errorf("line[5].new_messages = %v, want 3", lines[5]["new_messages"])
 	}
@@ -98,9 +96,9 @@ func TestEventsWriterAppendsJSONL(t *testing.T) {
 func TestEventsWriterTruncatesLargeFields(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "events.jsonl")
-	w, err := newEventsWriter(path)
+	w, err := NewEventsWriter(path)
 	if err != nil {
-		t.Fatalf("newEventsWriter() error = %v", err)
+		t.Fatalf("NewEventsWriter() error = %v", err)
 	}
 	t.Cleanup(func() { _ = w.Close() })
 
@@ -125,20 +123,19 @@ func TestEventsWriterTruncatesLargeFields(t *testing.T) {
 	}
 }
 
-func TestEventsWriterNilWhenPathEmpty(t *testing.T) {
-	w, err := newEventsWriter("")
+func TestEventsWriterNoopWhenPathEmpty(t *testing.T) {
+	w, err := NewEventsWriter("")
 	if err != nil {
-		t.Fatalf("newEventsWriter() error = %v", err)
+		t.Fatalf("NewEventsWriter() error = %v", err)
 	}
-	if w != nil {
-		t.Fatalf("expected nil writer for empty path, got %#v", w)
+	if w == nil {
+		t.Fatal("expected non-nil no-op writer for empty path")
 	}
-	// Both Close and HandleEvent must be safe on a nil writer.
 	if err := w.Close(); err != nil {
-		t.Fatalf("Close() on nil writer error = %v", err)
+		t.Fatalf("Close() on no-op writer error = %v", err)
 	}
 	if err := w.HandleEvent(context.Background(), agent.Event{Type: agent.EventAgentStart}); err != nil {
-		t.Fatalf("HandleEvent() on nil writer error = %v", err)
+		t.Fatalf("HandleEvent() on no-op writer error = %v", err)
 	}
 }
 
@@ -156,7 +153,7 @@ func TestCombineEventHandlersRunsAllAndReportsFirstError(t *testing.T) {
 		calls = append(calls, "c")
 		return errors.New("c-failed")
 	}
-	handler := combineEventHandlers(nil, a, b, c)
+	handler := CombineEventHandlers(nil, a, b, c)
 	err := handler(context.Background(), agent.Event{Type: agent.EventAgentStart})
 	if err == nil || err.Error() != "a-failed" {
 		t.Fatalf("err = %v, want a-failed", err)
@@ -167,7 +164,7 @@ func TestCombineEventHandlersRunsAllAndReportsFirstError(t *testing.T) {
 }
 
 func TestCombineEventHandlersNilWhenAllNil(t *testing.T) {
-	if h := combineEventHandlers(nil, nil); h != nil {
+	if h := CombineEventHandlers(nil, nil); h != nil {
 		t.Fatalf("expected nil handler when all inputs nil, got %#v", h)
 	}
 }

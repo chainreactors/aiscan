@@ -1,18 +1,42 @@
-package cmd
+package runner
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"text/tabwriter"
+	"time"
 
+	"github.com/chainreactors/aiscan/cmd/ioaserve"
+	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/ioa"
 	ioaclient "github.com/chainreactors/ioa/client"
 )
 
-func runIOAClientCommand(ctx context.Context, mode runMode, option *Option, args ioaClientArgs, logger telemetry.Logger) error {
+func RunIOAServe(ctx context.Context, option *cfg.Option, logger telemetry.Logger) error {
+	return ioaserve.RunServe(ctx, ioaserve.Config{
+		URL: option.IOAURL,
+		DB:  "",
+	}, logger)
+}
+
+func ResolveIOANodeName(option *cfg.Option) string {
+	if option.IOANodeName != "" {
+		return option.IOANodeName
+	}
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err == nil {
+		return "aiscan-" + hex.EncodeToString(b[:])
+	}
+	return "aiscan-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+}
+
+func RunIOAClientCommand(ctx context.Context, mode cfg.RunMode, option *cfg.Option, args cfg.IOAClientArgs, logger telemetry.Logger) error {
 	ioaURL := option.IOAURL
 	if ioaURL == "" {
 		ioaURL = "http://127.0.0.1:8765"
@@ -23,20 +47,20 @@ func runIOAClientCommand(ctx context.Context, mode runMode, option *Option, args
 	}
 
 	switch mode {
-	case runModeIOASpaces:
-		return runIOASpaces(ctx, client, option)
-	case runModeIOAMessages:
-		return runIOAMessages(ctx, client, option, args)
-	case runModeIOAContext:
-		return runIOAContext(ctx, client, option, args)
-	case runModeIOANodes:
-		return runIOANodes(ctx, client, option, args)
+	case cfg.RunModeIOASpaces:
+		return RunIOASpaces(ctx, client, option)
+	case cfg.RunModeIOAMessages:
+		return RunIOAMessages(ctx, client, option, args)
+	case cfg.RunModeIOAContext:
+		return RunIOAContext(ctx, client, option, args)
+	case cfg.RunModeIOANodes:
+		return RunIOANodes(ctx, client, option, args)
 	default:
 		return fmt.Errorf("unknown ioa mode: %s", mode)
 	}
 }
 
-func runIOASpaces(ctx context.Context, client *ioaclient.Client, option *Option) error {
+func RunIOASpaces(ctx context.Context, client *ioaclient.Client, option *cfg.Option) error {
 	spaces, err := client.ListSpaces(ctx)
 	if err != nil {
 		return err
@@ -56,7 +80,7 @@ func runIOASpaces(ctx context.Context, client *ioaclient.Client, option *Option)
 	return w.Flush()
 }
 
-func runIOAMessages(ctx context.Context, client *ioaclient.Client, option *Option, args ioaClientArgs) error {
+func RunIOAMessages(ctx context.Context, client *ioaclient.Client, option *cfg.Option, args cfg.IOAClientArgs) error {
 	space, err := client.ResolveSpace(ctx, args.Space)
 	if err != nil {
 		return err
@@ -80,7 +104,7 @@ func runIOAMessages(ctx context.Context, client *ioaclient.Client, option *Optio
 	return w.Flush()
 }
 
-func runIOAContext(ctx context.Context, client *ioaclient.Client, option *Option, args ioaClientArgs) error {
+func RunIOAContext(ctx context.Context, client *ioaclient.Client, option *cfg.Option, args cfg.IOAClientArgs) error {
 	space, err := client.ResolveSpace(ctx, args.Space)
 	if err != nil {
 		return err
@@ -106,7 +130,7 @@ func runIOAContext(ctx context.Context, client *ioaclient.Client, option *Option
 	return nil
 }
 
-func runIOANodes(ctx context.Context, client *ioaclient.Client, option *Option, args ioaClientArgs) error {
+func RunIOANodes(ctx context.Context, client *ioaclient.Client, option *cfg.Option, args cfg.IOAClientArgs) error {
 	if args.Space != "" {
 		space, err := client.ResolveSpace(ctx, args.Space)
 		if err != nil {

@@ -1,4 +1,4 @@
-package cmd
+package config
 
 import (
 	"os"
@@ -17,12 +17,10 @@ func writeTestConfig(t *testing.T, dir, content string) string {
 	return path
 }
 
-// TestMergeOptionOnlyFillsEmpty verifies mergeOption does not overwrite
-// existing (non-empty) values in dst.
 func TestMergeOptionOnlyFillsEmpty(t *testing.T) {
 	dst := Option{}
 	dst.Provider = "cli-provider"
-	dst.Model = "" // empty, should be filled
+	dst.Model = ""
 
 	src := Option{}
 	src.Provider = "config-provider"
@@ -42,11 +40,9 @@ func TestMergeOptionOnlyFillsEmpty(t *testing.T) {
 	}
 }
 
-// TestMergeOptionSpaceDefault verifies that go-flags default:"default" can
-// still be overridden by config when the value is exactly "default".
 func TestMergeOptionSpaceDefault(t *testing.T) {
 	dst := Option{}
-	dst.Space = "default" // go-flags default
+	dst.Space = "default"
 
 	src := Option{}
 	src.Space = "production"
@@ -58,11 +54,9 @@ func TestMergeOptionSpaceDefault(t *testing.T) {
 	}
 }
 
-// TestMergeOptionSpaceExplicitCLI verifies that an explicit CLI value
-// for --space is NOT overridden by config.
 func TestMergeOptionSpaceExplicitCLI(t *testing.T) {
 	dst := Option{}
-	dst.Space = "cli-space" // explicit CLI value
+	dst.Space = "cli-space"
 
 	src := Option{}
 	src.Space = "config-space"
@@ -74,7 +68,6 @@ func TestMergeOptionSpaceExplicitCLI(t *testing.T) {
 	}
 }
 
-// TestLoadConfig verifies gookit/config YAML loading with config: tags.
 func TestLoadConfig(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
@@ -147,8 +140,6 @@ func TestMergeOptionReconExplicitZeroWins(t *testing.T) {
 	}
 }
 
-// TestLoadConfigEmptyFieldsAreZero verifies empty YAML values don't produce
-// non-empty Go strings.
 func TestLoadConfigEmptyFieldsAreZero(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
@@ -174,7 +165,6 @@ cyberhub:
 	}
 }
 
-// TestPriorityCLIOverConfig verifies CLI > config.yaml.
 func TestPriorityCLIOverConfig(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
@@ -186,7 +176,6 @@ cyberhub:
   url: http://config-hub:9000
 `)
 
-	// Simulate: CLI sets provider and api_key, config sets model and cyberhub
 	option := Option{}
 	option.Provider = "cli-provider"
 	option.APIKey = "cli-key"
@@ -211,8 +200,6 @@ cyberhub:
 	}
 }
 
-// TestPriorityCustomConfigSameAsMerge verifies -c also uses mergeOption
-// (CLI still wins over -c).
 func TestPriorityCustomConfigSameAsMerge(t *testing.T) {
 	dir := t.TempDir()
 	customPath := writeTestConfig(t, dir, `
@@ -222,7 +209,7 @@ llm:
 `)
 
 	option := Option{}
-	option.Provider = "cli-provider" // CLI set
+	option.Provider = "cli-provider"
 	option.ConfigFile = customPath
 
 	var loaded Option
@@ -239,7 +226,6 @@ llm:
 	}
 }
 
-// TestPriorityConfigOverBuild verifies config > build ldflags.
 func TestPriorityConfigOverBuild(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
@@ -247,33 +233,27 @@ llm:
   provider: config-provider
 `)
 
-	// Simulate build-time ldflags by setting Default vars
-	origProvider := DefaultProvider
-	DefaultProvider = "build-provider"
-	defer func() { DefaultProvider = origProvider }()
+	withDefaults(t, func() {
+		DefaultProvider = "build-provider"
 
-	option := Option{} // CLI didn't set anything
+		option := Option{}
+		var loaded Option
+		if err := LoadConfig(filepath.Join(dir, "config.yaml"), &loaded); err != nil {
+			t.Fatal(err)
+		}
+		mergeOption(&option, &loaded)
 
-	var loaded Option
-	if err := LoadConfig(filepath.Join(dir, "config.yaml"), &loaded); err != nil {
-		t.Fatal(err)
-	}
-	mergeOption(&option, &loaded)
+		if option.Provider != "config-provider" {
+			t.Errorf("Provider: got %q, want %q (config fills empty)", option.Provider, "config-provider")
+		}
 
-	// Config fills empty
-	if option.Provider != "config-provider" {
-		t.Errorf("Provider: got %q, want %q (config fills empty)", option.Provider, "config-provider")
-	}
-
-	// Now applyDefaults should NOT override
-	applyDefaults(&option)
-	if option.Provider != "config-provider" {
-		t.Errorf("Provider after applyDefaults: got %q, want %q (config > build)", option.Provider, "config-provider")
-	}
+		ApplyDefaults(&option)
+		if option.Provider != "config-provider" {
+			t.Errorf("Provider after ApplyDefaults: got %q, want %q (config > build)", option.Provider, "config-provider")
+		}
+	})
 }
 
-// TestPriorityBuildFillsRemaining verifies build ldflags fill when config
-// doesn't set a value.
 func TestPriorityBuildFillsRemaining(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
@@ -281,52 +261,46 @@ llm:
   provider: ""
 `)
 
-	origModel := DefaultModel
-	DefaultModel = "build-model"
-	defer func() { DefaultModel = origModel }()
+	withDefaults(t, func() {
+		DefaultModel = "build-model"
 
-	option := Option{} // CLI didn't set, config is empty
+		option := Option{}
+		var loaded Option
+		if err := LoadConfig(filepath.Join(dir, "config.yaml"), &loaded); err != nil {
+			t.Fatal(err)
+		}
+		mergeOption(&option, &loaded)
 
-	var loaded Option
-	if err := LoadConfig(filepath.Join(dir, "config.yaml"), &loaded); err != nil {
-		t.Fatal(err)
-	}
-	mergeOption(&option, &loaded)
+		if option.Model != "" {
+			t.Errorf("Model before ApplyDefaults: got %q, want empty", option.Model)
+		}
 
-	if option.Model != "" {
-		t.Errorf("Model before applyDefaults: got %q, want empty", option.Model)
-	}
-
-	applyDefaults(&option)
-	if option.Model != "build-model" {
-		t.Errorf("Model after applyDefaults: got %q, want %q (build fills remaining)", option.Model, "build-model")
-	}
+		ApplyDefaults(&option)
+		if option.Model != "build-model" {
+			t.Errorf("Model after ApplyDefaults: got %q, want %q (build fills remaining)", option.Model, "build-model")
+		}
+	})
 }
 
-func TestLoadConfigWebSearchOptions(t *testing.T) {
+func TestLoadConfigSearchOptions(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
-websearch:
+search:
   tavily_keys: "K1,K2"
 `)
 
-	origTavilyKeys := DefaultTavilyKeys
-	defer func() {
-		DefaultTavilyKeys = origTavilyKeys
-	}()
+	withDefaults(t, func() {
+		if err := loadRuntimeDefaults(filepath.Join(dir, "config.yaml")); err != nil {
+			t.Fatal(err)
+		}
 
-	if err := loadRuntimeDefaults(filepath.Join(dir, "config.yaml")); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg := appConfig(&Option{}, runtimeFeatures{ToolsEnabled: true}, telemetry.NopLogger())
-	if cfg.Tools.TavilyKeys != "K1,K2" {
-		t.Fatalf("tool config = %#v", cfg.Tools)
-	}
+		cfg := AppConfig(&Option{}, RuntimeFeatures{ToolsEnabled: true}, telemetry.NopLogger())
+		if cfg.Tools.TavilyKeys != "K1,K2" {
+			t.Fatalf("tool config = %#v", cfg.Tools)
+		}
+	})
 }
 
-// TestLoadScanDefaults verifies scan.verify and scan.verify_timeout are
-// applied to runtime Default* vars.
 func TestLoadScanDefaults(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
@@ -335,27 +309,20 @@ scan:
   verify_timeout: 90
 `)
 
-	origVerify := DefaultVerify
-	origTimeout := DefaultVerifyTimeout
-	defer func() {
-		DefaultVerify = origVerify
-		DefaultVerifyTimeout = origTimeout
-	}()
+	withDefaults(t, func() {
+		if err := loadRuntimeDefaults(filepath.Join(dir, "config.yaml")); err != nil {
+			t.Fatal(err)
+		}
 
-	if err := loadRuntimeDefaults(filepath.Join(dir, "config.yaml")); err != nil {
-		t.Fatal(err)
-	}
-
-	if DefaultVerify != "critical" {
-		t.Errorf("DefaultVerify: got %q, want %q", DefaultVerify, "critical")
-	}
-	if DefaultVerifyTimeout != "90" {
-		t.Errorf("DefaultVerifyTimeout: got %q, want %q", DefaultVerifyTimeout, "90")
-	}
+		if DefaultVerify != "critical" {
+			t.Errorf("DefaultVerify: got %q, want %q", DefaultVerify, "critical")
+		}
+		if DefaultVerifyTimeout != "90" {
+			t.Errorf("DefaultVerifyTimeout: got %q, want %q", DefaultVerifyTimeout, "90")
+		}
+	})
 }
 
-// TestLoadAndApplyConfigDefaultFile verifies auto-discovery of config.yaml
-// in CWD.
 func TestLoadAndApplyConfigDefaultFile(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
@@ -368,7 +335,7 @@ llm:
 	defer os.Chdir(origDir)
 
 	option := Option{}
-	path, err := loadAndApplyConfig(&option)
+	path, err := LoadAndApplyConfig(&option)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,17 +348,13 @@ llm:
 	}
 }
 
-// TestLoadAndApplyConfigCustomFile verifies -c takes precedence over
-// default config.yaml in CWD.
 func TestLoadAndApplyConfigCustomFile(t *testing.T) {
 	dir := t.TempDir()
-	// Default config in CWD
 	writeTestConfig(t, dir, `
 llm:
   provider: default-provider
   model: default-model
 `)
-	// Custom config
 	customDir := t.TempDir()
 	customPath := writeTestConfig(t, customDir, `
 llm:
@@ -404,7 +367,7 @@ llm:
 
 	option := Option{}
 	option.ConfigFile = customPath
-	path, err := loadAndApplyConfig(&option)
+	path, err := LoadAndApplyConfig(&option)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -415,7 +378,6 @@ llm:
 	if option.Provider != "custom-provider" {
 		t.Errorf("Provider: got %q, want %q (-c wins over default)", option.Provider, "custom-provider")
 	}
-	// model not in custom config → stays empty (default config NOT loaded)
 	if option.Model != "" {
 		t.Errorf("Model: got %q, want empty (-c replaces default config, not merges)", option.Model)
 	}
@@ -430,7 +392,7 @@ func TestLoadAndApplyConfigRejectsMalformedFile(t *testing.T) {
 
 	option := Option{}
 	option.ConfigFile = path
-	gotPath, err := loadAndApplyConfig(&option)
+	gotPath, err := LoadAndApplyConfig(&option)
 	if err == nil {
 		t.Fatal("expected malformed config to return an error")
 	}
@@ -447,7 +409,7 @@ func TestLoadAndApplyConfigRejectsMissingExplicitFile(t *testing.T) {
 	option := Option{}
 	option.ConfigFile = path
 
-	gotPath, err := loadAndApplyConfig(&option)
+	gotPath, err := LoadAndApplyConfig(&option)
 	if err == nil {
 		t.Fatal("expected missing explicit config to return an error")
 	}
@@ -456,14 +418,12 @@ func TestLoadAndApplyConfigRejectsMissingExplicitFile(t *testing.T) {
 	}
 }
 
-// TestInitDefaultConfig verifies --init generates valid YAML.
 func TestInitDefaultConfig(t *testing.T) {
 	content := InitDefaultConfig()
 	if len(content) < 100 {
 		t.Error("generated config too short")
 	}
 
-	// Verify it can be parsed
 	var opt Option
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
@@ -473,8 +433,6 @@ func TestInitDefaultConfig(t *testing.T) {
 	}
 }
 
-// TestFullPriorityChain is an integration test that verifies:
-// CLI > config > build > hardcoded
 func TestFullPriorityChain(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
@@ -487,43 +445,55 @@ cyberhub:
   proxy: config-proxy
 `)
 
-	origProvider := DefaultProvider
-	origModel := DefaultModel
-	origScannerProxy := DefaultScannerProxy
-	DefaultProvider = "build-provider"
-	DefaultModel = "build-model"
-	DefaultScannerProxy = "build-proxy"
-	defer func() {
-		DefaultProvider = origProvider
-		DefaultModel = origModel
-		DefaultScannerProxy = origScannerProxy
-	}()
+	withDefaults(t, func() {
+		DefaultProvider = "build-provider"
+		DefaultModel = "build-model"
+		DefaultScannerProxy = "build-proxy"
 
-	origDir, _ := os.Getwd()
-	os.Chdir(dir)
-	defer os.Chdir(origDir)
+		origDir, _ := os.Getwd()
+		os.Chdir(dir)
+		defer os.Chdir(origDir)
 
-	// Simulate CLI: only --provider set
-	option := Option{}
-	option.Provider = "cli-provider"
+		option := Option{}
+		option.Provider = "cli-provider"
 
-	// Step 1: config loading
-	if _, err := loadAndApplyConfig(&option); err != nil {
-		t.Fatal(err)
-	}
-	// Step 2: apply build defaults
-	applyDefaults(&option)
-
-	checks := []struct{ field, got, want, reason string }{
-		{"Provider", option.Provider, "cli-provider", "CLI > config > build"},
-		{"Model", option.Model, "config-model", "config > build (CLI empty)"},
-		{"APIKey", option.APIKey, "config-key", "config fills empty"},
-		{"Proxy", option.Proxy, "config-proxy", "config > build"},
-		{"CyberhubURL", option.CyberhubURL, "http://config-hub:9000", "config fills empty"},
-	}
-	for _, c := range checks {
-		if c.got != c.want {
-			t.Errorf("%s: got %q, want %q (%s)", c.field, c.got, c.want, c.reason)
+		if _, err := LoadAndApplyConfig(&option); err != nil {
+			t.Fatal(err)
 		}
+		ApplyDefaults(&option)
+
+		checks := []struct{ field, got, want, reason string }{
+			{"Provider", option.Provider, "cli-provider", "CLI > config > build"},
+			{"Model", option.Model, "config-model", "config > build (CLI empty)"},
+			{"APIKey", option.APIKey, "config-key", "config fills empty"},
+			{"Proxy", option.Proxy, "config-proxy", "config > build"},
+			{"CyberhubURL", option.CyberhubURL, "http://config-hub:9000", "config fills empty"},
+		}
+		for _, c := range checks {
+			if c.got != c.want {
+				t.Errorf("%s: got %q, want %q (%s)", c.field, c.got, c.want, c.reason)
+			}
+		}
+	})
+}
+
+func withDefaults(t *testing.T, fn func()) {
+	t.Helper()
+	saved := []*string{
+		&DefaultProvider, &DefaultBaseURL, &DefaultAPIKey, &DefaultModel,
+		&DefaultScannerProxy, &DefaultCyberhubURL, &DefaultCyberhubKey,
+		&DefaultCyberhubMode, &DefaultVerify, &DefaultVerifyTimeout,
+		&DefaultTavilyKeys, &DefaultIOAURL, &DefaultIOANodeID,
+		&DefaultIOANodeName, &DefaultSpace,
 	}
+	originals := make([]string, len(saved))
+	for i, p := range saved {
+		originals[i] = *p
+	}
+	t.Cleanup(func() {
+		for i, p := range saved {
+			*p = originals[i]
+		}
+	})
+	fn()
 }

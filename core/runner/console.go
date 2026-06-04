@@ -1,4 +1,4 @@
-package cmd
+package runner
 
 import (
 	"context"
@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
-	"github.com/chainreactors/aiscan/pkg/telemetry"
 	skillpkg "github.com/chainreactors/aiscan/skills"
 	ioaclient "github.com/chainreactors/ioa/client"
 	"github.com/reeflective/console"
@@ -22,59 +22,20 @@ const agentPromptCommandName = "__prompt"
 
 var errAgentConsoleExit = errors.New("agent console exit")
 
-type agentConsole struct {
+type AgentConsole struct {
 	ctx         context.Context
-	option      *Option
+	option      *cfg.Option
 	application *app.App
 	session     *agent.Agent
 	console     *console.Console
 	menu        *console.Menu
-	output      *agentOutput
+	output      *AgentOutput
 }
 
-func runInteractiveAgentMode(ctx context.Context, option *Option, logger telemetry.Logger) error {
-	runtime, err := newAgentRuntime(ctx, option, logger)
-	if err != nil {
-		return err
-	}
-	defer runtime.application.Close()
-
-	application := runtime.application
-	if _, err := applySelectedSkills("", option.Skills, application.Skills); err != nil {
-		return err
-	}
-
-	events, err := newEventsWriter(option.EventsFile)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if cerr := events.Close(); cerr != nil {
-			logger.Warnf("close events file: %s", cerr)
-		}
-	}()
-
-	sess := newAgentSession(sessionConfig{
-		Application: application,
-		Option:      option,
-		Logger:      logger,
-		Events:      events,
-	})
-	defer sess.Cleanup()
-
-	session := sess.Config.
-		WithSystemPrompt(runtime.systemPrompt).
-		WithStream(false).
-		NewAgent()
-
-	repl := newAgentConsole(ctx, option, application, session)
-	return repl.start()
-}
-
-func newAgentConsole(ctx context.Context, option *Option, application *app.App, session *agent.Agent) *agentConsole {
+func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.App, session *agent.Agent) *AgentConsole {
 	c := console.New("aiscan")
 	c.NewlineAfter = true
-	output := newAgentOutput(option)
+	output := NewAgentOutput(option)
 	if session != nil {
 		session.Subscribe(output.HandleEvent)
 	}
@@ -90,7 +51,7 @@ func newAgentConsole(ctx context.Context, option *Option, application *app.App, 
 		return nil
 	}
 
-	repl := &agentConsole{
+	repl := &AgentConsole{
 		ctx:         ctx,
 		option:      option,
 		application: application,
@@ -105,8 +66,8 @@ func newAgentConsole(ctx context.Context, option *Option, application *app.App, 
 	return repl
 }
 
-func (r *agentConsole) start() error {
-	if r.output == nil || !r.output.quiet {
+func (r *AgentConsole) Start() error {
+	if r.output == nil || !r.output.Quiet {
 		fmt.Fprintln(os.Stderr, "aiscan interactive agent. Type /help for commands, /exit to quit.")
 	}
 	for {
@@ -129,7 +90,7 @@ func (r *agentConsole) start() error {
 			}
 		}
 
-		args, err := agentConsoleArgsForLine(line)
+		args, err := AgentConsoleArgsForLine(line)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %s\n", err)
 			continue
@@ -147,14 +108,14 @@ func (r *agentConsole) start() error {
 	}
 }
 
-func (r *agentConsole) executeArgs(ctx context.Context, args []string) error {
+func (r *AgentConsole) executeArgs(ctx context.Context, args []string) error {
 	root := r.rootCommand()
 	root.SetArgs(args)
 	root.SetContext(ctx)
 	return root.Execute()
 }
 
-func (r *agentConsole) rootCommand() *cobra.Command {
+func (r *AgentConsole) rootCommand() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "agent",
 		Short:         "aiscan interactive agent",
@@ -178,7 +139,7 @@ func (r *agentConsole) rootCommand() *cobra.Command {
 	return root
 }
 
-func (r *agentConsole) promptCommand() *cobra.Command {
+func (r *AgentConsole) promptCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:    agentPromptCommandName,
 		Hidden: true,
@@ -189,7 +150,7 @@ func (r *agentConsole) promptCommand() *cobra.Command {
 	}
 }
 
-func (r *agentConsole) helpCommand(root *cobra.Command) *cobra.Command {
+func (r *AgentConsole) helpCommand(root *cobra.Command) *cobra.Command {
 	return &cobra.Command{
 		Use:   "/help",
 		Short: "Show interactive commands",
@@ -200,7 +161,7 @@ func (r *agentConsole) helpCommand(root *cobra.Command) *cobra.Command {
 	}
 }
 
-func (r *agentConsole) resetCommand() *cobra.Command {
+func (r *AgentConsole) resetCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "/reset",
 		Short: "Clear conversation context",
@@ -212,7 +173,7 @@ func (r *agentConsole) resetCommand() *cobra.Command {
 	}
 }
 
-func (r *agentConsole) continueCommand() *cobra.Command {
+func (r *AgentConsole) continueCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "/continue",
 		Short: "Continue without a new prompt",
@@ -229,7 +190,7 @@ func (r *agentConsole) continueCommand() *cobra.Command {
 	}
 }
 
-func (r *agentConsole) exitCommand() *cobra.Command {
+func (r *AgentConsole) exitCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:     "/exit",
 		Aliases: []string{"/quit"},
@@ -241,7 +202,7 @@ func (r *agentConsole) exitCommand() *cobra.Command {
 	}
 }
 
-func (r *agentConsole) skillCommands() []*cobra.Command {
+func (r *AgentConsole) skillCommands() []*cobra.Command {
 	if r.application == nil || r.application.Skills == nil {
 		return nil
 	}
@@ -256,7 +217,7 @@ func (r *agentConsole) skillCommands() []*cobra.Command {
 	return commands
 }
 
-func (r *agentConsole) skillCommand(skill skillpkg.Skill) *cobra.Command {
+func (r *AgentConsole) skillCommand(skill skillpkg.Skill) *cobra.Command {
 	return &cobra.Command{
 		Use:                "/" + skill.Name + " [prompt]",
 		Short:              skill.Description,
@@ -267,9 +228,9 @@ func (r *agentConsole) skillCommand(skill skillpkg.Skill) *cobra.Command {
 	}
 }
 
-func (r *agentConsole) runPrompt(ctx context.Context, input string) error {
+func (r *AgentConsole) runPrompt(ctx context.Context, input string) error {
 	prompt := skillpkg.ExpandCommand(input, r.application.Skills)
-	prompt, err := applySelectedSkills(prompt, r.option.Skills, r.application.Skills)
+	prompt, err := cfg.ApplySelectedSkills(prompt, r.option.Skills, r.application.Skills)
 	if err != nil {
 		return err
 	}
@@ -282,9 +243,9 @@ func (r *agentConsole) runPrompt(ctx context.Context, input string) error {
 	return nil
 }
 
-func (r *agentConsole) runSkill(ctx context.Context, skill skillpkg.Skill, input string) error {
+func (r *AgentConsole) runSkill(ctx context.Context, skill skillpkg.Skill, input string) error {
 	prompt := skillpkg.FormatInvocation(skill, input)
-	prompt, err := applySelectedSkills(prompt, r.option.Skills, r.application.Skills)
+	prompt, err := cfg.ApplySelectedSkills(prompt, r.option.Skills, r.application.Skills)
 	if err != nil {
 		return err
 	}
@@ -297,7 +258,7 @@ func (r *agentConsole) runSkill(ctx context.Context, skill skillpkg.Skill, input
 	return nil
 }
 
-func (r *agentConsole) printResult(result *agent.Result) {
+func (r *AgentConsole) printResult(result *agent.Result) {
 	if result == nil || strings.TrimSpace(result.Output) == "" {
 		r.ensureOutput().Empty()
 		return
@@ -305,14 +266,14 @@ func (r *agentConsole) printResult(result *agent.Result) {
 	r.ensureOutput().Final(result.Output)
 }
 
-func (r *agentConsole) ensureOutput() *agentOutput {
+func (r *AgentConsole) ensureOutput() *AgentOutput {
 	if r.output == nil {
-		r.output = newAgentOutput(r.option)
+		r.output = NewAgentOutput(r.option)
 	}
 	return r.output
 }
 
-func (r *agentConsole) ioaClient() (*ioaclient.Client, error) {
+func (r *AgentConsole) ioaClient() (*ioaclient.Client, error) {
 	ioaURL := r.option.IOAURL
 	if ioaURL == "" {
 		return nil, fmt.Errorf("IOA not configured: use --ioa-url")
@@ -320,7 +281,7 @@ func (r *agentConsole) ioaClient() (*ioaclient.Client, error) {
 	return ioaclient.NewClient(ioaURL, "")
 }
 
-func (r *agentConsole) ioaCommands() []*cobra.Command {
+func (r *AgentConsole) ioaCommands() []*cobra.Command {
 	return []*cobra.Command{
 		{
 			Use:   "/spaces",
@@ -331,7 +292,7 @@ func (r *agentConsole) ioaCommands() []*cobra.Command {
 				if err != nil {
 					return err
 				}
-				return runIOASpaces(cmd.Context(), client, r.option)
+				return RunIOASpaces(cmd.Context(), client, r.option)
 			},
 		},
 		{
@@ -343,7 +304,7 @@ func (r *agentConsole) ioaCommands() []*cobra.Command {
 				if err != nil {
 					return err
 				}
-				return runIOAMessages(cmd.Context(), client, r.option, ioaClientArgs{Space: args[0]})
+				return RunIOAMessages(cmd.Context(), client, r.option, cfg.IOAClientArgs{Space: args[0]})
 			},
 		},
 		{
@@ -355,7 +316,7 @@ func (r *agentConsole) ioaCommands() []*cobra.Command {
 				if err != nil {
 					return err
 				}
-				return runIOAContext(cmd.Context(), client, r.option, ioaClientArgs{Space: args[0], MessageID: args[1]})
+				return RunIOAContext(cmd.Context(), client, r.option, cfg.IOAClientArgs{Space: args[0], MessageID: args[1]})
 			},
 		},
 		{
@@ -367,11 +328,11 @@ func (r *agentConsole) ioaCommands() []*cobra.Command {
 				if err != nil {
 					return err
 				}
-				var a ioaClientArgs
+				var a cfg.IOAClientArgs
 				if len(args) > 0 {
 					a.Space = args[0]
 				}
-				return runIOANodes(cmd.Context(), client, r.option, a)
+				return RunIOANodes(cmd.Context(), client, r.option, a)
 			},
 		},
 	}
@@ -381,7 +342,7 @@ var ioaConsoleCommands = map[string]bool{
 	"/spaces": true, "/messages": true, "/context": true, "/nodes": true,
 }
 
-func agentConsoleArgsForLine(line string) ([]string, error) {
+func AgentConsoleArgsForLine(line string) ([]string, error) {
 	text := strings.TrimSpace(line)
 	if text == "" {
 		return nil, nil

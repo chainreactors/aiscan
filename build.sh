@@ -42,7 +42,7 @@ OPT_VERIFY=""
 OPT_VERIFY_TIMEOUT=""
 OPT_TAVILY_KEYS=""
 
-MODULE="github.com/chainreactors/aiscan/cmd"
+MODULE="github.com/chainreactors/aiscan/core/config"
 
 DEFAULT_OSARCH="linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64"
 

@@ -1,6 +1,6 @@
 //go:build windows
 
-package cmd
+package pidlock
 
 import (
 	"errors"
@@ -9,10 +9,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const agentPIDLockOffset = 0xfffffff0
+const lockOffset = 0xfffffff0
 
-func lockAgentPIDFile(f *os.File) error {
-	overlapped := windows.Overlapped{Offset: agentPIDLockOffset}
+func lockFile(f *os.File) error {
+	overlapped := windows.Overlapped{Offset: lockOffset}
 	return windows.LockFileEx(
 		windows.Handle(f.Fd()),
 		windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY,
@@ -23,12 +23,12 @@ func lockAgentPIDFile(f *os.File) error {
 	)
 }
 
-func unlockAgentPIDFile(f *os.File) error {
-	overlapped := windows.Overlapped{Offset: agentPIDLockOffset}
+func unlockFile(f *os.File) error {
+	overlapped := windows.Overlapped{Offset: lockOffset}
 	return windows.UnlockFileEx(windows.Handle(f.Fd()), 0, 1, 0, &overlapped)
 }
 
-func processExists(pid int) bool {
+func ProcessExists(pid int) bool {
 	if pid <= 0 {
 		return false
 	}

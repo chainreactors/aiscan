@@ -5,6 +5,8 @@ package cmd
 import (
 	"reflect"
 	"testing"
+
+	cfg "github.com/chainreactors/aiscan/core/config"
 )
 
 func TestParseCLIReconCommandsAndFlags(t *testing.T) {
@@ -21,8 +23,8 @@ func TestParseCLIReconCommandsAndFlags(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseCLI() error = %v", err)
 	}
-	if parsed.Mode != runModeScanner {
-		t.Fatalf("mode = %s, want %s", parsed.Mode, runModeScanner)
+	if parsed.Mode != cfg.RunModeScanner {
+		t.Fatalf("mode = %s, want %s", parsed.Mode, cfg.RunModeScanner)
 	}
 	wantArgs := []string{"passive", `domain="example.com"`, "-s", "fofa"}
 	if !reflect.DeepEqual(parsed.ScannerArgs, wantArgs) {

@@ -1,4 +1,4 @@
-package cmd
+package config
 
 import (
 	"fmt"
@@ -6,31 +6,23 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/gookit/config/v2"
+	gkcfg "github.com/gookit/config/v2"
 	yamldrv "github.com/gookit/config/v2/yaml"
 )
 
-const defaultConfigName = "config.yaml"
+const DefaultConfigName = "config.yaml"
 
 func init() {
-	config.WithOptions(func(opt *config.Options) {
+	gkcfg.WithOptions(func(opt *gkcfg.Options) {
 		opt.DecoderConfig.TagName = "config"
 		opt.ParseDefault = true
 	})
-	config.AddDriver(yamldrv.Driver)
+	gkcfg.AddDriver(yamldrv.Driver)
 }
 
-func intOption(v int) *int { return &v }
-func intOptionValue(p *int) int {
-	if p != nil {
-		return *p
-	}
-	return 0
-}
-
-func newConfigLoader() *config.Config {
-	c := config.New("aiscan")
-	c.WithOptions(func(opt *config.Options) {
+func newConfigLoader() *gkcfg.Config {
+	c := gkcfg.New("aiscan")
+	c.WithOptions(func(opt *gkcfg.Options) {
 		opt.DecoderConfig.TagName = "config"
 	})
 	c.AddDriver(yamldrv.Driver)
@@ -49,22 +41,23 @@ func LoadConfig(filename string, v interface{}) error {
 	return nil
 }
 
-func applyExplicitReconNumericOptions(c *config.Config, v interface{}) {
+func applyExplicitReconNumericOptions(c *gkcfg.Config, v interface{}) {
 	opt, ok := v.(*Option)
 	if !ok || opt == nil {
 		return
 	}
 	if c.Exists("recon.limit") {
-		opt.ReconLimit = intOption(c.Int("recon.limit"))
+		v := c.Int("recon.limit")
+		opt.ReconLimit = &v
 	}
 }
 
 func findDefaultConfigFile() string {
-	if _, err := os.Stat(defaultConfigName); err == nil {
-		return defaultConfigName
+	if _, err := os.Stat(DefaultConfigName); err == nil {
+		return DefaultConfigName
 	}
 	if dir, err := os.UserConfigDir(); err == nil {
-		p := filepath.Join(dir, "aiscan", defaultConfigName)
+		p := filepath.Join(dir, "aiscan", DefaultConfigName)
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}
@@ -72,7 +65,7 @@ func findDefaultConfigFile() string {
 	return ""
 }
 
-func loadAndApplyConfig(option *Option) (string, error) {
+func LoadAndApplyConfig(option *Option) (string, error) {
 	configPath := option.ConfigFile
 	if configPath == "" {
 		configPath = findDefaultConfigFile()
@@ -109,37 +102,36 @@ func loadRuntimeDefaults(filename string) error {
 	if v := c.Int("scan.verify_timeout"); v > 0 {
 		DefaultVerifyTimeout = strconv.Itoa(v)
 	}
-	if v := c.String("websearch.tavily_keys"); v != "" {
+	if v := c.String("search.tavily_keys"); v != "" {
 		DefaultTavilyKeys = v
 	}
 	return nil
 }
 
 func mergeOption(dst, src *Option) {
-	dst.Provider = resolveString(dst.Provider, src.Provider)
-	dst.BaseURL = resolveString(dst.BaseURL, src.BaseURL)
-	dst.APIKey = resolveString(dst.APIKey, src.APIKey)
-	dst.Model = resolveString(dst.Model, src.Model)
-	dst.LLMProxy = resolveString(dst.LLMProxy, src.LLMProxy)
-	dst.CyberhubURL = resolveString(dst.CyberhubURL, src.CyberhubURL)
-	dst.CyberhubKey = resolveString(dst.CyberhubKey, src.CyberhubKey)
-	dst.CyberhubMode = resolveString(dst.CyberhubMode, src.CyberhubMode)
-	dst.FofaEmail = resolveString(dst.FofaEmail, src.FofaEmail)
-	dst.FofaKey = resolveString(dst.FofaKey, src.FofaKey)
-	dst.HunterToken = resolveString(dst.HunterToken, src.HunterToken)
-	dst.HunterAPIKey = resolveString(dst.HunterAPIKey, src.HunterAPIKey)
-	dst.ReconProxy = resolveString(dst.ReconProxy, src.ReconProxy)
+	dst.Provider = ResolveString(dst.Provider, src.Provider)
+	dst.BaseURL = ResolveString(dst.BaseURL, src.BaseURL)
+	dst.APIKey = ResolveString(dst.APIKey, src.APIKey)
+	dst.Model = ResolveString(dst.Model, src.Model)
+	dst.LLMProxy = ResolveString(dst.LLMProxy, src.LLMProxy)
+	dst.CyberhubURL = ResolveString(dst.CyberhubURL, src.CyberhubURL)
+	dst.CyberhubKey = ResolveString(dst.CyberhubKey, src.CyberhubKey)
+	dst.CyberhubMode = ResolveString(dst.CyberhubMode, src.CyberhubMode)
+	dst.FofaEmail = ResolveString(dst.FofaEmail, src.FofaEmail)
+	dst.FofaKey = ResolveString(dst.FofaKey, src.FofaKey)
+	dst.HunterToken = ResolveString(dst.HunterToken, src.HunterToken)
+	dst.HunterAPIKey = ResolveString(dst.HunterAPIKey, src.HunterAPIKey)
+	dst.ReconProxy = ResolveString(dst.ReconProxy, src.ReconProxy)
 	if dst.ReconLimit == nil && src.ReconLimit != nil {
 		dst.ReconLimit = src.ReconLimit
 	}
-	dst.Proxy = resolveString(dst.Proxy, src.Proxy)
-	dst.IOAURL = resolveString(dst.IOAURL, src.IOAURL)
-	dst.IOANodeName = resolveString(dst.IOANodeName, src.IOANodeName)
+	dst.Proxy = ResolveString(dst.Proxy, src.Proxy)
+	dst.IOAURL = ResolveString(dst.IOAURL, src.IOAURL)
+	dst.IOANodeName = ResolveString(dst.IOANodeName, src.IOANodeName)
 	if (dst.Space == "" || dst.Space == "default") && src.Space != "" {
 		dst.Space = src.Space
 	}
 }
-
 
 func InitDefaultConfig() string {
 	return defaultConfigTemplate
@@ -178,8 +170,8 @@ cyberhub:
   #   clash://?url=<encoded-subscribe-url>&strategy=adaptive
   proxy: ""
 
-# Web 搜索
-websearch:
+# 搜索
+search:
   # Tavily API keys（逗号分隔，留空则 fallback 到 DuckDuckGo）
   tavily_keys: ""
 

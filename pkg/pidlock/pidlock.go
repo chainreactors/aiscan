@@ -1,4 +1,4 @@
-package cmd
+package pidlock
 
 import (
 	"errors"
@@ -7,32 +7,38 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
-func agentPIDFilePath() string {
+type Logger interface {
+	Debugf(format string, args ...any)
+}
+
+type nopLogger struct{}
+
+func (nopLogger) Debugf(string, ...any) {}
+
+func AgentPIDFilePath() string {
 	return filepath.Join(os.TempDir(), "aiscan-agent.pid")
 }
 
-type agentPIDLock struct {
+type Lock struct {
 	path string
 	file *os.File
 	pid  int
 }
 
-func acquireAgentPIDFile(path string, logger telemetry.Logger) (*agentPIDLock, error) {
+func Acquire(path string, logger Logger) (*Lock, error) {
 	if logger == nil {
-		logger = telemetry.NopLogger()
+		logger = nopLogger{}
 	}
 	pid := os.Getpid()
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("open agent pidfile %s: %w", path, err)
 	}
-	if err := lockAgentPIDFile(f); err != nil {
+	if err := lockFile(f); err != nil {
 		_ = f.Close()
-		if existingPID, readErr := readAgentPIDFile(path); readErr == nil && existingPID > 0 {
+		if existingPID, readErr := ReadPIDFile(path); readErr == nil && existingPID > 0 {
 			return nil, fmt.Errorf("another aiscan agent is already running (PID %d, pidfile %s); kill it first or remove the pidfile", existingPID, path)
 		}
 		return nil, fmt.Errorf("another aiscan agent is already running (pidfile %s is locked)", path)
@@ -40,14 +46,14 @@ func acquireAgentPIDFile(path string, logger telemetry.Logger) (*agentPIDLock, e
 	locked := true
 	cleanup := func() {
 		if locked {
-			_ = unlockAgentPIDFile(f)
+			_ = unlockFile(f)
 		}
 		_ = f.Close()
 	}
 
 	if info, statErr := f.Stat(); statErr == nil && info.Size() > 0 {
-		if existingPID, readErr := readAgentPIDFile(path); readErr == nil && existingPID > 0 && existingPID != pid {
-			if processExists(existingPID) {
+		if existingPID, readErr := ReadPIDFile(path); readErr == nil && existingPID > 0 && existingPID != pid {
+			if ProcessExists(existingPID) {
 				cleanup()
 				return nil, fmt.Errorf("another aiscan agent is already running (PID %d, pidfile %s); kill it first or remove the pidfile", existingPID, path)
 			}
@@ -76,21 +82,21 @@ func acquireAgentPIDFile(path string, logger telemetry.Logger) (*agentPIDLock, e
 		return nil, fmt.Errorf("sync agent pidfile %s: %w", path, err)
 	}
 	locked = false
-	return &agentPIDLock{path: path, file: f, pid: pid}, nil
+	return &Lock{path: path, file: f, pid: pid}, nil
 }
 
-func (l *agentPIDLock) Release() {
+func (l *Lock) Release() {
 	if l == nil || l.file == nil {
 		return
 	}
-	_ = removeOwnedAgentPIDFile(l.path, l.pid)
-	_ = unlockAgentPIDFile(l.file)
+	_ = removeOwned(l.path, l.pid)
+	_ = unlockFile(l.file)
 	_ = l.file.Close()
 	l.file = nil
 }
 
-func removeOwnedAgentPIDFile(path string, pid int) error {
-	existingPID, err := readAgentPIDFile(path)
+func removeOwned(path string, pid int) error {
+	existingPID, err := ReadPIDFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -103,7 +109,7 @@ func removeOwnedAgentPIDFile(path string, pid int) error {
 	return os.Remove(path)
 }
 
-func readAgentPIDFile(path string) (int, error) {
+func ReadPIDFile(path string) (int, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return 0, err

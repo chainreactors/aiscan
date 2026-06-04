@@ -1,6 +1,7 @@
-package cmd
+package runner
 
 import (
+	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	inboxpkg "github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
@@ -9,22 +10,22 @@ import (
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
-type agentSession struct {
+type AgentSession struct {
 	Config  agent.Config
 	cleanup func()
 }
 
-type sessionConfig struct {
+type SessionConfig struct {
 	Application *app.App
-	Option      *Option
+	Option      *cfg.Option
 	Logger      telemetry.Logger
-	Events      *eventsWriter
+	Events      *EventsWriter
 }
 
-func newAgentSession(cfg sessionConfig) *agentSession {
+func NewAgentSession(sc SessionConfig) *AgentSession {
 	ib := inboxpkg.NewBuffered(64)
 
-	sessMgr := bashSessionManager(cfg.Application.Commands)
+	sessMgr := bashSessionManager(sc.Application.Commands)
 	if sessMgr != nil {
 		sessMgr.SetOnDone(func(info tmuxpkg.Info) {
 			tail := sessMgr.PeekOrEmpty(info.ID, 20)
@@ -36,34 +37,34 @@ func newAgentSession(cfg sessionConfig) *agentSession {
 				"exit_code":    info.ExitCode,
 			}
 			if err := ib.Push(msg); err != nil {
-				cfg.Logger.Warnf("inbox push session completion: %s", err)
+				sc.Logger.Warnf("inbox push session completion: %s", err)
 			}
 		})
 	}
 
-	scheduler := agent.NewLoopScheduler(ib, cfg.Logger)
+	scheduler := agent.NewLoopScheduler(ib, sc.Logger)
 
 	agentCfg := agent.Config{
-		Provider:       cfg.Application.Provider,
-		Tools:          cfg.Application.Commands,
-		Model:          cfg.Option.Model,
-		Logger:         cfg.Logger,
+		Provider:       sc.Application.Provider,
+		Tools:          sc.Application.Commands,
+		Model:          sc.Option.Model,
+		Logger:         sc.Logger,
 		Inbox:          ib,
 		LoopScheduler:  scheduler,
 		CacheRetention: provider.CacheShort,
 	}
 
-	cfg.Application.Commands.RegisterTool(agent.NewLoopTool(scheduler))
+	sc.Application.Commands.RegisterTool(agent.NewLoopTool(scheduler))
 
 	subAgentTool := NewSubAgentTool(SubAgentConfig{
 		ParentConfig: agentCfg,
 		ParentInbox:  ib,
-		SkillStore:   cfg.Application.Skills,
+		SkillStore:   sc.Application.Skills,
 	})
-	cfg.Application.Commands.RegisterTool(subAgentTool)
+	sc.Application.Commands.RegisterTool(subAgentTool)
 
-	if cfg.Events != nil {
-		agentCfg.Emit = cfg.Events.HandleEvent
+	if sc.Events != nil {
+		agentCfg.Emit = sc.Events.HandleEvent
 	}
 
 	cleanup := func() {
@@ -73,10 +74,10 @@ func newAgentSession(cfg sessionConfig) *agentSession {
 		}
 	}
 
-	return &agentSession{Config: agentCfg, cleanup: cleanup}
+	return &AgentSession{Config: agentCfg, cleanup: cleanup}
 }
 
-func (s *agentSession) Cleanup() {
+func (s *AgentSession) Cleanup() {
 	if s.cleanup != nil {
 		s.cleanup()
 	}

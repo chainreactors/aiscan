@@ -1,4 +1,4 @@
-package cmd
+package runner
 
 import (
 	"bytes"
@@ -26,7 +26,7 @@ func TestRenderAgentMarkdownPlainFallback(t *testing.T) {
 
 func TestAgentOutputFinalWritesPlainMarkdownWithoutWrapper(t *testing.T) {
 	var stdout bytes.Buffer
-	output := &agentOutput{
+	output := &AgentOutput{
 		stdout:   &stdout,
 		stderr:   &bytes.Buffer{},
 		markdown: false,
@@ -45,7 +45,7 @@ func TestAgentOutputFinalWritesPlainMarkdownWithoutWrapper(t *testing.T) {
 
 func TestAgentOutputToolSummary(t *testing.T) {
 	var stderr bytes.Buffer
-	output := &agentOutput{
+	output := &AgentOutput{
 		stdout: &bytes.Buffer{},
 		stderr: &stderr,
 		tools:  make(map[string]agentToolSummary),
@@ -81,7 +81,7 @@ func TestAgentOutputToolSummary(t *testing.T) {
 
 func TestAgentOutputToolDebugDetails(t *testing.T) {
 	var stderr bytes.Buffer
-	output := &agentOutput{
+	output := &AgentOutput{
 		stdout: &bytes.Buffer{},
 		stderr: &stderr,
 		debug:  true,
@@ -115,7 +115,7 @@ func TestAgentOutputToolDebugDetails(t *testing.T) {
 
 func TestAgentOutputToolError(t *testing.T) {
 	var stderr bytes.Buffer
-	output := &agentOutput{
+	output := &AgentOutput{
 		stdout: &bytes.Buffer{},
 		stderr: &stderr,
 		tools:  make(map[string]agentToolSummary),
@@ -137,7 +137,7 @@ func TestAgentOutputToolError(t *testing.T) {
 
 func TestAgentOutputWriteEditSummary(t *testing.T) {
 	var stderr bytes.Buffer
-	output := &agentOutput{
+	output := &AgentOutput{
 		stdout: &bytes.Buffer{},
 		stderr: &stderr,
 		tools:  make(map[string]agentToolSummary),
@@ -161,7 +161,7 @@ func TestAgentOutputWriteEditSummary(t *testing.T) {
 
 func TestAgentOutputMultiLineResult(t *testing.T) {
 	var stderr bytes.Buffer
-	output := &agentOutput{
+	output := &AgentOutput{
 		stdout: &bytes.Buffer{},
 		stderr: &stderr,
 		tools:  make(map[string]agentToolSummary),

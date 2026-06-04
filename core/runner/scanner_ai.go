@@ -1,4 +1,4 @@
-package cmd
+package runner
 
 import (
 	"context"
@@ -7,23 +7,20 @@ import (
 	"slices"
 	"strings"
 
+	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
+	"github.com/chainreactors/aiscan/pkg/pidlock"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/skills"
 )
 
-// runScannerWithAgent runs a full agent loop that executes a scanner command
-// and analyzes results interactively. The agent can invoke tools, follow up
-// on findings, and produce a structured report.
-//
-// Entry point: aiscan gogo --ai, aiscan spray --ai, etc. (non-scan commands)
-func runScannerWithAgent(ctx context.Context, option *Option, application *app.App, scannerArgs []string, logger telemetry.Logger) error {
+func RunScannerWithAgent(ctx context.Context, option *cfg.Option, application *app.App, scannerArgs []string, logger telemetry.Logger) error {
 	if application.Provider == nil {
 		return fmt.Errorf("--ai requires a configured LLM provider")
 	}
 
-	pidLock, err := acquireAgentPIDFile(agentPIDFilePath(), logger)
+	pidLock, err := pidlock.Acquire(pidlock.AgentPIDFilePath(), logger)
 	if err != nil {
 		return err
 	}
@@ -35,45 +32,39 @@ func runScannerWithAgent(ctx context.Context, option *Option, application *app.A
 		return err
 	}
 
-	systemPrompt := agent.BuildSystemPrompt(&agent.PromptConfig{
-		Tools:            application.Commands,
-		ScannerDocs:      application.Commands.UsageDocs(),
-		Skills:           application.Skills.Skills,
-		ScannerAgentMode: true,
-		ScannerName:      command,
+	rt, err := NewAgentRuntime(ctx, option, logger, &RuntimeConfig{
+		ExistingApp: application,
+		PromptConfig: &agent.PromptConfig{
+			Tools:            application.Commands,
+			ScannerDocs:      application.Commands.UsageDocs(),
+			Skills:           application.Skills.Skills,
+			ScannerAgentMode: true,
+			ScannerName:      command,
+		},
 	})
-
-	output := newAgentOutput(option)
-	output.Start("scanner", strings.Join(scannerArgs, " "))
-
-	sess := newAgentSession(sessionConfig{
-		Application: application,
-		Option:      option,
-		Logger:      logger,
-	})
-	defer sess.Cleanup()
+	if err != nil {
+		return err
+	}
+	defer rt.Close()
 
 	prompt := formatScannerTaskPrompt(scannerArgs, intent)
-	logger.Debugf("system prompt length: %d chars", len(systemPrompt))
+	rt.Output.Start("scanner", strings.Join(scannerArgs, " "))
 
-	result, err := sess.Config.
-		WithSystemPrompt(systemPrompt).
+	result, err := rt.Session.Config.
+		WithSystemPrompt(rt.SystemPrompt).
 		WithStream(false).
-		WithEventHandler(output.HandleEvent).
+		WithEventHandler(rt.EventHandler()).
 		Run(ctx, prompt)
 	if err != nil {
 		return err
 	}
 	if result != nil && strings.TrimSpace(result.Output) != "" {
-		output.Final(result.Output)
+		rt.Output.Final(result.Output)
 	}
 	return nil
 }
 
-
-// --- intent resolution ---
-
-func resolveScannerIntent(option *Option, store *skills.Store, command string) (string, error) {
+func resolveScannerIntent(option *cfg.Option, store *skills.Store, command string) (string, error) {
 	var sections []string
 	if skill, ok := store.ByName(scannerSkillName(command)); ok {
 		sections = append(sections, skills.FormatInvocation(skill, ""))
@@ -90,7 +81,7 @@ func resolveScannerIntent(option *Option, store *skills.Store, command string) (
 	if intent == "" {
 		intent = "Process the scanner output according to the user's intent. If no specific intent is provided, briefly explain the important evidence in the output."
 	}
-	intent, err := applySelectedSkills(intent, filterAutoSkill(option.Skills, command), store)
+	intent, err := cfg.ApplySelectedSkills(intent, filterAutoSkill(option.Skills, command), store)
 	if err != nil {
 		return "", err
 	}
@@ -101,7 +92,7 @@ func resolveScannerIntent(option *Option, store *skills.Store, command string) (
 func scannerSkillName(command string) string {
 	switch command {
 	case "gogo", "spray", "katana", "zombie", "neutron", "passive", "scan":
-		if !scannerCommandAvailable(command) {
+		if !cfg.ScannerCommandAvailable(command) {
 			return ""
 		}
 		return command
@@ -125,8 +116,6 @@ func filterAutoSkill(selected []string, command string) []string {
 	return slices.Clip(out)
 }
 
-// --- prompt formatting ---
-
 func formatScannerTaskPrompt(scannerArgs []string, intent string) string {
 	command := strings.Join(scannerArgs, " ")
 	if strings.TrimSpace(intent) == "" {
@@ -134,4 +123,3 @@ func formatScannerTaskPrompt(scannerArgs []string, intent string) string {
 	}
 	return fmt.Sprintf("Execute: %s\n\nUser intent: %s", command, strings.TrimSpace(intent))
 }
-

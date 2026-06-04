@@ -1,63 +1,26 @@
-package cmd
+package runner
 
 import (
 	"fmt"
 	"strings"
 
-	cyberhubcmd "github.com/chainreactors/aiscan/pkg/tools/cyberhub"
-	"github.com/chainreactors/aiscan/pkg/tools/scan"
+	"github.com/chainreactors/aiscan/core/config"
 )
 
-var extraScannerUsage = map[string]func() string{}
-
-func isScannerHelpRequest(args []string) bool {
-	if len(args) < 2 {
-		return false
-	}
-	for _, arg := range args[1:] {
-		if arg == "-h" || arg == "--help" {
-			return true
-		}
-	}
-	return false
-}
-
-func staticScannerUsage(name string) (string, bool) {
-	switch name {
-	case "scan":
-		return scan.Usage(), true
-	case "cyberhub":
-		return cyberhubcmd.Usage(), true
-	case "gogo":
-		return "gogo - host, port, service, and banner discovery\nUsage: gogo [options]\n", true
-	case "spray":
-		return "spray - web probing, fingerprints, common files, and crawl checks\nUsage: spray [options]\n", true
-	case "zombie":
-		return "zombie - weak credential checks for supported services\nUsage: zombie [options]\n", true
-	case "neutron":
-		return "neutron - POC/vulnerability testing with nuclei-style options\nUsage: neutron -u <target> [options]\n", true
-	default:
-		if fn, ok := extraScannerUsage[name]; ok {
-			return fn(), true
-		}
-		return "", false
-	}
-}
-
-func directScannerRuntimeFeatures(rest []string) (runtimeFeatures, []string, error) {
+func DirectScannerRuntimeFeatures(rest []string) (config.RuntimeFeatures, []string, error) {
 	if len(rest) == 0 {
-		return runtimeFeatures{}, nil, fmt.Errorf("missing scanner command")
+		return config.RuntimeFeatures{}, nil, fmt.Errorf("missing scanner command")
 	}
 	if rest[0] != "scan" {
-		return runtimeFeatures{}, rest, nil
+		return config.RuntimeFeatures{}, rest, nil
 	}
 	verifyMode, explicit := scannerVerifyMode(rest[1:])
-	aiEnabled := hasScannerFlag(rest[1:], "--ai")
-	sniperEnabled := hasScannerFlag(rest[1:], "--sniper")
-	deepEnabled := hasScannerFlag(rest[1:], "--deep")
+	aiEnabled := HasScannerFlag(rest[1:], "--ai")
+	sniperEnabled := HasScannerFlag(rest[1:], "--sniper")
+	deepEnabled := HasScannerFlag(rest[1:], "--deep")
 	aiSkillRequested := aiEnabled || sniperEnabled || deepEnabled
 
-	features := runtimeFeatures{}
+	features := config.RuntimeFeatures{}
 
 	if aiSkillRequested {
 		features.ProviderEnabled = true
@@ -90,10 +53,56 @@ func directScannerRuntimeFeatures(rest []string) (runtimeFeatures, []string, err
 		return features, rest, nil
 	default:
 		if explicit {
-			return runtimeFeatures{}, nil, fmt.Errorf("invalid --verify value %q: expected auto, off, low, medium, high, or critical", verifyMode)
+			return config.RuntimeFeatures{}, nil, fmt.Errorf("invalid --verify value %q: expected auto, off, low, medium, high, or critical", verifyMode)
 		}
 		return features, rest, nil
 	}
+}
+
+func HasScannerFlag(args []string, long string) bool {
+	for _, arg := range args {
+		if arg == long || strings.HasPrefix(arg, long+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func ShouldStreamScannerOutput(rest []string) bool {
+	if len(rest) == 0 || rest[0] != "scan" {
+		return false
+	}
+	if isDirectScannerJSONOutput(rest) {
+		return false
+	}
+	for _, arg := range rest[1:] {
+		if arg == "--report" {
+			return false
+		}
+		if strings.HasPrefix(arg, "--report=") {
+			value := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--report=")))
+			if value != "false" && value != "0" && value != "no" {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isDirectScannerJSONOutput(rest []string) bool {
+	if len(rest) == 0 || !config.ScannerCommandAvailable(rest[0]) {
+		return false
+	}
+	for _, arg := range rest[1:] {
+		if arg == "-j" || arg == "--json" {
+			return true
+		}
+		if strings.HasPrefix(arg, "--json=") {
+			value := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, "--json=")))
+			return value != "false" && value != "0" && value != "no"
+		}
+	}
+	return false
 }
 
 func scannerVerifyMode(args []string) (string, bool) {
@@ -137,7 +146,7 @@ func replaceOrAppendScannerFlag(args []string, flag, value string) []string {
 }
 
 func defaultVerifyMode() string {
-	value := strings.ToLower(strings.TrimSpace(DefaultVerify))
+	value := strings.ToLower(strings.TrimSpace(config.DefaultVerify))
 	if value == "" {
 		return "off"
 	}

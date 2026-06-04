@@ -1,6 +1,6 @@
 //go:build !windows
 
-package cmd
+package pidlock
 
 import (
 	"errors"
@@ -8,15 +8,15 @@ import (
 	"syscall"
 )
 
-func lockAgentPIDFile(f *os.File) error {
+func lockFile(f *os.File) error {
 	return syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 }
 
-func unlockAgentPIDFile(f *os.File) error {
+func unlockFile(f *os.File) error {
 	return syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 }
 
-func processExists(pid int) bool {
+func ProcessExists(pid int) bool {
 	proc, err := os.FindProcess(pid)
 	if err != nil {
 		return false

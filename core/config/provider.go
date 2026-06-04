@@ -1,6 +1,29 @@
-package cmd
+package config
 
 import "github.com/chainreactors/aiscan/pkg/agent/provider"
+
+var (
+	DefaultProvider = "deepseek"
+	DefaultBaseURL  = ""
+	DefaultAPIKey   = ""
+	DefaultModel    = "deepseek-v4-pro"
+
+	DefaultScannerProxy = ""
+
+	DefaultCyberhubURL  = ""
+	DefaultCyberhubKey  = ""
+	DefaultCyberhubMode = "merge"
+
+	DefaultVerify        = "auto"
+	DefaultVerifyTimeout = ""
+
+	DefaultIOAURL      = ""
+	DefaultIOANodeID   = ""
+	DefaultIOANodeName = ""
+	DefaultSpace       = ""
+
+	DefaultTavilyKeys = ""
+)
 
 func defaultProviderConfig() provider.ProviderConfig {
 	return provider.ProviderConfig{
@@ -11,7 +34,7 @@ func defaultProviderConfig() provider.ProviderConfig {
 	}
 }
 
-func providerConfig(option *Option) provider.ProviderConfig {
+func ProviderConfig(option *Option) provider.ProviderConfig {
 	cfg := defaultProviderConfig()
 	if option.Provider != "" {
 		cfg.Provider = option.Provider
@@ -35,10 +58,9 @@ func providerConfig(option *Option) provider.ProviderConfig {
 	return cfg
 }
 
-func applyResolvedProviderOptions(option *Option, cfg provider.ProviderConfig) {
+func ApplyResolvedProviderOptions(option *Option, cfg provider.ProviderConfig) {
 	option.Provider = cfg.Provider
 	option.BaseURL = cfg.BaseURL
 	option.APIKey = cfg.APIKey
 	option.Model = cfg.Model
 }
-
