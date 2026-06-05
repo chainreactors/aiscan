@@ -23,8 +23,8 @@ func NewTmuxCommand(mgr *tmux.Manager, registry *CommandRegistry) *TmuxCommand {
 	return &TmuxCommand{manager: mgr, registry: registry}
 }
 
-func (t *TmuxCommand) Name() string     { return "tmux" }
-func (t *TmuxCommand) InProcess()       {}
+func (t *TmuxCommand) Name() string        { return "tmux" }
+func (t *TmuxCommand) InProcess()          {}
 func (t *TmuxCommand) SetWorkDir(d string) { t.workDir = d }
 func (t *TmuxCommand) SetSelfBin(b string) { t.selfBin = b }
 func (t *TmuxCommand) SetProxy(p string)   { t.proxy = p }
@@ -154,7 +154,11 @@ func (t *TmuxCommand) createSession(cmdLine, name string, timeout time.Duration)
 				return tmux.Info{}, valErr
 			}
 		}
-		subArgs := append(tokens, "--no-color")
+		subArgs := []string{"--no-color"}
+		if t.proxy != "" {
+			subArgs = append(subArgs, "--proxy", t.proxy)
+		}
+		subArgs = append(subArgs, tokens...)
 		self := t.selfBin
 		if self == "" {
 			var err error

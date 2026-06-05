@@ -2,6 +2,8 @@ package command
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -73,6 +75,81 @@ func TestTmuxNewSessionWithName(t *testing.T) {
 	ls, _ := tmux.Execute(context.Background(), []string{"ls"})
 	if !strings.Contains(ls, "myscan") {
 		t.Fatalf("expected session name 'myscan' in ls, got: %q", ls)
+	}
+}
+
+func TestTmuxPseudoCommandPrependsNoColor(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-only")
+	}
+
+	dir := t.TempDir()
+	argsFile := filepath.Join(dir, "args.txt")
+	stub := filepath.Join(dir, "aiscan-stub")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shellQuote(argsFile) + "\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatalf("write stub: %v", err)
+	}
+
+	registry := NewRegistry()
+	registry.Register(&tmuxTestCommand{name: "scan"}, "")
+	mgr := tmuxpkg.NewManager()
+	t.Cleanup(mgr.Shutdown)
+	tmux := NewTmuxCommand(mgr, registry)
+	tmux.SetWorkDir(dir)
+	tmux.SetSelfBin(stub)
+
+	_, err := tmux.Execute(context.Background(), []string{"new-session", "scan", "-i", "127.0.0.1"})
+	if err != nil {
+		t.Fatalf("tmux new-session scan: %v", err)
+	}
+
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read args: %v", err)
+	}
+	got := strings.Split(strings.TrimSpace(string(data)), "\n")
+	want := []string{"--no-color", "scan", "-i", "127.0.0.1"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("args = %#v, want %#v", got, want)
+	}
+}
+
+func TestTmuxPseudoCommandPrependsProxy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-only")
+	}
+
+	dir := t.TempDir()
+	argsFile := filepath.Join(dir, "args.txt")
+	stub := filepath.Join(dir, "aiscan-stub")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shellQuote(argsFile) + "\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatalf("write stub: %v", err)
+	}
+
+	registry := NewRegistry()
+	registry.Register(&tmuxTestCommand{name: "scan"}, "")
+	mgr := tmuxpkg.NewManager()
+	t.Cleanup(mgr.Shutdown)
+	tmux := NewTmuxCommand(mgr, registry)
+	tmux.SetWorkDir(dir)
+	tmux.SetSelfBin(stub)
+	tmux.SetProxy("socks5://127.0.0.1:9999")
+
+	_, err := tmux.Execute(context.Background(), []string{"new-session", "scan", "-i", "127.0.0.1"})
+	if err != nil {
+		t.Fatalf("tmux new-session scan: %v", err)
+	}
+
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read args: %v", err)
+	}
+	got := strings.Split(strings.TrimSpace(string(data)), "\n")
+	want := []string{"--no-color", "--proxy", "socks5://127.0.0.1:9999", "scan", "-i", "127.0.0.1"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("args = %#v, want %#v", got, want)
 	}
 }
 
@@ -325,4 +402,18 @@ func TestTmuxNewSessionMissingCommand(t *testing.T) {
 	if !strings.Contains(err.Error(), "missing command") {
 		t.Fatalf("error = %v, want 'missing command'", err)
 	}
+}
+
+type tmuxTestCommand struct {
+	name string
+}
+
+func (c *tmuxTestCommand) Name() string  { return c.name }
+func (c *tmuxTestCommand) Usage() string { return c.name }
+func (c *tmuxTestCommand) Execute(context.Context, []string) (string, error) {
+	return "", nil
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
