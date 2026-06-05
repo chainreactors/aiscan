@@ -12,7 +12,8 @@ import (
 
 type OnProxyChange func(newProxyURL string)
 
-// CommandExecutor executes a named command with args. Matches CommandRegistry.ExecuteArgs.
+// CommandExecutor executes a parsed command while preserving the caller's
+// command-dispatch policy.
 type CommandExecutor func(ctx context.Context, tokens []string) (string, error)
 
 type Command struct {
@@ -34,6 +35,7 @@ func (c *Command) SetCommandExecutor(fn CommandExecutor) {
 }
 
 func (c *Command) Name() string { return "proxy" }
+func (c *Command) InProcess()   {}
 
 func (c *Command) Usage() string {
 	return `proxy - Manage proxy nodes and proxy-chain execution
@@ -140,13 +142,25 @@ func (c *Command) execAuto(_ context.Context, args []string) (string, error) {
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--type", "-t":
-			if i+1 < len(args) { typeFilter = args[i+1]; i++ }
+			if i+1 < len(args) {
+				typeFilter = args[i+1]
+				i++
+			}
 		case "--name", "-n":
-			if i+1 < len(args) { nameFilter = args[i+1]; i++ }
+			if i+1 < len(args) {
+				nameFilter = args[i+1]
+				i++
+			}
 		case "--country", "-c":
-			if i+1 < len(args) { countryFilter = args[i+1]; i++ }
+			if i+1 < len(args) {
+				countryFilter = args[i+1]
+				i++
+			}
 		case "--strategy", "-s":
-			if i+1 < len(args) { strategy = args[i+1]; i++ }
+			if i+1 < len(args) {
+				strategy = args[i+1]
+				i++
+			}
 		}
 	}
 

@@ -30,16 +30,14 @@ func init() {
 						bash.SetScannerProxy(newProxy)
 					}
 				}
-				// 2. update individual scanner command proxy fields;
-				// each command passes proxy to the SDK engine via
-				// Context.SetProxy / RunOptions.ProxyDial on next execution.
+				// 2. update commands that keep proxy state in-process.
 				for _, pc := range reg.All() {
 					if updater, ok := pc.(interface{ SetProxy(string) }); ok {
 						updater.SetProxy(newProxy)
 					}
 				}
 			})
-			cmd.SetCommandExecutor(reg.ExecuteArgs)
+			cmd.SetCommandExecutor(passthroughExecutor(reg))
 			reg.Register(cmd, "proxy")
 
 			// If --proxy / config proxy is a clash:// URL, auto-activate

@@ -2,8 +2,13 @@ package proxy
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/chainreactors/aiscan/pkg/command"
 )
 
 func TestCommandName(t *testing.T) {
@@ -153,6 +158,44 @@ func TestPassthroughSetsAndRevertsProxy(t *testing.T) {
 	}
 }
 
+func TestPassthroughExecutorUsesBashDispatch(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-only test")
+	}
+
+	dir := t.TempDir()
+	argsFile := filepath.Join(dir, "args.txt")
+	stub := filepath.Join(dir, "aiscan-stub")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shellQuote(argsFile) + "\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatalf("write stub: %v", err)
+	}
+
+	registry := command.NewRegistry()
+	registry.Register(&proxyTestCommand{name: "gogo"}, "scanner")
+	proxyURL := "socks5://127.0.0.1:9999"
+	bash := command.NewBashTool(dir, 5, registry).WithScannerProxy(proxyURL)
+	bash.SetSelfBinary(stub)
+	registry.RegisterTool(bash)
+
+	out, err := passthroughExecutor(registry)(context.Background(), []string{"gogo", "-i", "127.0.0.1"})
+	if err != nil {
+		t.Fatalf("passthrough executor: %v", err)
+	}
+	if out != "" {
+		t.Fatalf("expected empty stub output, got %q", out)
+	}
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read args: %v", err)
+	}
+	got := strings.Split(strings.TrimSpace(string(data)), "\n")
+	want := []string{"--proxy", proxyURL, "gogo", "-i", "127.0.0.1", "--no-color"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("args = %#v, want %#v", got, want)
+	}
+}
+
 func TestUnknownSubcommand(t *testing.T) {
 	state := NewState("")
 	cmd := New(state)
@@ -163,6 +206,20 @@ func TestUnknownSubcommand(t *testing.T) {
 	if !strings.Contains(err.Error(), "unknown proxy subcommand") {
 		t.Fatalf("error = %v, want 'unknown proxy subcommand'", err)
 	}
+}
+
+type proxyTestCommand struct {
+	name string
+}
+
+func (c *proxyTestCommand) Name() string  { return c.name }
+func (c *proxyTestCommand) Usage() string { return c.name }
+func (c *proxyTestCommand) Execute(context.Context, []string) (string, error) {
+	return "", nil
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 func TestSubscribeMissingURL(t *testing.T) {
