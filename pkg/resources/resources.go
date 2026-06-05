@@ -28,7 +28,6 @@ type Options struct {
 	CyberhubURL string
 	APIKey      string
 	Mode        string
-	Draft       bool
 	Proxy       string
 }
 
@@ -77,7 +76,7 @@ func Init(ctx context.Context, opts Options) (*Set, error) {
 	}
 
 	if set.RemoteEnabled {
-		remoteFingers, err := loadRemoteFingers(ctx, opts.CyberhubURL, opts.APIKey, opts.Draft)
+		remoteFingers, err := loadRemoteFingers(ctx, opts.CyberhubURL, opts.APIKey)
 		if err != nil {
 			set.RemoteFingersErr = err
 		} else if remoteFingers.Len() > 0 {
@@ -89,7 +88,7 @@ func Init(ctx context.Context, opts Options) (*Set, error) {
 			}
 		}
 
-		remoteTemplates, err := loadRemoteTemplates(ctx, opts.CyberhubURL, opts.APIKey, opts.Draft)
+		remoteTemplates, err := loadRemoteTemplates(ctx, opts.CyberhubURL, opts.APIKey)
 		if err != nil {
 			set.RemoteNeutronErr = err
 		} else if remoteTemplates.Len() > 0 {
@@ -238,11 +237,8 @@ func installLocalPortPreset() error {
 	return nil
 }
 
-func loadRemoteFingers(ctx context.Context, cyberhubURL, apiKey string, draft bool) (fingers.FullFingers, error) {
+func loadRemoteFingers(ctx context.Context, cyberhubURL, apiKey string) (fingers.FullFingers, error) {
 	provider := cyberhub.NewProvider(cyberhubURL, apiKey)
-	if draft {
-		provider = provider.WithFilter(cyberhub.NewExportFilter().WithDraft(true))
-	}
 	config := fingers.NewConfig().WithProvider(provider)
 	if err := config.Load(ctx); err != nil {
 		return fingers.FullFingers{}, err
@@ -250,11 +246,8 @@ func loadRemoteFingers(ctx context.Context, cyberhubURL, apiKey string, draft bo
 	return config.FullFingers, nil
 }
 
-func loadRemoteTemplates(ctx context.Context, cyberhubURL, apiKey string, draft bool) (neutron.Templates, error) {
+func loadRemoteTemplates(ctx context.Context, cyberhubURL, apiKey string) (neutron.Templates, error) {
 	provider := cyberhub.NewProvider(cyberhubURL, apiKey)
-	if draft {
-		provider = provider.WithFilter(cyberhub.NewExportFilter().WithDraft(true))
-	}
 	config := neutron.NewConfig().WithProvider(provider)
 	if err := config.Load(ctx); err != nil {
 		return neutron.Templates{}, err

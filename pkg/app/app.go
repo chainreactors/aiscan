@@ -40,7 +40,6 @@ type ScannerConfig struct {
 	CyberhubURL       string
 	CyberhubKey       string
 	CyberhubMode      string
-	CyberhubDraft     bool
 	AIEnabled         bool
 	EnableAllAISkills bool
 	AITimeout         int
@@ -157,7 +156,6 @@ func initEngines(ctx context.Context, cfg ScannerConfig, logger telemetry.Logger
 		CyberhubURL: cfg.CyberhubURL,
 		APIKey:      cfg.CyberhubKey,
 		Mode:        cfg.CyberhubMode,
-		Draft:       cfg.CyberhubDraft,
 		Proxy:       cfg.Proxy,
 	}, logger)
 	if err != nil {

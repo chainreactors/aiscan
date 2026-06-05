@@ -117,9 +117,6 @@ func mergeOption(dst, src *Option) {
 	dst.CyberhubURL = ResolveString(dst.CyberhubURL, src.CyberhubURL)
 	dst.CyberhubKey = ResolveString(dst.CyberhubKey, src.CyberhubKey)
 	dst.CyberhubMode = ResolveString(dst.CyberhubMode, src.CyberhubMode)
-	if !dst.CyberhubDraft {
-		dst.CyberhubDraft = src.CyberhubDraft
-	}
 	dst.FofaEmail = ResolveString(dst.FofaEmail, src.FofaEmail)
 	dst.FofaKey = ResolveString(dst.FofaKey, src.FofaKey)
 	dst.HunterToken = ResolveString(dst.HunterToken, src.HunterToken)

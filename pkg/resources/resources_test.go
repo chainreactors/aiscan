@@ -80,9 +80,6 @@ func TestInitPreservesCyberHubTemplateFingerprints(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/v1/fingerprints/export":
-			if got := r.URL.Query().Get("with_draft"); got != "true" {
-				t.Fatalf("with_draft query = %q, want true", got)
-			}
 			writeCyberHubAPIResponse(t, w, map[string]any{
 				"fingerprints": []map[string]any{
 					cyberHubFingerprintExport("sentinel", sentinelTemplateYAML()),
@@ -93,9 +90,6 @@ func TestInitPreservesCyberHubTemplateFingerprints(t *testing.T) {
 				"page_size": 2,
 			})
 		case "/api/v1/pocs/export":
-			if got := r.URL.Query().Get("with_draft"); got != "true" {
-				t.Fatalf("with_draft query = %q, want true", got)
-			}
 			writeCyberHubAPIResponse(t, w, map[string]any{
 				"pocs":     []any{},
 				"total":    0,
@@ -111,7 +105,6 @@ func TestInitPreservesCyberHubTemplateFingerprints(t *testing.T) {
 		CyberhubURL: hub.URL,
 		APIKey:      "test-key",
 		Mode:        ModeOverride,
-		Draft:       true,
 	})
 	if err != nil {
 		t.Fatalf("Init() error = %v", err)
