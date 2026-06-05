@@ -242,18 +242,17 @@ func (s *Service) runScan(jobID string) {
 	})
 
 	streamWriter := &sseStreamWriter{
-		hub:     s.hub,
-		scanID:  jobID,
-		store:   s.store,
-		job:     job,
-		ctx:     ctx,
-		partial: newPartialStructuredBuilder(job.Target, job.CreatedAt),
+		hub:    s.hub,
+		scanID: jobID,
+		store:  s.store,
+		job:    job,
+		ctx:    ctx,
 	}
 
 	// Run scan with streaming real-time progress.
 	// --report is NOT passed because it disables streaming output.
 	args := scanArgsForJob(job)
-	output, result, err := s.executeScan(ctx, args, streamWriter)
+	_, result, err := s.executeScan(ctx, args, streamWriter)
 	if err != nil {
 		job.Status = StatusFailed
 		job.Error = err.Error()
@@ -267,8 +266,7 @@ func (s *Service) runScan(jobID string) {
 		return
 	}
 
-	// Build a markdown report from the streamed lines and terminal output.
-	report := buildMarkdownReport(job.Target, job.Mode, streamWriter.lines, output)
+	report := buildMarkdownReport(job.Target, job.Mode, result)
 
 	job.Status = StatusCompleted
 	job.Report = report
@@ -346,14 +344,12 @@ func (s *Service) executeScan(ctx context.Context, args []string, stream io.Writ
 }
 
 type sseStreamWriter struct {
-	hub     *Hub
-	scanID  string
-	store   Store
-	job     *ScanJob
-	ctx     context.Context
-	partial *partialStructuredBuilder
-	buf     []byte
-	lines   []string
+	hub    *Hub
+	scanID string
+	store  Store
+	job    *ScanJob
+	ctx    context.Context
+	buf    []byte
 }
 
 func (w *sseStreamWriter) Write(p []byte) (int, error) {
@@ -378,10 +374,6 @@ func (w *sseStreamWriter) Write(p []byte) (int, error) {
 			continue
 		}
 
-		w.lines = append(w.lines, line)
-		if w.partial != nil {
-			w.partial.ObserveLine(line)
-		}
 		fmt.Fprintf(os.Stderr, "[scan:%s] %s\n", w.scanID, line)
 
 		current, err := w.store.Get(context.Background(), w.scanID)
@@ -393,9 +385,6 @@ func (w *sseStreamWriter) Write(p []byte) (int, error) {
 		}
 		current.Progress = line
 		current.UpdatedAt = time.Now()
-		if w.partial != nil {
-			current.Result = w.partial.Result(current.UpdatedAt)
-		}
 		if err := w.store.Update(context.Background(), current); err != nil {
 			return 0, err
 		}
@@ -405,13 +394,12 @@ func (w *sseStreamWriter) Write(p []byte) (int, error) {
 			Type:   "progress",
 			ScanID: w.scanID,
 			Data:   line,
-			Result: current.Result,
 		})
 	}
 	return len(p), nil
 }
 
-func buildMarkdownReport(target, mode string, lines []string, terminalOutput string) string {
+func buildMarkdownReport(target, mode string, result *output.Result) string {
 	var sb strings.Builder
 	sb.WriteString("# Penetration Test Report\n\n")
 	sb.WriteString(fmt.Sprintf("**Target:** `%s`  \n", target))
@@ -419,61 +407,162 @@ func buildMarkdownReport(target, mode string, lines []string, terminalOutput str
 	sb.WriteString(fmt.Sprintf("**Date:** %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 	sb.WriteString("---\n\n")
 
-	var services, web, fingerprints, risks, vulns, ai, summary []string
-
-	for _, line := range lines {
-		l := strings.ToLower(line)
-		switch {
-		case strings.Contains(l, "[service"):
-			services = append(services, line)
-		case strings.Contains(l, "[web"):
-			web = append(web, line)
-		case strings.Contains(l, "[fingerprint"):
-			fingerprints = append(fingerprints, line)
-		case strings.Contains(l, "[risk") || strings.Contains(l, "weakpass"):
-			risks = append(risks, line)
-		case strings.Contains(l, "[vuln"):
-			vulns = append(vulns, line)
-		case strings.Contains(l, "[ai") || strings.Contains(l, "[sniper") || strings.Contains(l, "[deep") || strings.Contains(l, "verified"):
-			ai = append(ai, line)
-		case strings.Contains(l, "[summary") || strings.Contains(l, "completed"):
-			summary = append(summary, line)
-		}
+	if result == nil {
+		sb.WriteString("No structured result was returned.\n")
+		return sb.String()
 	}
 
-	writeSection := func(title string, items []string) {
-		if len(items) == 0 {
-			return
+	sb.WriteString("## Summary\n\n")
+	sb.WriteString("| Metric | Value |\n|---|---:|\n")
+	sb.WriteString(fmt.Sprintf("| Targets | %d |\n", result.Summary.Targets))
+	sb.WriteString(fmt.Sprintf("| Services | %d |\n", result.Summary.Services))
+	sb.WriteString(fmt.Sprintf("| Web | %d |\n", result.Summary.Webs))
+	sb.WriteString(fmt.Sprintf("| Probes | %d |\n", result.Summary.Probes))
+	sb.WriteString(fmt.Sprintf("| Fingerprints | %d |\n", resultFingerprintCount(result)))
+	sb.WriteString(fmt.Sprintf("| Findings | %d |\n", result.Summary.Risks+result.Summary.Vulns))
+	sb.WriteString(fmt.Sprintf("| AI | %d |\n", len(result.AI)))
+	sb.WriteString(fmt.Sprintf("| Errors | %d |\n", result.Summary.Errors))
+	if result.Summary.Duration != "" {
+		sb.WriteString(fmt.Sprintf("| Duration | %s |\n", result.Summary.Duration))
+	}
+	sb.WriteString("\n")
+
+	if len(result.Assets) == 0 {
+		return sb.String()
+	}
+
+	sb.WriteString("## Assets\n\n")
+	for _, asset := range result.Assets {
+		title := output.FirstNonEmpty(asset.Title, asset.Target, asset.Key, "Asset")
+		sb.WriteString(fmt.Sprintf("### %s\n\n", title))
+		if asset.Target != "" && asset.Target != title {
+			sb.WriteString(fmt.Sprintf("- **Target:** %s\n", markdownCode(asset.Target)))
 		}
-		sb.WriteString(fmt.Sprintf("## %s\n\n", title))
-		for _, item := range items {
-			sb.WriteString(fmt.Sprintf("- `%s`\n", item))
+		if asset.Status != "" {
+			sb.WriteString(fmt.Sprintf("- **State:** %s\n", markdownCode(asset.Status)))
 		}
+		writeMarkdownList(&sb, "Services", assetServiceFacts(asset.Items))
+		writeMarkdownList(&sb, "HTTP", assetHTTPStatuses(asset.Items))
+		writeMarkdownList(&sb, "Fingers", assetFingers(asset.Items))
+		writeMarkdownList(&sb, "Sources", assetSources(asset.Items))
+		if paths := assetPathCount(asset.Items); paths > 0 {
+			sb.WriteString(fmt.Sprintf("- **Paths:** %d\n", paths))
+		}
+		writeAssetFindingsMarkdown(&sb, asset.Items)
 		sb.WriteString("\n")
 	}
-
-	writeSection("Open Services", services)
-	writeSection("Web Endpoints", web)
-	writeSection("Fingerprints", fingerprints)
-	writeSection("Risks (Weak Credentials)", risks)
-	writeSection("Vulnerabilities", vulns)
-	writeSection("Analysis", ai)
-
-	if len(summary) > 0 {
-		sb.WriteString("## Summary\n\n")
-		for _, line := range summary {
-			sb.WriteString(line + "\n")
-		}
-		sb.WriteString("\n")
-	}
-
-	sb.WriteString("---\n\n")
-	sb.WriteString("## Raw Output\n\n")
-	sb.WriteString("```\n")
-	sb.WriteString(stripANSI(terminalOutput))
-	sb.WriteString("\n```\n")
 
 	return sb.String()
+}
+
+func writeMarkdownList(sb *strings.Builder, label string, values []string) {
+	if len(values) == 0 {
+		return
+	}
+	coded := make([]string, 0, len(values))
+	for _, value := range values {
+		coded = append(coded, markdownCode(value))
+	}
+	sb.WriteString(fmt.Sprintf("- **%s:** %s\n", label, strings.Join(coded, ", ")))
+}
+
+func writeAssetFindingsMarkdown(sb *strings.Builder, items []output.AssetItem) {
+	var lines []string
+	for _, item := range items {
+		switch item.Kind {
+		case output.AssetItemFinding, output.AssetItemNote, output.AssetItemResponse, output.AssetItemError:
+			text := output.FirstNonEmpty(item.Summary, item.Title, item.Detail, item.Raw)
+			if text == "" {
+				continue
+			}
+			prefix := output.FirstNonEmpty(item.Source, item.Kind)
+			if item.Status != "" {
+				prefix += ":" + item.Status
+			}
+			lines = append(lines, fmt.Sprintf("  - **%s** %s", prefix, text))
+		}
+	}
+	if len(lines) == 0 {
+		return
+	}
+	sb.WriteString("- **Findings:**\n")
+	for _, line := range lines {
+		sb.WriteString(line + "\n")
+	}
+}
+
+func assetServiceFacts(items []output.AssetItem) []string {
+	var values []string
+	for _, item := range items {
+		if item.Kind != output.AssetItemService {
+			continue
+		}
+		values = append(values, strings.Join(output.CompactStrings(
+			output.AssetDataString(item.Data, "protocol"),
+			output.AssetDataString(item.Data, "service"),
+			output.AssetDataString(item.Data, "port"),
+		), " "))
+	}
+	return output.CompactStrings(values...)
+}
+
+func assetHTTPStatuses(items []output.AssetItem) []string {
+	var values []string
+	for _, item := range items {
+		if item.Kind == output.AssetItemPath && item.Status != "" {
+			values = append(values, item.Status)
+		}
+	}
+	return output.CompactStrings(values...)
+}
+
+func assetFingers(items []output.AssetItem) []string {
+	var values []string
+	for _, item := range items {
+		switch item.Kind {
+		case output.AssetItemFingerprint:
+			values = append(values, output.FirstNonEmpty(item.Title, output.AssetDataString(item.Data, "name")))
+		case output.AssetItemPath:
+			values = append(values, output.AssetDataStrings(item.Data, "fingers")...)
+		}
+	}
+	return output.CompactStrings(values...)
+}
+
+func assetSources(items []output.AssetItem) []string {
+	var values []string
+	for _, item := range items {
+		values = append(values, item.Source)
+	}
+	return output.CompactStrings(values...)
+}
+
+func assetPathCount(items []output.AssetItem) int {
+	count := 0
+	for _, item := range items {
+		if item.Kind == output.AssetItemPath {
+			count++
+		}
+	}
+	return count
+}
+
+func resultFingerprintCount(result *output.Result) int {
+	if result == nil {
+		return 0
+	}
+	seen := make(map[string]struct{})
+	for _, asset := range result.Assets {
+		for _, finger := range assetFingers(asset.Items) {
+			seen[strings.ToLower(finger)] = struct{}{}
+		}
+	}
+	return len(seen)
+}
+
+func markdownCode(value string) string {
+	value = strings.ReplaceAll(value, "`", "'")
+	return "`" + value + "`"
 }
 
 func generateID() string {

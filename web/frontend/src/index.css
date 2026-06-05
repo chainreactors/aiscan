@@ -4,6 +4,29 @@
 
 @layer base {
   :root {
+    color-scheme: light;
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --primary: 142 72% 32%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 94%;
+    --secondary-foreground: 222 47% 16%;
+    --muted: 210 40% 94%;
+    --muted-foreground: 215 16% 42%;
+    --accent: 142 32% 91%;
+    --accent-foreground: 142 72% 18%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 88%;
+    --input: 214 32% 84%;
+    --ring: 142 72% 32%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    color-scheme: dark;
     --background: 220 14% 4%;
     --foreground: 210 20% 92%;
     --card: 220 14% 6%;
@@ -21,17 +44,21 @@
     --border: 215 14% 16%;
     --input: 215 14% 16%;
     --ring: 142 71% 45%;
-    --radius: 0.5rem;
   }
 
   * {
     border-color: hsl(var(--border));
   }
 
+  html {
+    background-color: hsl(var(--background));
+  }
+
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
   }
 
   ::-webkit-scrollbar {
@@ -42,10 +69,10 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: hsl(215 14% 20%);
+    background: hsl(var(--muted-foreground) / 0.35);
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(215 14% 30%);
+    background: hsl(var(--muted-foreground) / 0.55);
   }
 }

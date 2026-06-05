@@ -52,6 +52,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if segments[0] == "api" {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+
 	if segments[0] == "health" {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		return

@@ -1,38 +1,38 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { Settings, Shield } from 'lucide-react'
+import { useState, useEffect, useCallback, type ReactNode } from 'react'
+import { AlertTriangle, CheckCircle2, History, Settings, Shield, X } from 'lucide-react'
 import Sidebar from './components/Sidebar'
 import ScanForm from './components/ScanForm'
 import ScanView from './components/ScanView'
 import LLMConfigPanel from './components/LLMConfigPanel'
-import { submitScan, listScans, getScan, subscribeScanEvents, getReport, getStatus } from './api'
-import type { ScanJob, ScanEvent, ScanOptions, ServerStatus, StructuredResult } from './api'
+import ThemeToggle from './components/ThemeToggle'
+import { getStatus } from './api'
+import type { ServerStatus } from './api'
+import { useScanSession } from './hooks/useScanSession'
 import { Button } from './components/ui/button'
+import { cn } from './lib/utils'
+
+const sidebarStorageKey = 'aiscan-sidebar-open'
+
+function getInitialSidebarOpen() {
+  if (typeof window === 'undefined') {
+    return true
+  }
+  if (window.matchMedia('(max-width: 767px)').matches) {
+    return false
+  }
+  const stored = window.localStorage.getItem(sidebarStorageKey)
+  if (stored === 'true' || stored === 'false') {
+    return stored === 'true'
+  }
+  return window.matchMedia('(min-width: 1024px)').matches
+}
 
 export default function App() {
-  const [scans, setScans] = useState<ScanJob[]>([])
-  const [activeScan, setActiveScan] = useState<ScanJob | null>(null)
-  const [progressLines, setProgressLines] = useState<string[]>([])
-  const [report, setReport] = useState('')
-  const [result, setResult] = useState<StructuredResult | null>(null)
-  const [scanning, setScanning] = useState(false)
-  const [error, setError] = useState('')
+  const scanSession = useScanSession()
   const [analysisAvailable, setAnalysisAvailable] = useState(true)
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null)
   const [llmConfigOpen, setLLMConfigOpen] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [logCollapsed, setLogCollapsed] = useState(false)
-  const unsubRef = useRef<(() => void) | null>(null)
-
-  const refreshScans = useCallback(async () => {
-    try {
-      const list = await listScans()
-      setScans(list || [])
-    } catch {}
-  }, [])
-
-  useEffect(() => {
-    refreshScans()
-  }, [refreshScans])
+  const [sidebarOpen, setSidebarOpen] = useState(getInitialSidebarOpen)
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -48,179 +48,99 @@ export default function App() {
     refreshStatus()
   }, [refreshStatus])
 
-  const handleSubmit = async (target: string, mode: string, options: ScanOptions) => {
-    setError('')
-    setProgressLines([])
-    setReport('')
-    setResult(null)
-    setScanning(true)
-    setLogCollapsed(false)
-
-    try {
-      const job = await submitScan(target, mode, options)
-      setActiveScan(job)
-      refreshScans()
-      subscribeToScan(job.id)
-    } catch (err: any) {
-      setError(err.message || 'Failed to submit scan')
-      setScanning(false)
-    }
-  }
-
-  const subscribeToScan = (id: string) => {
-    if (unsubRef.current) {
-      unsubRef.current()
-    }
-
-    const unsub = subscribeScanEvents(id, (event: ScanEvent) => {
-      if (event.type === 'progress' && event.data) {
-        setProgressLines((prev) => [...prev, event.data!])
-        if (event.result) {
-          setResult(event.result)
-          setActiveScan((scan) => (scan?.id === id ? { ...scan, result: event.result } : scan))
-        }
-      } else if (event.type === 'status' && event.status) {
-        setActiveScan((scan) =>
-          scan?.id === id
-            ? { ...scan, status: event.status as ScanJob['status'], updated_at: new Date().toISOString() }
-            : scan,
-        )
-      } else if (event.type === 'complete') {
-        setScanning(false)
-        setLogCollapsed(true)
-        setError('')
-        if (event.result) {
-          setResult(event.result)
-        }
-        setActiveScan((scan) =>
-          scan?.id === id
-            ? { ...scan, status: 'completed', updated_at: new Date().toISOString() }
-            : scan,
-        )
-        refreshScans()
-        if (!event.result) {
-          loadResult(id)
-        }
-        loadReport(id)
-      } else if (event.type === 'error') {
-        setScanning(false)
-        setActiveScan((scan) =>
-          scan?.id === id
-            ? {
-                ...scan,
-                status: 'failed',
-                error: event.error || 'Scan failed',
-                updated_at: new Date().toISOString(),
-              }
-            : scan,
-        )
-        setError(event.error || 'Scan failed')
-        refreshScans()
-      }
-    })
-    unsubRef.current = unsub
-  }
-
-  const loadReport = async (id: string) => {
-    try {
-      const r = await getReport(id)
-      setReport(r)
-    } catch {
-      const job = await getScan(id)
-      if (job.report) {
-        setReport(job.report)
-      }
-    }
-  }
-
-  const loadResult = async (id: string) => {
-    try {
-      const job = await getScan(id)
-      if (job.result) {
-        setResult(job.result)
-      }
-    } catch {}
-  }
-
-  const handleSelectScan = async (scan: ScanJob) => {
-    setActiveScan(scan)
-    setError('')
-    setProgressLines([])
-    setResult(scan.result || null)
-    setLogCollapsed(false)
-
-    if (scan.status === 'completed') {
-      setLogCollapsed(true)
-      if (!scan.result) {
-        await loadResult(scan.id)
-      }
-      if (scan.report) {
-        setReport(scan.report)
-      } else {
-        await loadReport(scan.id)
-      }
-    } else if (scan.status === 'running') {
-      setScanning(true)
-      subscribeToScan(scan.id)
-    } else {
-      setReport('')
-    }
-  }
+  useEffect(() => {
+    window.localStorage.setItem(sidebarStorageKey, String(sidebarOpen))
+  }, [sidebarOpen])
 
   return (
-    <div className="min-h-screen flex">
+    <div className="flex min-h-screen bg-background">
       <Sidebar
         open={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
-        scans={scans}
-        activeId={activeScan?.id}
-        onSelectScan={handleSelectScan}
+        scans={scanSession.scans}
+        activeId={scanSession.activeScan?.id}
+        onSelectScan={scanSession.selectScan}
       />
 
       <main className="flex-1 flex flex-col min-w-0">
         {/* Header with form */}
-        <div className="flex flex-wrap items-center gap-3 border-b border-border bg-card/30 p-4 backdrop-blur-sm">
-          <div className="min-w-0 flex-1">
-            <ScanForm onSubmit={handleSubmit} disabled={scanning} analysisAvailable={analysisAvailable} />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setLLMConfigOpen(true)}
-            className="h-10 shrink-0"
-          >
-            <Settings className="h-4 w-4" />
-            <span className="hidden sm:inline">LLM</span>
-          </Button>
+        <div className="sticky top-0 z-20 border-b border-border bg-card/85 p-3 shadow-sm backdrop-blur-sm sm:p-4">
+          <ScanForm
+            onSubmit={scanSession.submit}
+            disabled={scanSession.scanning}
+            analysisAvailable={analysisAvailable}
+            status={<StatusPill active={analysisAvailable} />}
+            actions={
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setLLMConfigOpen(true)}
+                  className="h-10 w-10 shrink-0 px-0 sm:w-auto sm:px-3"
+                  aria-label="Open LLM configuration"
+                >
+                  <Settings className="h-4 w-4" />
+                  <span className="hidden sm:inline">LLM</span>
+                </Button>
+                <ThemeToggle />
+              </>
+            }
+          />
         </div>
 
         {/* Error */}
-        {error && (
-          <div className="mx-4 mt-3 px-3 py-2 bg-destructive/10 border border-destructive/30 rounded-md text-destructive text-sm animate-fade-in">
-            {error}
+        {scanSession.error && (
+          <div
+            role="alert"
+            className="mx-4 mt-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive animate-fade-in"
+          >
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="min-w-0 flex-1 break-words">{scanSession.error}</span>
+            <button
+              type="button"
+              aria-label="Dismiss error"
+              onClick={scanSession.clearError}
+              className="rounded p-0.5 text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
 
         {/* Content */}
-        {activeScan ? (
+        {scanSession.activeScan ? (
           <div className="flex-1 p-4 overflow-auto">
             <ScanView
-              scan={activeScan}
-              lines={progressLines}
-              report={report}
-              result={result}
-              logCollapsed={logCollapsed}
-              onToggleLog={() => setLogCollapsed(!logCollapsed)}
+              scan={scanSession.activeScan}
+              lines={scanSession.progressLines}
+              report={scanSession.report}
+              result={scanSession.result}
+              logCollapsed={scanSession.logCollapsed}
+              onToggleLog={scanSession.toggleLog}
             />
           </div>
         ) : (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center space-y-3">
+            <div className="text-center space-y-4">
               <Shield className="w-16 h-16 mx-auto text-muted-foreground/10" strokeWidth={1} />
-              <p className="text-muted-foreground text-sm">Enter a target to start scanning</p>
-              <p className="text-muted-foreground/50 text-xs">
-                Security scanning with structured reports
-              </p>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">No active scan</p>
+                <p className="text-xs text-muted-foreground">Ready for a target</p>
+              </div>
+              <div className="flex flex-wrap justify-center gap-2">
+                <EmptyStateMetric icon={<History className="h-3.5 w-3.5" />} label="History" value={scanSession.scans.length} />
+                <EmptyStateMetric
+                  icon={analysisAvailable ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+                  label="LLM"
+                  value={analysisAvailable ? 'Ready' : 'Offline'}
+                  tone={analysisAvailable ? 'ready' : 'warning'}
+                />
+                <EmptyStateMetric
+                  icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+                  label="Config"
+                  value={serverStatus?.config_loaded ? 'Loaded' : 'Default'}
+                />
+              </div>
             </div>
           </div>
         )}
@@ -231,6 +151,50 @@ export default function App() {
         onClose={() => setLLMConfigOpen(false)}
         onSaved={refreshStatus}
       />
+    </div>
+  )
+}
+
+function StatusPill({ active }: { active: boolean }) {
+  return (
+    <span
+      title={active ? 'LLM Ready' : 'LLM Offline'}
+      className={cn(
+        'hidden h-10 shrink-0 items-center gap-2 rounded-md border px-3 text-xs font-medium lg:inline-flex',
+        active
+          ? 'border-cyber-400/30 bg-cyber-400/10 text-cyber-700 dark:text-cyber-300'
+          : 'border-yellow-400/30 bg-yellow-400/10 text-yellow-700 dark:text-yellow-300',
+      )}
+    >
+      {active ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+      {active ? 'LLM Ready' : 'LLM Offline'}
+    </span>
+  )
+}
+
+function EmptyStateMetric({
+  icon,
+  label,
+  value,
+  tone = 'muted',
+}: {
+  icon: ReactNode
+  label: string
+  value: string | number
+  tone?: 'muted' | 'ready' | 'warning'
+}) {
+  return (
+    <div
+      className={cn(
+        'inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs',
+        tone === 'ready' && 'border-cyber-400/25 bg-cyber-400/10 text-cyber-700 dark:text-cyber-300',
+        tone === 'warning' && 'border-yellow-400/25 bg-yellow-400/10 text-yellow-700 dark:text-yellow-300',
+        tone === 'muted' && 'border-border bg-card/60 text-muted-foreground',
+      )}
+    >
+      {icon}
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-mono text-foreground">{value}</span>
     </div>
   )
 }

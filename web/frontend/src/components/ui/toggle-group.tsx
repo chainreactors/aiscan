@@ -7,11 +7,16 @@ interface ToggleGroupProps {
   children: React.ReactNode
   className?: string
   disabled?: boolean
+  ariaLabel?: string
 }
 
-function ToggleGroup({ value, onValueChange, children, className, disabled }: ToggleGroupProps) {
+function ToggleGroup({ value, onValueChange, children, className, disabled, ariaLabel }: ToggleGroupProps) {
   return (
-    <div className={cn('inline-flex items-center rounded-md border border-input bg-secondary/50 p-0.5', className)}>
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className={cn('inline-flex items-center rounded-md border border-input bg-secondary/50 p-0.5', className)}
+    >
       {React.Children.map(children, (child) => {
         if (React.isValidElement<ToggleGroupItemProps>(child)) {
           return React.cloneElement(child, {

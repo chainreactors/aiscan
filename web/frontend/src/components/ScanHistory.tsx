@@ -24,6 +24,9 @@ export default function ScanHistory({ scans, activeId, onSelect }: ScanHistoryPr
           <button
             key={scan.id}
             onClick={() => onSelect(scan)}
+            title={`${scan.target} — ${scan.status}`}
+            aria-current={scan.id === activeId ? 'true' : undefined}
+            aria-label={`${scan.target}, ${scan.status}, ${scan.mode}`}
             className={`w-full text-left px-2.5 py-2 rounded-md transition-colors ${
               scan.id === activeId
                 ? 'bg-accent border border-cyber-600/30'
@@ -38,9 +41,9 @@ export default function ScanHistory({ scans, activeId, onSelect }: ScanHistoryPr
             </div>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span className="text-[10px] text-muted-foreground">{scan.mode}</span>
-              {verifyEnabled && <span className="text-[10px] text-cyber-300">Verify</span>}
-              {sniperEnabled && <span className="text-[10px] text-red-300">Sniper</span>}
-              {scan.deep && <span className="text-[10px] text-yellow-300">Deep</span>}
+              {verifyEnabled && <span className="text-[10px] text-cyber-700 dark:text-cyber-300">Verify</span>}
+              {sniperEnabled && <span className="text-[10px] text-red-700 dark:text-red-300">Sniper</span>}
+              {scan.deep && <span className="text-[10px] text-yellow-700 dark:text-yellow-300">Deep</span>}
               <span className="text-[10px] text-muted-foreground/60">{formatTime(scan.created_at)}</span>
             </div>
           </button>
@@ -59,7 +62,7 @@ function StatusDot({ status }: { status: string }) {
     cancelled: 'bg-yellow-400',
   }
   return (
-    <span className={`w-2 h-2 rounded-full shrink-0 ${colors[status] || colors.queued}`} />
+    <span title={status} className={`w-2 h-2 rounded-full shrink-0 ${colors[status] || colors.queued}`} />
   )
 }
 

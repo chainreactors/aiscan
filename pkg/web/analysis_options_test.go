@@ -103,33 +103,3 @@ func TestSQLiteStoreMapsLegacyAIToVerifyAndSniper(t *testing.T) {
 		t.Fatalf("legacy options = verify:%v sniper:%v ai:%v", got.Verify, got.Sniper, got.AI)
 	}
 }
-
-func TestPartialStructuredBuilderAggregatesStreamLines(t *testing.T) {
-	builder := newPartialStructuredBuilder("127.0.0.1", time.Now())
-	builder.ObserveLine(`[service] 127.0.0.1:22 open tcp 12ms`)
-	builder.ObserveLine(`[web] http://127.0.0.1:8765 200 550 3ms "Directory listing for /" [directory,pythonsimplehttp]`)
-	builder.ObserveLine(`[deep:rejected] http://127.0.0.1:8765 not_confirmed "No issue" "static listing"`)
-
-	result := builder.Result(time.Now())
-	if result == nil {
-		t.Fatal("partial result is nil")
-	}
-	if result.Summary.Services != 1 || result.Summary.Probes != 1 || len(result.AI) != 1 {
-		t.Fatalf("summary = %#v", result.Summary)
-	}
-	if len(result.Assets) != 2 {
-		t.Fatalf("assets = %d, want 2: %#v", len(result.Assets), result.Assets)
-	}
-	var webAssetFound bool
-	for _, asset := range result.Assets {
-		if asset.Target == "http://127.0.0.1:8765" {
-			webAssetFound = true
-			if asset.Status != "not_confirmed" {
-				t.Fatalf("web asset status = %q", asset.Status)
-			}
-		}
-	}
-	if !webAssetFound {
-		t.Fatalf("web asset not found: %#v", result.Assets)
-	}
-}

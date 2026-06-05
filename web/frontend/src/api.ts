@@ -9,31 +9,28 @@ export interface ScanJob {
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   progress?: string;
   report?: string;
-  result?: StructuredResult;
+  result?: ScanResult;
   error?: string;
   created_at: string;
   updated_at: string;
 }
 
-export interface StructuredResult {
-  summary: StructuredSummary;
+export interface ScanResult {
+  summary: ScanResultSummary;
   assets?: Asset[];
-  services?: StructuredService[];
-  web_endpoints?: StructuredWebEndpoint[];
-  web_probes?: StructuredWebEndpoint[];
-  fingerprints?: StructuredFingerprint[];
-  risks?: StructuredFinding[];
-  vulns?: StructuredFinding[];
-  ai?: StructuredFinding[];
-  errors?: StructuredError[];
+  services?: unknown[];
+  web_probes?: unknown[];
+  risks?: unknown[];
+  vulns?: unknown[];
+  ai?: AIFinding[];
+  errors?: ResultError[];
 }
 
-export interface StructuredSummary {
+export interface ScanResultSummary {
   targets: number;
   services: number;
   webs: number;
   probes: number;
-  fingerprints: number;
   risks: number;
   vulns: number;
   verified: number;
@@ -54,8 +51,10 @@ export interface Asset {
   items?: AssetItem[];
 }
 
+export type AssetItemKind = 'service' | 'path' | 'fingerprint' | 'finding' | 'note' | 'response' | 'error';
+
 export interface AssetItem {
-  kind: string;
+  kind: AssetItemKind;
   source?: string;
   target?: string;
   status?: string;
@@ -67,35 +66,7 @@ export interface AssetItem {
   raw?: string;
 }
 
-export interface StructuredService {
-  target: string;
-  ip?: string;
-  port?: string;
-  protocol?: string;
-  service?: string;
-  banner?: string;
-  raw?: string;
-  is_web?: boolean;
-}
-
-export interface StructuredWebEndpoint {
-  url: string;
-  host_header?: string;
-  source?: string;
-  status?: number;
-  title?: string;
-  fingers?: string[];
-  raw?: string;
-}
-
-export interface StructuredFingerprint {
-  target: string;
-  name: string;
-  source?: string;
-  focus?: boolean;
-}
-
-export interface StructuredFinding {
+export interface AIFinding {
   kind: string;
   target?: string;
   priority?: string;
@@ -110,7 +81,7 @@ export interface StructuredFinding {
   raw?: string;
 }
 
-export interface StructuredError {
+export interface ResultError {
   source?: string;
   message: string;
 }
@@ -121,7 +92,7 @@ export interface ScanEvent {
   data?: string;
   status?: string;
   error?: string;
-  result?: StructuredResult;
+  result?: ScanResult;
 }
 
 export interface ScanOptions {
@@ -150,126 +121,51 @@ export interface LLMConfig {
   proxy: string;
 }
 
-const isWails = !!(window as any).go;
-
 export async function getStatus(): Promise<ServerStatus> {
-  if (isWails) {
-    const app = (window as any)['go']?.['main']?.['App'];
-    if (app?.GetStatus) {
-      return app.GetStatus();
-    }
-    return { llm_available: true, config_loaded: false };
-  }
-  const res = await fetch('/api/status');
-  if (!res.ok) throw new Error('Failed to load status');
-  return res.json();
+  return apiJSON('/api/status', 'Failed to load status');
 }
 
 export async function getLLMConfig(): Promise<LLMConfig> {
-  if (isWails) {
-    const app = (window as any)['go']?.['main']?.['App'];
-    if (app?.GetLLMConfig) {
-      return app.GetLLMConfig();
-    }
-    throw new Error('LLM config is not available in this runtime');
-  }
-  const res = await fetch('/api/config/llm');
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to load LLM config');
-  }
-  return res.json();
+  return apiJSON('/api/config/llm', 'Failed to load LLM config');
 }
 
 export async function saveLLMConfig(config: LLMConfig): Promise<LLMConfig> {
-  if (isWails) {
-    const app = (window as any)['go']?.['main']?.['App'];
-    if (app?.SaveLLMConfig) {
-      return app.SaveLLMConfig(config);
-    }
-    throw new Error('LLM config is not available in this runtime');
-  }
-  const res = await fetch('/api/config/llm', {
+  return apiJSON('/api/config/llm', 'Failed to save LLM config', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to save LLM config');
-  }
-  return res.json();
 }
 
 export async function submitScan(target: string, mode: string, options: ScanOptions): Promise<ScanJob> {
-  if (isWails) {
-    return (window as any)['go']['main']['App']['SubmitScan'](
-      target,
-      mode,
-      options.verify,
-      options.sniper,
-      options.deep,
-    );
-  }
-  const res = await fetch('/api/scans', {
+  return apiJSON('/api/scans', 'Failed to submit scan', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ target, mode, ...options }),
   });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to submit scan');
-  }
-  return res.json();
 }
 
 export async function getScan(id: string): Promise<ScanJob> {
-  if (isWails) {
-    return (window as any)['go']['main']['App']['GetScan'](id);
-  }
-  const res = await fetch(`/api/scans/${id}`);
-  if (!res.ok) throw new Error('Scan not found');
-  return res.json();
+  return apiJSON(`/api/scans/${encodeURIComponent(id)}`, 'Scan not found');
 }
 
 export async function listScans(): Promise<ScanJob[]> {
-  if (isWails) {
-    return (window as any)['go']['main']['App']['ListScans']();
-  }
-  const res = await fetch('/api/scans');
-  if (!res.ok) throw new Error('Failed to list scans');
-  return res.json();
+  return apiJSON('/api/scans', 'Failed to list scans');
 }
 
 export async function cancelScan(id: string): Promise<void> {
-  if (isWails) {
-    return (window as any)['go']['main']['App']['CancelScan'](id);
-  }
-  await fetch(`/api/scans/${id}`, { method: 'DELETE' });
+  await apiJSON(`/api/scans/${encodeURIComponent(id)}`, 'Failed to cancel scan', { method: 'DELETE' });
 }
 
 export async function getReport(id: string): Promise<string> {
-  if (isWails) {
-    return (window as any)['go']['main']['App']['GetReport'](id);
-  }
-  const res = await fetch(`/api/scans/${id}/report`);
-  if (!res.ok) throw new Error('Report not ready');
-  return res.text();
+  return apiText(`/api/scans/${encodeURIComponent(id)}/report`, 'Report not ready');
 }
 
 export function subscribeScanEvents(
   id: string,
   onEvent: (event: ScanEvent) => void,
 ): () => void {
-  if (isWails) {
-    const runtime = (window as any).runtime;
-    if (runtime?.EventsOn) {
-      runtime.EventsOn(`scan:${id}`, (event: ScanEvent) => onEvent(event));
-      return () => runtime.EventsOff(`scan:${id}`);
-    }
-  }
-
-  const es = new EventSource(`/api/scans/${id}/events`);
+  const es = new EventSource(`/api/scans/${encodeURIComponent(id)}/events`);
   const handler = (type: ScanEvent['type']) => (e: Event) => {
     const data = 'data' in e ? (e as MessageEvent).data : undefined;
     if (typeof data !== 'string' || data === '') {
@@ -311,4 +207,29 @@ export function subscribeScanEvents(
   es.addEventListener('error', handler('error'));
 
   return () => es.close();
+}
+
+async function apiJSON<T>(path: string, fallbackMessage: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, init);
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, fallbackMessage));
+  }
+  return res.json();
+}
+
+async function apiText(path: string, fallbackMessage: string): Promise<string> {
+  const res = await fetch(path);
+  if (!res.ok) {
+    throw new Error(await errorMessage(res, fallbackMessage));
+  }
+  return res.text();
+}
+
+async function errorMessage(res: Response, fallback: string) {
+  try {
+    const body = await res.json();
+    return body?.error || fallback;
+  } catch {
+    return fallback;
+  }
 }

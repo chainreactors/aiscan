@@ -162,7 +162,7 @@ export default function LLMConfigPanel({ open, status, onClose, onSaved }: LLMCo
             </div>
           )}
           {saved && (
-            <div className="flex items-center gap-2 rounded-md border border-cyber-400/30 bg-cyber-400/10 px-3 py-2 text-sm text-cyber-300">
+            <div className="flex items-center gap-2 rounded-md border border-cyber-400/30 bg-cyber-400/10 px-3 py-2 text-sm text-cyber-700 dark:text-cyber-300">
               <CheckCircle className="h-4 w-4" />
               Saved and runtime reloaded
             </div>
@@ -197,8 +197,8 @@ function StatusPill({ active, label }: { active: boolean; label: string }) {
     <span
       className={`rounded-full border px-2.5 py-1 ${
         active
-          ? 'border-cyber-400/30 bg-cyber-400/10 text-cyber-300'
-          : 'border-yellow-400/30 bg-yellow-400/10 text-yellow-300'
+          ? 'border-cyber-400/30 bg-cyber-400/10 text-cyber-700 dark:text-cyber-300'
+          : 'border-yellow-400/30 bg-yellow-400/10 text-yellow-700 dark:text-yellow-300'
       }`}
     >
       {label}

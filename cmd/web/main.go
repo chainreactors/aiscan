@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -74,8 +75,12 @@ func main() {
 	})
 	defer service.Close()
 
-	staticSub, _ := fs.Sub(staticFS, "static")
-	handler := web.NewHandler(service, http.FileServer(http.FS(staticSub)))
+	staticSub, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: load static assets: %s\n", err)
+		os.Exit(1)
+	}
+	handler := web.NewHandler(service, newSPAFileServer(staticSub))
 
 	srv := &http.Server{
 		Addr:    *addr,
@@ -98,6 +103,46 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(1)
 	}
+}
+
+type spaFileServer struct {
+	fsys       fs.FS
+	fileServer http.Handler
+}
+
+func newSPAFileServer(fsys fs.FS) http.Handler {
+	return spaFileServer{
+		fsys:       fsys,
+		fileServer: http.FileServer(http.FS(fsys)),
+	}
+}
+
+func (h spaFileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		h.fileServer.ServeHTTP(w, r)
+		return
+	}
+
+	name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+	if name == "" || h.staticFileExists(name) {
+		h.fileServer.ServeHTTP(w, r)
+		return
+	}
+
+	indexReq := r.Clone(r.Context())
+	indexReq.URL.Path = "/"
+	h.fileServer.ServeHTTP(w, indexReq)
+}
+
+func (h spaFileServer) staticFileExists(name string) bool {
+	file, err := h.fsys.Open(name)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	return err == nil && !info.IsDir()
 }
 
 type yamlConfig struct {

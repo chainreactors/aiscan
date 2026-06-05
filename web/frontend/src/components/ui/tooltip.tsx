@@ -27,7 +27,7 @@ function Tooltip({ content, children, side = 'right' }: TooltipProps) {
       {show && (
         <div
           className={cn(
-            'absolute z-50 whitespace-nowrap rounded-md bg-gray-800 px-2.5 py-1.5 text-xs text-gray-200 shadow-lg border border-gray-700',
+            'absolute z-50 whitespace-nowrap rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-card-foreground shadow-lg',
             positionClass
           )}
         >
