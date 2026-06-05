@@ -65,7 +65,7 @@ func ParseLegacyMessage(content map[string]any) (SwarmMessage, bool) {
 }
 
 func swarmContent(msg SwarmMessage) map[string]any {
-	m := map[string]any{"content": msg.Content}
+	m := map[string]any{"type": "message", "content": msg.Content}
 	if len(msg.Targets) > 0 {
 		m["targets"] = msg.Targets
 	}
