@@ -3,9 +3,7 @@ package ioa
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,10 +13,23 @@ import (
 	ioaclient "github.com/chainreactors/ioa/client"
 )
 
+// spaceResolver is implemented by ioa/client.Client.
+type spaceResolver interface {
+	ResolveSpace(ctx context.Context, nameOrID string) (ioamodel.SpaceInfo, error)
+}
+
+// spaceLister is implemented by ioa/client.Client.
+type spaceLister interface {
+	ListSpaces(ctx context.Context) ([]ioamodel.SpaceInfo, error)
+}
+
 func NewCommands(client ioaclient.API, nodeName string, meta map[string]any) []command.PseudoCommand {
+	rc := &resolvingClient{
+		API:   client,
+		cache: make(map[string]string),
+	}
 	var cmds []command.PseudoCommand
-	resolvingClient := newSpaceResolvingClient(client, nodeName)
-	for _, t := range ioaclient.NewTools(resolvingClient, ioaclient.ToolOptions{NodeName: nodeName, NodeMeta: meta}) {
+	for _, t := range ioaclient.NewTools(rc, ioaclient.ToolOptions{NodeName: nodeName, NodeMeta: meta}) {
 		cmds = append(cmds, &toolAdapter{tool: t, descOverride: toolDescOverrides[t.Name()]})
 	}
 	return cmds
@@ -29,92 +40,90 @@ var toolDescOverrides = map[string]string{
 	"ioa_read": `Read messages from an IOA space. The --space_id value accepts either the space hash ID or the human-readable space name; --space and --space_name are accepted aliases. Example: ioa_read --space "my-space-name" --all true --limit 50. Use --after "<message_id>" to paginate.`,
 }
 
-type spaceResolver interface {
-	ResolveSpace(ctx context.Context, nameOrID string) (ioamodel.SpaceInfo, error)
-}
-
-type spaceResolvingClient struct {
+// resolvingClient wraps ioaclient.API to transparently resolve space names to
+// IDs. If a name cannot be resolved it returns an error listing available
+// spaces — it never auto-creates/joins a space.
+type resolvingClient struct {
 	ioaclient.API
 
-	mu                  sync.RWMutex
-	cache               map[string]string
-	autoJoinDescription string
+	mu    sync.RWMutex
+	cache map[string]string // selector → spaceID
 }
 
-func newSpaceResolvingClient(client ioaclient.API, nodeName string) ioaclient.API {
-	desc := "aiscan ioa tool auto-join"
-	if strings.TrimSpace(nodeName) != "" {
-		desc = "aiscan ioa tool auto-join: " + strings.TrimSpace(nodeName)
-	}
-	return &spaceResolvingClient{
-		API:                 client,
-		cache:               make(map[string]string),
-		autoJoinDescription: desc,
-	}
-}
-
-func (c *spaceResolvingClient) Space(ctx context.Context, name, description string, tags ...string) (ioamodel.SpaceInfo, error) {
+func (c *resolvingClient) Space(ctx context.Context, name, description string, tags ...string) (ioamodel.SpaceInfo, error) {
 	info, err := c.API.Space(ctx, name, description, tags...)
 	if err != nil {
 		return ioamodel.SpaceInfo{}, err
 	}
-	c.cacheSpace("", info)
+	c.remember("", info)
 	return info, nil
 }
 
-func (c *spaceResolvingClient) Send(ctx context.Context, spaceID string, body ioamodel.SendMessage) (ioamodel.Message, error) {
-	resolved, err := c.resolveSpaceID(ctx, spaceID)
+func (c *resolvingClient) Send(ctx context.Context, spaceID string, body ioamodel.SendMessage) (ioamodel.Message, error) {
+	resolved, err := c.resolve(ctx, spaceID)
 	if err != nil {
 		return ioamodel.Message{}, err
 	}
 	return c.API.Send(ctx, resolved, body)
 }
 
-func (c *spaceResolvingClient) Read(ctx context.Context, spaceID string, opts ioamodel.ReadOptions) ([]ioamodel.Message, error) {
-	resolved, err := c.resolveSpaceID(ctx, spaceID)
+func (c *resolvingClient) Read(ctx context.Context, spaceID string, opts ioamodel.ReadOptions) ([]ioamodel.Message, error) {
+	resolved, err := c.resolve(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
 	return c.API.Read(ctx, resolved, opts)
 }
 
-func (c *spaceResolvingClient) resolveSpaceID(ctx context.Context, selector string) (string, error) {
+// resolve maps a selector (hash ID or human name) to a canonical space ID.
+// It never creates a space — unknown names produce an actionable error.
+func (c *resolvingClient) resolve(ctx context.Context, selector string) (string, error) {
 	selector = strings.TrimSpace(selector)
 	if selector == "" {
 		return "", fmt.Errorf("space_id is required")
 	}
-	if id, ok := c.cachedSpaceID(selector); ok {
+	// 1. cache hit
+	if id, ok := c.cached(selector); ok {
 		return id, nil
 	}
+	// 2. ask server to resolve (works for both ID and name)
 	if resolver, ok := c.API.(spaceResolver); ok {
 		info, err := resolver.ResolveSpace(ctx, selector)
 		if err == nil {
-			c.cacheSpace(selector, info)
+			c.remember(selector, info)
 			return info.ID, nil
 		}
-		if !spaceNotFound(err) || looksLikeSpaceID(selector) {
-			return "", err
-		}
 	} else if looksLikeSpaceID(selector) {
+		// no resolver, but looks like a raw ID — pass through
 		return selector, nil
 	}
-
-	info, err := c.Space(ctx, selector, c.autoJoinDescription)
-	if err != nil {
-		return "", err
-	}
-	c.cacheSpace(selector, info)
-	return info.ID, nil
+	// 3. not found → list available spaces and return a helpful error
+	return "", c.notFoundError(ctx, selector)
 }
 
-func (c *spaceResolvingClient) cachedSpaceID(selector string) (string, bool) {
+func (c *resolvingClient) notFoundError(ctx context.Context, selector string) error {
+	if lister, ok := c.API.(spaceLister); ok {
+		spaces, err := lister.ListSpaces(ctx)
+		if err == nil && len(spaces) > 0 {
+			var names []string
+			for _, s := range spaces {
+				names = append(names, fmt.Sprintf("  - %s (id: %s)", s.Name, s.ID))
+			}
+			return fmt.Errorf("space %q not found. Use ioa_space to join first.\nAvailable spaces:\n%s",
+				selector, strings.Join(names, "\n"))
+		}
+	}
+	return fmt.Errorf("space %q not found. Use ioa_space to create or join a space first", selector)
+}
+
+func (c *resolvingClient) cached(selector string) (string, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	id, ok := c.cache[selector]
 	return id, ok
 }
 
-func (c *spaceResolvingClient) cacheSpace(selector string, info ioamodel.SpaceInfo) {
+func (c *resolvingClient) remember(selector string, info ioamodel.SpaceInfo) {
 	if strings.TrimSpace(info.ID) == "" {
 		return
 	}
@@ -127,11 +136,6 @@ func (c *spaceResolvingClient) cacheSpace(selector string, info ioamodel.SpaceIn
 	if strings.TrimSpace(selector) != "" {
 		c.cache[selector] = info.ID
 	}
-}
-
-func spaceNotFound(err error) bool {
-	var protocolErr *ioamodel.Error
-	return errors.As(err, &protocolErr) && protocolErr.Status == http.StatusNotFound
 }
 
 func looksLikeSpaceID(value string) bool {

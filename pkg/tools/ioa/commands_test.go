@@ -27,9 +27,6 @@ func TestSendResolvesSpaceNameToID(t *testing.T) {
 	if got := onlyValue(t, client.sentSpaceIDs, "sent space ids"); got != knownSpaceID {
 		t.Fatalf("Send space id = %q, want %q", got, knownSpaceID)
 	}
-	if len(client.createdNames) != 0 {
-		t.Fatalf("created spaces = %v, want none", client.createdNames)
-	}
 }
 
 func TestReadAcceptsSpaceAlias(t *testing.T) {
@@ -48,26 +45,33 @@ func TestReadAcceptsSpaceAlias(t *testing.T) {
 	}
 }
 
-func TestSendAutoCreatesMissingSpaceName(t *testing.T) {
-	client := newFakeIOAClient()
+func TestUnknownNameListsAvailableSpaces(t *testing.T) {
+	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "existing-space"})
 	cmd := findIOACommand(t, client, "ioa_send")
 
-	if _, err := cmd.Execute(context.Background(), []string{
-		"--space_name", "new-case",
+	_, err := cmd.Execute(context.Background(), []string{
+		"--space_id", "no-such-space",
 		"--content", `{"content":"hello"}`,
-	}); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	})
+	if err == nil {
+		t.Fatal("expected error for unknown space name")
 	}
-
-	if got := onlyValue(t, client.createdNames, "created spaces"); got != "new-case" {
-		t.Fatalf("created space = %q, want new-case", got)
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "not found") {
+		t.Fatalf("error should mention 'not found', got: %s", errMsg)
 	}
-	if got := onlyValue(t, client.sentSpaceIDs, "sent space ids"); got != "created-new-case" {
-		t.Fatalf("Send space id = %q, want created-new-case", got)
+	if !strings.Contains(errMsg, "existing-space") {
+		t.Fatalf("error should list available spaces, got: %s", errMsg)
+	}
+	if !strings.Contains(errMsg, "ioa_space") {
+		t.Fatalf("error should suggest ioa_space, got: %s", errMsg)
+	}
+	if len(client.createdNames) != 0 {
+		t.Fatalf("should NOT auto-create, but created: %v", client.createdNames)
 	}
 }
 
-func TestUnknownHashLikeSpaceIDDoesNotAutoCreate(t *testing.T) {
+func TestUnknownHashIDDoesNotAutoCreate(t *testing.T) {
 	client := newFakeIOAClient()
 	cmd := findIOACommand(t, client, "ioa_send")
 	unknownID := strings.Repeat("a", 32)
@@ -77,13 +81,10 @@ func TestUnknownHashLikeSpaceIDDoesNotAutoCreate(t *testing.T) {
 		"--content", `{"content":"hello"}`,
 	})
 	if err == nil {
-		t.Fatal("Execute() error = nil, want not found")
+		t.Fatal("expected error for unknown hash ID")
 	}
 	if len(client.createdNames) != 0 {
-		t.Fatalf("created spaces = %v, want none", client.createdNames)
-	}
-	if len(client.sentSpaceIDs) != 0 {
-		t.Fatalf("sent space ids = %v, want none", client.sentSpaceIDs)
+		t.Fatalf("should NOT auto-create, but created: %v", client.createdNames)
 	}
 }
 
@@ -140,7 +141,7 @@ func (c *fakeIOAClient) RegisterNode(_ context.Context, name string, meta map[st
 	return ioamodel.Node{ID: c.nodeID, Name: name, Meta: meta}, nil
 }
 
-func (c *fakeIOAClient) Space(_ context.Context, name, _ string) (ioamodel.SpaceInfo, error) {
+func (c *fakeIOAClient) Space(_ context.Context, name, _ string, _ ...string) (ioamodel.SpaceInfo, error) {
 	if space, ok := c.spacesByName[name]; ok {
 		return space, nil
 	}
@@ -148,6 +149,14 @@ func (c *fakeIOAClient) Space(_ context.Context, name, _ string) (ioamodel.Space
 	c.createdNames = append(c.createdNames, name)
 	c.addSpace(space)
 	return space, nil
+}
+
+func (c *fakeIOAClient) ListSpaces(_ context.Context) ([]ioamodel.SpaceInfo, error) {
+	var out []ioamodel.SpaceInfo
+	for _, s := range c.spacesByID {
+		out = append(out, s)
+	}
+	return out, nil
 }
 
 func (c *fakeIOAClient) ResolveSpace(_ context.Context, nameOrID string) (ioamodel.SpaceInfo, error) {
