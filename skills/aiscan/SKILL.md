@@ -45,9 +45,12 @@ Read the search skill for usage: `aiscan://skills/search/SKILL.md`.
 
 ## Scan Output Consumption
 
-- Prefer using scan output returned directly from the bash tool call, not from files.
-- When scan writes output to a file (`-f`), use the read tool to access it — do NOT pipe through `head`/`tail`/`grep` which truncates results.
-- For structured analysis, re-run the scanner with `-j` flag to get JSON output.
+Scanners (`scan`, `gogo`, `spray`, `neutron`) run as subprocesses inside a tmux session and stream results to that session's pane — **stdout/tmux is the only result channel; nothing is written to disk for you to read back.**
+
+- If the scan finishes quickly, its output is returned **inline in the same bash result** — consume it right there.
+- If it exceeds the auto-background threshold, the call returns a `session id`. Read results from the pane with `tmux peek -t <id>` or `tmux capture-pane -t <id> --new` — **do NOT** try to `cat` an output file. The pane updates live; a re-run command that immediately looks for a "result file" will find nothing and loop.
+- Do **not** pass `-f`/`-o json -f` to make the scanner "write a file then read it" — that file is never produced on this code path. Get JSON by adding `-j` and reading it from the same inline/tmux channel.
+- When reading pane output, prefer `tmux capture-pane --new` over piping through `head`/`tail`/`grep`, which truncates results.
 
 ## Asset Triage
 
