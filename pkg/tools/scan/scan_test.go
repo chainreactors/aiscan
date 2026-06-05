@@ -16,13 +16,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/eventbus"
+	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
-	"github.com/chainreactors/logs"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
 	"github.com/chainreactors/fingers/common"
+	"github.com/chainreactors/logs"
 	"github.com/chainreactors/neutron/operators"
 	neutronhttp "github.com/chainreactors/neutron/protocols/http"
 	"github.com/chainreactors/neutron/templates"
@@ -36,11 +37,11 @@ import (
 )
 
 func newTestPipeline(ctx context.Context, caps []pipeline.Capability, coll *collector, debug bool) *pipeline.Pipeline {
-	observe, debugFn := wrapObserve(coll, debug)
+	bus := eventbus.New[pipeline.Observation]()
+	subscribePipeline(bus, coll, debug)
 	return pipeline.New(ctx, pipeline.Config{
 		Capabilities: caps,
-		Observe:      observe,
-		Debug:        debugFn,
+		Bus:          bus,
 	})
 }
 
@@ -1074,7 +1075,7 @@ func TestDeepAISkillRunsFingerprintAssessment(t *testing.T) {
 	}
 }
 
-func TestDeepAISkillEmitsResponseWhenCheckpointMissing(t *testing.T) {
+func TestDeepAISkillSkipsFindingWhenCheckpointMissing(t *testing.T) {
 	agentFn := func(_ context.Context, prompt string) (*agentRunResult, error) {
 		return &agentRunResult{
 			raw: "I inspected the browser evidence, but did not submit checkpoint.",
@@ -1102,16 +1103,12 @@ func TestDeepAISkillEmitsResponseWhenCheckpointMissing(t *testing.T) {
 	if len(coll.aiSkillResults) != 0 {
 		t.Fatalf("checkpoint results = %d, want 0", len(coll.aiSkillResults))
 	}
-	if len(coll.aiSkillResponses) != 1 {
-		t.Fatalf("ai skill responses = %d, want 1", len(coll.aiSkillResponses))
-	}
-	got := coll.aiSkillResponses[0].Response
-	if got.Status != "response" || got.Summary != "agent response without checkpoint" {
-		t.Fatalf("agent response = %#v", got)
+	if len(coll.aiSkillResponses) != 0 {
+		t.Fatalf("ai skill responses = %d, want 0", len(coll.aiSkillResponses))
 	}
 	result := coll.StructuredResult()
-	if len(result.AI) != 1 || result.AI[0].Kind != string(findingAIResponse) {
-		t.Fatalf("structured AI response = %#v", result.AI)
+	if len(result.AI) != 0 {
+		t.Fatalf("structured AI response = %#v, want none", result.AI)
 	}
 }
 
@@ -1887,8 +1884,8 @@ func TestScanAggregatesAIAsAssetItems(t *testing.T) {
 		Skill:   "deep",
 		Target:  "http://127.0.0.1:8080",
 		Status:  "response",
-		Summary: "agent response without checkpoint",
-		Raw:     "no checkpoint submitted",
+		Summary: "manual agent response",
+		Raw:     "manual response body",
 	})})
 	coll.Finish()
 
@@ -2009,6 +2006,30 @@ func TestScanReportMarkdown(t *testing.T) {
 	for _, want := range []string{"# Scan Report", "## Metrics", "## Open Services", "## AI Review", "confirmed by test"} {
 		if !strings.Contains(report, want) {
 			t.Fatalf("report missing %q:\n%s", want, report)
+		}
+	}
+}
+
+func TestScanReportMarkdownKeepsAIResponseDetailAsMarkdown(t *testing.T) {
+	coll := newCollector([]string{"seed"}, nil, false, false)
+	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentDeep, aiSkillResponse{
+		Skill:   "deep",
+		Target:  "http://127.0.0.1:8092",
+		Status:  "response",
+		Summary: "manual agent response",
+		Detail:  "Let me analyze the collected browser evidence.\n\n## Evidence Analysis\n\n| Asset | Details |\n|---|---|\n| API | GET /api/scans |",
+	})})
+	coll.Finish()
+
+	report := coll.ReportMarkdown()
+	for _, want := range []string{"## AI Agent Responses", "[deep:response]", "## Evidence Analysis", "| Asset | Details |"} {
+		if !strings.Contains(report, want) {
+			t.Fatalf("report missing %q:\n%s", want, report)
+		}
+	}
+	for _, bad := range []string{`\\n`, `"Let me analyze`} {
+		if strings.Contains(report, bad) {
+			t.Fatalf("report still contains escaped markdown %q:\n%s", bad, report)
 		}
 	}
 }

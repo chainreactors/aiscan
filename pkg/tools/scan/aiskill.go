@@ -290,8 +290,6 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 		}
 	}
 	cp := command.NewCheckpointTool()
-	start := time.Now()
-
 	a := c.parent.Derive()
 	a.Cfg.Tools = a.Cfg.Tools.CloneTools()
 	a.Cfg.Tools.RegisterTool(cp)
@@ -301,8 +299,7 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 	if c.aiConfig.Model != "" {
 		a.Cfg.Model = c.aiConfig.Model
 	}
-	result, agentErr := a.Run(skillCtx, prompt)
-	duration := time.Since(start)
+	_, agentErr := a.Run(skillCtx, prompt)
 	if agentErr != nil {
 		c.logger.Debugf("scan capability=%s status=failed error=%q", skill.CapName, agentErr)
 		emitAISkillResponse(skill, e, "failed", "LLM call failed", agentErr.Error(), emit)
@@ -311,24 +308,12 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 	checkpoint := cp.Result()
 	if checkpoint == nil || isMissingAISkillCheckpoint(checkpoint) {
 		c.logger.Debugf("scan capability=%s status=failed error=no_checkpoint", skill.CapName)
-		raw := ""
-		if result != nil {
-			raw = strings.TrimSpace(result.Output)
-		}
-		if c.recorder != nil && result != nil {
-			c.recorder.AITurn(skill.Name, 1, prompt, result.NewMessages, &result.TotalUsage, duration)
-		}
-		emitAISkillResponse(skill, e, "response", "agent response without checkpoint", raw, emit)
 		return
 	}
 	c.hydrateAISkillCheckpoint(skill, e, checkpoint)
 
 	if checkpoint.Title == "" && checkpoint.Content == "" {
 		return
-	}
-
-	if c.recorder != nil && result != nil {
-		c.recorder.AITurn(skill.Name, 1, prompt, result.NewMessages, &result.TotalUsage, duration)
 	}
 
 	status := checkpointStatus(checkpoint)
@@ -339,10 +324,6 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 	if e.Finding != nil {
 		originalKey = e.Finding.Key()
 		originalKind = e.Finding.Kind()
-	}
-
-	if c.recorder != nil {
-		c.recorder.AISkill(skill.Name, target, status, checkpoint.Title, checkpoint.Content, duration)
 	}
 
 	emit(findingEvent(skill.CapName, aiSkillFinding{
@@ -365,7 +346,6 @@ func (c *Command) runAISkillTest(ctx context.Context, skill AISkill, e event, em
 	}
 	checkpoint := result.checkpoint
 	if checkpoint == nil || isMissingAISkillCheckpoint(checkpoint) {
-		emitAISkillResponse(skill, e, "response", "agent response without checkpoint", result.raw, emit)
 		return
 	}
 	c.hydrateAISkillCheckpoint(skill, e, checkpoint)

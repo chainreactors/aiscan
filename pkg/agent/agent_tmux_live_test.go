@@ -62,7 +62,7 @@ func TestLiveLLMTmuxInteraction(t *testing.T) {
 	systemPrompt := buildTmuxTestPrompt(registry)
 
 	var events []string
-	emit := func(_ context.Context, event Event) error {
+	handleEvent := func(event Event) {
 		switch event.Type {
 		case EventToolExecutionStart:
 			events = append(events, fmt.Sprintf("[TOOL] %s → %s", event.ToolName, event.Arguments))
@@ -75,7 +75,6 @@ func TestLiveLLMTmuxInteraction(t *testing.T) {
 		case EventTurnStart:
 			events = append(events, fmt.Sprintf("--- Turn %d ---", event.Turn))
 		}
-		return nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -86,7 +85,7 @@ func TestLiveLLMTmuxInteraction(t *testing.T) {
 		Tools:        registry,
 		Model:        model,
 		SystemPrompt: systemPrompt,
-		Emit:         emit,
+		Bus:          testBus(handleEvent),
 		MaxRetries:   2,
 	}).Run(ctx, `Perform the following multi-round interactive test using tmux (via the bash tool).
 

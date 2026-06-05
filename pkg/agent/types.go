@@ -3,9 +3,10 @@ package agent
 import (
 	"context"
 
-	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
@@ -17,6 +18,7 @@ const (
 	EventAgentEnd           EventType = "agent_end"
 	EventTurnStart          EventType = "turn_start"
 	EventTurnEnd            EventType = "turn_end"
+	EventLLMRequest         EventType = "llm_request"
 	EventMessageStart       EventType = "message_start"
 	EventMessageUpdate      EventType = "message_update"
 	EventMessageEnd         EventType = "message_end"
@@ -33,12 +35,13 @@ const (
 	StopReasonStopped    StopReason = "stopped"
 	StopReasonBudget     StopReason = "budget"
 	StopReasonError      StopReason = "error"
-	StopReasonCanceled StopReason = "canceled"
+	StopReasonCanceled   StopReason = "canceled"
 )
 
 type Event struct {
 	Type          EventType
 	Turn          int
+	Request       *provider.ChatCompletionRequest
 	Message       provider.ChatMessage
 	Messages      []provider.ChatMessage
 	NewMessages   []provider.ChatMessage
@@ -53,8 +56,6 @@ type Event struct {
 	Usage         *provider.Usage
 	ContextTokens int
 }
-
-type EventHandler func(context.Context, Event) error
 
 type TransformContextFunc func([]provider.ChatMessage) []provider.ChatMessage
 
@@ -82,7 +83,7 @@ type AfterToolCallContext struct {
 type ToolFlowDecision int
 
 const (
-	ToolFlowContinue  ToolFlowDecision = iota
+	ToolFlowContinue ToolFlowDecision = iota
 	ToolFlowTerminate
 )
 
@@ -93,48 +94,51 @@ type AfterToolCallResult struct {
 }
 
 type Config struct {
-	Provider            provider.Provider
-	Tools               *command.CommandRegistry
-	Model               string
-	SystemPrompt        string
-	Messages            []provider.ChatMessage
-	MaxTokens           int
-	Temperature         *float64
-	Stream              bool
-	MaxRetries          int
-	TokenBudget         int
-	ResponseFormat      *provider.ResponseFormat
-	Logger              telemetry.Logger
-	TransformContext    TransformContextFunc
-	Emit                EventHandler
-	BeforeToolCall func(context.Context, BeforeToolCallContext) (*BeforeToolCallResult, error)
-	AfterToolCall  func(context.Context, AfterToolCallContext) (*AfterToolCallResult, error)
-	MaxTurns       int
-	LoopScheduler  *LoopScheduler
-	Inbox          inbox.Inbox
-	Expander       *inbox.Expander
-	MaxResultSize  int
-	CacheRetention provider.CacheRetention
-	SessionID      string
+	Provider         provider.Provider
+	Tools            *command.CommandRegistry
+	Model            string
+	SystemPrompt     string
+	Messages         []provider.ChatMessage
+	MaxTokens        int
+	Temperature      *float64
+	Stream           bool
+	MaxRetries       int
+	TokenBudget      int
+	ResponseFormat   *provider.ResponseFormat
+	Logger           telemetry.Logger
+	TransformContext TransformContextFunc
+	Bus              *eventbus.Bus[Event]
+	BeforeToolCall   func(context.Context, BeforeToolCallContext) (*BeforeToolCallResult, error)
+	AfterToolCall    func(context.Context, AfterToolCallContext) (*AfterToolCallResult, error)
+	MaxTurns         int
+	LoopScheduler    *LoopScheduler
+	Inbox            inbox.Inbox
+	Expander         *inbox.Expander
+	MaxResultSize    int
+	CacheRetention   provider.CacheRetention
+	SessionID        string
 }
 
 // Builder methods — each returns a modified copy (Config is a value type).
 
-func (c Config) WithProvider(p provider.Provider) Config             { c.Provider = p; return c }
-func (c Config) WithTools(t *command.CommandRegistry) Config         { c.Tools = t; return c }
-func (c Config) WithModel(m string) Config                           { c.Model = m; return c }
-func (c Config) WithSystemPrompt(s string) Config                    { c.SystemPrompt = s; return c }
-func (c Config) WithMessages(msgs []provider.ChatMessage) Config     { c.Messages = msgs; return c }
-func (c Config) WithStream(s bool) Config                            { c.Stream = s; return c }
-func (c Config) WithInbox(ib inbox.Inbox) Config                     { c.Inbox = ib; return c }
-func (c Config) WithLogger(l telemetry.Logger) Config                { c.Logger = l; return c }
-func (c Config) WithEventHandler(h EventHandler) Config              { c.Emit = h; return c }
-func (c Config) WithMaxTokens(n int) Config                          { c.MaxTokens = n; return c }
-func (c Config) WithTemperature(t float64) Config                    { c.Temperature = &t; return c }
-func (c Config) WithMaxRetries(n int) Config                         { c.MaxRetries = n; return c }
-func (c Config) WithTokenBudget(n int) Config                        { c.TokenBudget = n; return c }
-func (c Config) WithExpander(e *inbox.Expander) Config               { c.Expander = e; return c }
-func (c Config) WithTransformContext(fn TransformContextFunc) Config { c.TransformContext = fn; return c }
+func (c Config) WithProvider(p provider.Provider) Config         { c.Provider = p; return c }
+func (c Config) WithTools(t *command.CommandRegistry) Config     { c.Tools = t; return c }
+func (c Config) WithModel(m string) Config                       { c.Model = m; return c }
+func (c Config) WithSystemPrompt(s string) Config                { c.SystemPrompt = s; return c }
+func (c Config) WithMessages(msgs []provider.ChatMessage) Config { c.Messages = msgs; return c }
+func (c Config) WithStream(s bool) Config                        { c.Stream = s; return c }
+func (c Config) WithInbox(ib inbox.Inbox) Config                 { c.Inbox = ib; return c }
+func (c Config) WithLogger(l telemetry.Logger) Config            { c.Logger = l; return c }
+func (c Config) WithBus(b *eventbus.Bus[Event]) Config           { c.Bus = b; return c }
+func (c Config) WithMaxTokens(n int) Config                      { c.MaxTokens = n; return c }
+func (c Config) WithTemperature(t float64) Config                { c.Temperature = &t; return c }
+func (c Config) WithMaxRetries(n int) Config                     { c.MaxRetries = n; return c }
+func (c Config) WithTokenBudget(n int) Config                    { c.TokenBudget = n; return c }
+func (c Config) WithExpander(e *inbox.Expander) Config           { c.Expander = e; return c }
+func (c Config) WithTransformContext(fn TransformContextFunc) Config {
+	c.TransformContext = fn
+	return c
+}
 func (c Config) WithCacheRetention(r provider.CacheRetention) Config { c.CacheRetention = r; return c }
 func (c Config) WithSessionID(id string) Config                      { c.SessionID = id; return c }
 func (c Config) WithResponseFormat(rf *provider.ResponseFormat) Config {
@@ -153,6 +157,9 @@ func prepareConfig(c Config) Config {
 	}
 	if cfg.Inbox == nil {
 		cfg.Inbox = inbox.NewBuffered(SubInboxCapacity)
+	}
+	if cfg.Bus == nil {
+		cfg.Bus = eventbus.New[Event]()
 	}
 	return cfg
 }

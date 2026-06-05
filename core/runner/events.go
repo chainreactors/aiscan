@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,53 +16,38 @@ const (
 	eventResultLimit  = 16 * 1024
 )
 
-type EventsWriter struct {
+type eventsFileSubscriber struct {
 	mu   sync.Mutex
 	file *os.File
-	path string
 }
 
-func NewEventsWriter(path string) (*EventsWriter, error) {
-	if path == "" {
-		return &EventsWriter{}, nil
-	}
+func newEventsFileSubscriber(path string) (*eventsFileSubscriber, error) {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("open events file %s: %w", path, err)
 	}
-	return &EventsWriter{file: f, path: path}, nil
+	return &eventsFileSubscriber{file: f}, nil
 }
 
-func (w *EventsWriter) Close() error {
-	if w.file == nil {
-		return nil
-	}
+func (w *eventsFileSubscriber) Close() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	err := w.file.Close()
-	w.file = nil
-	return err
+	if w.file != nil {
+		_ = w.file.Close()
+		w.file = nil
+	}
 }
 
-func (w *EventsWriter) HandleEvent(_ context.Context, event agent.Event) error {
-	if w.file == nil {
-		return nil
-	}
+func (w *eventsFileSubscriber) HandleEvent(event agent.Event) {
 	line, err := json.Marshal(serializableEvent(event))
 	if err != nil {
-		return fmt.Errorf("marshal event: %w", err)
+		return
 	}
 	line = append(line, '\n')
-
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if _, err := w.file.Write(line); err != nil {
-		return fmt.Errorf("write event: %w", err)
-	}
-	if err := w.file.Sync(); err != nil {
-		return fmt.Errorf("sync events file: %w", err)
-	}
-	return nil
+	_, _ = w.file.Write(line)
+	_ = w.file.Sync()
 }
 
 type eventJSON struct {
@@ -164,28 +148,4 @@ func truncate(s string, limit int) string {
 		return s
 	}
 	return s[:limit] + fmt.Sprintf("...[truncated %d bytes]", len(s)-limit)
-}
-
-func combineEventHandlers(handlers ...agent.EventHandler) agent.EventHandler {
-	cleaned := make([]agent.EventHandler, 0, len(handlers))
-	for _, h := range handlers {
-		if h != nil {
-			cleaned = append(cleaned, h)
-		}
-	}
-	if len(cleaned) == 0 {
-		return nil
-	}
-	if len(cleaned) == 1 {
-		return cleaned[0]
-	}
-	return func(ctx context.Context, event agent.Event) error {
-		var firstErr error
-		for _, h := range cleaned {
-			if err := h(ctx, event); err != nil && firstErr == nil {
-				firstErr = err
-			}
-		}
-		return firstErr
-	}
 }

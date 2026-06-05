@@ -77,6 +77,7 @@ func (a *Agent) Derive() *Agent {
 		Temperature:    a.Cfg.Temperature,
 		CacheRetention: a.Cfg.CacheRetention,
 		SessionID:      a.Cfg.SessionID,
+		Bus:            a.Cfg.Bus,
 	})
 }
 

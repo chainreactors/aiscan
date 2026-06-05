@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
@@ -119,9 +120,10 @@ func requestAssistantMessageWithUsage(ctx context.Context, cfg Config, messages 
 		CacheRetention: cfg.CacheRetention,
 		SessionID:      cfg.SessionID,
 	}
+	cfg.Bus.Emit(Event{Type: EventLLMRequest, Turn: turn, Request: req})
 	if cfg.Stream {
 		if streaming, ok := cfg.Provider.(provider.StreamingProvider); ok {
-			return streamAssistantMessageWithUsage(ctx, streaming, req, cfg.Emit, cfg.Logger, turn)
+			return streamAssistantMessageWithUsage(ctx, streaming, req, cfg.Bus, cfg.Logger, turn)
 		}
 	}
 
@@ -133,17 +135,13 @@ func requestAssistantMessageWithUsage(ctx context.Context, cfg Config, messages 
 		return provider.ChatMessage{}, nil, fmt.Errorf("empty response from LLM at turn %d", turn)
 	}
 	msg := resp.Choices[0].Message
-	if err := emit(ctx, cfg.Emit, Event{Type: EventMessageStart, Turn: turn, Message: msg}); err != nil {
-		return provider.ChatMessage{}, nil, err
-	}
-	if err := emit(ctx, cfg.Emit, Event{Type: EventMessageEnd, Turn: turn, Message: msg}); err != nil {
-		return provider.ChatMessage{}, nil, err
-	}
+	cfg.Bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: msg})
+	cfg.Bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: msg})
 	logAssistantAndUsage(cfg.Logger, msg, resp.Usage)
 	return msg, resp.Usage, nil
 }
 
-func streamAssistantMessageWithUsage(ctx context.Context, p provider.StreamingProvider, req *provider.ChatCompletionRequest, emitFn EventHandler, logger telemetry.Logger, turn int) (provider.ChatMessage, *provider.Usage, error) {
+func streamAssistantMessageWithUsage(ctx context.Context, p provider.StreamingProvider, req *provider.ChatCompletionRequest, bus *eventbus.Bus[Event], logger telemetry.Logger, turn int) (provider.ChatMessage, *provider.Usage, error) {
 	events, err := p.ChatCompletionStream(ctx, req)
 	if err != nil {
 		return provider.ChatMessage{}, nil, fmt.Errorf("LLM stream failed at turn %d: %w", turn, err)
@@ -165,13 +163,9 @@ func streamAssistantMessageWithUsage(ctx context.Context, p provider.StreamingPr
 		updated := builder.Apply(event.Delta)
 		if !started {
 			started = true
-			if err := emit(ctx, emitFn, Event{Type: EventMessageStart, Turn: turn, Message: updated}); err != nil {
-				return provider.ChatMessage{}, nil, err
-			}
+			bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: updated})
 		}
-		if err := emit(ctx, emitFn, Event{Type: EventMessageUpdate, Turn: turn, Message: updated}); err != nil {
-			return provider.ChatMessage{}, nil, err
-		}
+		bus.Emit(Event{Type: EventMessageUpdate, Turn: turn, Message: updated})
 	}
 	if err := ctx.Err(); err != nil {
 		return provider.ChatMessage{}, nil, err
@@ -179,13 +173,9 @@ func streamAssistantMessageWithUsage(ctx context.Context, p provider.StreamingPr
 
 	msg := builder.Message()
 	if !started {
-		if err := emit(ctx, emitFn, Event{Type: EventMessageStart, Turn: turn, Message: msg}); err != nil {
-			return provider.ChatMessage{}, nil, err
-		}
+		bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: msg})
 	}
-	if err := emit(ctx, emitFn, Event{Type: EventMessageEnd, Turn: turn, Message: msg}); err != nil {
-		return provider.ChatMessage{}, nil, err
-	}
+	bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: msg})
 	logAssistantAndUsage(logger, msg, usage)
 	return msg, usage, nil
 }

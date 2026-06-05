@@ -52,8 +52,7 @@ func RunScannerWithAgent(ctx context.Context, option *cfg.Option, application *a
 
 	result, err := agent.NewAgent(rt.Config.
 		WithSystemPrompt(rt.SystemPrompt).
-		WithStream(false).
-		WithEventHandler(rt.EventHandler())).
+		WithStream(false)).
 		Run(ctx, prompt)
 	if err != nil {
 		return err

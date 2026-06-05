@@ -18,7 +18,6 @@ const (
 	TypeWeb       RecordType = "web"
 	TypeFinding   RecordType = "finding"
 	TypeAISkill   RecordType = "ai_skill"
-	TypeAITurn    RecordType = "ai_turn"
 	TypeScanEnd   RecordType = "scan_end"
 )
 

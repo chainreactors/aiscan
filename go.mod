@@ -7,12 +7,12 @@ require (
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c
 	github.com/chainreactors/ioa v0.0.0-20260519070109-6746bd1fdaef
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
-	github.com/chainreactors/neutron v0.0.0-20260605023245-cebd98035d23
-	github.com/chainreactors/parsers v0.0.0-20260601064045-2f253d74ce70
+	github.com/chainreactors/neutron v0.0.0-20260605022800-0c41c379805e
+	github.com/chainreactors/parsers v0.0.0-20260517174207-da1ebd0e7f68
 	github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593
 	github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3
-	github.com/chainreactors/sdk v0.2.4-0.20260605033510-b6044d15639e
-	github.com/chainreactors/spray v1.3.1-0.20260601084448-7faa2de1516a
+	github.com/chainreactors/sdk v0.2.3
+	github.com/chainreactors/spray v1.3.1-0.20260529172359-9caf4ee3567c
 	github.com/chainreactors/utils v0.0.0-20260529172343-6465cb8568b2
 	github.com/chainreactors/zombie v1.2.3-0.20260529172356-6b3bf94a7dfc
 	github.com/charmbracelet/glamour v0.8.0
@@ -71,7 +71,7 @@ require (
 	github.com/carapace-sh/carapace-shlex v1.0.1 // indirect
 	github.com/censys/censys-sdk-go v0.19.1 // indirect
 	github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0 // indirect
-	github.com/chainreactors/proton v0.2.1-0.20260531171011-8717fe5a8df7 // indirect
+	github.com/chainreactors/proton v0.0.0-20260521032855-e7e7b12b4506 // indirect
 	github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4 // indirect
 	github.com/charlievieth/fastwalk v1.0.14 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
@@ -272,6 +272,7 @@ require (
 )
 
 replace (
+	github.com/chainreactors/sdk => ../sdk
 	github.com/reeflective/console => github.com/chainreactors/malice-network/external/console v0.0.0-20260422184128-e856ed004d32
 	github.com/reeflective/readline => github.com/chainreactors/malice-network/external/readline v0.0.0-20260422184128-e856ed004d32
 )

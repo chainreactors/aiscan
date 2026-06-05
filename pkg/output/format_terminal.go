@@ -66,26 +66,6 @@ func RenderRecordsTerminal(w io.Writer, records []Record) error {
 				d.Target, d.Status, d.Summary,
 				c.Code(ANSIDim), d.Duration, c.Code(ANSIReset))
 
-		case TypeAITurn:
-			d, _ := ParseRecordData[AITurn](r)
-			fmt.Fprintf(w, "  %s[turn %d]%s %s→%s %s\n",
-				c.Code(ANSIMagenta), d.Turn, c.Code(ANSIReset),
-				c.Code(ANSIDim), c.Code(ANSIReset),
-				TruncateStr(d.Prompt, 80))
-			for _, msg := range parseAIMessages(d.Messages) {
-				if msg.Role == "assistant" && msg.Content != "" {
-					fmt.Fprintf(w, "  %s[turn %d]%s %s←%s %s\n",
-						c.Code(ANSIBlue), d.Turn, c.Code(ANSIReset),
-						c.Code(ANSIDim), c.Code(ANSIReset),
-						TruncateStr(msg.Content, 120))
-				}
-				for _, tc := range msg.ToolCalls {
-					fmt.Fprintf(w, "    %s⚡%s %s(%s)\n",
-						c.Code(ANSIYellow), c.Code(ANSIReset),
-						tc.Name, TruncateStr(tc.Arguments, 60))
-				}
-			}
-
 		case TypeScanEnd:
 			d, _ := ParseRecordData[ScanEnd](r)
 			fmt.Fprintf(w, "%s[done]%s %.1fs targets=%d services=%d webs=%d findings=%d ai=%d errors=%d\n",

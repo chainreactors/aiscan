@@ -2,9 +2,9 @@ package pipeline
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"sync"
+
+	"github.com/chainreactors/aiscan/pkg/eventbus"
 )
 
 type Event interface {
@@ -46,15 +46,13 @@ func (c Capability) KeyFor(e Event) string {
 
 type Config struct {
 	Capabilities []Capability
-	Observe      func(Observation)
-	Debug        func(Observation) string
+	Bus          *eventbus.Bus[Observation]
 }
 
 type Pipeline struct {
 	ctx            context.Context
 	capabilities   []Capability
-	observe        func(Observation)
-	debugFn        func(Observation) string
+	bus            *eventbus.Bus[Observation]
 	events         chan Event
 	queues         map[string]chan Event
 	dispatcherDone chan struct{}
@@ -67,16 +65,19 @@ type Pipeline struct {
 }
 
 func New(ctx context.Context, cfg Config) *Pipeline {
+	bus := cfg.Bus
+	if bus == nil {
+		bus = eventbus.New[Observation]()
+	}
 	p := &Pipeline{
-		ctx:          ctx,
-		capabilities: cfg.Capabilities,
-		observe:      cfg.Observe,
-		debugFn:      cfg.Debug,
-		events:       make(chan Event, 1024),
-		queues:       make(map[string]chan Event, len(cfg.Capabilities)),
+		ctx:            ctx,
+		capabilities:   cfg.Capabilities,
+		bus:            bus,
+		events:         make(chan Event, 1024),
+		queues:         make(map[string]chan Event, len(cfg.Capabilities)),
 		dispatcherDone: make(chan struct{}),
-		seenEvents:   make(map[string]struct{}),
-		seenRuns:     make(map[string]struct{}),
+		seenEvents:     make(map[string]struct{}),
+		seenRuns:       make(map[string]struct{}),
 	}
 	p.cond = sync.NewCond(&p.mu)
 	return p
@@ -223,11 +224,5 @@ func (p *Pipeline) markRun(key string) bool {
 }
 
 func (p *Pipeline) emit(action ActionKind, capability string, e Event) {
-	obs := Observation{Action: action, Capability: capability, Event: e}
-	if p.observe != nil {
-		p.observe(obs)
-	}
-	if p.debugFn != nil {
-		fmt.Fprintln(os.Stderr, p.debugFn(obs))
-	}
+	p.bus.Emit(Observation{Action: action, Capability: capability, Event: e})
 }
