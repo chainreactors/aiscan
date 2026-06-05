@@ -369,13 +369,6 @@ var scannerKnownFlags = []knownFlag{
 	{names: []string{"--cyberhub-url"}, arity: 1, apply: func(o *cfg.Option, v string) { o.CyberhubURL = v }},
 	{names: []string{"--cyberhub-key"}, arity: 1, apply: func(o *cfg.Option, v string) { o.CyberhubKey = v }},
 	{names: []string{"--cyberhub-mode"}, arity: 1, apply: func(o *cfg.Option, v string) { o.CyberhubMode = v }},
-	{names: []string{"--cyberhub-draft"}, arity: 0, apply: func(o *cfg.Option, v string) {
-		if v != "" {
-			o.CyberhubDraft = truthyFlagValue(v)
-		} else {
-			o.CyberhubDraft = true
-		}
-	}},
 	{names: []string{"--no-color"}, arity: 0, apply: func(o *cfg.Option, _ string) { o.NoColor = true }},
 	{names: []string{"--ai"}, arity: 0, apply: func(o *cfg.Option, v string) {
 		if v != "" {

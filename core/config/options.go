@@ -39,7 +39,7 @@ type ScannerOptions struct {
 	CyberhubURL   string `long:"cyberhub-url" config:"url" description:"Cyberhub server URL for loading fingers/templates"`
 	CyberhubKey   string `long:"cyberhub-key" config:"key" description:"Cyberhub API key"`
 	CyberhubMode  string `long:"cyberhub-mode" config:"mode" description:"Cyberhub resource mode: merge or override"`
-	CyberhubDraft bool   `long:"cyberhub-draft" config:"draft" description:"Load Cyberhub draft fingerprint/templates when available"`
+	CyberhubDraft bool   `no-flag:"true" config:"draft"` // config-file only
 	Proxy         string `long:"proxy" config:"proxy" description:"Proxy for scanner tools. Supports socks5://, trojan://, vless://, clash:// (subscription with load balancing)"`
 }
 
