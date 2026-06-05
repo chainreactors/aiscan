@@ -22,7 +22,8 @@ var (
 	DefaultIOANodeName = ""
 	DefaultSpace       = ""
 
-	DefaultTavilyKeys = ""
+	DefaultTavilyKeys  = ""
+	DefaultSearchProxy = ""
 )
 
 func defaultProviderConfig() provider.ProviderConfig {

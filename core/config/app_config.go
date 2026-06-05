@@ -27,6 +27,7 @@ func AppConfig(option *Option, features RuntimeFeatures, logger telemetry.Logger
 			CyberhubURL:       option.CyberhubURL,
 			CyberhubKey:       option.CyberhubKey,
 			CyberhubMode:      option.CyberhubMode,
+			CyberhubDraft:     option.CyberhubDraft,
 			AIEnabled:         features.AIEnabled,
 			EnableAllAISkills: option.AI,
 			AITimeout:         DefaultInt(DefaultVerifyTimeout, 120),
@@ -40,9 +41,10 @@ func AppConfig(option *Option, features RuntimeFeatures, logger telemetry.Logger
 			ReconLimit:        intOptionValue(option.ReconLimit),
 		},
 		Tools: app.ToolConfig{
-			Enabled:     features.ToolsEnabled,
-			BashTimeout: 300,
-			TavilyKeys:  DefaultTavilyKeys,
+			Enabled:        features.ToolsEnabled,
+			BashTimeout:    300,
+			TavilyKeys:     DefaultTavilyKeys,
+			WebSearchProxy: DefaultSearchProxy,
 		},
 		Logger: logger,
 	}

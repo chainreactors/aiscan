@@ -105,6 +105,9 @@ func loadRuntimeDefaults(filename string) error {
 	if v := c.String("search.tavily_keys"); v != "" {
 		DefaultTavilyKeys = v
 	}
+	if v := c.String("websearch.proxy"); v != "" {
+		DefaultSearchProxy = v
+	}
 	return nil
 }
 
@@ -117,6 +120,9 @@ func mergeOption(dst, src *Option) {
 	dst.CyberhubURL = ResolveString(dst.CyberhubURL, src.CyberhubURL)
 	dst.CyberhubKey = ResolveString(dst.CyberhubKey, src.CyberhubKey)
 	dst.CyberhubMode = ResolveString(dst.CyberhubMode, src.CyberhubMode)
+	if !dst.CyberhubDraft {
+		dst.CyberhubDraft = src.CyberhubDraft
+	}
 	dst.FofaEmail = ResolveString(dst.FofaEmail, src.FofaEmail)
 	dst.FofaKey = ResolveString(dst.FofaKey, src.FofaKey)
 	dst.HunterToken = ResolveString(dst.HunterToken, src.HunterToken)
@@ -164,6 +170,8 @@ cyberhub:
   key: ""
   # merge 或 override
   mode: ""
+  # true 时优先加载 CyberHub draft 模板，适合验证未发布的指纹转换结果
+  draft: false
   # 扫描器代理，支持以下格式:
   #   socks5://127.0.0.1:1080
   #   trojan://password@server:443?sni=example.com
@@ -174,6 +182,11 @@ cyberhub:
 search:
   # Tavily API keys（逗号分隔，留空则 fallback 到 DuckDuckGo）
   tavily_keys: ""
+
+# Web 搜索
+websearch:
+  # web_search 请求代理（如 http://127.0.0.1:7890 或 socks5://...）
+  proxy: ""
 
 # IOA 协作
 ioa:

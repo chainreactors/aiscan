@@ -40,6 +40,7 @@ type ScannerConfig struct {
 	CyberhubURL       string
 	CyberhubKey       string
 	CyberhubMode      string
+	CyberhubDraft     bool
 	AIEnabled         bool
 	EnableAllAISkills bool
 	AITimeout         int
@@ -54,9 +55,10 @@ type ScannerConfig struct {
 }
 
 type ToolConfig struct {
-	Enabled     bool
-	BashTimeout int
-	TavilyKeys  string // comma-separated Tavily API keys (build-time fallback)
+	Enabled        bool
+	BashTimeout    int
+	TavilyKeys     string // comma-separated Tavily API keys (build-time fallback)
+	WebSearchProxy string
 }
 
 type IOAConfig struct {
@@ -156,6 +158,7 @@ func initEngines(ctx context.Context, cfg ScannerConfig, logger telemetry.Logger
 		CyberhubURL: cfg.CyberhubURL,
 		APIKey:      cfg.CyberhubKey,
 		Mode:        cfg.CyberhubMode,
+		Draft:       cfg.CyberhubDraft,
 		Proxy:       cfg.Proxy,
 	}, logger)
 	if err != nil {
@@ -245,15 +248,16 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 	scanOpts = append(scanOpts, scan.WithLogger(logger))
 
 	deps := &command.Deps{
-		WorkDir:      workDir,
-		BashTimeout:  toolCfg.BashTimeout,
-		SkillStore:   skillStore,
-		EngineSet:    engineSet,
-		ScannerProxy: scanCfg.Proxy,
-		ScanOpts:     scanOpts,
-		Logger:       logger,
-		Model:        model,
-		TavilyKeys:   toolCfg.TavilyKeys,
+		WorkDir:        workDir,
+		BashTimeout:    toolCfg.BashTimeout,
+		SkillStore:     skillStore,
+		EngineSet:      engineSet,
+		ScannerProxy:   scanCfg.Proxy,
+		ScanOpts:       scanOpts,
+		Logger:         logger,
+		Model:          model,
+		TavilyKeys:     toolCfg.TavilyKeys,
+		WebSearchProxy: toolCfg.WebSearchProxy,
 	}
 	if engineSet != nil {
 		deps.Resources = engineSet.Resources
