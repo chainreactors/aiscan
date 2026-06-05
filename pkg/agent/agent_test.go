@@ -133,6 +133,48 @@ func TestRunExecutesToolLoop(t *testing.T) {
 	}
 }
 
+func TestRunPreservesManagedToolResult(t *testing.T) {
+	tools := command.NewRegistry()
+	output := strings.Repeat("x", DefaultMaxResultSize+100) + "TAIL_MARKER"
+	tools.RegisterTool(&recordingTool{name: "managed", output: output, managed: true})
+	llm := &scriptedProvider{
+		responses: []*provider.ChatCompletionResponse{
+			chatResponse(provider.ChatMessage{
+				Role: "assistant",
+				ToolCalls: []provider.ToolCall{{
+					ID:   "call-1",
+					Type: "function",
+					Function: provider.FunctionCall{
+						Name:      "managed",
+						Arguments: `{}`,
+					},
+				}},
+			}),
+			chatResponse(provider.NewTextMessage("assistant", "final")),
+		},
+	}
+
+	_, err := (Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+	}).Run(context.Background(), "use tool")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	requests := llm.requestsSnapshot()
+	if len(requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(requests))
+	}
+	if !hasToolMessage(requests[1].Messages, "call-1", "TAIL_MARKER") {
+		t.Fatalf("managed result was truncated before the second request")
+	}
+	if hasToolMessage(requests[1].Messages, "call-1", "[truncated:") {
+		t.Fatalf("managed result should not receive generic truncation: %#v", requests[1].Messages)
+	}
+}
+
 func TestRunEmitsTurnEndAfterToolResults(t *testing.T) {
 	tools := command.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
@@ -624,8 +666,9 @@ func TestToolHooksCanBlockRewriteAndTerminate(t *testing.T) {
 }
 
 type recordingTool struct {
-	name   string
-	output string
+	name    string
+	output  string
+	managed bool
 
 	mu    sync.Mutex
 	calls []string
@@ -652,6 +695,9 @@ func (t *recordingTool) Execute(_ context.Context, arguments string) (command.To
 	t.calls = append(t.calls, arguments)
 	if strings.Contains(arguments, "fail") {
 		return command.ToolResult{}, fmt.Errorf("failed")
+	}
+	if t.managed {
+		return command.ManagedTextResult(t.output), nil
 	}
 	return command.TextResult(t.output), nil
 }

@@ -357,11 +357,12 @@ type toolCallSlot struct {
 }
 
 type toolExecution struct {
-	result     string
-	fullResult *command.ToolResult
-	isError    bool
-	err        error
-	flow       ToolFlowDecision
+	result         string
+	fullResult     *command.ToolResult
+	isError        bool
+	err            error
+	flow           ToolFlowDecision
+	skipTruncation bool
 }
 
 func runToolCall(ctx context.Context, cfg Config, assistantMsg provider.ChatMessage, tc provider.ToolCall) toolExecution {
@@ -382,8 +383,11 @@ func runToolCall(ctx context.Context, cfg Config, assistantMsg provider.ChatMess
 		if toolResult.HasImages() {
 			execution.fullResult = &toolResult
 		}
+		execution.skipTruncation = toolResult.SkipTruncation
 	}
-	execution.result = truncateResultSize(execution.result, cfg.MaxResultSize)
+	if !execution.skipTruncation {
+		execution.result = truncateResultSize(execution.result, cfg.MaxResultSize)
+	}
 	return afterToolCall(ctx, cfg, assistantMsg, tc, execution)
 }
 
