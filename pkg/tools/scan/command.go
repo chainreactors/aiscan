@@ -19,13 +19,14 @@ import (
 )
 
 type Command struct {
-	engines     *engine.Set
-	parent      *agent.Agent
-	aiConfig    AISkillConfig
-	deepBrowser DeepBrowserFunc
-	logger      telemetry.Logger
-	proxy       string
-	workDir     string
+	engines        *engine.Set
+	parent         *agent.Agent
+	aiConfig       AISkillConfig
+	deepBrowser    DeepBrowserFunc
+	checkpointSink command.CheckpointSink
+	logger         telemetry.Logger
+	proxy          string
+	workDir        string
 
 	testAgent  func(ctx context.Context, prompt string) (*agentRunResult, error)
 	testReport func(ctx context.Context, prompt string) (string, error)
@@ -209,7 +210,11 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 
 	var scanWriter *scanJSONLWriter
 	if flags.OutputFile != "" {
-		w, wErr := newScanJSONLWriter(flags.OutputFile, pipelineBus)
+		var agentBus *eventbus.Bus[agent.Event]
+		if c.parent != nil {
+			agentBus = c.parent.Cfg.Bus
+		}
+		w, wErr := newScanJSONLWriter(flags.OutputFile, pipelineBus, agentBus)
 		if wErr != nil {
 			return "", nil, fmt.Errorf("scan: open record file: %w", wErr)
 		}

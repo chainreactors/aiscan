@@ -12,6 +12,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/resources"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
+	"github.com/chainreactors/aiscan/pkg/tools/ioa"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	"github.com/chainreactors/aiscan/skills"
@@ -75,8 +76,9 @@ type App struct {
 	Engines          *engine.Set
 	Skills           *skills.Store
 	SkillDiagnostics []skills.Diagnostic
-	IOAClient        ioaclient.API
-	IOAStreamClient  ioaclient.StreamAPI
+	IOAClient          ioaclient.API
+	IOAStreamClient    ioaclient.StreamAPI
+	CheckpointSink     command.CheckpointSink
 }
 
 func New(ctx context.Context, cfg Config) (*App, error) {
@@ -381,6 +383,17 @@ func (a *App) InitIOA(ctx context.Context, cfg IOAConfig) error {
 		info, err := client.Space(ctx, cfg.Space, "aiscan agent")
 		if err == nil {
 			a.setIOASpace(info.ID)
+		}
+	}
+	if a.Commands != nil {
+		a.CheckpointSink = ioa.CheckpointSink(client, a.Commands)
+		for _, cmd := range a.Commands.All() {
+			type configurable interface {
+				Configure(...scan.Option)
+			}
+			if sc, ok := cmd.(configurable); ok {
+				sc.Configure(scan.WithCheckpointSink(a.CheckpointSink))
+			}
 		}
 	}
 	return nil

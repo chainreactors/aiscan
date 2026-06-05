@@ -41,6 +41,31 @@ func NewCommands(client ioaclient.API, nodeName string, meta map[string]any) []c
 	}
 }
 
+// CheckpointSink returns a command.CheckpointSink that sends checkpoint
+// results to the current IOA space. Safe to call when no space is bound
+// (silently skips). Attach via CheckpointTool.OnCheckpoint().
+func CheckpointSink(client ioaclient.API, registry *command.CommandRegistry) command.CheckpointSink {
+	return func(ctx context.Context, result *command.CheckpointResult) {
+		var binding *spaceBinding
+		for _, cmd := range registry.All() {
+			if sc, ok := cmd.(*spaceCommand); ok {
+				binding = sc.binding
+				break
+			}
+		}
+		if binding == nil {
+			return
+		}
+		spaceID := binding.get()
+		if spaceID == "" || client.NodeID() == "" {
+			return
+		}
+		_, _ = client.Send(ctx, spaceID, ioamodel.SendMessage{
+			Content: result.IOAContent(),
+		})
+	}
+}
+
 func ensureNode(ctx context.Context, client ioaclient.API, name string, meta map[string]any) error {
 	if client.NodeID() != "" {
 		return nil

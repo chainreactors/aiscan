@@ -58,12 +58,22 @@ func (r *CheckpointResult) IOAMeta() map[string]interface{} {
 	}
 }
 
+// CheckpointSink is called when a checkpoint is submitted. Used to sync
+// results to external systems (e.g. IOA space) without the checkpoint
+// needing to know about them.
+type CheckpointSink func(ctx context.Context, result *CheckpointResult)
+
 type CheckpointTool struct {
 	result *CheckpointResult
+	sinks  []CheckpointSink
 }
 
 func NewCheckpointTool() *CheckpointTool {
 	return &CheckpointTool{}
+}
+
+func (t *CheckpointTool) OnCheckpoint(fn CheckpointSink) {
+	t.sinks = append(t.sinks, fn)
 }
 
 func (t *CheckpointTool) Result() *CheckpointResult {
@@ -80,7 +90,7 @@ func (t *CheckpointTool) Definition() provider.ToolDefinition {
 	return ToolDef("checkpoint", t.Description(), CheckpointArgs{})
 }
 
-func (t *CheckpointTool) Execute(_ context.Context, arguments string) (ToolResult, error) {
+func (t *CheckpointTool) Execute(ctx context.Context, arguments string) (ToolResult, error) {
 	args, err := ParseArgs[CheckpointArgs](arguments)
 	if err != nil {
 		return ToolResult{}, err
@@ -97,6 +107,9 @@ func (t *CheckpointTool) Execute(_ context.Context, arguments string) (ToolResul
 		Status:  status,
 		Options: args.Options,
 		Labels:  args.Labels,
+	}
+	for _, sink := range t.sinks {
+		sink(ctx, t.result)
 	}
 	return TerminateResult(fmt.Sprintf("checkpoint submitted: kind=%s title=%s", t.result.Kind, t.result.Title)), nil
 }

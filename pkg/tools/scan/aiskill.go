@@ -290,6 +290,9 @@ func (c *Command) runAISkill(ctx context.Context, skill AISkill, e event, emit f
 		}
 	}
 	cp := command.NewCheckpointTool()
+	if c.checkpointSink != nil {
+		cp.OnCheckpoint(c.checkpointSink)
+	}
 	a := c.parent.Derive()
 	a.Cfg.Tools = a.Cfg.Tools.CloneTools()
 	a.Cfg.Tools.RegisterTool(cp)
