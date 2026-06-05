@@ -13,9 +13,13 @@ func init() {
 			if deps.Resources != nil {
 				res, _ = deps.Resources.(*resources.Set)
 			}
+			searchProxy := deps.WebSearchProxy
+			if searchProxy == "" {
+				searchProxy = deps.ScannerProxy
+			}
 			cmd := New(Opts{
 				TavilyKeys:   deps.TavilyKeys,
-				ScannerProxy: deps.ScannerProxy,
+				ScannerProxy: searchProxy,
 				Resources:    res,
 			})
 			reg.Register(cmd, "tools")
