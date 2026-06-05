@@ -19,16 +19,16 @@ aiscan 的配置涵盖 LLM Provider、扫描参数、资源服务和协作选项
 
 ## 配置优先级
 
-aiscan 按以下顺序加载配置，后者覆盖前者：
+aiscan 按以下优先级解析运行时配置：
 
 ```
-编译时固化值（build.sh ldflags）
-  ↓
-默认配置文件（./config.yaml 或 ~/.config/aiscan/config.yaml）
-  ↓
 CLI 参数
   ↓
--c 自定义配置文件
+环境变量
+  ↓
+配置文件（-c 指定，或自动搜索 ./config.yaml / ~/.config/aiscan/config.yaml）
+  ↓
+编译时固化值（build.sh ldflags）
 ```
 
 仅填写需要的字段，未填写的字段不会覆盖其他来源的值。
@@ -121,11 +121,13 @@ misc:
 | `moonshot` | `https://api.moonshot.cn/v1` | — | `MOONSHOT_API_KEY` |
 | `ollama` | `http://localhost:11434/v1` | — | 不需要 |
 
-### API Key 优先级
+### 环境变量优先级
 
 ```
---api-key CLI 参数 > Provider 对应环境变量 > AISCAN_API_KEY 统一变量
+CLI 参数 > 环境变量 > 配置文件 > 编译时默认值
 ```
+
+LLM API key 在环境变量内部按 `Provider 对应 API key 变量 > AISCAN_API_KEY` 解析。
 
 ### Provider 自动推断
 
@@ -158,6 +160,24 @@ aiscan agent --provider ollama --model llama3 --base-url http://localhost:11434/
 
 ```bash
 aiscan agent --base-url https://my-proxy.example/v1 --api-key "$MY_KEY" --model my-model -p "扫描目标" -i 10.0.0.0/24
+```
+
+**OpenAI/Codex 风格环境变量：**
+
+```bash
+export OPENAI_API_KEY="sk-..."
+export OPENAI_BASE_URL="https://my-proxy.example/v1"
+export OPENAI_MODEL="my-model"
+aiscan agent -p "扫描目标" -i 10.0.0.0/24
+```
+
+**Claude Code 风格 Anthropic 环境变量：**
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+export ANTHROPIC_BASE_URL="https://api.anthropic.com/v1"
+export ANTHROPIC_MODEL="claude-sonnet-4-20250514"
+aiscan agent -p "检查目标" -i http://target.example
 ```
 
 **通过代理访问 LLM API：**
@@ -308,9 +328,17 @@ scan:
 | 变量 | 说明 |
 | --- | --- |
 | `OPENAI_API_KEY` | OpenAI API key |
+| `OPENAI_BASE_URL` / `OPENAI_BASEURL` | OpenAI/Codex 风格 API base URL |
+| `OPENAI_MODEL` | OpenAI/Codex 风格模型名 |
 | `DEEPSEEK_API_KEY` | DeepSeek API key |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
+| `ANTHROPIC_BASE_URL` / `ANTHROPIC_BASEURL` | Claude Code 风格 Anthropic API base URL |
+| `ANTHROPIC_MODEL` | Claude Code 风格 Anthropic 模型名 |
 | `OPENROUTER_API_KEY` | OpenRouter API key |
 | `GROQ_API_KEY` | Groq API key |
 | `MOONSHOT_API_KEY` | Moonshot API key |
 | `AISCAN_API_KEY` | 统一 fallback API key（所有 provider 通用） |
+| `AISCAN_BASE_URL` / `AISCAN_BASEURL` / `AISCAN_LLM_BASE_URL` / `AISCAN_LLM_BASEURL` | aiscan 统一 LLM API base URL |
+| `AISCAN_MODEL` / `AISCAN_LLM_MODEL` | aiscan 统一模型名 |
+| `AISCAN_PROVIDER` / `AISCAN_LLM_PROVIDER` | aiscan 统一 provider 名称 |
+| `AISCAN_LLM_PROXY` | LLM API 请求代理 |

@@ -188,7 +188,9 @@ aiscan neutron -h
 export AISCAN_API_KEY="..."
 ```
 
-API key 解析优先级：`--llm-api-key` > Provider 对应环境变量 > `AISCAN_API_KEY`。
+运行时配置优先级：CLI 参数 > 环境变量 > 配置文件 > 编译时默认值。
+
+LLM API key 在环境变量内部按 Provider 对应变量 > `AISCAN_API_KEY` 解析。Base URL 和模型也支持环境变量：`AISCAN_BASE_URL` / `AISCAN_BASEURL` / `AISCAN_MODEL`，OpenAI/Codex 风格的 `OPENAI_BASE_URL` / `OPENAI_BASEURL` / `OPENAI_MODEL`，以及 Claude Code 风格的 `ANTHROPIC_BASE_URL` / `ANTHROPIC_BASEURL` / `ANTHROPIC_MODEL`。
 
 ### 示例
 
@@ -223,6 +225,24 @@ aiscan agent --llm-proxy http://127.0.0.1:7890 -p "检查目标暴露面" -i htt
 
 ```bash
 aiscan agent --llm-base-url https://my-proxy.example/v1 --llm-api-key "$MY_KEY" --llm-model my-model -p "扫描目标" -i 10.0.0.0/24
+```
+
+OpenAI/Codex 风格环境变量：
+
+```bash
+export OPENAI_API_KEY="sk-..."
+export OPENAI_BASE_URL="https://my-proxy.example/v1"
+export OPENAI_MODEL="my-model"
+aiscan agent -p "扫描目标" -i 10.0.0.0/24
+```
+
+Claude Code 风格 Anthropic 环境变量：
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+export ANTHROPIC_BASE_URL="https://api.anthropic.com/v1"
+export ANTHROPIC_MODEL="claude-sonnet-4-20250514"
+aiscan agent -p "检查目标" -i http://target.example
 ```
 
 ---

@@ -2,21 +2,30 @@
 #
 # 编译时: build.sh 读取此文件，通过 ldflags 将配置固化到二进制
 # 运行时: aiscan 自动加载 ./config.yaml 或 ~/.config/aiscan/config.yaml
-# 优先级: -c 自定义配置 > CLI 参数 > 默认 config.yaml > 编译时固化值
+# 优先级: CLI 参数 > 环境变量 > 配置文件（-c 或默认路径）> 编译时固化值
 #
 # 仅填写需要的字段，留空或删除的字段不会覆盖其他来源的值
 
 # LLM Provider 配置
 llm:
   # openai, deepseek, openrouter, ollama, groq, moonshot, anthropic
+  # 环境变量: AISCAN_PROVIDER / AISCAN_LLM_PROVIDER
   provider: ""
   # API base URL（留空使用 provider 默认值）
+  # 环境变量: AISCAN_BASE_URL / AISCAN_BASEURL / AISCAN_LLM_BASE_URL / AISCAN_LLM_BASEURL
+  # OpenAI/Codex 风格: OPENAI_BASE_URL / OPENAI_BASEURL
+  # Claude Code 风格: ANTHROPIC_BASE_URL / ANTHROPIC_BASEURL
   base_url: ""
   # API key（建议使用环境变量而非写入文件）
+  # 环境变量: AISCAN_API_KEY / Provider 对应 API key 变量（如 OPENAI_API_KEY）
   api_key: ""
   # 模型名称
+  # 环境变量: AISCAN_MODEL / AISCAN_LLM_MODEL
+  # OpenAI/Codex 风格: OPENAI_MODEL
+  # Claude Code 风格: ANTHROPIC_MODEL
   model: ""
   # 访问 LLM API 的 HTTP proxy
+  # 环境变量: AISCAN_LLM_PROXY
   proxy: ""
 
 # Vision 配置

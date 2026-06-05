@@ -94,7 +94,7 @@ func AiScan() {
 		os.Exit(1)
 	}
 
-	cfgPath, err := cfg.LoadAndApplyConfig(&option)
+	cfgPath, err := cfg.ResolveRuntimeConfig(&option)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(1)
@@ -102,7 +102,6 @@ func AiScan() {
 	if cfgPath != "" && option.Debug {
 		fmt.Fprintf(os.Stderr, "loaded config: %s\n", cfgPath)
 	}
-	cfg.ApplyDefaults(&option)
 	logger := telemetry.GlobalLogger(telemetry.LogConfig{Debug: option.Debug, Quiet: option.Quiet, Output: os.Stderr, Color: !option.NoColor})
 
 	var (

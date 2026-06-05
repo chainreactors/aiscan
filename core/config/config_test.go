@@ -477,6 +477,128 @@ cyberhub:
 	})
 }
 
+func TestResolveRuntimeConfigEnvOverridesConfig(t *testing.T) {
+	dir := t.TempDir()
+	writeTestConfig(t, dir, `
+llm:
+  provider: deepseek
+  base_url: https://config.example/v1
+  api_key: config-key
+  model: config-model
+  proxy: http://config-proxy:7890
+cyberhub:
+  url: http://config-hub:9000
+`)
+	t.Setenv("AISCAN_MODEL", "env-model")
+	t.Setenv("AISCAN_BASE_URL", "https://env.example/v1")
+	t.Setenv("AISCAN_API_KEY", "env-key")
+	t.Setenv("AISCAN_LLM_PROXY", "http://env-proxy:7890")
+	t.Setenv("CYBERHUB_URL", "http://env-hub:9000")
+
+	withDefaults(t, func() {
+		origDir, _ := os.Getwd()
+		os.Chdir(dir)
+		defer os.Chdir(origDir)
+
+		option := Option{}
+		if _, err := ResolveRuntimeConfig(&option); err != nil {
+			t.Fatal(err)
+		}
+
+		checks := []struct{ field, got, want string }{
+			{"Provider", option.Provider, "deepseek"},
+			{"BaseURL", option.BaseURL, "https://env.example/v1"},
+			{"APIKey", option.APIKey, "env-key"},
+			{"Model", option.Model, "env-model"},
+			{"LLMProxy", option.LLMProxy, "http://env-proxy:7890"},
+			{"CyberhubURL", option.CyberhubURL, "http://env-hub:9000"},
+		}
+		for _, c := range checks {
+			if c.got != c.want {
+				t.Errorf("%s: got %q, want %q", c.field, c.got, c.want)
+			}
+		}
+	})
+}
+
+func TestResolveRuntimeConfigCLIWinsOverEnv(t *testing.T) {
+	dir := t.TempDir()
+	writeTestConfig(t, dir, `
+llm:
+  model: config-model
+`)
+	t.Setenv("AISCAN_MODEL", "env-model")
+	t.Setenv("AISCAN_BASE_URL", "https://env.example/v1")
+	t.Setenv("AISCAN_API_KEY", "env-key")
+
+	withDefaults(t, func() {
+		origDir, _ := os.Getwd()
+		os.Chdir(dir)
+		defer os.Chdir(origDir)
+
+		option := Option{}
+		option.Model = "cli-model"
+		option.BaseURL = "https://cli.example/v1"
+		option.APIKey = "cli-key"
+		if _, err := ResolveRuntimeConfig(&option); err != nil {
+			t.Fatal(err)
+		}
+		if option.Model != "cli-model" || option.BaseURL != "https://cli.example/v1" || option.APIKey != "cli-key" {
+			t.Fatalf("CLI values were overridden: %#v", option.LLMOptions)
+		}
+	})
+}
+
+func TestResolveRuntimeConfigSupportsOpenAIEnvAliases(t *testing.T) {
+	t.Setenv("OPENAI_BASE_URL", "https://openai-proxy.example/v1")
+	t.Setenv("OPENAI_MODEL", "gpt-env")
+	t.Setenv("OPENAI_API_KEY", "openai-key")
+
+	withDefaults(t, func() {
+		dir := t.TempDir()
+		writeTestConfig(t, dir, `
+llm:
+  provider: ""
+`)
+		origDir, _ := os.Getwd()
+		os.Chdir(dir)
+		defer os.Chdir(origDir)
+
+		option := Option{}
+		if _, err := ResolveRuntimeConfig(&option); err != nil {
+			t.Fatal(err)
+		}
+		if option.Provider != "openai" || option.BaseURL != "https://openai-proxy.example/v1" || option.Model != "gpt-env" || option.APIKey != "openai-key" {
+			t.Fatalf("OpenAI env aliases not applied: %#v", option.LLMOptions)
+		}
+	})
+}
+
+func TestResolveRuntimeConfigSupportsAnthropicEnvAliases(t *testing.T) {
+	t.Setenv("ANTHROPIC_BASE_URL", "https://anthropic-proxy.example/v1")
+	t.Setenv("ANTHROPIC_MODEL", "claude-env")
+	t.Setenv("ANTHROPIC_API_KEY", "anthropic-key")
+
+	withDefaults(t, func() {
+		dir := t.TempDir()
+		writeTestConfig(t, dir, `
+llm:
+  provider: ""
+`)
+		origDir, _ := os.Getwd()
+		os.Chdir(dir)
+		defer os.Chdir(origDir)
+
+		option := Option{}
+		if _, err := ResolveRuntimeConfig(&option); err != nil {
+			t.Fatal(err)
+		}
+		if option.Provider != "anthropic" || option.BaseURL != "https://anthropic-proxy.example/v1" || option.Model != "claude-env" || option.APIKey != "anthropic-key" {
+			t.Fatalf("Anthropic env aliases not applied: %#v", option.LLMOptions)
+		}
+	})
+}
+
 func withDefaults(t *testing.T, fn func()) {
 	t.Helper()
 	saved := []*string{

@@ -1,8 +1,6 @@
 package config
 
 import (
-	"os"
-
 	"github.com/chainreactors/aiscan/pkg/app"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
@@ -32,11 +30,11 @@ func AppConfig(option *Option, features RuntimeFeatures, logger telemetry.Logger
 			AITimeout:         DefaultInt(DefaultVerifyTimeout, 120),
 			VerifyMode:        DefaultVerify,
 			Proxy:             option.Proxy,
-			FofaEmail:         ResolveString(option.FofaEmail, os.Getenv("FOFA_EMAIL")),
-			FofaKey:           ResolveString(option.FofaKey, os.Getenv("FOFA_KEY")),
-			HunterToken:       ResolveString(option.HunterToken, os.Getenv("HUNTER_TOKEN")),
-			HunterAPIKey:      ResolveString(option.HunterAPIKey, os.Getenv("HUNTER_API_KEY")),
-			ReconProxy:        ResolveString(option.ReconProxy, os.Getenv("RECON_PROXY")),
+			FofaEmail:         option.FofaEmail,
+			FofaKey:           option.FofaKey,
+			HunterToken:       option.HunterToken,
+			HunterAPIKey:      option.HunterAPIKey,
+			ReconProxy:        option.ReconProxy,
 			ReconLimit:        intOptionValue(option.ReconLimit),
 		},
 		Tools: app.ToolConfig{

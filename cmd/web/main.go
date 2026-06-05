@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/app"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/web"
@@ -331,91 +331,28 @@ func loadYAMLConfig(path string) yamlConfig {
 }
 
 func initApp(ctx context.Context, configFile string, logger telemetry.Logger) (*app.App, error) {
-	cfgPath := findConfigFile(configFile)
-	ycfg := loadYAMLConfig(cfgPath)
+	option := cfg.Option{}
+	if configFile != "" {
+		option.ConfigFile = configFile
+	}
+	cfgPath, err := cfg.ResolveRuntimeConfig(&option)
+	if err != nil {
+		return nil, err
+	}
 	if cfgPath != "" {
 		logger.Infof("loaded config: %s", cfgPath)
 	}
 
-	providerCfg := provider.ProviderConfig{
-		Provider: ycfg.LLM.Provider,
-		BaseURL:  ycfg.LLM.BaseURL,
-		APIKey:   ycfg.LLM.APIKey,
-		Model:    ycfg.LLM.Model,
-		Proxy:    ycfg.LLM.Proxy,
-		Timeout:  120,
-	}
+	appCfg := cfg.AppConfig(&option, cfg.RuntimeFeatures{
+		ProviderEnabled:  true,
+		ProviderOptional: true,
+		ToolsEnabled:     true,
+		AIEnabled:        true,
+	}, logger)
+	appCfg.Scanner.EnableAllAISkills = false
+	appCfg.Scanner.VerifyMode = "off"
 
-	// Env vars override config file
-	if v := os.Getenv("AISCAN_API_KEY"); v != "" {
-		providerCfg.APIKey = v
-	}
-	if v := os.Getenv("OPENAI_API_KEY"); v != "" {
-		providerCfg.APIKey = v
-	}
-	if v := os.Getenv("ANTHROPIC_API_KEY"); v != "" {
-		providerCfg.APIKey = v
-		providerCfg.Provider = "anthropic"
-	}
-	if v := os.Getenv("AISCAN_PROVIDER"); v != "" {
-		providerCfg.Provider = v
-	}
-	if v := os.Getenv("AISCAN_MODEL"); v != "" {
-		providerCfg.Model = v
-	}
-	if v := os.Getenv("AISCAN_BASE_URL"); v != "" {
-		providerCfg.BaseURL = v
-	}
-
-	providerName := strings.ToLower(strings.TrimSpace(providerCfg.Provider))
-	if providerName == "" {
-		providerName = provider.InferFromBaseURL(providerCfg.BaseURL)
-	}
-	hasProvider := strings.TrimSpace(providerCfg.APIKey) != "" || providerName == "ollama"
-
-	cyberhubURL := ycfg.Cyberhub.URL
-	if v := os.Getenv("CYBERHUB_URL"); v != "" {
-		cyberhubURL = v
-	}
-	cyberhubKey := ycfg.Cyberhub.Key
-	if v := os.Getenv("CYBERHUB_KEY"); v != "" {
-		cyberhubKey = v
-	}
-
-	cfg := app.Config{
-		Provider: app.ProviderConfig{
-			Enabled:  hasProvider,
-			Optional: true,
-			Config:   providerCfg,
-		},
-		Scanner: app.ScannerConfig{
-			AIEnabled:         hasProvider,
-			EnableAllAISkills: false,
-			AITimeout:         120,
-			VerifyMode:        "off",
-			CyberhubURL:       cyberhubURL,
-			CyberhubKey:       cyberhubKey,
-			CyberhubMode:      firstNonEmpty(ycfg.Cyberhub.Mode, "merge"),
-			Proxy:             firstNonEmpty(os.Getenv("AISCAN_PROXY"), ycfg.Cyberhub.Proxy),
-		},
-		Tools: app.ToolConfig{
-			Enabled:     true,
-			BashTimeout: 300,
-			TavilyKeys:  ycfg.Search.TavilyKeys,
-		},
-		Logger: logger,
-	}
-
-	return app.New(ctx, cfg)
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
+	return app.New(ctx, appCfg)
 }
 
 // parseSimpleYAML is a minimal YAML parser for flat/two-level config.

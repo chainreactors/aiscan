@@ -3,7 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
+	"sort"
 	"strings"
 )
 
@@ -41,6 +41,23 @@ var presets = map[string]providerPreset{
 	"anthropic":  {"https://api.anthropic.com/v1", "ANTHROPIC_API_KEY"},
 }
 
+func KnownProviders() []string {
+	names := make([]string, 0, len(presets))
+	for name := range presets {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func APIKeyEnvName(providerName string) string {
+	preset, ok := presets[strings.ToLower(strings.TrimSpace(providerName))]
+	if !ok {
+		return ""
+	}
+	return preset.APIKeyEnv
+}
+
 func Resolve(cfg *ProviderConfig) (*ProviderConfig, error) {
 	resolved := *cfg
 
@@ -62,15 +79,13 @@ func Resolve(cfg *ProviderConfig) (*ProviderConfig, error) {
 	}
 
 	if resolved.APIKey == "" {
-		if preset, ok := presets[providerName]; ok && preset.APIKeyEnv != "" {
-			resolved.APIKey = os.Getenv(preset.APIKeyEnv)
-		}
-		if resolved.APIKey == "" {
-			resolved.APIKey = os.Getenv("AISCAN_API_KEY")
-		}
 		if resolved.APIKey == "" && providerName != "ollama" {
-			return nil, fmt.Errorf("no API key for provider %q: set --llm-api-key, %s, or AISCAN_API_KEY",
-				resolved.Provider, presets[providerName].APIKeyEnv)
+			if envName := APIKeyEnvName(providerName); envName != "" {
+				return nil, fmt.Errorf("no API key for provider %q: set --api-key, llm.api_key, %s, or AISCAN_API_KEY",
+					resolved.Provider, envName)
+			}
+			return nil, fmt.Errorf("no API key for provider %q: set --api-key, llm.api_key, or AISCAN_API_KEY",
+				resolved.Provider)
 		}
 	}
 
