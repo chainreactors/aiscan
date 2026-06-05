@@ -11,7 +11,7 @@ require (
 	github.com/chainreactors/parsers v0.0.0-20260517174207-da1ebd0e7f68
 	github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593
 	github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3
-	github.com/chainreactors/sdk v0.2.3-0.20260529125956-4741de355c3a
+	github.com/chainreactors/sdk v0.2.3
 	github.com/chainreactors/spray v1.3.1-0.20260529172359-9caf4ee3567c
 	github.com/chainreactors/utils v0.0.0-20260529172343-6465cb8568b2
 	github.com/chainreactors/zombie v1.2.3-0.20260529172356-6b3bf94a7dfc
