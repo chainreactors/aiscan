@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
+	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
@@ -50,6 +51,10 @@ func (c *Command) Configure(opts ...Option) {
 
 func WithDeepBrowserFunc(fn DeepBrowserFunc) Option {
 	return func(c *Command) { c.deepBrowser = fn }
+}
+
+func WithCheckpointSink(fn command.CheckpointSink) Option {
+	return func(c *Command) { c.checkpointSink = fn }
 }
 
 func verificationEnabled(mode string) bool {
