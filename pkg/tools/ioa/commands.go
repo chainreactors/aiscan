@@ -14,223 +14,362 @@ import (
 	ioaclient "github.com/chainreactors/ioa/client"
 )
 
-// spaceResolver is implemented by ioa/client.Client.
-type spaceResolver interface {
-	ResolveSpace(ctx context.Context, nameOrID string) (ioamodel.SpaceInfo, error)
+// spaceBinding holds the current space ID shared across all IOA commands.
+type spaceBinding struct {
+	mu      sync.RWMutex
+	spaceID string
 }
 
-// spaceLister is implemented by ioa/client.Client.
-type spaceLister interface {
-	ListSpaces(ctx context.Context) ([]ioamodel.SpaceInfo, error)
+func (b *spaceBinding) get() string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.spaceID
+}
+
+func (b *spaceBinding) set(id string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.spaceID = id
 }
 
 func NewCommands(client ioaclient.API, nodeName string, meta map[string]any) []command.Command {
-	rc := &resolvingClient{
-		API:   client,
-		cache: make(map[string]string),
-	}
-	var cmds []command.Command
-	for _, t := range ioaclient.NewTools(rc, ioaclient.ToolOptions{NodeName: nodeName, NodeMeta: meta}) {
-		cmds = append(cmds, &toolAdapter{tool: t, descOverride: toolDescOverrides[t.Name()]})
-	}
-	return cmds
-}
-
-var toolDescOverrides = map[string]string{
-	"ioa_send": `Send a structured IOA message to a space. The --space_id value accepts either the space hash ID or the human-readable space name; --space and --space_name are accepted aliases. The --content value MUST be a valid JSON object (not a string). It MUST include a "content" key. Correct: --content '{"content": "your message here", "meta": {"kind": "finding"}}'. WRONG: --content '"just a string"'. Use --refs '{"nodes": ["<id>"]}' to direct to a specific node.`,
-	"ioa_read": `Read messages from an IOA space. The --space_id value accepts either the space hash ID or the human-readable space name; --space and --space_name are accepted aliases. Example: ioa_read --space "my-space-name" --all true --limit 50. Use --after "<message_id>" to paginate.`,
-}
-
-// resolvingClient wraps ioaclient.API to transparently resolve space names to
-// IDs. If a name cannot be resolved it returns an error listing available
-// spaces — it never auto-creates/joins a space.
-type resolvingClient struct {
-	ioaclient.API
-
-	mu    sync.RWMutex
-	cache map[string]string // selector → spaceID
-}
-
-func (c *resolvingClient) Space(ctx context.Context, name, description string, tags ...string) (ioamodel.SpaceInfo, error) {
-	info, err := c.API.Space(ctx, name, description, tags...)
-	if err != nil {
-		return ioamodel.SpaceInfo{}, err
-	}
-	c.remember("", info)
-	return info, nil
-}
-
-func (c *resolvingClient) Send(ctx context.Context, spaceID string, body ioamodel.SendMessage) (ioamodel.Message, error) {
-	resolved, err := c.resolve(ctx, spaceID)
-	if err != nil {
-		return ioamodel.Message{}, err
-	}
-	return c.API.Send(ctx, resolved, body)
-}
-
-func (c *resolvingClient) Read(ctx context.Context, spaceID string, opts ioamodel.ReadOptions) ([]ioamodel.Message, error) {
-	resolved, err := c.resolve(ctx, spaceID)
-	if err != nil {
-		return nil, err
-	}
-	return c.API.Read(ctx, resolved, opts)
-}
-
-// resolve maps a selector (hash ID or human name) to a canonical space ID.
-// It never creates a space — unknown names produce an actionable error.
-func (c *resolvingClient) resolve(ctx context.Context, selector string) (string, error) {
-	selector = strings.TrimSpace(selector)
-	if selector == "" {
-		return "", fmt.Errorf("space_id is required")
-	}
-	if id, ok := c.cached(selector); ok {
-		return id, nil
-	}
-	if resolver, ok := c.API.(spaceResolver); ok {
-		info, err := resolver.ResolveSpace(ctx, selector)
-		if err == nil {
-			c.remember(selector, info)
-			return info.ID, nil
-		}
-	} else if looksLikeSpaceID(selector) {
-		return selector, nil
-	}
-	return "", c.notFoundError(ctx, selector)
-}
-
-func (c *resolvingClient) notFoundError(ctx context.Context, selector string) error {
-	if lister, ok := c.API.(spaceLister); ok {
-		spaces, err := lister.ListSpaces(ctx)
-		if err == nil && len(spaces) > 0 {
-			var names []string
-			for _, s := range spaces {
-				names = append(names, fmt.Sprintf("  - %s (id: %s)", s.Name, s.ID))
-			}
-			return fmt.Errorf("space %q not found. Use ioa_space to join first.\nAvailable spaces:\n%s",
-				selector, strings.Join(names, "\n"))
-		}
-	}
-	return fmt.Errorf("space %q not found. Use ioa_space to create or join a space first", selector)
-}
-
-func (c *resolvingClient) cached(selector string) (string, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	id, ok := c.cache[selector]
-	return id, ok
-}
-
-func (c *resolvingClient) remember(selector string, info ioamodel.SpaceInfo) {
-	if strings.TrimSpace(info.ID) == "" {
-		return
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cache[info.ID] = info.ID
-	if strings.TrimSpace(info.Name) != "" {
-		c.cache[info.Name] = info.ID
-	}
-	if strings.TrimSpace(selector) != "" {
-		c.cache[selector] = info.ID
+	binding := &spaceBinding{}
+	return []command.Command{
+		&spaceCommand{client: client, binding: binding, nodeName: nodeName, meta: meta},
+		&sendCommand{client: client, binding: binding},
+		&readCommand{client: client, binding: binding},
 	}
 }
 
-func looksLikeSpaceID(value string) bool {
-	if len(value) != 32 {
-		return false
+func ensureNode(ctx context.Context, client ioaclient.API, name string, meta map[string]any) error {
+	if client.NodeID() != "" {
+		return nil
 	}
-	for _, r := range value {
-		switch {
-		case r >= '0' && r <= '9':
-		case r >= 'a' && r <= 'f':
-		case r >= 'A' && r <= 'F':
-		default:
-			return false
-		}
+	if name == "" {
+		name = "aiscan-agent"
 	}
-	return true
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	_, err := client.RegisterNode(ctx, name, meta)
+	return err
 }
 
-type toolAdapter struct {
-	tool         ioaclient.Tool
-	descOverride string
-}
-
-func (a *toolAdapter) Name() string { return a.tool.Name() }
-
-func (a *toolAdapter) Usage() string {
-	def := a.tool.Definition()
-	desc := a.tool.Description()
-	if a.descOverride != "" {
-		desc = a.descOverride
-	}
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s - %s\n", def.Function.Name, desc))
-
-	params := def.Function.Parameters
-	props, _ := params["properties"].(map[string]interface{})
-	reqRaw, _ := params["required"].([]interface{})
-	required := make([]string, 0, len(reqRaw))
-	for _, r := range reqRaw {
-		if s, ok := r.(string); ok {
-			required = append(required, s)
-		}
-	}
-	requiredSet := make(map[string]bool, len(required))
-	for _, r := range required {
-		requiredSet[r] = true
-	}
-
-	if len(props) > 0 {
-		sb.WriteString("\nUsage:\n")
-		sb.WriteString(fmt.Sprintf("  %s", def.Function.Name))
-		for name := range props {
-			if requiredSet[name] {
-				sb.WriteString(fmt.Sprintf(" --%s <value>", name))
-			} else {
-				sb.WriteString(fmt.Sprintf(" [--%s <value>]", name))
-			}
-		}
-		sb.WriteString("\n\nOptions:\n")
-		for name, schema := range props {
-			desc := ""
-			if m, ok := schema.(map[string]interface{}); ok {
-				desc, _ = m["description"].(string)
-			}
-			marker := ""
-			if requiredSet[name] {
-				marker = " (required)"
-			}
-			sb.WriteString(fmt.Sprintf("  --%-16s %s%s\n", name, desc, marker))
-		}
-	}
-	return sb.String()
-}
-
-func (a *toolAdapter) Execute(ctx context.Context, args []string, w io.Writer) error {
-	argMap, err := argsToMap(args)
-	if err != nil {
-		return fmt.Errorf("%s: %w\n\n%s", a.tool.Name(), err, a.Usage())
-	}
-	normalizeSpaceAliases(a.tool.Name(), argMap)
-	jsonArgs, err := jsonFromMap(argMap)
+func writeJSON(w io.Writer, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	result, execErr := a.tool.Execute(ctx, jsonArgs)
-	if result != "" {
-		_, _ = io.WriteString(w, result)
-	}
-	return execErr
+	_, err = w.Write(data)
+	return err
 }
 
-func argsToJSON(args []string) (string, error) {
+// --- ioa_space ---
+
+type spaceCommand struct {
+	client   ioaclient.API
+	binding  *spaceBinding
+	nodeName string
+	meta     map[string]any
+}
+
+func (c *spaceCommand) SetDefaultSpace(id string) { c.binding.set(id) }
+func (c *spaceCommand) Name() string                { return "ioa_space" }
+
+func (c *spaceCommand) Usage() string {
+	return `ioa_space - Manage IOA spaces
+
+Subcommands:
+  ioa_space join --name <name> --description <role> [--tags a,b]
+  ioa_space list
+  ioa_space nodes
+  ioa_space topics
+
+join      Join or create a space (sets it as current for ioa_send/ioa_read)
+list      List all available spaces on the server
+nodes     Show nodes in the current space
+topics    Show root messages (conversation starters) in the current space`
+}
+
+func (c *spaceCommand) Execute(ctx context.Context, args []string, w io.Writer) error {
+	sub := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "--") {
+		sub = args[0]
+		args = args[1:]
+	}
+
+	switch sub {
+	case "join", "":
+		m, err := argsToMap(args)
+		if err != nil {
+			return fmt.Errorf("ioa_space: %w\n\n%s", err, c.Usage())
+		}
+		return c.execJoin(ctx, m, w)
+	case "list", "ls":
+		return c.execList(ctx, w)
+	case "nodes":
+		return c.execNodes(ctx, w)
+	case "topics":
+		return c.execTopics(ctx, w)
+	default:
+		return fmt.Errorf("ioa_space: unknown subcommand %q\n\n%s", sub, c.Usage())
+	}
+}
+
+func (c *spaceCommand) execJoin(ctx context.Context, m map[string]interface{}, w io.Writer) error {
+	name, _ := m["name"].(string)
+	desc, _ := m["description"].(string)
+	if name == "" || desc == "" {
+		return fmt.Errorf("ioa_space: --name and --description are required\n\n%s", c.Usage())
+	}
+	var tags []string
+	if raw, ok := m["tags"].(string); ok && raw != "" {
+		for _, t := range strings.Split(raw, ",") {
+			if t = strings.TrimSpace(t); t != "" {
+				tags = append(tags, t)
+			}
+		}
+	}
+
+	if err := ensureNode(ctx, c.client, c.nodeName, c.meta); err != nil {
+		return err
+	}
+	info, err := c.client.Space(ctx, name, desc, tags...)
+	if err != nil {
+		return err
+	}
+	c.binding.set(info.ID)
+
+	allMessages, readErr := c.client.Read(ctx, info.ID, ioamodel.ReadOptions{All: true})
+	if readErr != nil {
+		return writeJSON(w, info)
+	}
+	var startMessages []ioamodel.Message
+	for _, msg := range allMessages {
+		if len(msg.Refs.Messages) == 0 && len(msg.Refs.Nodes) == 0 {
+			startMessages = append(startMessages, msg)
+		}
+	}
+	return writeJSON(w, struct {
+		ioamodel.SpaceInfo
+		StartMessages []ioamodel.Message `json:"start_messages"`
+	}{info, startMessages})
+}
+
+func (c *spaceCommand) execList(ctx context.Context, w io.Writer) error {
+	type lister interface {
+		ListSpaces(ctx context.Context) ([]ioamodel.SpaceInfo, error)
+	}
+	l, ok := c.client.(lister)
+	if !ok {
+		return fmt.Errorf("ioa_space list: not supported by this client")
+	}
+	spaces, err := l.ListSpaces(ctx)
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, spaces)
+}
+
+func (c *spaceCommand) execNodes(ctx context.Context, w io.Writer) error {
+	spaceID := c.binding.get()
+	if spaceID == "" {
+		return fmt.Errorf("no space joined. Use ioa_space join --name <name> --description <role> first")
+	}
+	type infoGetter interface {
+		GetSpaceInfo(ctx context.Context, spaceID string) (ioamodel.SpaceInfo, error)
+	}
+	g, ok := c.client.(infoGetter)
+	if !ok {
+		return fmt.Errorf("ioa_space --nodes: not supported by this client")
+	}
+	info, err := g.GetSpaceInfo(ctx, spaceID)
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, info.Nodes)
+}
+
+func (c *spaceCommand) execTopics(ctx context.Context, w io.Writer) error {
+	spaceID := c.binding.get()
+	if spaceID == "" {
+		return fmt.Errorf("no space joined. Use ioa_space join --name <name> --description <role> first")
+	}
+	if err := ensureNode(ctx, c.client, c.nodeName, c.meta); err != nil {
+		return err
+	}
+	messages, err := c.client.Read(ctx, spaceID, ioamodel.ReadOptions{All: true})
+	if err != nil {
+		return err
+	}
+	var topics []ioamodel.Message
+	for _, msg := range messages {
+		if len(msg.Refs.Messages) == 0 && len(msg.Refs.Nodes) == 0 {
+			topics = append(topics, msg)
+		}
+	}
+	return writeJSON(w, topics)
+}
+
+// --- ioa_send ---
+
+type sendCommand struct {
+	client  ioaclient.API
+	binding *spaceBinding
+}
+
+func (c *sendCommand) Name() string { return "ioa_send" }
+
+func (c *sendCommand) Usage() string {
+	return `ioa_send - Send a message to the current IOA space
+
+Subcommands:
+  ioa_send --content '{"content": "msg"}'                        Send to space (broadcast)
+  ioa_send to --node <node_id> --content '{"content": "msg"}'    Send to a specific node
+  ioa_send reply --to <message_id> --content '{"content": "re"}' Reply to a message
+
+Options:
+  --content         Structured message content as JSON object (required)
+  --node            Target node ID (for "to" subcommand)
+  --to              Message ID to reply to (for "reply" subcommand)
+  --refs            Raw references JSON: '{"messages": ["id"], "nodes": ["id"]}'`
+}
+
+func (c *sendCommand) Execute(ctx context.Context, args []string, w io.Writer) error {
+	spaceID := c.binding.get()
+	if spaceID == "" {
+		return fmt.Errorf("no space joined. Use ioa_space join first")
+	}
+
+	sub := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "--") {
+		sub = args[0]
+		args = args[1:]
+	}
+
 	m, err := argsToMap(args)
 	if err != nil {
-		return "", err
+		return fmt.Errorf("ioa_send: %w\n\n%s", err, c.Usage())
 	}
-	return jsonFromMap(m)
+	content, _ := m["content"].(map[string]interface{})
+	if content == nil {
+		return fmt.Errorf("ioa_send: --content is required and must be a JSON object\n\n%s", c.Usage())
+	}
+
+	body := ioamodel.SendMessage{Content: content}
+
+	switch sub {
+	case "to":
+		node, _ := m["node"].(string)
+		if node == "" {
+			return fmt.Errorf("ioa_send to: --node <node_id> is required")
+		}
+		body.Refs = &ioamodel.Ref{Nodes: []string{node}}
+	case "reply":
+		to, _ := m["to"].(string)
+		if to == "" {
+			return fmt.Errorf("ioa_send reply: --to <message_id> is required")
+		}
+		body.Refs = &ioamodel.Ref{Messages: []string{to}}
+	case "broadcast", "":
+		if refs, ok := m["refs"].(map[string]interface{}); ok {
+			data, _ := json.Marshal(refs)
+			var r ioamodel.Ref
+			if json.Unmarshal(data, &r) == nil {
+				body.Refs = &r
+			}
+		}
+	default:
+		return fmt.Errorf("ioa_send: unknown subcommand %q\n\n%s", sub, c.Usage())
+	}
+
+	if err := ensureNode(ctx, c.client, "", nil); err != nil {
+		return err
+	}
+	msg, err := c.client.Send(ctx, spaceID, body)
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, msg)
 }
+
+// --- ioa_read ---
+
+type readCommand struct {
+	client  ioaclient.API
+	binding *spaceBinding
+}
+
+func (c *readCommand) Name() string { return "ioa_read" }
+
+func (c *readCommand) Usage() string {
+	return `ioa_read - Read messages from the current IOA space
+
+Subcommands:
+  ioa_read                           Read messages addressed to this node
+  ioa_read all [--limit 50]          Read all messages in the space
+  ioa_read thread --id <message_id>  Read context of a specific message
+  ioa_read new [--after <msg_id>]    Read messages after a cursor (pagination)
+
+Options:
+  --limit           Maximum number of messages
+  --after           Message ID cursor for pagination
+  --id              Message ID for thread context`
+}
+
+func (c *readCommand) Execute(ctx context.Context, args []string, w io.Writer) error {
+	spaceID := c.binding.get()
+	if spaceID == "" {
+		return fmt.Errorf("no space joined. Use ioa_space join first")
+	}
+
+	sub := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "--") {
+		sub = args[0]
+		args = args[1:]
+	}
+
+	m, err := argsToMap(args)
+	if err != nil {
+		return fmt.Errorf("ioa_read: %w\n\n%s", err, c.Usage())
+	}
+
+	opts := ioamodel.ReadOptions{}
+	if v, ok := m["limit"].(int); ok {
+		opts.Limit = v
+	}
+	if v, ok := m["after"].(string); ok {
+		opts.After = v
+	}
+
+	switch sub {
+	case "all":
+		opts.All = true
+	case "thread":
+		id, _ := m["id"].(string)
+		if id == "" {
+			return fmt.Errorf("ioa_read thread: --id <message_id> is required")
+		}
+		opts.MessageID = id
+	case "new":
+		// uses --after from flags above
+	case "":
+		// default: read messages addressed to this node
+	default:
+		return fmt.Errorf("ioa_read: unknown subcommand %q\n\n%s", sub, c.Usage())
+	}
+
+	if err := ensureNode(ctx, c.client, "", nil); err != nil {
+		return err
+	}
+	messages, err := c.client.Read(ctx, spaceID, opts)
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, messages)
+}
+
+// --- arg parsing ---
 
 func argsToMap(args []string) (map[string]interface{}, error) {
 	m := make(map[string]interface{})
@@ -250,9 +389,9 @@ func argsToMap(args []string) (map[string]interface{}, error) {
 			m[key] = true
 		} else if val == "false" {
 			m[key] = false
-		} else if n, err := parseInt(val); err == nil {
+		} else if n, err := strconv.Atoi(val); err == nil {
 			m[key] = n
-		} else if json.Valid([]byte(val)) && (val[0] == '{' || val[0] == '[') {
+		} else if json.Valid([]byte(val)) && len(val) > 0 && (val[0] == '{' || val[0] == '[') {
 			var v interface{}
 			if err := json.Unmarshal([]byte(val), &v); err != nil {
 				return nil, fmt.Errorf("parse %s JSON: %w", key, err)
@@ -263,31 +402,4 @@ func argsToMap(args []string) (map[string]interface{}, error) {
 		}
 	}
 	return m, nil
-}
-
-func jsonFromMap(m map[string]interface{}) (string, error) {
-	data, err := json.Marshal(m)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-func parseInt(s string) (int, error) {
-	return strconv.Atoi(s)
-}
-
-func normalizeSpaceAliases(toolName string, args map[string]interface{}) {
-	if toolName != "ioa_send" && toolName != "ioa_read" {
-		return
-	}
-	if _, ok := args["space_id"]; ok {
-		return
-	}
-	for _, alias := range []string{"space", "space_name"} {
-		if value, ok := args[alias]; ok {
-			args["space_id"] = value
-			return
-		}
-	}
 }

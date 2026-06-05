@@ -62,6 +62,7 @@ type IOAConfig struct {
 	URL           string
 	NodeID        string
 	NodeName      string
+	Space         string
 	RegisterTools bool
 	AutoRegister  bool
 	NodeMeta      map[string]any
@@ -375,7 +376,22 @@ func (a *App) InitIOA(ctx context.Context, cfg IOAConfig) error {
 			return err
 		}
 	}
+	// Auto-join the configured space so ioa_send/ioa_read work immediately.
+	if cfg.Space != "" && client != nil && client.NodeID() != "" {
+		info, err := client.Space(ctx, cfg.Space, "aiscan agent")
+		if err == nil {
+			a.setIOASpace(info.ID)
+		}
+	}
 	return nil
+}
+
+func (a *App) setIOASpace(spaceID string) {
+	for _, cmd := range a.Commands.All() {
+		if setter, ok := cmd.(interface{ SetDefaultSpace(string) }); ok {
+			setter.SetDefaultSpace(spaceID)
+		}
+	}
 }
 
 func newIOAClient(cfg IOAConfig) (ioaclient.API, error) {

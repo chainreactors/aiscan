@@ -17,6 +17,7 @@ import (
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/app"
 	cmdpkg "github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/swarm"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
@@ -31,7 +32,7 @@ type AgentRuntime struct {
 	App          *app.App
 	SystemPrompt string
 	Config       agent.Config
-	Events       *EventsWriter
+	Bus          *eventbus.Bus[agent.Event]
 	Output       *AgentOutput
 	ownsApp      bool
 	cleanup      func()
@@ -91,18 +92,27 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 	rt.SystemPrompt = BuildSystemPrompt(pc)
 	logger.Debugf("system prompt length: %d chars", len(rt.SystemPrompt))
 
-	events, err := NewEventsWriter(option.EventsFile)
-	if err != nil {
-		if rt.ownsApp {
-			rt.App.Close()
-		}
-		return nil, err
-	}
-	rt.Events = events
-
 	if rc == nil || !rc.NoOutput {
 		rt.Output = NewAgentOutput(option)
 	}
+
+	agentBus := eventbus.New[agent.Event]()
+	if rt.Output != nil {
+		agentBus.Subscribe(rt.Output.HandleEvent)
+	}
+	var eventsCloser func()
+	if option.EventsFile != "" {
+		w, err := newEventsFileSubscriber(option.EventsFile)
+		if err != nil {
+			if rt.ownsApp {
+				rt.App.Close()
+			}
+			return nil, err
+		}
+		unsub := agentBus.Subscribe(w.HandleEvent)
+		eventsCloser = func() { unsub(); w.Close() }
+	}
+	rt.Bus = agentBus
 
 	ib := inboxpkg.NewBuffered(agent.DefaultInboxCapacity)
 
@@ -133,6 +143,7 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		Inbox:          ib,
 		LoopScheduler:  scheduler,
 		CacheRetention: provider.CacheShort,
+		Bus:            agentBus,
 	}
 
 	rt.App.Commands.RegisterTool(agent.NewLoopTool(scheduler))
@@ -157,14 +168,13 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 	})
 	rt.App.Commands.RegisterTool(subAgentTool)
 
-	if events != nil {
-		rt.Config.Emit = events.HandleEvent
-	}
-
 	rt.cleanup = func() {
 		scheduler.Stop()
 		if sessMgr != nil {
 			sessMgr.Shutdown()
+		}
+		if eventsCloser != nil {
+			eventsCloser()
 		}
 	}
 
@@ -175,21 +185,11 @@ func (rt *AgentRuntime) Close() {
 	if rt.cleanup != nil {
 		rt.cleanup()
 	}
-	if rt.Events != nil {
-		rt.Events.Close()
-	}
 	if rt.ownsApp && rt.App != nil {
 		rt.App.Close()
 	}
 }
 
-func (rt *AgentRuntime) EventHandler() agent.EventHandler {
-	var outputHandler agent.EventHandler
-	if rt.Output != nil {
-		outputHandler = rt.Output.HandleEvent
-	}
-	return combineEventHandlers(outputHandler, rt.Events.HandleEvent)
-}
 
 // ---------------------------------------------------------------------------
 // Mode dispatch
@@ -230,8 +230,7 @@ func runOneShotMode(ctx context.Context, option *cfg.Option, logger telemetry.Lo
 	rt.Output.Start("task", task)
 	result, err := agent.NewAgent(rt.Config.
 		WithSystemPrompt(rt.SystemPrompt).
-		WithStream(false).
-		WithEventHandler(rt.EventHandler())).
+		WithStream(false)).
 		Run(ctx, task)
 	if err != nil {
 		return err
@@ -259,8 +258,7 @@ func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetr
 
 	session := agent.NewAgent(rt.Config.
 		WithSystemPrompt(rt.SystemPrompt).
-		WithStream(false).
-		WithEventHandler(combineEventHandlers(rt.Output.HandleEvent, rt.Events.HandleEvent)))
+		WithStream(false))
 
 	repl := NewAgentConsole(ctx, option, rt.App, session)
 	return repl.Start()
@@ -285,6 +283,7 @@ func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) e
 			URL:           ioaURL,
 			NodeID:        option.IOANodeID,
 			NodeName:      option.IOANodeName,
+			Space:         option.Space,
 			RegisterTools: true,
 			AutoRegister:  false,
 		},
@@ -487,6 +486,7 @@ func registerIOATools(ctx context.Context, application *app.App, option *cfg.Opt
 		URL:           ioaURL,
 		NodeID:        option.IOANodeID,
 		NodeName:      option.IOANodeName,
+		Space:         option.Space,
 		RegisterTools: true,
 		AutoRegister:  true,
 		NodeMeta:      map[string]any{"client": "aiscan"},
