@@ -237,6 +237,38 @@ func TestParseCLICyberhubModeRootAndPassthrough(t *testing.T) {
 	}
 }
 
+// --no-color placed AFTER a non-scan scanner subcommand must still toggle the
+// root NoColor option and be stripped from the args passed through to the
+// underlying scanner. Previously it was forwarded verbatim and silently lost.
+func TestParseCLINoColorAfterNonScanScanner(t *testing.T) {
+	parsed, err := parseCLI([]string{"gogo", "-i", "127.0.0.1", "--no-color"})
+	if err != nil {
+		t.Fatalf("parseCLI() error = %v", err)
+	}
+	if !parsed.Option.NoColor {
+		t.Fatal("--no-color after gogo should set NoColor")
+	}
+	wantArgs := []string{"gogo", "-i", "127.0.0.1"}
+	if !reflect.DeepEqual(parsed.ScannerArgs, wantArgs) {
+		t.Fatalf("scanner args = %#v, want %#v (--no-color must be stripped)", parsed.ScannerArgs, wantArgs)
+	}
+}
+
+// --no-color=false after a non-scan scanner must be honored as an explicit
+// disable, not blindly forced on.
+func TestParseCLINoColorExplicitFalseAfterScanner(t *testing.T) {
+	parsed, err := parseCLI([]string{"spray", "-u", "http://x", "--no-color=false"})
+	if err != nil {
+		t.Fatalf("parseCLI() error = %v", err)
+	}
+	if parsed.Option.NoColor {
+		t.Fatal("--no-color=false must not enable NoColor")
+	}
+	if !reflect.DeepEqual(parsed.ScannerArgs, []string{"spray", "-u", "http://x"}) {
+		t.Fatalf("scanner args = %#v", parsed.ScannerArgs)
+	}
+}
+
 func TestParseCLINonScanScannerKeepsPostRootArgsIsolated(t *testing.T) {
 	parsed, err := parseCLI([]string{
 		"gogo",

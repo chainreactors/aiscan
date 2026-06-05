@@ -221,6 +221,13 @@ func parseScannerCLI(scannerName string, rootArgs, scannerRest []string) (parsed
 		if err != nil {
 			return parsedCLI{}, err
 		}
+	} else {
+		// For non-scan scanners the rest is passed through to the underlying
+		// scanner verbatim, so root control flags placed *after* the
+		// subcommand would otherwise be lost. --no-color is a pure display
+		// toggle that every scanner should honor regardless of position, so
+		// extract it here and strip it from the pass-through args.
+		scannerArgs = extractNoColor(scannerArgs, &option)
 	}
 	if boolFlagEnabled(scannerArgs, "--debug") {
 		option.Debug = true
@@ -362,6 +369,13 @@ var scannerKnownFlags = []knownFlag{
 	{names: []string{"--cyberhub-url"}, arity: 1, apply: func(o *cfg.Option, v string) { o.CyberhubURL = v }},
 	{names: []string{"--cyberhub-key"}, arity: 1, apply: func(o *cfg.Option, v string) { o.CyberhubKey = v }},
 	{names: []string{"--cyberhub-mode"}, arity: 1, apply: func(o *cfg.Option, v string) { o.CyberhubMode = v }},
+	{names: []string{"--cyberhub-draft"}, arity: 0, apply: func(o *cfg.Option, v string) {
+		if v != "" {
+			o.CyberhubDraft = truthyFlagValue(v)
+		} else {
+			o.CyberhubDraft = true
+		}
+	}},
 	{names: []string{"--no-color"}, arity: 0, apply: func(o *cfg.Option, _ string) { o.NoColor = true }},
 	{names: []string{"--ai"}, arity: 0, apply: func(o *cfg.Option, v string) {
 		if v != "" {
@@ -420,6 +434,27 @@ func buildRootFlagValueArity() map[string]int {
 		m[name] = arity
 	}
 	return m
+}
+
+// extractNoColor removes any --no-color / --no-color=<bool> token from args,
+// setting option.NoColor accordingly, and returns the remaining args. Used so
+// the flag works when placed after a (non-scan) scanner subcommand, where the
+// rest is otherwise passed through to the underlying scanner untouched.
+func extractNoColor(args []string, option *cfg.Option) []string {
+	out := make([]string, 0, len(args))
+	for _, arg := range args {
+		key, value, hasValue := strings.Cut(arg, "=")
+		if key == "--no-color" {
+			if hasValue {
+				option.NoColor = truthyFlagValue(value)
+			} else {
+				option.NoColor = true
+			}
+			continue
+		}
+		out = append(out, arg)
+	}
+	return out
 }
 
 func argsAfterCommand(args []string, command string) []string {
