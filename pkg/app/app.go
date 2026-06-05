@@ -55,10 +55,9 @@ type ScannerConfig struct {
 }
 
 type ToolConfig struct {
-	Enabled        bool
-	BashTimeout    int
-	TavilyKeys     string // comma-separated Tavily API keys (build-time fallback)
-	WebSearchProxy string
+	Enabled     bool
+	BashTimeout int
+	TavilyKeys  string // comma-separated Tavily API keys (build-time fallback)
 }
 
 type IOAConfig struct {
@@ -252,12 +251,11 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 		BashTimeout:    toolCfg.BashTimeout,
 		SkillStore:     skillStore,
 		EngineSet:      engineSet,
-		ScannerProxy:   scanCfg.Proxy,
-		ScanOpts:       scanOpts,
-		Logger:         logger,
-		Model:          model,
-		TavilyKeys:     toolCfg.TavilyKeys,
-		WebSearchProxy: toolCfg.WebSearchProxy,
+		ScannerProxy: scanCfg.Proxy,
+		ScanOpts:     scanOpts,
+		Logger:       logger,
+		Model:        model,
+		TavilyKeys:   toolCfg.TavilyKeys,
 	}
 	if engineSet != nil {
 		deps.Resources = engineSet.Resources

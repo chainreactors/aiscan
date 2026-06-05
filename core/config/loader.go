@@ -105,9 +105,6 @@ func loadRuntimeDefaults(filename string) error {
 	if v := c.String("search.tavily_keys"); v != "" {
 		DefaultTavilyKeys = v
 	}
-	if v := c.String("websearch.proxy"); v != "" {
-		DefaultSearchProxy = v
-	}
 	return nil
 }
 
@@ -180,11 +177,6 @@ cyberhub:
 search:
   # Tavily API keys（逗号分隔，留空则 fallback 到 DuckDuckGo）
   tavily_keys: ""
-
-# Web 搜索
-websearch:
-  # web_search 请求代理（如 http://127.0.0.1:7890 或 socks5://...）
-  proxy: ""
 
 # IOA 协作
 ioa:

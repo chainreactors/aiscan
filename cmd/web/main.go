@@ -121,9 +121,6 @@ type yamlConfig struct {
 	Search struct {
 		TavilyKeys string `yaml:"tavily_keys" config:"tavily_keys"`
 	} `yaml:"search" config:"search"`
-	WebSearch struct {
-		Proxy string `yaml:"proxy" config:"proxy"`
-	} `yaml:"websearch" config:"websearch"`
 }
 
 type llmConfigFileStore struct {
@@ -357,10 +354,9 @@ func initApp(ctx context.Context, configFile string, logger telemetry.Logger) (*
 			Proxy:             firstNonEmpty(os.Getenv("AISCAN_PROXY"), ycfg.Cyberhub.Proxy),
 		},
 		Tools: app.ToolConfig{
-			Enabled:        true,
-			BashTimeout:    300,
-			TavilyKeys:     ycfg.Search.TavilyKeys,
-			WebSearchProxy: ycfg.WebSearch.Proxy,
+			Enabled:     true,
+			BashTimeout: 300,
+			TavilyKeys:  ycfg.Search.TavilyKeys,
 		},
 		Logger: logger,
 	}
@@ -431,11 +427,6 @@ func parseSimpleYAML(data []byte, cfg *yamlConfig) {
 			switch key {
 			case "tavily_keys":
 				cfg.Search.TavilyKeys = value
-			}
-		case "websearch":
-			switch key {
-			case "proxy":
-				cfg.WebSearch.Proxy = value
 			}
 		}
 	}

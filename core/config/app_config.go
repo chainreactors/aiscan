@@ -41,10 +41,9 @@ func AppConfig(option *Option, features RuntimeFeatures, logger telemetry.Logger
 			ReconLimit:        intOptionValue(option.ReconLimit),
 		},
 		Tools: app.ToolConfig{
-			Enabled:        features.ToolsEnabled,
-			BashTimeout:    300,
-			TavilyKeys:     DefaultTavilyKeys,
-			WebSearchProxy: DefaultSearchProxy,
+			Enabled:     features.ToolsEnabled,
+			BashTimeout: 300,
+			TavilyKeys:  DefaultTavilyKeys,
 		},
 		Logger: logger,
 	}
