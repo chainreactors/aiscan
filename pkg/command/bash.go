@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	maxOutputSize          = 50 * 1024
-	defaultTimeout         = 300
+	maxOutputSize           = 50 * 1024
+	defaultTimeout          = 300
 	autoBackgroundThreshold = 15 * time.Second
-	foregroundStopWait     = 5 * time.Second
+	foregroundStopWait      = 5 * time.Second
 )
 
 type BashTool struct {
@@ -73,6 +73,30 @@ func (t *BashTool) Definition() provider.ToolDefinition {
 	return ToolDef("bash", t.Description(), BashArgs{})
 }
 
+// ExecuteTokens executes an already-tokenized command through the same routing
+// rules as Execute: in-process pseudo-commands stay in-process, scanner
+// pseudo-commands run as subprocesses, and ordinary commands go through the
+// shell.
+func (t *BashTool) ExecuteTokens(ctx context.Context, tokens []string) (ToolResult, error) {
+	if len(tokens) == 0 {
+		return ToolResult{}, fmt.Errorf("empty command")
+	}
+	tokens = append([]string(nil), tokens...)
+	if t.registry != nil {
+		if cmd, ok := t.registry.Get(tokens[0]); ok {
+			if _, inProc := cmd.(InProcessCommand); inProc {
+				result, err := t.registry.ExecuteArgs(ctx, tokens)
+				if err != nil {
+					return ToolResult{}, err
+				}
+				return TextResult(result), nil
+			}
+			return t.execPseudoTokens(ctx, tokens)
+		}
+	}
+	return t.execForeground(ctx, joinCommandLine(tokens), false)
+}
+
 func (t *BashTool) Execute(ctx context.Context, arguments string) (ToolResult, error) {
 	args, err := ParseArgs[BashArgs](arguments)
 	if err != nil {
@@ -108,38 +132,63 @@ func (t *BashTool) Execute(ctx context.Context, arguments string) (ToolResult, e
 	return t.execForeground(ctx, cmdLine, false)
 }
 
+func (t *BashTool) execPseudoTokens(ctx context.Context, tokens []string) (ToolResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(t.timeout)*time.Second)
+	defer cancel()
+
+	if len(tokens) > 1 {
+		if _, valErr := stripShellSyntax(tokens[1:]); valErr != nil {
+			return ToolResult{}, valErr
+		}
+	}
+	self := t.selfBinary
+	var err error
+	if self == "" {
+		self, err = os.Executable()
+		if err != nil {
+			return ToolResult{}, fmt.Errorf("resolve self: %w", err)
+		}
+	}
+	subArgs := t.subprocessArgs(tokens)
+	env := t.buildSubprocessEnv()
+	info, err := t.tasks.CreateCmd(t.workDir, self, subArgs, "", time.Duration(t.timeout)*time.Second, env, "")
+	if err != nil {
+		return ToolResult{}, err
+	}
+
+	done := t.tasks.Done(info.ID)
+	select {
+	case <-done:
+		return t.collectResult(info.ID, ctx), nil
+	case <-time.After(autoBackgroundThreshold):
+		return TextResult(fmt.Sprintf(
+			"Command auto-backgrounded (exceeded %s).\nsession id=%s name=%s\nUse `tmux peek -t %s` to check progress, `tmux kill -t %s` to stop.",
+			autoBackgroundThreshold, info.ID, info.Name, info.ID, info.ID)), nil
+	case <-ctx.Done():
+		_ = t.tasks.Kill(info.ID)
+		<-done
+		return t.collectResult(info.ID, ctx), nil
+	}
+}
+
 // execForeground creates a session and waits for completion. If the command
 // exceeds autoBackgroundThreshold, it returns immediately with the session ID.
 func (t *BashTool) execForeground(ctx context.Context, cmdLine string, isPseudo bool) (ToolResult, error) {
+	if isPseudo {
+		tokens, parseErr := SplitCommandLine(cmdLine)
+		if parseErr != nil {
+			return ToolResult{}, parseErr
+		}
+		return t.execPseudoTokens(ctx, tokens)
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(t.timeout)*time.Second)
 	defer cancel()
 
 	var info tmux.Info
 	var err error
 
-	if isPseudo {
-		tokens, parseErr := SplitCommandLine(cmdLine)
-		if parseErr != nil {
-			return ToolResult{}, parseErr
-		}
-		if len(tokens) > 1 {
-			if _, valErr := stripShellSyntax(tokens[1:]); valErr != nil {
-				return ToolResult{}, valErr
-			}
-		}
-		self := t.selfBinary
-		if self == "" {
-			self, err = os.Executable()
-			if err != nil {
-				return ToolResult{}, fmt.Errorf("resolve self: %w", err)
-			}
-		}
-		subArgs := append(tokens, "--no-color")
-		env := t.buildSubprocessEnv()
-		info, err = t.tasks.CreateCmd(t.workDir, self, subArgs, "", time.Duration(t.timeout)*time.Second, env, "")
-	} else {
-		info, err = t.tasks.Create(t.workDir, cmdLine, "", time.Duration(t.timeout)*time.Second, t.proxyEnv(), "")
-	}
+	info, err = t.tasks.Create(t.workDir, cmdLine, "", time.Duration(t.timeout)*time.Second, t.proxyEnv(), "")
 	if err != nil {
 		return ToolResult{}, err
 	}
@@ -193,6 +242,49 @@ func (t *BashTool) buildSubprocessEnv() []string {
 	env := t.proxyEnv()
 	env = append(env, "AISCAN_PARENT=1")
 	return env
+}
+
+func (t *BashTool) subprocessArgs(tokens []string) []string {
+	subArgs := make([]string, 0, len(tokens)+3)
+	if t.scannerProxy != "" {
+		subArgs = append(subArgs, "--proxy", t.scannerProxy)
+	}
+	subArgs = append(subArgs, tokens...)
+	subArgs = append(subArgs, "--no-color")
+	return subArgs
+}
+
+func joinCommandLine(tokens []string) string {
+	parts := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		parts = append(parts, shellQuoteToken(token))
+	}
+	return strings.Join(parts, " ")
+}
+
+func shellQuoteToken(token string) string {
+	if token == "" {
+		return "''"
+	}
+	if isSafeShellToken(token) {
+		return token
+	}
+	return "'" + strings.ReplaceAll(token, "'", "'\\''") + "'"
+}
+
+func isSafeShellToken(token string) bool {
+	for _, r := range token {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			continue
+		}
+		switch r {
+		case '_', '@', '%', '+', '=', ':', ',', '.', '/', '-':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func isOnlyCommentsOrBlank(cmdLine string) bool {

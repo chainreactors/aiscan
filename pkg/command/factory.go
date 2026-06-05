@@ -12,17 +12,18 @@ type Deps struct {
 	BashTimeout int
 	SkillStore  any
 
-	EngineSet    any
-	Resources    any
-	IOAClient    any
-	Provider     any
-	Model        string
-	ScannerProxy string
-	ScanOpts     []any
-	Logger       any
-	NodeName     string
-	NodeMeta     map[string]any
-	TavilyKeys string // comma-separated Tavily API keys (build-time fallback)
+	EngineSet      any
+	Resources      any
+	IOAClient      any
+	Provider       any
+	Model          string
+	ScannerProxy   string
+	ScanOpts       []any
+	Logger         any
+	NodeName       string
+	NodeMeta       map[string]any
+	TavilyKeys     string // comma-separated Tavily API keys (build-time fallback)
+	WebSearchProxy string
 }
 
 var (

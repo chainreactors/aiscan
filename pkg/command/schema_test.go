@@ -129,6 +129,17 @@ func TestToolResult(t *testing.T) {
 	if r.IsError {
 		t.Fatal("expected IsError=false")
 	}
+	if r.SkipTruncation {
+		t.Fatal("expected SkipTruncation=false")
+	}
+
+	m := ManagedTextResult("managed output")
+	if m.Text() != "managed output" {
+		t.Fatalf("expected managed output, got %q", m.Text())
+	}
+	if !m.SkipTruncation {
+		t.Fatal("expected SkipTruncation=true")
+	}
 
 	e := ErrorResult("something broke")
 	if !e.IsError {

@@ -22,9 +22,9 @@ type StreamingCommand interface {
 	ExecuteStreaming(ctx context.Context, args []string, stream io.Writer) (string, error)
 }
 
-// InProcessCommand marks a PseudoCommand that must run in-process (not as
-// a subprocess). Used for control-plane commands like tmux that operate on
-// shared in-memory state.
+// InProcessCommand marks a PseudoCommand that must run in-process (not as a
+// subprocess), either because it operates on shared in-memory state or because
+// it has no equivalent top-level CLI entrypoint.
 type InProcessCommand interface {
 	PseudoCommand
 	InProcess()
@@ -216,6 +216,9 @@ func (r *CommandRegistry) ExecuteArgsStreaming(ctx context.Context, tokens []str
 	if err != nil {
 		return "", err
 	}
+	if !commandAcceptsNoColorFlag(name) {
+		args = stripNoColorFlag(args)
+	}
 	if stream != nil {
 		if streaming, ok := cmd.(StreamingCommand); ok {
 			return streaming.ExecuteStreaming(ctx, args, stream)
@@ -261,6 +264,31 @@ func stripShellSyntax(tokens []string) ([]string, error) {
 		clean = append(clean, t)
 	}
 	return clean, nil
+}
+
+// stripNoColorFlag removes --no-color tokens from args. This flag is a display
+// toggle handled at the CLI level; individual in-process commands don't
+// recognize it, so we strip it here to avoid "unknown flag" errors when the LLM
+// adds it to pseudo-command invocations.
+func stripNoColorFlag(args []string) []string {
+	out := make([]string, 0, len(args))
+	for _, arg := range args {
+		key, _, _ := strings.Cut(arg, "=")
+		if key == "--no-color" {
+			continue
+		}
+		out = append(out, arg)
+	}
+	return out
+}
+
+func commandAcceptsNoColorFlag(name string) bool {
+	switch name {
+	case "scan", "spray":
+		return true
+	default:
+		return false
+	}
 }
 
 // isStderrDup reports whether the token is a stderr/stdout duplication that
