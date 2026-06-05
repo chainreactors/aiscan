@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/netip"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -51,19 +53,23 @@ func (c *Command) WithLogger(l telemetry.Logger) *Command {
 func (c *Command) Name() string { return "passive" }
 
 func (c *Command) Usage() string {
-	return `passive - cyberspace passive recon (uncover)
+	avail := c.sourceList()
+	availStr := "none configured"
+	if len(avail) > 0 {
+		availStr = strings.Join(avail, ", ")
+	}
+	return fmt.Sprintf(`passive - cyberspace passive recon (uncover)
 
 Usage:
   passive -s fofa 'domain="example.com"'
   passive -s hunter 'domain.suffix="example.com"'
-  passive -s shodan 'org:"Example"'
+  passive -s shodan-idb '1.2.3.4'
 
 Options:
   -s <source>   Data source (required).
-                Cyberspace: fofa, hunter, shodan, shodan-idb, censys,
-                            quake, zoomeye, netlas, criminalip, publicwww,
-                            hunterhow, binaryedge, onyphe, driftnet, greynoise
-  -h            Show this help`
+                Available now: %s
+                Note: shodan-idb accepts ONLY ip/cidr queries.
+  -h            Show this help`, availStr)
 }
 
 func (c *Command) Execute(ctx context.Context, args []string) (string, error) {
@@ -89,6 +95,11 @@ func (c *Command) runQuery(ctx context.Context, src string, args []string) (stri
 	query, err := parseQueryArgs(args)
 	if err != nil {
 		return "", err
+	}
+	// shodan-idb only accepts IP/CIDR; give a clear error before hitting the
+	// upstream agent so the LLM can switch sources immediately.
+	if src == "shodan-idb" && !looksLikeIPOrCIDR(query) {
+		return "", fmt.Errorf("passive: shodan-idb only accepts IP or CIDR queries (got %q). Use fofa or hunter for domain/keyword queries", query)
 	}
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
@@ -229,5 +240,20 @@ func (c *Command) sourceList() []string {
 	for s := range c.sources {
 		out = append(out, s)
 	}
+	sort.Strings(out)
 	return out
+}
+
+// looksLikeIPOrCIDR returns true for a bare IPv4/IPv6 address or CIDR range.
+func looksLikeIPOrCIDR(q string) bool {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return false
+	}
+	if strings.Contains(q, "/") {
+		prefix, err := netip.ParsePrefix(q)
+		return err == nil && prefix.IsValid()
+	}
+	addr, err := netip.ParseAddr(q)
+	return err == nil && addr.IsValid()
 }
