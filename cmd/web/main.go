@@ -360,7 +360,7 @@ func initApp(ctx context.Context, configFile string, logger telemetry.Logger) (*
 			Enabled:        true,
 			BashTimeout:    300,
 			TavilyKeys:     ycfg.Search.TavilyKeys,
-			WebSearchProxy: firstNonEmpty(os.Getenv("AISCAN_SEARCH_PROXY"), ycfg.WebSearch.Proxy),
+			WebSearchProxy: ycfg.WebSearch.Proxy,
 		},
 		Logger: logger,
 	}
