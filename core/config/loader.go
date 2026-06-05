@@ -170,8 +170,6 @@ cyberhub:
   key: ""
   # merge 或 override
   mode: ""
-  # true 时优先加载 CyberHub draft 模板，适合验证未发布的指纹转换结果
-  draft: false
   # 扫描器代理，支持以下格式:
   #   socks5://127.0.0.1:1080
   #   trojan://password@server:443?sni=example.com
