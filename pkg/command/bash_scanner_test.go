@@ -172,7 +172,7 @@ func TestScannerSubprocessReceivesRootProxy(t *testing.T) {
 		t.Fatalf("read args: %v", err)
 	}
 	got := strings.Split(strings.TrimSpace(string(data)), "\n")
-	want := []string{"--proxy", proxy, "gogo", "-i", "127.0.0.1", "--no-color"}
+	want := []string{"--proxy", proxy, "gogo", "-i", "127.0.0.1"}
 	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("args = %#v, want %#v", got, want)
 	}

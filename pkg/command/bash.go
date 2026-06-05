@@ -250,7 +250,12 @@ func (t *BashTool) subprocessArgs(tokens []string) []string {
 		subArgs = append(subArgs, "--proxy", t.scannerProxy)
 	}
 	subArgs = append(subArgs, tokens...)
-	subArgs = append(subArgs, "--no-color")
+	// --no-color is a scan-specific flag; other scanners (gogo, spray,
+	// zombie, neutron) are SDK calls whose output has no ANSI escapes,
+	// so appending it unconditionally would cause "unknown flag" errors.
+	if len(tokens) > 0 && tokens[0] == "scan" {
+		subArgs = append(subArgs, "--no-color")
+	}
 	return subArgs
 }
 

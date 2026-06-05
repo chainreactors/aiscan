@@ -154,11 +154,16 @@ func (t *TmuxCommand) createSession(cmdLine, name string, timeout time.Duration)
 				return tmux.Info{}, valErr
 			}
 		}
-		subArgs := []string{"--no-color"}
+		var subArgs []string
 		if t.proxy != "" {
 			subArgs = append(subArgs, "--proxy", t.proxy)
 		}
 		subArgs = append(subArgs, tokens...)
+		// --no-color is a scan-specific flag; other scanners are SDK calls
+		// whose output has no ANSI escapes.
+		if len(tokens) > 0 && tokens[0] == "scan" {
+			subArgs = append(subArgs, "--no-color")
+		}
 		self := t.selfBin
 		if self == "" {
 			var err error

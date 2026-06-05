@@ -78,7 +78,7 @@ func TestTmuxNewSessionWithName(t *testing.T) {
 	}
 }
 
-func TestTmuxPseudoCommandPrependsNoColor(t *testing.T) {
+func TestTmuxScanAppendsNoColor(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only")
 	}
@@ -109,13 +109,50 @@ func TestTmuxPseudoCommandPrependsNoColor(t *testing.T) {
 		t.Fatalf("read args: %v", err)
 	}
 	got := strings.Split(strings.TrimSpace(string(data)), "\n")
-	want := []string{"--no-color", "scan", "-i", "127.0.0.1"}
+	want := []string{"scan", "-i", "127.0.0.1", "--no-color"}
 	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("args = %#v, want %#v", got, want)
 	}
 }
 
-func TestTmuxPseudoCommandPrependsProxy(t *testing.T) {
+func TestTmuxNonScanOmitsNoColor(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-only")
+	}
+
+	dir := t.TempDir()
+	argsFile := filepath.Join(dir, "args.txt")
+	stub := filepath.Join(dir, "aiscan-stub")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + shellQuote(argsFile) + "\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatalf("write stub: %v", err)
+	}
+
+	registry := NewRegistry()
+	registry.Register(&tmuxTestCommand{name: "gogo"}, "")
+	mgr := tmuxpkg.NewManager()
+	t.Cleanup(mgr.Shutdown)
+	tmux := NewTmuxCommand(mgr, registry)
+	tmux.SetWorkDir(dir)
+	tmux.SetSelfBin(stub)
+
+	_, err := tmux.Execute(context.Background(), []string{"new-session", "gogo", "-i", "10.0.0.1", "-p", "top2"})
+	if err != nil {
+		t.Fatalf("tmux new-session gogo: %v", err)
+	}
+
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read args: %v", err)
+	}
+	got := strings.Split(strings.TrimSpace(string(data)), "\n")
+	want := []string{"gogo", "-i", "10.0.0.1", "-p", "top2"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("args = %#v, want %#v", got, want)
+	}
+}
+
+func TestTmuxPseudoCommandProxy(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only")
 	}
@@ -147,7 +184,7 @@ func TestTmuxPseudoCommandPrependsProxy(t *testing.T) {
 		t.Fatalf("read args: %v", err)
 	}
 	got := strings.Split(strings.TrimSpace(string(data)), "\n")
-	want := []string{"--no-color", "--proxy", "socks5://127.0.0.1:9999", "scan", "-i", "127.0.0.1"}
+	want := []string{"--proxy", "socks5://127.0.0.1:9999", "scan", "-i", "127.0.0.1", "--no-color"}
 	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("args = %#v, want %#v", got, want)
 	}
