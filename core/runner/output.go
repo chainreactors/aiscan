@@ -2,7 +2,6 @@ package runner
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -106,9 +105,9 @@ func (o *AgentOutput) Final(content string) {
 	fmt.Fprintln(o.stdout, rendered)
 }
 
-func (o *AgentOutput) HandleEvent(_ context.Context, event agent.Event) error {
+func (o *AgentOutput) HandleEvent(event agent.Event) {
 	if o == nil {
-		return nil
+		return
 	}
 	switch event.Type {
 	case agent.EventToolExecutionStart:
@@ -118,7 +117,6 @@ func (o *AgentOutput) HandleEvent(_ context.Context, event agent.Event) error {
 	case agent.EventTurnEnd:
 		o.turnEnd(event)
 	}
-	return nil
 }
 
 func (o *AgentOutput) turnEnd(event agent.Event) {

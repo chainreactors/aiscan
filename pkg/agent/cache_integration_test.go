@@ -47,9 +47,8 @@ func TestMultiTurnContextInheritanceAndCache(t *testing.T) {
 		strings.Repeat("You always answer arithmetic questions with just the numeric result. ", 30)
 
 	var events []Event
-	handler := func(_ context.Context, e Event) error {
+	handler := func(e Event) {
 		events = append(events, e)
-		return nil
 	}
 
 	tools := command.NewRegistry()
@@ -60,7 +59,7 @@ func TestMultiTurnContextInheritanceAndCache(t *testing.T) {
 		Model:          cfg.Model,
 		SystemPrompt:   systemPrompt,
 		CacheRetention: provider.CacheShort,
-		Emit:           handler,
+		Bus: testBus(func(e Event) { handler(e) }),
 		Logger:         telemetry.NopLogger(),
 		MaxRetries:     1,
 	}
@@ -211,11 +210,10 @@ func TestMultiTurnWithToolCallsCache(t *testing.T) {
 	tools.RegisterTool(calcTool)
 
 	var turnEndEvents []Event
-	handler := func(_ context.Context, e Event) error {
+	handler := func(e Event) {
 		if e.Type == EventTurnEnd {
 			turnEndEvents = append(turnEndEvents, e)
 		}
-		return nil
 	}
 
 	agentCfg := Config{
@@ -224,7 +222,7 @@ func TestMultiTurnWithToolCallsCache(t *testing.T) {
 		Model:          cfg.Model,
 		SystemPrompt:   systemPrompt,
 		CacheRetention: provider.CacheShort,
-		Emit:           handler,
+		Bus: testBus(func(e Event) { handler(e) }),
 		Logger:         telemetry.NopLogger(),
 		MaxRetries:     1,
 	}
@@ -439,11 +437,10 @@ func TestEventCarriesCacheUsage(t *testing.T) {
 	}
 
 	var captured *provider.Usage
-	handler := func(_ context.Context, e Event) error {
+	handler := func(e Event) {
 		if e.Type == EventTurnEnd && e.Usage != nil {
 			captured = e.Usage
 		}
-		return nil
 	}
 
 	_, err := (NewAgent(Config{
@@ -451,7 +448,7 @@ func TestEventCarriesCacheUsage(t *testing.T) {
 		Tools:        command.NewRegistry(),
 		Model:        "test",
 		SystemPrompt: "sys",
-		Emit:         handler,
+		Bus: testBus(func(e Event) { handler(e) }),
 		Logger:       telemetry.NopLogger(),
 	})).Run(context.Background(), "test")
 	if err != nil {

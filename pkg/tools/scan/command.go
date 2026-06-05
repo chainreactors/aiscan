@@ -10,6 +10,7 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
@@ -22,7 +23,6 @@ type Command struct {
 	parent      *agent.Agent
 	aiConfig    AISkillConfig
 	deepBrowser DeepBrowserFunc
-	recorder    *recorder
 	logger      telemetry.Logger
 	proxy       string
 	workDir     string
@@ -198,36 +198,42 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		return "", nil, fmt.Errorf("scan: no input targets")
 	}
 
-	if flags.OutputFile != "" {
-		rec, recErr := newRecorder(flags.OutputFile)
-		if recErr != nil {
-			return "", nil, fmt.Errorf("scan: open record file: %w", recErr)
-		}
-		c.recorder = rec
-		defer func() { c.recorder.Close(); c.recorder = nil }()
-		c.recorder.ScanStart(rawInputs, flags.Mode, args)
-	}
-
 	if flags.JSON || flags.Report {
 		stream = nil
 	}
 
 	trace := flags.Trace || flags.Debug
+	pipelineBus := eventbus.New[pipeline.Observation]()
 	coll := newCollector(rawInputs, stream, stream != nil && !flags.NoColor, trace)
-	coll.recorder = c.recorder
+	subscribePipeline(pipelineBus, coll, trace)
+
+	var scanWriter *scanJSONLWriter
+	if flags.OutputFile != "" {
+		w, wErr := newScanJSONLWriter(flags.OutputFile, pipelineBus)
+		if wErr != nil {
+			return "", nil, fmt.Errorf("scan: open record file: %w", wErr)
+		}
+		scanWriter = w
+		defer scanWriter.Close()
+		scanWriter.WriteRecord(output.NewRecord(output.TypeScanStart, output.ScanStart{
+			Targets: rawInputs, Mode: flags.Mode, Flags: args,
+		}))
+	}
+
 	seeds := buildSeedEvents(rawInputs, func(raw string) {
-		coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: errorEventOf("", fmt.Sprintf("skip invalid input: %s", raw))})
+		pipelineBus.Emit(pipeline.Observation{
+			Action: pipeline.ActionAccept,
+			Event:  errorEventOf("", fmt.Sprintf("skip invalid input: %s", raw)),
+		})
 	})
 	if len(seeds) == 0 {
 		return "", nil, fmt.Errorf("scan: no valid inputs")
 	}
 
 	capabilities := c.buildCapabilities(flags, options, profile)
-	observe, debugFn := wrapObserve(coll, trace)
 	p := pipeline.New(ctx, pipeline.Config{
 		Capabilities: capabilities,
-		Observe:      observe,
-		Debug:        debugFn,
+		Bus:          pipelineBus,
 	})
 	p.Run(seedsToEvents(seeds))
 	coll.Finish()
@@ -245,7 +251,7 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 	} else {
 		out = coll.TerminalString(stream != nil && !flags.NoColor)
 	}
-	if c.recorder != nil {
+	if scanWriter != nil {
 		coll.mu.Lock()
 		stats := coll.statsSnapshotLocked()
 		gogoCount := len(coll.gogoResults)
@@ -254,8 +260,15 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		aiCount := len(coll.aiSkillResults)
 		errCount := len(coll.errors)
 		coll.mu.Unlock()
-		c.recorder.ScanEnd(stats.Duration(), stats.Inputs,
-			gogoCount, webCount, vulnCount, aiCount, errCount)
+		scanWriter.WriteRecord(output.NewRecord(output.TypeScanEnd, output.ScanEnd{
+			Duration: stats.Duration().Seconds(),
+			Targets:  stats.Inputs,
+			Services: gogoCount,
+			Webs:     webCount,
+			Findings: vulnCount,
+			AISkills: aiCount,
+			Errors:   errCount,
+		}))
 	}
 	if flags.OutputFile != "" && !flags.JSON {
 		plainOut := coll.PlainTextWithFindings()

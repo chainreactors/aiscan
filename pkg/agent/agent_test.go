@@ -9,10 +9,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
+
+func testBus(handler func(Event)) *eventbus.Bus[Event] {
+	b := eventbus.New[Event]()
+	if handler != nil {
+		b.Subscribe(handler)
+	}
+	return b
+}
 
 func TestRunWithoutToolsReturnsFinalText(t *testing.T) {
 	tools := command.NewRegistry()
@@ -65,15 +74,11 @@ func TestRunExecutesToolLoop(t *testing.T) {
 	}
 
 	var events []EventType
-	emit := func(_ context.Context, event Event) error {
-		events = append(events, event.Type)
-		return nil
-	}
 	result, err := (NewAgent(Config{
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
-		Emit:     emit,
+		Bus: testBus(func(e Event) { events = append(events, e.Type) }),
 	})).Run(context.Background(), "use tool")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -121,10 +126,9 @@ func TestRunEmitsTurnEndAfterToolResults(t *testing.T) {
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
-		Emit: func(_ context.Context, event Event) error {
+		Bus: testBus(func(event Event) {
 			events = append(events, event.Type)
-			return nil
-		},
+		}),
 	})).Run(context.Background(), "use tool")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -138,6 +142,7 @@ func TestRunEmitsTurnEndAfterToolResults(t *testing.T) {
 		EventTurnStart,
 		EventMessageStart,
 		EventMessageEnd,
+		EventLLMRequest,
 		EventMessageStart,
 		EventMessageEnd,
 		EventToolExecutionStart,
@@ -146,6 +151,7 @@ func TestRunEmitsTurnEndAfterToolResults(t *testing.T) {
 		EventMessageEnd,
 		EventTurnEnd,
 		EventTurnStart,
+		EventLLMRequest,
 		EventMessageStart,
 		EventMessageEnd,
 		EventTurnEnd,
@@ -261,10 +267,9 @@ func TestProviderErrorEmitsAgentEndAndUpdatesState(t *testing.T) {
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
-		Emit: func(_ context.Context, event Event) error {
+		Bus: testBus(func(event Event) {
 			events = append(events, event)
-			return nil
-		},
+		}),
 	})
 
 	result, err := a.Run(context.Background(), "hello")
@@ -279,6 +284,7 @@ func TestProviderErrorEmitsAgentEndAndUpdatesState(t *testing.T) {
 		EventTurnStart,
 		EventMessageStart,
 		EventMessageEnd,
+		EventLLMRequest,
 		EventMessageStart,
 		EventMessageEnd,
 		EventTurnEnd,
@@ -353,12 +359,11 @@ func TestStreamingProviderEmitsMessageUpdates(t *testing.T) {
 		Tools:    tools,
 		Model:    "test",
 		Stream:   true,
-		Emit: func(_ context.Context, event Event) error {
+		Bus: testBus(func(event Event) {
 			if event.Type == EventMessageUpdate {
 				updates++
 			}
-			return nil
-		},
+		}),
 	})).Run(context.Background(), "stream")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -387,12 +392,11 @@ func TestStatefulAgentTracksStreamingMessage(t *testing.T) {
 		Tools:    tools,
 		Model:    "test",
 		Stream:   true,
-		Emit: func(_ context.Context, event Event) error {
+		Bus: testBus(func(event Event) {
 			if event.Type == EventMessageUpdate && messageContent(event.Message) != "" {
 				sawUpdate = true
 			}
-			return nil
-		},
+		}),
 	})
 
 	result, err := a.Run(context.Background(), "stream")
@@ -834,12 +838,11 @@ func TestTokenBudgetWarning(t *testing.T) {
 		Tools:       tools,
 		Model:       "test",
 		TokenBudget: 1000,
-		Emit: func(_ context.Context, event Event) error {
+		Bus: testBus(func(event Event) {
 			if event.Type == EventTokenBudgetWarning {
 				sawWarning = true
 			}
-			return nil
-		},
+		}),
 	})).Run(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -1001,13 +1004,12 @@ func TestTurnEndEventCarriesUsage(t *testing.T) {
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
-		Emit: func(_ context.Context, event Event) error {
+		Bus: testBus(func(event Event) {
 			if event.Type == EventTurnEnd {
 				turnEndUsage = event.Usage
 				turnEndContext = event.ContextTokens
 			}
-			return nil
-		},
+		}),
 	})).Run(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)

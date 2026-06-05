@@ -2,9 +2,7 @@ package runner
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,14 +12,13 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
 )
 
-func TestEventsWriterAppendsJSONL(t *testing.T) {
+func TestEventsFileSubscriberAppendsJSONL(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "events.jsonl")
-	w, err := NewEventsWriter(path)
+	w, err := newEventsFileSubscriber(path)
 	if err != nil {
-		t.Fatalf("NewEventsWriter() error = %v", err)
+		t.Fatalf("newEventsFileSubscriber() error = %v", err)
 	}
-	t.Cleanup(func() { _ = w.Close() })
 
 	content := "spray returned no results"
 	events := []agent.Event{
@@ -50,12 +47,7 @@ func TestEventsWriterAppendsJSONL(t *testing.T) {
 		{Type: agent.EventAgentEnd, Turn: 1, NewMessages: make([]provider.ChatMessage, 3)},
 	}
 	for _, e := range events {
-		if err := w.HandleEvent(context.Background(), e); err != nil {
-			t.Fatalf("HandleEvent() error = %v", err)
-		}
-	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
+		w.HandleEvent(e)
 	}
 
 	f, err := os.Open(path)
@@ -93,23 +85,19 @@ func TestEventsWriterAppendsJSONL(t *testing.T) {
 	}
 }
 
-func TestEventsWriterTruncatesLargeFields(t *testing.T) {
+func TestEventsFileSubscriberTruncatesLargeFields(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "events.jsonl")
-	w, err := NewEventsWriter(path)
+	w, err := newEventsFileSubscriber(path)
 	if err != nil {
-		t.Fatalf("NewEventsWriter() error = %v", err)
+		t.Fatalf("newEventsFileSubscriber() error = %v", err)
 	}
-	t.Cleanup(func() { _ = w.Close() })
 
 	huge := strings.Repeat("a", eventResultLimit+1024)
-	if err := w.HandleEvent(context.Background(), agent.Event{
+	w.HandleEvent(agent.Event{
 		Type:   agent.EventToolExecutionEnd,
 		Result: huge,
-	}); err != nil {
-		t.Fatalf("HandleEvent() error = %v", err)
-	}
-	_ = w.Close()
+	})
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -120,51 +108,5 @@ func TestEventsWriterTruncatesLargeFields(t *testing.T) {
 	}
 	if len(data) > eventResultLimit+2048 {
 		t.Fatalf("written line should be bounded; got %d bytes", len(data))
-	}
-}
-
-func TestEventsWriterNoopWhenPathEmpty(t *testing.T) {
-	w, err := NewEventsWriter("")
-	if err != nil {
-		t.Fatalf("NewEventsWriter() error = %v", err)
-	}
-	if w == nil {
-		t.Fatal("expected non-nil no-op writer for empty path")
-	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("Close() on no-op writer error = %v", err)
-	}
-	if err := w.HandleEvent(context.Background(), agent.Event{Type: agent.EventAgentStart}); err != nil {
-		t.Fatalf("HandleEvent() on no-op writer error = %v", err)
-	}
-}
-
-func TestCombineEventHandlersRunsAllAndReportsFirstError(t *testing.T) {
-	var calls []string
-	a := func(_ context.Context, _ agent.Event) error {
-		calls = append(calls, "a")
-		return errors.New("a-failed")
-	}
-	b := func(_ context.Context, _ agent.Event) error {
-		calls = append(calls, "b")
-		return nil
-	}
-	c := func(_ context.Context, _ agent.Event) error {
-		calls = append(calls, "c")
-		return errors.New("c-failed")
-	}
-	handler := combineEventHandlers(nil, a, b, c)
-	err := handler(context.Background(), agent.Event{Type: agent.EventAgentStart})
-	if err == nil || err.Error() != "a-failed" {
-		t.Fatalf("err = %v, want a-failed", err)
-	}
-	if got, want := strings.Join(calls, ","), "a,b,c"; got != want {
-		t.Fatalf("call order = %s, want %s", got, want)
-	}
-}
-
-func TestCombineEventHandlersNilWhenAllNil(t *testing.T) {
-	if h := combineEventHandlers(nil, nil); h != nil {
-		t.Fatalf("expected nil handler when all inputs nil, got %#v", h)
 	}
 }

@@ -3,7 +3,6 @@ package output
 import (
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	sdktypes "github.com/chainreactors/sdk/pkg/types"
 )
 
@@ -19,17 +18,17 @@ type Result struct {
 }
 
 type Summary struct {
-	Targets  int       `json:"targets"`
-	Services int       `json:"services"`
-	Webs     int       `json:"webs"`
-	Probes   int       `json:"probes"`
-	Risks    int       `json:"risks"`
-	Vulns    int       `json:"vulns"`
-	Verified int       `json:"verified"`
-	Errors   int       `json:"errors"`
-	Tasks    int64     `json:"tasks"`
-	Requests int64     `json:"requests"`
-	Duration string    `json:"duration"`
+	Targets    int       `json:"targets"`
+	Services   int       `json:"services"`
+	Webs       int       `json:"webs"`
+	Probes     int       `json:"probes"`
+	Risks      int       `json:"risks"`
+	Vulns      int       `json:"vulns"`
+	Verified   int       `json:"verified"`
+	Errors     int       `json:"errors"`
+	Tasks      int64     `json:"tasks"`
+	Requests   int64     `json:"requests"`
+	Duration   string    `json:"duration"`
 	StartedAt  time.Time `json:"started_at,omitempty"`
 	FinishedAt time.Time `json:"finished_at,omitempty"`
 }
@@ -113,11 +112,3 @@ type AISkill struct {
 	Duration float64 `json:"duration_s"`
 }
 
-type AITurn struct {
-	Skill    string                 `json:"skill"`
-	Turn     int                    `json:"turn"`
-	Prompt   string                 `json:"prompt,omitempty"`
-	Messages []provider.ChatMessage `json:"messages,omitempty"`
-	Usage    *provider.Usage        `json:"usage,omitempty"`
-	Duration float64                `json:"duration_s"`
-}

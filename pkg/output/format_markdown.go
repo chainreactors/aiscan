@@ -18,11 +18,6 @@ func RenderRecordsMarkdown(w io.Writer, records []Record) error {
 	var zombieFindings []*sdktypes.ZombieResult
 	var vulnFindings []*sdktypes.VulnResult
 	var aiSkills []AISkill
-	type aiTurnEntry struct {
-		AITurn
-		parsedMsgs []aiMessageView
-	}
-	var aiTurns []aiTurnEntry
 	var scanEnd *ScanEnd
 
 	for _, r := range records {
@@ -47,9 +42,6 @@ func RenderRecordsMarkdown(w io.Writer, records []Record) error {
 		case TypeAISkill:
 			d, _ := ParseRecordData[AISkill](r)
 			aiSkills = append(aiSkills, d)
-		case TypeAITurn:
-			d, _ := ParseRecordData[AITurn](r)
-			aiTurns = append(aiTurns, aiTurnEntry{AITurn: d, parsedMsgs: parseAIMessages(d.Messages)})
 		case TypeScanEnd:
 			d, _ := ParseRecordData[ScanEnd](r)
 			scanEnd = &d
@@ -99,36 +91,24 @@ func RenderRecordsMarkdown(w io.Writer, records []Record) error {
 		for _, d := range aiSkills {
 			fmt.Fprintf(w, "### %s → %s (%.1fs)\n\n", d.Skill, d.Target, d.Duration)
 			fmt.Fprintf(w, "**Status:** %s\n\n", d.Status)
-			fmt.Fprintf(w, "%s\n\n", d.Summary)
+			if d.Summary != "" {
+				fmt.Fprintf(w, "**Summary:** %s\n\n", d.Summary)
+			}
 			if d.Detail != "" {
-				fmt.Fprintf(w, "> %s\n\n", d.Detail)
-			}
-		}
-	}
-
-	if len(aiTurns) > 0 {
-		fmt.Fprintf(w, "## AI Execution Trace\n\n")
-		for _, d := range aiTurns {
-			fmt.Fprintf(w, "#### [%s] Turn %d (%.1fs)\n\n", d.Skill, d.Turn, d.Duration)
-			if d.Prompt != "" {
-				fmt.Fprintf(w, "**Request:** %s\n\n", TruncateStr(d.Prompt, 200))
-			}
-			for _, msg := range d.parsedMsgs {
-				if msg.Role == "assistant" && msg.Content != "" {
-					fmt.Fprintf(w, "**Response:** %s\n\n", TruncateStr(msg.Content, 300))
-				}
-				if len(msg.ToolCalls) > 0 {
-					fmt.Fprintf(w, "**Tools:**\n")
-					for _, tc := range msg.ToolCalls {
-						fmt.Fprintf(w, "- `%s` %s\n", tc.Name, TruncateStr(tc.Arguments, 100))
-					}
-					fmt.Fprintln(w)
-				}
+				fmt.Fprintf(w, "%s\n\n", strings.TrimSpace(d.Detail))
 			}
 		}
 	}
 
 	return nil
+}
+
+func writeMarkdownFence(w io.Writer, lang, body string) {
+	fence := "```"
+	if strings.Contains(body, "```") {
+		fence = "~~~"
+	}
+	fmt.Fprintf(w, "%s%s\n%s\n%s\n\n", fence, lang, body, fence)
 }
 
 // RecordsToResult converts parsed records into a Result for asset report rendering.

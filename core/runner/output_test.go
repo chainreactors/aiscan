@@ -2,7 +2,7 @@ package runner
 
 import (
 	"bytes"
-	"context"
+
 	"regexp"
 	"strings"
 	"testing"
@@ -51,24 +51,18 @@ func TestAgentOutputToolSummary(t *testing.T) {
 		tools:  make(map[string]agentToolSummary),
 	}
 
-	err := output.HandleEvent(context.Background(), agent.Event{
+	output.HandleEvent(agent.Event{
 		Type:       agent.EventToolExecutionStart,
 		ToolCallID: "call-1",
 		ToolName:   "bash",
 		Arguments:  `{"command":"scan -i 127.0.0.1 --mode quick"}`,
 	})
-	if err != nil {
-		t.Fatalf("HandleEvent() error = %v", err)
-	}
-	err = output.HandleEvent(context.Background(), agent.Event{
+	output.HandleEvent(agent.Event{
 		Type:       agent.EventToolExecutionEnd,
 		ToolCallID: "call-1",
 		ToolName:   "bash",
 		Result:     "ok",
 	})
-	if err != nil {
-		t.Fatalf("HandleEvent() error = %v", err)
-	}
 
 	got := stripANSI(stderr.String())
 	if !strings.Contains(got, "bash") || !strings.Contains(got, "scan -i 127.0.0.1 --mode quick") {
@@ -88,13 +82,13 @@ func TestAgentOutputToolDebugDetails(t *testing.T) {
 		tools:  make(map[string]agentToolSummary),
 	}
 
-	_ = output.HandleEvent(context.Background(), agent.Event{
+	output.HandleEvent(agent.Event{
 		Type:       agent.EventToolExecutionStart,
 		ToolCallID: "call-1",
 		ToolName:   "read",
 		Arguments:  `{"path":"docs/usage.md","limit":20}`,
 	})
-	_ = output.HandleEvent(context.Background(), agent.Event{
+	output.HandleEvent(agent.Event{
 		Type:       agent.EventToolExecutionEnd,
 		ToolCallID: "call-1",
 		ToolName:   "read",
@@ -121,7 +115,7 @@ func TestAgentOutputToolError(t *testing.T) {
 		tools:  make(map[string]agentToolSummary),
 	}
 
-	_ = output.HandleEvent(context.Background(), agent.Event{
+	output.HandleEvent(agent.Event{
 		Type:       agent.EventToolExecutionEnd,
 		ToolCallID: "call-1",
 		ToolName:   "bash",
@@ -143,7 +137,7 @@ func TestAgentOutputWriteEditSummary(t *testing.T) {
 		tools:  make(map[string]agentToolSummary),
 	}
 
-	_ = output.HandleEvent(context.Background(), agent.Event{
+	output.HandleEvent(agent.Event{
 		Type:       agent.EventToolExecutionStart,
 		ToolCallID: "call-1",
 		ToolName:   "write",
@@ -168,7 +162,7 @@ func TestAgentOutputMultiLineResult(t *testing.T) {
 	}
 
 	result := "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8"
-	_ = output.HandleEvent(context.Background(), agent.Event{
+	output.HandleEvent(agent.Event{
 		Type:       agent.EventToolExecutionEnd,
 		ToolCallID: "call-1",
 		ToolName:   "bash",

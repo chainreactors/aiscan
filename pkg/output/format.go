@@ -49,3 +49,133 @@ func FirstNonEmpty(values ...string) string {
 	}
 	return ""
 }
+
+func AIFindingSummary(finding AIFinding) string {
+	if summary := strings.TrimSpace(finding.Summary); summary != "" {
+		return summary
+	}
+	if summary := ExtractQuotedSummary(finding.Raw); summary != "" {
+		return summary
+	}
+	if detail := AIFindingDetail(finding); detail != "" {
+		return firstContentLine(detail)
+	}
+	return strings.TrimSpace(finding.Raw)
+}
+
+func AIFindingDetail(finding AIFinding) string {
+	for _, value := range []string{finding.Detail, finding.Evidence} {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ExtractQuotedMarkdown(finding.Raw)
+}
+
+func AssetItemDetail(item AssetItem) string {
+	for _, value := range []string{item.Detail, item.Raw} {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			if value == item.Raw {
+				if parsed := ExtractQuotedMarkdown(value); parsed != "" {
+					return parsed
+				}
+			}
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func ExtractQuotedMarkdown(raw string) string {
+	fields := quotedFields(raw)
+	for i := len(fields) - 1; i >= 0; i-- {
+		value := strings.TrimSpace(fields[i])
+		if value == "" {
+			continue
+		}
+		if looksLikeMarkdown(value) {
+			return value
+		}
+	}
+	return ""
+}
+
+func ExtractQuotedSummary(raw string) string {
+	fields := quotedFields(raw)
+	if len(fields) == 0 {
+		return ""
+	}
+	for _, value := range fields {
+		value = strings.TrimSpace(value)
+		if value == "" || looksLikeMarkdown(value) {
+			continue
+		}
+		return value
+	}
+	return ""
+}
+
+func quotedFields(input string) []string {
+	var values []string
+	for i := 0; i < len(input); i++ {
+		if input[i] != '"' {
+			continue
+		}
+		i++
+		var sb strings.Builder
+		for i < len(input) {
+			ch := input[i]
+			if ch == '"' {
+				break
+			}
+			if ch == '\\' && i+1 < len(input) {
+				sb.WriteString(decodeEscapedByte(input[i+1]))
+				i += 2
+				continue
+			}
+			sb.WriteByte(ch)
+			i++
+		}
+		values = append(values, sb.String())
+	}
+	return values
+}
+
+func decodeEscapedByte(ch byte) string {
+	switch ch {
+	case 'n':
+		return "\n"
+	case 'r':
+		return "\r"
+	case 't':
+		return "\t"
+	case '"':
+		return `"`
+	case '\\':
+		return `\`
+	default:
+		return string(ch)
+	}
+}
+
+func looksLikeMarkdown(value string) bool {
+	if strings.Contains(value, "\n") {
+		return true
+	}
+	for _, prefix := range []string{"#", "-", "*", "|", ">", "```"} {
+		if strings.HasPrefix(strings.TrimSpace(value), prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func firstContentLine(value string) string {
+	for _, line := range strings.Split(value, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return ""
+}

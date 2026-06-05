@@ -2,7 +2,10 @@ package scan
 
 import (
 	"context"
+	"fmt"
+	"os"
 
+	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
 )
 
@@ -12,22 +15,21 @@ type pipelineEvent struct {
 	Event      event
 }
 
-func wrapObserve(coll *collector, debug bool) (func(pipeline.Observation), func(pipeline.Observation) string) {
-	observe := func(obs pipeline.Observation) {
-		if coll == nil {
-			return
-		}
-		e, _ := obs.Event.(event)
-		coll.Observe(pipelineEvent{Action: obs.Action, Capability: obs.Capability, Event: e})
-	}
-	var debugFn func(pipeline.Observation) string
-	if debug {
-		debugFn = func(obs pipeline.Observation) string {
+func subscribePipeline(bus *eventbus.Bus[pipeline.Observation], coll *collector, debug bool) {
+	if coll != nil {
+		bus.Subscribe(func(obs pipeline.Observation) {
 			e, _ := obs.Event.(event)
-			return formatTraceEvent(pipelineEvent{Action: obs.Action, Capability: obs.Capability, Event: e})
-		}
+			coll.Observe(pipelineEvent{Action: obs.Action, Capability: obs.Capability, Event: e})
+		})
 	}
-	return observe, debugFn
+	if debug {
+		bus.Subscribe(func(obs pipeline.Observation) {
+			e, _ := obs.Event.(event)
+			if trace := formatTraceEvent(pipelineEvent{Action: obs.Action, Capability: obs.Capability, Event: e}); trace != "" {
+				fmt.Fprintln(os.Stderr, trace)
+			}
+		})
+	}
 }
 
 func wrapCapability(name string, accept func(event) bool, worker int, run func(context.Context, event, func(event))) pipeline.Capability {

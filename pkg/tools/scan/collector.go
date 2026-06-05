@@ -41,7 +41,6 @@ type collector struct {
 	inputs           []string
 	debug            bool
 	stats            *statsCollector
-	recorder         *recorder
 	gogoResults      []*parsers.GOGOResult
 	sprayResults     []sprayObservation
 	zombieResults    []*parsers.ZombieResult
@@ -132,9 +131,6 @@ func (c *collector) recordTargetEvent(event event) {
 	case serviceTarget:
 		if target.Result != nil {
 			c.gogoResults = append(c.gogoResults, target.Result)
-			if c.recorder != nil {
-				c.recorder.Service(target.Result)
-			}
 		}
 	case webProbeTarget:
 		if reportableSprayResultForCapability(target.Result, target.Capability) {
@@ -146,9 +142,6 @@ func (c *collector) recordTargetEvent(event event) {
 				Result:     target.Result,
 				Capability: source,
 			})
-			if c.recorder != nil && target.Result != nil {
-				c.recorder.Web(target.Result)
-			}
 		}
 	}
 }
@@ -166,16 +159,10 @@ func (c *collector) recordFindingEvent(event event) {
 	case weakpassFinding:
 		if finding.Result != nil {
 			c.zombieResults = append(c.zombieResults, finding.Result)
-			if c.recorder != nil {
-				c.recorder.Zombie(finding.Result)
-			}
 		}
 	case vulnFinding:
 		if finding.String() != "" {
 			c.neutronMatches = append(c.neutronMatches, finding)
-			if c.recorder != nil {
-				c.recorder.Vuln(finding.Result)
-			}
 		}
 	case verificationFinding:
 		if reportableVerificationFinding(finding) {
