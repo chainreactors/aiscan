@@ -104,7 +104,6 @@ Options:
       --report      Output a concise final markdown report
   -f, --file        Write output to file without ANSI colors
   -F, --format      Write aggregated asset report to file
-      --no-color    Disable ANSI colors in terminal output
       --trace       Show internal scanner source and pipeline trace
       --debug       Enable trace and underlying scanner debug logs
 

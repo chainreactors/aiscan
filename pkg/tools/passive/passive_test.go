@@ -4,6 +4,7 @@ package passive
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
@@ -123,5 +124,44 @@ func TestParseQueryArgs(t *testing.T) {
 	_, err = parseQueryArgs([]string{"a", "b"})
 	if err == nil {
 		t.Fatal("expected error for multiple positional args")
+	}
+}
+
+func TestSourceListSorted(t *testing.T) {
+	cmd := &Command{sources: map[string]bool{
+		"shodan-idb": true,
+		"fofa":       true,
+		"hunter":     true,
+	}}
+	got := cmd.sourceList()
+	want := []string{"fofa", "hunter", "shodan-idb"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("sourceList() = %v, want %v", got, want)
+	}
+}
+
+func TestLooksLikeIPOrCIDR(t *testing.T) {
+	tests := []struct {
+		query string
+		want  bool
+	}{
+		{"1.2.3.4", true},
+		{"10.0.0.0/24", true},
+		{"::1", true},
+		{"2001:db8::/32", true},
+		{"", false},
+		{"example.com", false},
+		{`domain="example.com"`, false},
+		{`org:"Example"`, false},
+		{"http://example.com", false},
+		{"999.999.999.999", false},
+		{"10.0.0.0/notbits", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.query, func(t *testing.T) {
+			if got := looksLikeIPOrCIDR(tt.query); got != tt.want {
+				t.Fatalf("looksLikeIPOrCIDR(%q) = %v, want %v", tt.query, got, tt.want)
+			}
+		})
 	}
 }

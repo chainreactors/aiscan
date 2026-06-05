@@ -201,6 +201,7 @@ func (r *CommandRegistry) ExecuteArgsStreaming(ctx context.Context, tokens []str
 	if parseErr != nil {
 		return "", parseErr
 	}
+	args = normalizeNoColor(name, args)
 
 	var buf strings.Builder
 	var w io.Writer = &buf
@@ -283,6 +284,18 @@ func isFileRedirection(token string) bool {
 		}
 	}
 	return false
+}
+
+func normalizeNoColor(name string, args []string) []string {
+	if name != "scan" {
+		return args
+	}
+	for _, a := range args {
+		if a == "--no-color" {
+			return args
+		}
+	}
+	return append(args, "--no-color")
 }
 
 func (r *CommandRegistry) UsageDocs() string {

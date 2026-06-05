@@ -63,7 +63,8 @@ func Init(ctx context.Context, opts Options) (*Set, error) {
 		return nil, err
 	}
 	localFingers := append(append(fingerslib.Fingers(nil), localHTTP...), localSocket...)
-	finalFingers := append(fingerslib.Fingers(nil), localFingers...)
+	localFullFingers := (fingers.FullFingers{}).Merge(localFingers, nil)
+	finalFullFingers := cloneFullFingers(localFullFingers)
 	finalTemplates := loadLocalTemplates()
 
 	set := &Set{
@@ -81,9 +82,9 @@ func Init(ctx context.Context, opts Options) (*Set, error) {
 		} else if remoteFingers.Len() > 0 {
 			set.RemoteFingers = remoteFingers.Len()
 			if mode == ModeOverride {
-				finalFingers = remoteFingers.Fingers()
+				finalFullFingers = cloneFullFingers(remoteFingers)
 			} else {
-				finalFingers = mergeFingers(localFingers, remoteFingers.Fingers())
+				finalFullFingers = mergeFullFingers(localFullFingers, remoteFingers)
 			}
 		}
 
@@ -100,6 +101,7 @@ func Init(ctx context.Context, opts Options) (*Set, error) {
 		}
 	}
 
+	finalFingers := finalFullFingers.Fingers()
 	httpFingers, socketFingers := splitFingers(finalFingers)
 	set.gogoConfigs["http"] = marshalJSON(httpFingers)
 	set.gogoConfigs["socket"] = marshalJSON(socketFingers)
@@ -109,10 +111,11 @@ func Init(ctx context.Context, opts Options) (*Set, error) {
 	set.zombieConfigs["http"] = marshalJSON(httpFingers)
 	set.zombieConfigs["socket"] = marshalJSON(socketFingers)
 
-	set.FingersConfig = fingers.NewConfig().WithFingers(finalFingers)
+	set.FingersConfig = fingers.NewConfig()
+	set.FingersConfig.FullFingers = finalFullFingers
 	set.NeutronConfig = neutron.NewConfig().WithTemplates(finalTemplates)
 
-	set.Fingers, err = fingers.NewEngine(set.FingersConfig)
+	set.Fingers, err = fingers.NewEngineWithFingers(finalFullFingers)
 	if err != nil {
 		return nil, err
 	}
@@ -250,26 +253,21 @@ func loadRemoteTemplates(ctx context.Context, cyberhubURL, apiKey string) (neutr
 	return config.Templates, nil
 }
 
-func mergeFingers(local, remote fingerslib.Fingers) fingerslib.Fingers {
-	if len(local) == 0 {
-		return append(fingerslib.Fingers(nil), remote...)
+func cloneFullFingers(src fingers.FullFingers) fingers.FullFingers {
+	if src.Len() == 0 {
+		return fingers.FullFingers{}
 	}
-	items := make(map[string]*fingerslib.Finger, len(local)+len(remote))
-	for _, item := range local {
-		if item == nil || item.Name == "" {
-			continue
-		}
-		items[item.Name] = item
+	out := fingers.FullFingers{Items: make(map[string]*fingers.FullFinger, len(src.Items))}
+	for key, item := range src.Items {
+		out.Items[key] = item
 	}
-	for _, item := range remote {
-		if item == nil || item.Name == "" {
-			continue
-		}
-		items[item.Name] = item
-	}
-	out := make(fingerslib.Fingers, 0, len(items))
-	for _, item := range items {
-		out = append(out, item)
+	return out
+}
+
+func mergeFullFingers(local, remote fingers.FullFingers) fingers.FullFingers {
+	out := cloneFullFingers(local)
+	for _, item := range remote.Items {
+		out = out.Append(item)
 	}
 	return out
 }

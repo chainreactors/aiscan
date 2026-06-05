@@ -49,7 +49,6 @@ Filter:
 Output:
   -jsonl             JSON Lines output
   -silent            Silent mode
-  -nc, -no-color     Disable colors
 
 Examples:
   katana -u https://target.com -d 3 -jc
