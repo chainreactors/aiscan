@@ -60,14 +60,16 @@ func AggregateStructuredResult(result *output.Result) []output.Asset {
 	for _, vuln := range result.Vulns {
 		builder.addVulnFinding(vuln)
 	}
-	for _, finding := range result.AI {
+	for _, tc := range result.ToolCalls {
+		view := output.ParseToolCallView(tc)
 		kind := output.AssetItemNote
-		if finding.Kind == string(findingAIResponse) {
-			kind = output.AssetItemResponse
-		} else if finding.Status == string(verificationConfirmed) {
+		switch view.Status {
+		case string(verificationConfirmed):
 			kind = output.AssetItemFinding
+		case "response":
+			kind = output.AssetItemResponse
 		}
-		builder.addAIFinding(finding, kind)
+		builder.addToolCallFinding(view, kind)
 	}
 	for _, err := range result.Errors {
 		builder.addError(err)
@@ -263,46 +265,38 @@ func (b *assetBuilder) addVulnFinding(vr *sdktypes.VulnResult) {
 	b.addItem(target, keys, identity, item)
 }
 
-func (b *assetBuilder) addAIFinding(finding output.AIFinding, itemKind string) {
-	target := assetTargetFromValues(finding.Target, finding.OriginalKey, finding.Raw, finding.Summary)
-	keys := targetKeys(target, finding.Target, finding.OriginalKey, finding.Raw, finding.Summary)
-	status := output.FirstNonEmpty(finding.Status, finding.Priority)
+func (b *assetBuilder) addToolCallFinding(view output.ToolCallView, itemKind string) {
+	target := assetTargetFromValues(view.Target, view.Title)
+	keys := targetKeys(target, view.Target)
+	status := view.Status
 	if itemKind == output.AssetItemFinding && status == "" {
 		status = output.AssetItemFinding
 	}
-	title := output.FirstNonEmpty(finding.Summary, finding.Kind)
+	summary := output.FirstNonEmpty(output.ToolCallSummary(view), view.Kind)
+	detail := output.ToolCallDetail(view)
 	data := assetData(
-		"kind", finding.Kind,
-		"priority", finding.Priority,
-		"status", finding.Status,
-		"skill", finding.Skill,
-		"source", finding.Source,
-		"original_kind", finding.OriginalKind,
-		"original_key", finding.OriginalKey,
-		"evidence", finding.Evidence,
+		"tool", view.Tool,
+		"kind", view.Kind,
+		"status", view.Status,
 	)
 	item := output.AssetItem{
 		Kind:    itemKind,
-		Source:  output.FirstNonEmpty(finding.Skill, finding.Source),
-		Target:  finding.Target,
+		Source:  output.FirstNonEmpty(view.Kind, view.Tool),
+		Target:  view.Target,
 		Status:  status,
-		Title:   title,
-		Summary: output.FirstNonEmpty(finding.Summary, finding.Raw),
-		Detail:  output.FirstNonEmpty(finding.Detail, finding.Evidence),
-		Tags:    output.CompactStrings(finding.Kind, finding.Priority, finding.Status, finding.Skill, finding.Source),
+		Title:   summary,
+		Summary: summary,
+		Detail:  detail,
+		Tags:    output.CompactStrings(view.Kind, view.Status, view.Tool),
 		Data:    data,
-		Raw:     finding.Raw,
 	}
 	identity := strings.Join(output.CompactStrings(
 		itemKind,
-		finding.Kind,
-		finding.Target,
-		finding.OriginalKind,
-		finding.OriginalKey,
-		finding.Skill,
-		finding.Status,
-		finding.Summary,
-		finding.Raw,
+		view.Tool,
+		view.Kind,
+		view.Target,
+		view.Status,
+		view.Title,
 	), "|")
 	b.addItem(target, keys, identity, item)
 }
@@ -531,7 +525,6 @@ func firstURL(value string) string {
 	return strings.Trim(match, " \t\r\n\"'<>[](),")
 }
 
-
 func preferredAssetTarget(current, next string) string {
 	current = strings.TrimSpace(current)
 	next = strings.TrimSpace(next)
@@ -681,7 +674,6 @@ func sortAssetItems(items []output.AssetItem) {
 	})
 }
 
-
 func assetItemRank(kind string) int {
 	switch kind {
 	case output.AssetItemService:
@@ -779,7 +771,6 @@ func isEmptyAssetData(value any) bool {
 		return false
 	}
 }
-
 
 func sortedStrings(values []string) []string {
 	out := append([]string(nil), values...)

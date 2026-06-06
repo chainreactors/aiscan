@@ -93,7 +93,7 @@ func TestEventsFileSubscriberTruncatesLargeFields(t *testing.T) {
 		t.Fatalf("newEventsFileSubscriber() error = %v", err)
 	}
 
-	huge := strings.Repeat("a", eventResultLimit+1024)
+	huge := strings.Repeat("a", agent.EventResultLimit+1024)
 	w.HandleEvent(agent.Event{
 		Type:   agent.EventToolExecutionEnd,
 		Result: huge,
@@ -106,7 +106,7 @@ func TestEventsFileSubscriberTruncatesLargeFields(t *testing.T) {
 	if !strings.Contains(string(data), "[truncated") {
 		t.Fatalf("expected truncation marker in: %s", string(data))
 	}
-	if len(data) > eventResultLimit+2048 {
+	if len(data) > agent.EventResultLimit+2048 {
 		t.Fatalf("written line should be bounded; got %d bytes", len(data))
 	}
 }

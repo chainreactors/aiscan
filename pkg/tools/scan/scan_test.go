@@ -951,8 +951,8 @@ func TestAISkillFailureIsStructured(t *testing.T) {
 		t.Fatalf("ai failure detail = %q", got.Detail)
 	}
 	result := coll.StructuredResult()
-	if len(result.AI) != 1 || len(result.Assets) == 0 {
-		t.Fatalf("structured result missing AI/assets: %#v", result)
+	if len(result.ToolCalls) != 1 || len(result.Assets) == 0 {
+		t.Fatalf("structured result missing ToolCalls/assets: %#v", result)
 	}
 	var found bool
 	for _, asset := range result.Assets {
@@ -1107,8 +1107,8 @@ func TestDeepAISkillSkipsFindingWhenCheckpointMissing(t *testing.T) {
 		t.Fatalf("ai skill responses = %d, want 0", len(coll.aiSkillResponses))
 	}
 	result := coll.StructuredResult()
-	if len(result.AI) != 0 {
-		t.Fatalf("structured AI response = %#v, want none", result.AI)
+	if len(result.ToolCalls) != 0 {
+		t.Fatalf("structured ToolCalls response = %#v, want none", result.ToolCalls)
 	}
 }
 
@@ -2022,7 +2022,7 @@ func TestScanReportMarkdownKeepsAIResponseDetailAsMarkdown(t *testing.T) {
 	coll.Finish()
 
 	report := coll.ReportMarkdown()
-	for _, want := range []string{"## AI Agent Responses", "[deep:response]", "## Evidence Analysis", "| Asset | Details |"} {
+	for _, want := range []string{"## Tool Call Responses", "[deep:response]", "## Evidence Analysis", "| Asset | Details |"} {
 		if !strings.Contains(report, want) {
 			t.Fatalf("report missing %q:\n%s", want, report)
 		}

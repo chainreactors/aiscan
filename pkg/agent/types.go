@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	crand "crypto/rand"
+	"encoding/hex"
 
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
@@ -40,6 +42,7 @@ const (
 
 type Event struct {
 	Type          EventType
+	SessionID     string
 	Turn          int
 	Request       *provider.ChatCompletionRequest
 	Message       provider.ChatMessage
@@ -150,23 +153,50 @@ func (c Config) WithLoopScheduler(s *LoopScheduler) Config {
 	return c
 }
 
-func prepareConfig(c Config) Config {
-	cfg := normalizeConfig(c)
-	if cfg.Tools == nil {
-		cfg.Tools = command.NewRegistry()
+func (c Config) init() Config {
+	if c.Logger == nil {
+		c.Logger = telemetry.NopLogger()
 	}
-	if cfg.Inbox == nil {
-		cfg.Inbox = inbox.NewBuffered(SubInboxCapacity)
+	if c.MaxRetries == 0 {
+		c.MaxRetries = DefaultMaxRetries
 	}
-	if cfg.Bus == nil {
-		cfg.Bus = eventbus.New[Event]()
+	if c.MaxResultSize <= 0 {
+		c.MaxResultSize = DefaultMaxResultSize
 	}
-	return cfg
+	if c.SessionID == "" {
+		b := make([]byte, 8)
+		_, _ = crand.Read(b)
+		c.SessionID = hex.EncodeToString(b)
+	}
+	if c.Tools == nil {
+		c.Tools = command.NewRegistry()
+	}
+	if c.Inbox == nil {
+		c.Inbox = inbox.NewBuffered(SubInboxCapacity)
+	}
+	if c.Bus == nil {
+		c.Bus = eventbus.New[Event]()
+	}
+	return c
+}
+
+type emitter struct {
+	bus       *eventbus.Bus[Event]
+	sessionID string
+}
+
+func newEmitter(bus *eventbus.Bus[Event], sessionID string) emitter {
+	return emitter{bus: bus, sessionID: sessionID}
+}
+
+func (e emitter) Emit(ev Event) {
+	ev.SessionID = e.sessionID
+	e.bus.Emit(ev)
 }
 
 // NewAgent creates an Agent from a Config.
 func NewAgent(cfg Config) *Agent {
-	cfg = prepareConfig(cfg)
+	cfg = cfg.init()
 	return &Agent{
 		Cfg: cfg,
 		state: State{

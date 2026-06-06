@@ -125,9 +125,6 @@ func (h *Harness) RunWithTimeout(timeout time.Duration, args ...string) *RunResu
 			break
 		}
 	}
-	if needsEvents {
-		fullArgs = append(fullArgs, "--events-file", eventsFile)
-	}
 	fullArgs = append(fullArgs, args...)
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -135,6 +132,9 @@ func (h *Harness) RunWithTimeout(timeout time.Duration, args ...string) *RunResu
 
 	cmd := exec.CommandContext(ctx, h.exe, fullArgs...)
 	cmd.Dir = h.workDir
+	if needsEvents {
+		cmd.Env = append(os.Environ(), "AISCAN_EVENTS_FILE="+eventsFile)
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

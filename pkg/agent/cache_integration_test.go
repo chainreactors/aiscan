@@ -299,8 +299,11 @@ func TestCacheConfigInheritance(t *testing.T) {
 	if child.Cfg.CacheRetention != provider.CacheShort {
 		t.Errorf("child CacheRetention = %q, want %q", child.Cfg.CacheRetention, provider.CacheShort)
 	}
-	if child.Cfg.SessionID != "parent-session-123" {
-		t.Errorf("child SessionID = %q, want parent-session-123", child.Cfg.SessionID)
+	if child.Cfg.SessionID == "" {
+		t.Error("child SessionID should be auto-generated, got empty")
+	}
+	if child.Cfg.SessionID == "parent-session-123" {
+		t.Error("child SessionID should differ from parent")
 	}
 
 	// Run the child and verify the request carries cache fields
@@ -316,32 +319,28 @@ func TestCacheConfigInheritance(t *testing.T) {
 	if reqs[0].CacheRetention != provider.CacheShort {
 		t.Errorf("request CacheRetention = %q, want %q", reqs[0].CacheRetention, provider.CacheShort)
 	}
-	if reqs[0].SessionID != "parent-session-123" {
-		t.Errorf("request SessionID = %q, want parent-session-123", reqs[0].SessionID)
+	if reqs[0].SessionID != child.Cfg.SessionID {
+		t.Errorf("request SessionID = %q, want child SessionID %q", reqs[0].SessionID, child.Cfg.SessionID)
 	}
 }
 
-// TestSessionIDAutoGeneration verifies that normalizeConfig generates a
-// SessionID when CacheRetention is set but SessionID is empty.
 func TestSessionIDAutoGeneration(t *testing.T) {
 	cfg := Config{
 		CacheRetention: provider.CacheShort,
 	}
-	normalized := normalizeConfig(cfg)
+	initialized := cfg.init()
 
-	if normalized.SessionID == "" {
+	if initialized.SessionID == "" {
 		t.Error("expected auto-generated SessionID, got empty")
 	}
-	if len(normalized.SessionID) != 16 { // 8 bytes → 16 hex chars
-		t.Errorf("SessionID length = %d, want 16 hex chars, got %q", len(normalized.SessionID), normalized.SessionID)
+	if len(initialized.SessionID) != 16 {
+		t.Errorf("SessionID length = %d, want 16 hex chars, got %q", len(initialized.SessionID), initialized.SessionID)
 	}
-	t.Logf("Auto-generated SessionID: %s", normalized.SessionID)
 
-	// CacheNone should NOT generate
 	cfg2 := Config{CacheRetention: provider.CacheNone}
-	normalized2 := normalizeConfig(cfg2)
-	if normalized2.SessionID != "" {
-		t.Errorf("CacheNone should not generate SessionID, got %q", normalized2.SessionID)
+	initialized2 := cfg2.init()
+	if initialized2.SessionID == "" {
+		t.Error("CacheNone should still generate SessionID for event tracking")
 	}
 }
 

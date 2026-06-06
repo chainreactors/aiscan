@@ -16,13 +16,13 @@ func FormatAssetReport(result *Result, color bool) string {
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Assets: %d total\n", len(result.Assets))
-	fmt.Fprintf(&sb, "Summary: %d target(s), %d service(s), %d web endpoint(s), %d probe(s), %d finding(s), %d AI item(s), %d error(s), %s\n\n",
+	fmt.Fprintf(&sb, "Summary: %d target(s), %d service(s), %d web endpoint(s), %d probe(s), %d finding(s), %d tool call(s), %d error(s), %s\n\n",
 		result.Summary.Targets,
 		result.Summary.Services,
 		result.Summary.Webs,
 		result.Summary.Probes,
 		result.Summary.Risks+result.Summary.Vulns,
-		len(result.AI),
+		len(result.ToolCalls),
 		result.Summary.Errors,
 		result.Summary.Duration,
 	)
@@ -67,14 +67,15 @@ func writeAssetTopItems(sb *strings.Builder, items []AssetItem, c Color) {
 			name := FirstNonEmpty(item.Title, item.Summary, item.Target)
 			fmt.Fprintf(sb, "   %s %s\n", c.Cyan("fingerprint:"), name)
 		case AssetItemFinding, AssetItemNote, AssetItemResponse:
-			line := FirstNonEmpty(item.Summary, item.Title, item.Detail, item.Raw)
+			detail := AssetItemDetail(item)
+			line := FirstNonEmpty(item.Summary, item.Title, firstContentLine(detail), item.Raw)
 			if item.Status != "" {
 				line = c.Yellow("["+item.Status+"]") + " " + line
 			}
 			label := FirstNonEmpty(item.Source, item.Kind)
 			fmt.Fprintf(sb, "   %s %s\n", c.Yellow(label+":"), line)
-			if item.Detail != "" && item.Detail != line && !strings.Contains(line, item.Detail) {
-				for _, dl := range strings.Split(strings.TrimSpace(item.Detail), "\n") {
+			if detail != "" && detail != line && !strings.Contains(line, detail) {
+				for _, dl := range strings.Split(strings.TrimSpace(detail), "\n") {
 					if dl = strings.TrimSpace(dl); dl != "" {
 						fmt.Fprintf(sb, "      %s\n", c.Dim(dl))
 					}

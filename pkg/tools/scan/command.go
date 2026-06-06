@@ -262,17 +262,17 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		gogoCount := len(coll.gogoResults)
 		webCount := len(coll.seenWeb)
 		vulnCount := len(coll.neutronMatches) + len(coll.zombieResults)
-		aiCount := len(coll.aiSkillResults)
+		toolCallCount := len(coll.aiSkillResults)
 		errCount := len(coll.errors)
 		coll.mu.Unlock()
 		scanWriter.WriteRecord(output.NewRecord(output.TypeScanEnd, output.ScanEnd{
-			Duration: stats.Duration().Seconds(),
-			Targets:  stats.Inputs,
-			Services: gogoCount,
-			Webs:     webCount,
-			Findings: vulnCount,
-			AISkills: aiCount,
-			Errors:   errCount,
+			Duration:  stats.Duration().Seconds(),
+			Targets:   stats.Inputs,
+			Services:  gogoCount,
+			Webs:      webCount,
+			Findings:  vulnCount,
+			ToolCalls: toolCallCount,
+			Errors:    errCount,
 		}))
 	}
 	if flags.OutputFile != "" && !flags.JSON {

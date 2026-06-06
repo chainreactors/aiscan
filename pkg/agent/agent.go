@@ -29,7 +29,7 @@ func (a *Agent) Run(ctx context.Context, prompt string) (*Result, error) {
 	defer a.finishRun()
 
 	cfg := a.Cfg
-	cfg = normalizeConfig(cfg)
+	cfg = cfg.init()
 	cfg.Messages = a.messagesSnapshot()
 	if cfg.Inbox == nil {
 		cfg.Inbox = inbox.NewBuffered(SubInboxCapacity)
@@ -57,7 +57,7 @@ func (a *Agent) Continue(ctx context.Context) (*Result, error) {
 	defer a.finishRun()
 
 	cfg := a.Cfg
-	cfg = normalizeConfig(cfg)
+	cfg = cfg.init()
 	cfg.Messages = a.messagesSnapshot()
 	result, runErr := runLoop(runCtx, cfg)
 	a.saveState(result, runErr)
@@ -76,7 +76,6 @@ func (a *Agent) Derive() *Agent {
 		Stream:         a.Cfg.Stream,
 		Temperature:    a.Cfg.Temperature,
 		CacheRetention: a.Cfg.CacheRetention,
-		SessionID:      a.Cfg.SessionID,
 		Bus:            a.Cfg.Bus,
 	})
 }

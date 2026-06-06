@@ -101,16 +101,14 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		agentBus.Subscribe(rt.Output.HandleEvent)
 	}
 	var eventsCloser func()
-	if option.EventsFile != "" {
-		w, err := newEventsFileSubscriber(option.EventsFile)
+	if eventsPath := os.Getenv("AISCAN_EVENTS_FILE"); eventsPath != "" {
+		w, err := newEventsFileSubscriber(eventsPath)
 		if err != nil {
-			if rt.ownsApp {
-				rt.App.Close()
-			}
-			return nil, err
+			logger.Warnf("events file: %s", err)
+		} else {
+			unsub := agentBus.Subscribe(w.HandleEvent)
+			eventsCloser = func() { unsub(); w.Close() }
 		}
-		unsub := agentBus.Subscribe(w.HandleEvent)
-		eventsCloser = func() { unsub(); w.Close() }
 	}
 	rt.Bus = agentBus
 

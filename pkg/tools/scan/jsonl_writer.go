@@ -5,6 +5,8 @@ import (
 	"os"
 	"sync"
 
+	"github.com/chainreactors/aiscan/pkg/agent"
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
@@ -13,25 +15,33 @@ import (
 )
 
 type scanJSONLWriter struct {
-	mu   sync.Mutex
-	file *os.File
-	unsub func()
+	mu         sync.Mutex
+	file       *os.File
+	scanUnsub  func()
+	agentUnsub func()
 }
 
-func newScanJSONLWriter(path string, bus *eventbus.Bus[pipeline.Observation]) (*scanJSONLWriter, error) {
+func newScanJSONLWriter(path string, scanBus *eventbus.Bus[pipeline.Observation], agentBus *eventbus.Bus[agent.Event]) (*scanJSONLWriter, error) {
 	f, err := os.Create(path)
 	if err != nil {
 		return nil, err
 	}
 	w := &scanJSONLWriter{file: f}
-	w.unsub = bus.Subscribe(w.handleObservation)
+	w.scanUnsub = scanBus.Subscribe(w.handleObservation)
+	if agentBus != nil {
+		w.agentUnsub = agentBus.Subscribe(w.handleAgentEvent)
+	}
 	return w, nil
 }
 
 func (w *scanJSONLWriter) Close() error {
-	if w.unsub != nil {
-		w.unsub()
-		w.unsub = nil
+	if w.scanUnsub != nil {
+		w.scanUnsub()
+		w.scanUnsub = nil
+	}
+	if w.agentUnsub != nil {
+		w.agentUnsub()
+		w.agentUnsub = nil
 	}
 	if w.file == nil {
 		return nil
@@ -66,6 +76,24 @@ func (w *scanJSONLWriter) handleObservation(obs pipeline.Observation) {
 	for _, rec := range observationToRecords(e) {
 		w.WriteRecord(rec)
 	}
+}
+
+func (w *scanJSONLWriter) handleAgentEvent(event agent.Event) {
+	w.writeJSON(agent.SerializableEvent(event))
+}
+
+func (w *scanJSONLWriter) writeJSON(v any) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.file == nil {
+		return
+	}
+	line, err := json.Marshal(v)
+	if err != nil {
+		return
+	}
+	_, _ = w.file.Write(line)
+	_, _ = w.file.Write([]byte("\n"))
 }
 
 func observationToRecords(e event) []output.Record {
@@ -105,20 +133,12 @@ func findingToRecords(e event) []output.Record {
 		}
 	case aiSkillFinding:
 		if finding.Summary != "" || finding.Detail != "" {
-			return []output.Record{output.NewRecord(output.TypeAISkill, output.AISkill{
-				Skill:   finding.Skill,
-				Target:  finding.Target,
-				Status:  finding.Status,
-				Summary: finding.Summary,
-				Detail:  finding.Detail,
-			})}
+			return []output.Record{output.NewRecord(output.TypeToolCall, aiSkillToToolCall(finding))}
 		}
 	}
 	return nil
 }
 
-// observationToRecord converts a pipeline.Observation to an output.Record for external consumers.
-// This is used by the unified JSONL writer in core/runner when subscribing to the pipeline bus.
 func ObservationToRecord(obs pipeline.Observation) *output.Record {
 	if obs.Action != pipeline.ActionAccept {
 		return nil
@@ -134,7 +154,57 @@ func ObservationToRecord(obs pipeline.Observation) *output.Record {
 	return &records[0]
 }
 
-// targetTypes for external type assertions on pipeline events
+func aiSkillToToolCall(finding aiSkillFinding) provider.ToolCall {
+	args, _ := json.Marshal(map[string]any{
+		"kind":    finding.Skill,
+		"title":   finding.Summary,
+		"content": finding.Detail,
+		"target":  finding.Target,
+		"status":  finding.Status,
+	})
+	return provider.ToolCall{
+		Type: "function",
+		Function: provider.FunctionCall{
+			Name:      "checkpoint",
+			Arguments: string(args),
+		},
+	}
+}
+
+func aiSkillResponseToToolCall(response aiSkillResponse) provider.ToolCall {
+	args, _ := json.Marshal(map[string]any{
+		"kind":    response.Skill,
+		"title":   response.Summary,
+		"content": response.Detail,
+		"target":  response.Target,
+		"status":  response.Status,
+	})
+	return provider.ToolCall{
+		Type: "function",
+		Function: provider.FunctionCall{
+			Name:      "checkpoint",
+			Arguments: string(args),
+		},
+	}
+}
+
+func verificationToToolCall(finding verificationFinding) provider.ToolCall {
+	args, _ := json.Marshal(map[string]any{
+		"kind":    "verify",
+		"title":   finding.Summary,
+		"content": finding.Evidence,
+		"target":  finding.Target,
+		"status":  string(finding.Status),
+	})
+	return provider.ToolCall{
+		Type: "function",
+		Function: provider.FunctionCall{
+			Name:      "checkpoint",
+			Arguments: string(args),
+		},
+	}
+}
+
 type ServiceResult = parsers.GOGOResult
 type SprayResult = parsers.SprayResult
 type ZombieResult = parsers.ZombieResult

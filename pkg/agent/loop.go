@@ -2,8 +2,6 @@ package agent
 
 import (
 	"context"
-	crand "crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -25,7 +23,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 	transcript := newTranscript(cfg.Messages, 8)
 	turn := 0
 
-	bus := cfg.Bus
+	bus := newEmitter(cfg.Bus, cfg.SessionID)
 	ib := cfg.Inbox
 	bus.Emit(Event{Type: EventAgentStart})
 	ended := false
@@ -81,7 +79,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		reqMessages := requestMessages(cfg.SystemPrompt, transcript.messages, cfg.TransformContext)
 		cfg.Logger.Debugf("[turn %d] sending %d messages to LLM", turn, len(reqMessages))
 
-		assistantMsg, usage, err := requestWithRetry(ctx, cfg, reqMessages, cfg.Tools.ToolDefinitions(), turn)
+		assistantMsg, usage, err := requestWithRetry(ctx, cfg, bus, reqMessages, cfg.Tools.ToolDefinitions(), turn)
 		transcript.recordTurnUsage(turn, usage)
 		if err != nil {
 			failure := provider.NewTextMessage("assistant", "")
@@ -110,7 +108,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		terminate := false
 		if len(assistantMsg.ToolCalls) > 0 {
 			cfg.Messages = append([]provider.ChatMessage(nil), transcript.messages...)
-			batch, err := executeToolCalls(ctx, cfg, assistantMsg, turn)
+			batch, err := executeToolCalls(ctx, cfg, bus, assistantMsg, turn)
 			if err != nil {
 				return end(nil, err, StopReasonError)
 			}
@@ -224,14 +222,14 @@ type toolBatchResult struct {
 	terminate bool
 }
 
-func executeToolCalls(ctx context.Context, cfg Config, assistantMsg provider.ChatMessage, turn int) (toolBatchResult, error) {
+func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg provider.ChatMessage, turn int) (toolBatchResult, error) {
 	toolCalls := assistantMsg.ToolCalls
 	slots := make([]toolCallSlot, len(toolCalls))
 
 	// Phase 1: preflight all tool calls sequentially (emit start events, check beforeToolCall)
 	for i, tc := range toolCalls {
 		cfg.Logger.Infof("tool_call name=%s args=%q", tc.Function.Name, preview(tc.Function.Arguments, 200))
-		cfg.Bus.Emit(Event{
+		bus.Emit(Event{
 			Type:       EventToolExecutionStart,
 			Turn:       turn,
 			ToolCallID: tc.ID,
@@ -285,7 +283,7 @@ func executeToolCalls(ctx context.Context, cfg Config, assistantMsg provider.Cha
 	messages := make([]provider.ChatMessage, 0, len(slots))
 	terminations := 0
 	for _, s := range slots {
-		cfg.Bus.Emit(Event{
+		bus.Emit(Event{
 			Type:       EventToolExecutionEnd,
 			Turn:       turn,
 			ToolCallID: s.tc.ID,
@@ -297,8 +295,8 @@ func executeToolCalls(ctx context.Context, cfg Config, assistantMsg provider.Cha
 		})
 		cfg.Logger.Debugf("tool_result name=%s bytes=%d", s.tc.Function.Name, len(s.result.result))
 		toolMsg := toolResultToMessage(s.tc.ID, s.result)
-		cfg.Bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: toolMsg})
-		cfg.Bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: toolMsg})
+		bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: toolMsg})
+		bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: toolMsg})
 		messages = append(messages, toolMsg)
 		if s.result.flow == ToolFlowTerminate {
 			terminations++
@@ -489,23 +487,6 @@ func compactLogContent(value string) string {
 	return strings.Join(strings.Fields(value), " ")
 }
 
-func normalizeConfig(cfg Config) Config {
-	if cfg.Logger == nil {
-		cfg.Logger = telemetry.NopLogger()
-	}
-	if cfg.MaxRetries == 0 {
-		cfg.MaxRetries = DefaultMaxRetries
-	}
-	if cfg.MaxResultSize <= 0 {
-		cfg.MaxResultSize = DefaultMaxResultSize
-	}
-	if cfg.CacheRetention != provider.CacheNone && cfg.SessionID == "" {
-		b := make([]byte, 8)
-		_, _ = crand.Read(b)
-		cfg.SessionID = hex.EncodeToString(b)
-	}
-	return cfg
-}
 
 func schedulerActive(s *LoopScheduler) int {
 	if s == nil {
