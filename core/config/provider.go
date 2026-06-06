@@ -1,6 +1,6 @@
 package config
 
-import "github.com/chainreactors/aiscan/pkg/agent/provider"
+import "github.com/chainreactors/aiscan/pkg/agent"
 
 var (
 	DefaultProvider = "deepseek"
@@ -25,8 +25,8 @@ var (
 	DefaultTavilyKeys = ""
 )
 
-func defaultProviderConfig() provider.ProviderConfig {
-	return provider.ProviderConfig{
+func defaultProviderConfig() agent.ProviderConfig {
+	return agent.ProviderConfig{
 		Provider: DefaultProvider,
 		BaseURL:  DefaultBaseURL,
 		APIKey:   DefaultAPIKey,
@@ -34,7 +34,7 @@ func defaultProviderConfig() provider.ProviderConfig {
 	}
 }
 
-func ProviderConfig(option *Option) provider.ProviderConfig {
+func ProviderConfig(option *Option) agent.ProviderConfig {
 	cfg := defaultProviderConfig()
 	if option.Provider != "" {
 		cfg.Provider = option.Provider
@@ -58,7 +58,7 @@ func ProviderConfig(option *Option) provider.ProviderConfig {
 	return cfg
 }
 
-func ApplyResolvedProviderOptions(option *Option, cfg provider.ProviderConfig) {
+func ApplyResolvedProviderOptions(option *Option, cfg agent.ProviderConfig) {
 	option.Provider = cfg.Provider
 	option.BaseURL = cfg.BaseURL
 	option.APIKey = cfg.APIKey

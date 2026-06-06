@@ -12,7 +12,6 @@ import (
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/core/runner"
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/app"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
@@ -25,11 +24,11 @@ type fakeConsoleProvider struct {
 
 func (p *fakeConsoleProvider) Name() string { return "fake" }
 
-func (p *fakeConsoleProvider) ChatCompletion(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+func (p *fakeConsoleProvider) ChatCompletion(_ context.Context, req *agent.ChatCompletionRequest) (*agent.ChatCompletionResponse, error) {
 	p.requests++
-	return &provider.ChatCompletionResponse{
-		Choices: []provider.Choice{{
-			Message: provider.NewTextMessage("assistant", "ok"),
+	return &agent.ChatCompletionResponse{
+		Choices: []agent.Choice{{
+			Message: agent.NewTextMessage("assistant", "ok"),
 		}},
 	}, nil
 }
@@ -136,9 +135,9 @@ func TestParseCLIAgentAcceptsLLMFlags(t *testing.T) {
 	}
 	pcfg := cfg.ProviderConfig(&opt)
 	if pcfg.Provider != "" {
-		t.Fatalf("provider should be unresolved before provider.Resolve, got %q", pcfg.Provider)
+		t.Fatalf("provider should be unresolved before agent.ResolveProvider, got %q", pcfg.Provider)
 	}
-	resolved, err := provider.Resolve(&pcfg)
+	resolved, err := agent.ResolveProvider(&pcfg)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -169,9 +168,9 @@ func TestParseCLIScanExtractsLLMFlags(t *testing.T) {
 	}
 	pcfg := cfg.ProviderConfig(&opt)
 	if pcfg.Provider != "" {
-		t.Fatalf("provider should be unresolved before provider.Resolve, got %q", pcfg.Provider)
+		t.Fatalf("provider should be unresolved before agent.ResolveProvider, got %q", pcfg.Provider)
 	}
-	resolved, err := provider.Resolve(&pcfg)
+	resolved, err := agent.ResolveProvider(&pcfg)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -456,7 +455,7 @@ func TestAgentConsolePromptCommandRunsAgent(t *testing.T) {
 		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
 	llm := &fakeConsoleProvider{}
-	session := (agent.Config{Provider: llm, Tools: command.NewRegistry()}).NewAgent()
+	session := agent.NewAgent(agent.Config{Provider: llm, Tools: command.NewRegistry()})
 	repl := runner.NewAgentConsole(context.Background(), &cfg.Option{}, &app.App{Skills: store}, session)
 	_ = repl // console created successfully — full REPL test requires readline
 }

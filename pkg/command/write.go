@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	"github.com/chainreactors/ioa"
 )
 
 type WriteTool struct {
@@ -42,7 +42,7 @@ type WriteArgs struct {
 	Edits   []EditPatch `json:"edits,omitempty"   jsonschema:"description=One or more targeted replacements. Each edit is matched against the original file. Do not include overlapping edits."`
 }
 
-func (t *WriteTool) Definition() provider.ToolDefinition {
+func (t *WriteTool) Definition() ioa.ToolDefinition {
 	return ToolDef("write", t.Description(), WriteArgs{})
 }
 

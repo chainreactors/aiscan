@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	"github.com/chainreactors/aiscan/pkg/agent"
 )
 
 type envLookup func(string) (string, bool)
@@ -123,18 +123,18 @@ func selectedEnvProvider(option *Option, lookup envLookup) string {
 	if v := strings.ToLower(strings.TrimSpace(option.Provider)); v != "" {
 		return v
 	}
-	if v := provider.InferFromBaseURL(option.BaseURL); v != "" {
+	if v := agent.InferProviderFromBaseURL(option.BaseURL); v != "" {
 		return v
 	}
 	return providerHintFromEnv(lookup)
 }
 
 func providerHintFromEnv(lookup envLookup) string {
-	for _, name := range provider.KnownProviders() {
+	for _, name := range agent.KnownProviders() {
 		if firstEnv(lookup, providerEnvName(name, "BASE_URL"), providerEnvName(name, "BASEURL"), providerEnvName(name, "MODEL")) != "" {
 			return name
 		}
-		if envName := provider.APIKeyEnvName(name); envName != "" && firstEnv(lookup, envName) != "" {
+		if envName := agent.APIKeyEnvName(name); envName != "" && firstEnv(lookup, envName) != "" {
 			return name
 		}
 	}
@@ -163,7 +163,7 @@ func providerModelEnv(providerName string, lookup envLookup) string {
 }
 
 func providerAPIKeyEnv(providerName string, lookup envLookup) string {
-	envName := provider.APIKeyEnvName(providerName)
+	envName := agent.APIKeyEnvName(providerName)
 	if envName == "" {
 		return ""
 	}

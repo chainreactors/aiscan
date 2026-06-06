@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/ioa"
 	ioaclient "github.com/chainreactors/ioa/client"
 	ioaserver "github.com/chainreactors/ioa/server"
@@ -41,7 +41,7 @@ func TestRealLLMSwarmNodeRepliesThroughIOA(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	llmProvider, err := provider.NewProvider(&provider.ProviderConfig{
+	llmProvider, err := agent.NewProvider(&agent.ProviderConfig{
 		Provider: "openai",
 		BaseURL:  baseURL,
 		APIKey:   apiKey,
@@ -69,9 +69,9 @@ func TestRealLLMSwarmNodeRepliesThroughIOA(t *testing.T) {
 		Prompt:           "reply loop to hello",
 		Network:          map[string]any{"test": "real-llm"},
 		OnTask: func(ctx context.Context, task Task) (string, error) {
-			resp, err := llmProvider.ChatCompletion(ctx, &provider.ChatCompletionRequest{
+			resp, err := llmProvider.ChatCompletion(ctx, &agent.ChatCompletionRequest{
 				Model: model,
-				Messages: []provider.ChatMessage{
+				Messages: []agent.ChatMessage{
 					{Role: "system", Content: strPtr(systemPrompt)},
 					{Role: "user", Content: strPtr(task.Content)},
 				},

@@ -13,7 +13,6 @@ import (
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	inboxpkg "github.com/chainreactors/aiscan/pkg/agent/inbox"
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/app"
 	cmdpkg "github.com/chainreactors/aiscan/pkg/command"
@@ -140,7 +139,7 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		Logger:         logger,
 		Inbox:          ib,
 		LoopScheduler:  scheduler,
-		CacheRetention: provider.CacheShort,
+		CacheRetention: agent.CacheShort,
 		Bus:            agentBus,
 	}
 

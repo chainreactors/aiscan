@@ -11,7 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	"github.com/chainreactors/ioa"
 )
 
 const (
@@ -45,7 +45,7 @@ type ReadArgs struct {
 	Limit  int    `json:"limit,omitempty"  jsonschema:"description=Maximum number of lines to read (default: 2000)"`
 }
 
-func (t *ReadTool) Definition() provider.ToolDefinition {
+func (t *ReadTool) Definition() ioa.ToolDefinition {
 	return ToolDef("read", t.Description(), ReadArgs{})
 }
 

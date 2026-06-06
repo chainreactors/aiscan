@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	"github.com/chainreactors/ioa"
 	"github.com/chainreactors/aiscan/pkg/agent/tmux"
 )
 
@@ -61,7 +61,7 @@ type BashArgs struct {
 	Command string `json:"command" jsonschema:"description=The command to execute. For shell commands: any valid sh command. For pseudo-commands (scan, gogo, tmux, etc.): pass them directly here."`
 }
 
-func (t *BashTool) Definition() provider.ToolDefinition {
+func (t *BashTool) Definition() ioa.ToolDefinition {
 	return ToolDef("bash", t.Description(), BashArgs{})
 }
 

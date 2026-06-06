@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
+	"github.com/chainreactors/ioa"
 )
 
 type CheckpointArgs struct {
-	Kind    string   `json:"kind"              jsonschema:"description=Checkpoint kind: verify, sniper, or deep,enum=verify,enum=sniper,enum=deep"`
+	Kind    string   `json:"kind"              jsonschema:"description=Checkpoint kind (e.g. verify, sniper, deep),enum=verify,enum=sniper,enum=deep"`
 	Title   string   `json:"title"             jsonschema:"description=Short title summarizing the finding"`
 	Content string   `json:"content"           jsonschema:"description=Markdown body with evidence and analysis details"`
 	Target  string   `json:"target,omitempty"  jsonschema:"description=Target host:port or URL being analyzed"`
@@ -28,52 +28,12 @@ type CheckpointResult struct {
 	Labels  []string
 }
 
-// IOAContent returns the checkpoint as IOA message content.
-func (r *CheckpointResult) IOAContent() map[string]interface{} {
-	m := map[string]interface{}{
-		"type":    "checkpoint",
-		"kind":    r.Kind,
-		"title":   r.Title,
-		"content": r.Content,
-	}
-	if r.Target != "" {
-		m["target"] = r.Target
-	}
-	if r.Status != "" {
-		m["status"] = r.Status
-	}
-	if len(r.Options) > 0 {
-		m["options"] = r.Options
-	}
-	return m
-}
-
-// IOAMeta returns labels as IOA message metadata.
-func (r *CheckpointResult) IOAMeta() map[string]interface{} {
-	if len(r.Labels) == 0 {
-		return nil
-	}
-	return map[string]interface{}{
-		"labels": r.Labels,
-	}
-}
-
-// CheckpointSink is called when a checkpoint is submitted. Used to sync
-// results to external systems (e.g. IOA space) without the checkpoint
-// needing to know about them.
-type CheckpointSink func(ctx context.Context, result *CheckpointResult)
-
 type CheckpointTool struct {
 	result *CheckpointResult
-	sinks  []CheckpointSink
 }
 
 func NewCheckpointTool() *CheckpointTool {
 	return &CheckpointTool{}
-}
-
-func (t *CheckpointTool) OnCheckpoint(fn CheckpointSink) {
-	t.sinks = append(t.sinks, fn)
 }
 
 func (t *CheckpointTool) Result() *CheckpointResult {
@@ -86,11 +46,11 @@ func (t *CheckpointTool) Description() string {
 	return "Submit the final finding after completing verification or analysis. This terminates the current session. Call exactly once with your conclusion."
 }
 
-func (t *CheckpointTool) Definition() provider.ToolDefinition {
+func (t *CheckpointTool) Definition() ioa.ToolDefinition {
 	return ToolDef("checkpoint", t.Description(), CheckpointArgs{})
 }
 
-func (t *CheckpointTool) Execute(ctx context.Context, arguments string) (ToolResult, error) {
+func (t *CheckpointTool) Execute(_ context.Context, arguments string) (ToolResult, error) {
 	args, err := ParseArgs[CheckpointArgs](arguments)
 	if err != nil {
 		return ToolResult{}, err
@@ -107,9 +67,6 @@ func (t *CheckpointTool) Execute(ctx context.Context, arguments string) (ToolRes
 		Status:  status,
 		Options: args.Options,
 		Labels:  args.Labels,
-	}
-	for _, sink := range t.sinks {
-		sink(ctx, t.result)
 	}
 	return TerminateResult(fmt.Sprintf("checkpoint submitted: kind=%s title=%s", t.result.Kind, t.result.Title)), nil
 }

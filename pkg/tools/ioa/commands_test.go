@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/command"
 	ioamodel "github.com/chainreactors/ioa"
@@ -392,7 +391,7 @@ func TestLLMIOAToolUsage(t *testing.T) {
 	baseURL := envOr("LIVE_TEST_BASE_URL", "https://api.deepseek.com")
 	model := envOr("LIVE_TEST_MODEL", "deepseek-v4-pro")
 
-	llm, err := provider.NewProvider(&provider.ProviderConfig{
+	llm, err := agent.NewProvider(&agent.ProviderConfig{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
 		Model:   model,

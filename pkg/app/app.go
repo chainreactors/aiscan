@@ -8,11 +8,9 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/resources"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
-	"github.com/chainreactors/aiscan/pkg/tools/ioa"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	"github.com/chainreactors/aiscan/skills"
@@ -32,7 +30,7 @@ type Config struct {
 
 type ProviderConfig struct {
 	Enabled  bool
-	Config   provider.ProviderConfig
+	Config   agent.ProviderConfig
 	Optional bool
 }
 
@@ -70,15 +68,14 @@ type IOAConfig struct {
 }
 
 type App struct {
-	Provider         provider.Provider
-	ProviderConfig   provider.ProviderConfig
+	Provider         agent.Provider
+	ProviderConfig   agent.ProviderConfig
 	Commands         *command.CommandRegistry
 	Engines          *engine.Set
 	Skills           *skills.Store
 	SkillDiagnostics []skills.Diagnostic
 	IOAClient          ioaclient.API
 	IOAStreamClient    ioaclient.StreamAPI
-	CheckpointSink     command.CheckpointSink
 }
 
 func New(ctx context.Context, cfg Config) (*App, error) {
@@ -140,13 +137,13 @@ func (a *App) Close() {
 	}
 }
 
-func initProvider(cfg provider.ProviderConfig, logger telemetry.Logger) (provider.Provider, *provider.ProviderConfig, error) {
-	resolved, err := provider.Resolve(&cfg)
+func initProvider(cfg agent.ProviderConfig, logger telemetry.Logger) (agent.Provider, *agent.ProviderConfig, error) {
+	resolved, err := agent.ResolveProvider(&cfg)
 	if err != nil {
 		return nil, nil, err
 	}
 	logger.Infof("provider init provider=%s model=%s", resolved.Provider, resolved.Model)
-	llmProvider, err := provider.NewProviderFromResolved(resolved)
+	llmProvider, err := agent.NewProviderFromResolved(resolved)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -176,7 +173,7 @@ func initEngines(ctx context.Context, cfg ScannerConfig, logger telemetry.Logger
 	return engineSet
 }
 
-func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg ToolConfig, llmProvider provider.Provider, model string, skillStore *skills.Store, logger telemetry.Logger) *command.CommandRegistry {
+func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg ToolConfig, llmProvider agent.Provider, model string, skillStore *skills.Store, logger telemetry.Logger) *command.CommandRegistry {
 	cmdReg := command.NewRegistry()
 
 	workDir, _ := os.Getwd()
@@ -189,13 +186,6 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 			Model:    model,
 			Logger:   logger,
 		})))
-		scanOpts = append(scanOpts, scan.WithAISkillConfig(scan.AISkillConfig{
-			Model:      model,
-			Timeout:    scanCfg.AITimeout,
-			Workers:    3,
-			Enable:     scanCfg.EnableAllAISkills,
-			VerifyMode: scanCfg.VerifyMode,
-		}))
 		scanOpts = append(scanOpts, scan.WithDeepBrowserFunc(func(ctx context.Context, targetURL string) (string, error) {
 			return collectDeepBrowserArtifacts(ctx, cmdReg, targetURL, logger)
 		}))
@@ -383,17 +373,6 @@ func (a *App) InitIOA(ctx context.Context, cfg IOAConfig) error {
 		info, err := client.Space(ctx, cfg.Space, "aiscan agent")
 		if err == nil {
 			a.setIOASpace(info.ID)
-		}
-	}
-	if a.Commands != nil {
-		a.CheckpointSink = ioa.CheckpointSink(client, a.Commands)
-		for _, cmd := range a.Commands.All() {
-			type configurable interface {
-				Configure(...scan.Option)
-			}
-			if sc, ok := cmd.(configurable); ok {
-				sc.Configure(scan.WithCheckpointSink(a.CheckpointSink))
-			}
 		}
 	}
 	return nil

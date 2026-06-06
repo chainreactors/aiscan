@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 )
 
 func TestEventsFileSubscriberAppendsJSONL(t *testing.T) {
@@ -39,12 +38,12 @@ func TestEventsFileSubscriberAppendsJSONL(t *testing.T) {
 		{
 			Type: agent.EventMessageEnd,
 			Turn: 1,
-			Message: provider.ChatMessage{
+			Message: agent.ChatMessage{
 				Role:    "assistant",
 				Content: &content,
 			},
 		},
-		{Type: agent.EventAgentEnd, Turn: 1, NewMessages: make([]provider.ChatMessage, 3)},
+		{Type: agent.EventAgentEnd, Turn: 1, NewMessages: make([]agent.ChatMessage, 3)},
 	}
 	for _, e := range events {
 		w.HandleEvent(e)
