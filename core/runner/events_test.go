@@ -18,6 +18,7 @@ func TestEventsFileSubscriberAppendsJSONL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newEventsFileSubscriber() error = %v", err)
 	}
+	defer w.Close()
 
 	content := "spray returned no results"
 	events := []agent.Event{
@@ -91,6 +92,7 @@ func TestEventsFileSubscriberTruncatesLargeFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newEventsFileSubscriber() error = %v", err)
 	}
+	defer w.Close()
 
 	huge := strings.Repeat("a", agent.EventResultLimit+1024)
 	w.HandleEvent(agent.Event{

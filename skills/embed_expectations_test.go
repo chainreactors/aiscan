@@ -6,6 +6,7 @@ var baseInternalSkills = []string{"playwright", "scan", "gogo", "spray", "zombie
 var extraExpected []string
 var extraInternal []string
 
+//nolint:unused // called from build-tagged test files
 func addExpectedSkill(name string, internal bool) {
 	extraExpected = append(extraExpected, name)
 	if internal {

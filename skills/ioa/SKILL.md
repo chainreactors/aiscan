@@ -31,7 +31,7 @@ Send a message to the current space. Subcommands:
 ```
 ioa_send --content '{"kind": "asset", "ips": ["10.0.0.1"]}'                  Broadcast to all
 ioa_send to --node <node_id> --content '{"content": "scan this"}'             Send to a specific node
-ioa_send reply --to <message_id> --content '{"content": "findings attached"}' Reply to a message
+ioa_send reply --to <message_id> --content '{"content": "loots attached"}' Reply to a message
 ```
 
 The `--content` value must be a JSON object. Use `--refs` for raw reference control.
@@ -57,10 +57,10 @@ Messages use structured JSON content with a `kind` field for routing:
 |------|---------|------------|
 | `claim` | announce work you're about to start | `scope`, `eta_min` |
 | `asset` | share discovered targets | `ips`, `domains`, `source` |
-| `finding` | share vulnerabilities or dead ends | `severity`, `target`, `vuln`, `evidence` |
+| `loot` | share vulnerabilities or dead ends | `severity`, `target`, `vuln`, `evidence` |
 | `handoff` | signal phase transition | `from_phase`, `next`, `context` |
 | `blocker` | request help | `reason`, `need` |
-| `result` | report completed work | `scope`, `summary`, `findings_count` |
+| `result` | report completed work | `scope`, `summary`, `loots_count` |
 
 ### Refs
 
@@ -81,7 +81,7 @@ These apply in any multi-agent scenario:
 
 1. **Read before write** — always `ioa_read all` before starting work. A peer may have already claimed your target.
 2. **Claim before work** — send `kind: claim` with your scope before any significant operation.
-3. **Share as you go** — emit findings immediately, not in a final batch. Peers need your data to make decisions now.
+3. **Share as you go** - emit loots immediately, not in a final batch. Peers need your data to make decisions now.
 4. **No noise** — the space is shared memory, not chat. No "ok", "thanks", or thinking-out-loud.
 5. **Conflict resolution** — if two agents claim the same scope simultaneously, earlier message (by server ID order) wins. The later agent adapts.
 

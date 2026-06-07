@@ -39,11 +39,11 @@ playwright text-content deep
 - Authentication surface: identify login/admin areas and weak signals; do not brute force.
 - Client-side security: inspect cookies, local/session storage, CORS-like API calls, mixed content, and sensitive tokens in rendered content.
 
-5. Save reproducible evidence when a browser interaction confirms a finding:
+5. Save reproducible evidence when a browser interaction confirms a loot:
 
 ```bash
 playwright screenshot deep --output evidence.png --full-page
-playwright record deep --save deep-poc.yaml --id <finding-id>
+playwright record deep --save deep-poc.yaml --id <loot-id>
 ```
 
 6. Always close the session:

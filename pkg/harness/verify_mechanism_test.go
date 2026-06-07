@@ -28,7 +28,7 @@ func TestVerifyOffProducesNoAIOutput(t *testing.T) {
 
 // TestVerifyHighTriggersAIVerification runs scan with --ai (which sets
 // verify=high) and confirms that the scan pipeline completes with AI skills
-// enabled. When targets have high-priority findings, AI verify and sniper
+// enabled. When targets have high-priority loots, AI verify and sniper
 // skills produce output.
 func TestVerifyHighTriggersAIVerification(t *testing.T) {
 	h := New(t)
@@ -139,13 +139,13 @@ func TestScanAIWithReportIncludesVerification(t *testing.T) {
 	t.Logf("report output (%d bytes):\n%s", len(r.Stdout), clip(r.Stdout, 3000))
 }
 
-// TestFindingsFileOutputFormats runs scan with -f and -F and verifies both
-// output formats include structured checkpoint findings.
-func TestFindingsFileOutputFormats(t *testing.T) {
+// TestAssetReportFileOutputFormats runs scan with -f and -F and verifies both
+// output formats include structured checkpoint loots.
+func TestAssetReportFileOutputFormats(t *testing.T) {
 	h := New(t)
 	r := h.RunWithTimeout(600*time.Second,
 		"scan", "-i", verifyTarget, "--mode", "quick", "--ai", "--timeout", "5",
-		"-f", "output.txt", "-F", "findings.txt",
+		"-f", "output.txt", "-F", "asset_report.txt",
 	)
 	Verify(t, r).OK().Done()
 
@@ -156,24 +156,20 @@ func TestFindingsFileOutputFormats(t *testing.T) {
 	plain := string(plainBytes)
 	t.Logf("-f output (%d bytes):\n%s", len(plain), clip(plain, 3000))
 
-	findingsBytes, err := os.ReadFile(h.WorkFile("findings.txt"))
+	assetReportBytes, err := os.ReadFile(h.WorkFile("asset_report.txt"))
 	if err != nil {
 		if !hasAISkillOutput(r.Stdout) {
-			t.Skip("no AI findings produced, skipping -F check")
+			t.Skip("no AI output produced, skipping -F check")
 		}
 		t.Fatalf("read -F output: %v", err)
 	}
-	findings := string(findingsBytes)
-	t.Logf("-F output (%d bytes):\n%s", len(findings), clip(findings, 3000))
+	assetReport := string(assetReportBytes)
+	t.Logf("-F output (%d bytes):\n%s", len(assetReport), clip(assetReport, 3000))
 
-	if len(findings) > 0 {
-		if !strings.Contains(findings, "Assets:") {
+	if len(assetReport) > 0 {
+		if !strings.Contains(assetReport, "Assets:") {
 			t.Fatal("-F output should contain 'Assets:' header")
 		}
-	}
-
-	if hasAISkillOutput(r.Stdout) && !strings.Contains(plain, "--- Findings ---") {
-		t.Fatal("-f output should contain Findings section when AI findings exist")
 	}
 }
 

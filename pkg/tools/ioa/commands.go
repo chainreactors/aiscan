@@ -74,7 +74,7 @@ type spaceCommand struct {
 }
 
 func (c *spaceCommand) SetDefaultSpace(id string) { c.binding.set(id) }
-func (c *spaceCommand) Name() string                { return "ioa_space" }
+func (c *spaceCommand) Name() string              { return "ioa_space" }
 
 func (c *spaceCommand) Usage() string {
 	return `ioa_space - Manage IOA spaces
@@ -235,7 +235,7 @@ Options:
   --to              Message ID to reply to (for "reply" subcommand)
   --refs            Raw references JSON: '{"messages": ["id"], "nodes": ["id"]}'
   --kind            Checkpoint kind: verify, sniper, deep
-  --title           Short finding title (checkpoint)
+  --title           Short checkpoint title
   --target          Target host:port or URL (checkpoint)
   --status          Verification status: confirmed, not_confirmed, info, inconclusive (checkpoint)`
 }

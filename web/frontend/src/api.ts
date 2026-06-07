@@ -6,7 +6,7 @@ export interface ScanJob {
   sniper?: boolean;
   ai?: boolean;
   deep?: boolean;
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'canceled';
   progress?: string;
   report?: string;
   result?: ScanResult;
@@ -20,9 +20,7 @@ export interface ScanResult {
   assets?: Asset[];
   services?: unknown[];
   web_probes?: unknown[];
-  risks?: unknown[];
-  vulns?: unknown[];
-  ai?: AIFinding[];
+  loots?: Loot[];
   errors?: ResultError[];
 }
 
@@ -31,9 +29,7 @@ export interface ScanResultSummary {
   services: number;
   webs: number;
   probes: number;
-  risks: number;
-  vulns: number;
-  verified: number;
+  loots: number;
   errors: number;
   tasks: number;
   requests: number;
@@ -51,7 +47,7 @@ export interface Asset {
   items?: AssetItem[];
 }
 
-export type AssetItemKind = 'service' | 'path' | 'fingerprint' | 'finding' | 'note' | 'response' | 'error';
+export type AssetItemKind = 'service' | 'path' | 'fingerprint' | 'loot' | 'note' | 'response' | 'error';
 
 export interface AssetItem {
   kind: AssetItemKind;
@@ -66,19 +62,13 @@ export interface AssetItem {
   raw?: string;
 }
 
-export interface AIFinding {
+export interface Loot {
   kind: string;
-  target?: string;
+  target: string;
   priority?: string;
-  status?: string;
-  summary?: string;
-  detail?: string;
-  evidence?: string;
-  skill?: string;
-  source?: string;
-  original_kind?: string;
-  original_key?: string;
-  raw?: string;
+  description?: string;
+  tags?: string[];
+  data?: Record<string, unknown>;
 }
 
 export interface ResultError {
@@ -157,10 +147,6 @@ export async function cancelScan(id: string): Promise<void> {
   await apiJSON(`/api/scans/${encodeURIComponent(id)}`, 'Failed to cancel scan', { method: 'DELETE' });
 }
 
-export async function getReport(id: string): Promise<string> {
-  return apiText(`/api/scans/${encodeURIComponent(id)}/report`, 'Report not ready');
-}
-
 export function subscribeScanEvents(
   id: string,
   onEvent: (event: ScanEvent) => void,
@@ -175,7 +161,7 @@ export function subscribeScanEvents(
             if (job.status === 'completed') {
               onEvent({ type: 'complete', scan_id: id, status: job.status });
               es.close();
-            } else if (job.status === 'failed' || job.status === 'cancelled') {
+            } else if (job.status === 'failed' || job.status === 'canceled') {
               onEvent({
                 type: 'error',
                 scan_id: id,
@@ -215,14 +201,6 @@ async function apiJSON<T>(path: string, fallbackMessage: string, init?: RequestI
     throw new Error(await errorMessage(res, fallbackMessage));
   }
   return res.json();
-}
-
-async function apiText(path: string, fallbackMessage: string): Promise<string> {
-  const res = await fetch(path);
-  if (!res.ok) {
-    throw new Error(await errorMessage(res, fallbackMessage));
-  }
-  return res.text();
 }
 
 async function errorMessage(res: Response, fallback: string) {

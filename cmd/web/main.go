@@ -95,7 +95,7 @@ func main() {
 		cancel()
 		shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutCancel()
-		srv.Shutdown(shutCtx)
+		_ = srv.Shutdown(shutCtx)
 	}()
 
 	logger.Infof("aiscan web server listening on http://%s", *addr)
@@ -443,12 +443,13 @@ func trimString(s string) string {
 func countLeadingSpaces(s string) int {
 	n := 0
 	for _, c := range s {
-		if c == ' ' {
+		switch c {
+		case ' ':
 			n++
-		} else if c == '\t' {
+		case '\t':
 			n += 2
-		} else {
-			break
+		default:
+			return n
 		}
 	}
 	return n

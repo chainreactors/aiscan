@@ -16,7 +16,7 @@ func FormatAssetReport(result *Result, color bool) string {
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Assets: %d total\n", len(result.Assets))
-	fmt.Fprintf(&sb, "Summary: %d target(s), %d service(s), %d web endpoint(s), %d probe(s), %d finding(s), %d error(s), %s\n\n",
+	fmt.Fprintf(&sb, "Summary: %d target(s), %d service(s), %d web endpoint(s), %d probe(s), %d loot(s), %d error(s), %s\n\n",
 		result.Summary.Targets,
 		result.Summary.Services,
 		result.Summary.Webs,
@@ -65,7 +65,7 @@ func writeAssetTopItems(sb *strings.Builder, items []AssetItem, c Color) {
 		case AssetItemFingerprint:
 			name := FirstNonEmpty(item.Title, item.Summary, item.Target)
 			fmt.Fprintf(sb, "   %s %s\n", c.Cyan("fingerprint:"), name)
-		case AssetItemFinding, AssetItemNote, AssetItemResponse:
+		case AssetItemLoot, AssetItemNote, AssetItemResponse:
 			detail := AssetItemDetail(item)
 			line := FirstNonEmpty(item.Summary, item.Title, firstContentLine(detail), item.Raw)
 			if item.Status != "" {
@@ -183,7 +183,7 @@ func collectAnnotations(asset Asset) map[string][]string {
 			if p != "" {
 				out[p] = appendUniq(out[p], item.Title)
 			}
-		case AssetItemFinding, AssetItemNote, AssetItemResponse:
+		case AssetItemLoot, AssetItemNote, AssetItemResponse:
 			p := pathFromTarget(item.Target, asset.Target)
 			if p == "" {
 				p = "/"

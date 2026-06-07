@@ -32,7 +32,7 @@ Notes:
 
 - `quick` uses gogo `-p all -v`; `full` uses gogo `-p -` and adds spray default-dictionary probing.
 - Spray web capabilities run with recon enabled in both profiles.
-- `--verify=<level>` enables active validation for findings at or above the selected priority.
+- `--verify=<level>` enables active validation for loots at or above the selected priority.
 - `--sniper` enables fingerprint vulnerability intelligence.
 - `--deep` enables browser-backed testing for discovered websites and fingerprint-based deep assessment for fingerprinted assets.
 - `--ai` is a compatibility alias for `--verify=high --sniper`. It does not enable `--deep`.
@@ -42,7 +42,7 @@ Notes:
 
 The scan AI sub-skills are independent options:
 
-- `aiscan://skills/scan/verify.md` — Active finding validation: probes targets to confirm or reject scanner findings
+- `aiscan://skills/scan/verify.md` - Active loot validation: probes targets to confirm or reject scanner leads
 - `aiscan://skills/scan/sniper.md` — Vulnerability intelligence: searches for known CVEs based on discovered fingerprints
 - `aiscan://skills/scan/deep.md` — Deep testing for discovered web endpoints and fingerprinted assets
 - `aiscan://skills/scan/fuzz.md` — Post-scan parameter fuzzing for injection vulnerabilities

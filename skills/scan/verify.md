@@ -1,6 +1,6 @@
 # Verify
 
-Verify is aiscan's active finding validation skill. Scanner output is a **lead**, not proof. This skill probes the target to determine whether the evidence actually supports a confirmed security issue.
+Verify is aiscan's active loot validation skill. Scanner output is a **lead**, not proof. This skill probes the target to determine whether the evidence actually supports a confirmed security issue.
 
 ## Core Rule
 
@@ -8,7 +8,7 @@ NEVER report a vulnerability as "confirmed" based solely on scanner tool output.
 
 ## Active Verification Protocol
 
-You have access to bash tools. Use them to verify findings against live targets.
+You have access to bash tools. Use them to verify loots against live targets.
 
 ### Step 1: Reachability Check
 
@@ -62,31 +62,31 @@ Is the target a simple HTTP endpoint?
 
 ### Step 4: Baseline Comparison
 
-When verifying web findings:
+When verifying web loots:
 - Compare suspicious endpoint response against a normal endpoint on the same host
 - For injection claims: compare response with payload vs response with benign input
 
 ## Engine-Specific Interpretation
 
-- **neutron** template match = potential lead requiring independent verification. "no templates selected" = nothing matched, not a finding.
+- **neutron** template match = potential lead requiring independent verification. "no templates selected" = nothing matched, not a loot.
 - **zombie** HTTP 200 = check response BODY for authenticated content. A login page returns 200 normally — that is NOT a successful login.
 - **spray** fingerprint = informational asset intelligence, not a vulnerability.
 - **gogo** port open = service exposure, confirm what's actually running.
 - **POC/exploit** output can be confirmed only when the evidence shows successful exploitation, not just that a template matched.
 - **weak credential** output can be confirmed only when evidence shows valid authentication or authenticated content.
 
-## Verifying Injection Findings
+## Verifying Injection Loots
 
 When verifying XSS/SQLi/injection-type scanner output:
 
 - Grep for a unique random canary string (e.g. `aiscan_xss_a7f3b2`), not generic payloads like `alert(1)`.
 - Compare the injected response against a baseline (same endpoint, normal parameter value).
-- A finding requires a measurable difference.
+- A loot requires a measurable difference.
 
 ## Status Determination
 
 - **confirmed**: evidence directly supports the security risk with reproducible proof from your active probing
-- **info**: finding is real but informational (fingerprint, version disclosure, non-exploitable exposure)
+- **info**: lead is real but informational (fingerprint, version disclosure, non-exploitable exposure)
 - **not_confirmed**: probing completed but did not support the claim; use this for target unreachable, service mismatch, auth required, 401/403/WAF denial without protected data, unaffected version, or insufficient evidence
 - **inconclusive**: rare; probing could not be completed or evaluated because of tool failure, unstable connectivity, or contradictory responses
 
@@ -98,7 +98,7 @@ When a browser-based vulnerability is **confirmed** via playwright session, save
 # Always use --record when opening sessions for verification
 playwright open http://target.com/vuln --session s1 --record
 # ... verification steps ...
-# On confirmed finding:
+# On confirmed loot:
 playwright record s1 --save <vuln-type>-poc.yaml --id <vuln-id>
 playwright close s1
 ```
@@ -112,7 +112,7 @@ When you have completed verification, call the `checkpoint` tool:
 - **kind**: "verify"
 - **target**: the host:port or URL you verified
 - **status**: confirmed, not_confirmed, info, or inconclusive
-- **title**: one-sentence finding summary
+- **title**: one-sentence loot summary
 - **content**: markdown body with exact command output as evidence
 - **labels**: severity and classification tags (e.g. "high", "critical")
 

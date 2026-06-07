@@ -23,6 +23,6 @@ For each candidate parameter:
 
 ## Confirmation Standard
 
-A finding is confirmed only when there is a measurable, reproducible difference between baseline and injected responses, proven by: the exact payload (curl-reproducible), the response fragment showing exploitation, and the baseline for comparison. Without all three, classify as "potential/unverified".
+A loot is confirmed only when there is a measurable, reproducible difference between baseline and injected responses, proven by: the exact payload (curl-reproducible), the response fragment showing exploitation, and the baseline for comparison. Without all three, classify as "potential/unverified".
 
-Apply the `verify` skill's validation rules for all findings.
+Apply the `verify` skill's validation rules for all loots.

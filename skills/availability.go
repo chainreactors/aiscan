@@ -5,6 +5,7 @@ var blocked = map[string]bool{
 	"passive": true,
 }
 
+//nolint:unused // called from build-tagged files
 func enableSkill(name string) {
 	delete(blocked, name)
 }

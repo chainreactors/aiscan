@@ -10,7 +10,7 @@ import (
 
 type CheckpointArgs struct {
 	Kind    string   `json:"kind"              jsonschema:"description=Checkpoint kind (e.g. verify, sniper, deep),enum=verify,enum=sniper,enum=deep"`
-	Title   string   `json:"title"             jsonschema:"description=Short title summarizing the finding"`
+	Title   string   `json:"title"             jsonschema:"description=Short checkpoint title summarizing the result"`
 	Content string   `json:"content"           jsonschema:"description=Markdown body with evidence and analysis details"`
 	Target  string   `json:"target,omitempty"  jsonschema:"description=Target host:port or URL being analyzed"`
 	Status  string   `json:"status,omitempty"  jsonschema:"description=Verification status,enum=confirmed,enum=not_confirmed,enum=info,enum=inconclusive"`
@@ -43,7 +43,7 @@ func (t *CheckpointTool) Result() *CheckpointResult {
 func (t *CheckpointTool) Name() string { return "checkpoint" }
 
 func (t *CheckpointTool) Description() string {
-	return "Submit the final finding after completing verification or analysis. This terminates the current session. Call exactly once with your conclusion."
+	return "Submit the final checkpoint after completing verification or analysis. This terminates the current session. Call exactly once with your conclusion."
 }
 
 func (t *CheckpointTool) Definition() ioa.ToolDefinition {

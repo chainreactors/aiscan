@@ -15,27 +15,26 @@ import (
 	"github.com/chainreactors/utils"
 )
 
-
 type sprayObservation struct {
 	Result     *parsers.SprayResult
 	Capability string
 }
 
 type collector struct {
-	mu             sync.Mutex
-	inputs         []string
-	debug          bool
-	stats          *statsCollector
-	gogoResults    []*parsers.GOGOResult
-	sprayResults   []sprayObservation
-	loots          []output.Loot
-	errors         []string
-	trace          []string
-	seenWeb        map[string]struct{}
-	seenFinger     map[string]int
-	stream         io.Writer
-	streamColor    bool
-	fileLines      []string
+	mu           sync.Mutex
+	inputs       []string
+	debug        bool
+	stats        *statsCollector
+	gogoResults  []*parsers.GOGOResult
+	sprayResults []sprayObservation
+	loots        []output.Loot
+	errors       []string
+	trace        []string
+	seenWeb      map[string]struct{}
+	seenFinger   map[string]int
+	stream       io.Writer
+	streamColor  bool
+	fileLines    []string
 }
 
 func newCollector(inputs []string, stream io.Writer, streamColor, debug bool) *collector {
@@ -188,7 +187,7 @@ func (c *collector) AssetReport() string {
 	return output.FormatAssetReport(c.StructuredResult(), false)
 }
 
-func (c *collector) FindingsReport() string {
+func (c *collector) LootReport() string {
 	return c.AssetReport()
 }
 

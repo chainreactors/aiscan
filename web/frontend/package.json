@@ -9,19 +9,20 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^2.6.0",
-    "lucide-react": "^0.468.0"
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.15",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "@tailwindcss/typography": "^0.5.15",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",

@@ -37,7 +37,7 @@ func RenderRecordsMarkdown(w io.Writer, records []Record) error {
 	}
 
 	if len(result.Loots) > 0 {
-		fmt.Fprintf(w, "## Findings\n\n")
+		fmt.Fprintf(w, "## Loots\n\n")
 		for _, d := range result.Loots {
 			fmt.Fprintf(w, "- **[%s]** `%s` %s\n", d.Kind, d.Target, d.Description)
 		}

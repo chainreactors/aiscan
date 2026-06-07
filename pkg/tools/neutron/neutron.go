@@ -52,7 +52,7 @@ type neutronFlags struct {
 	OutputFile        string   `short:"o" long:"output" description:"Write output to file"`
 	JSONL             bool     `long:"jsonl" description:"Output JSON Lines"`
 	JSON              bool     `short:"j" long:"json" description:"Output JSON Lines (alias of --jsonl)"`
-	Silent            bool     `long:"silent" description:"Only output matched findings"`
+	Silent            bool     `long:"silent" description:"Only output matched loots"`
 	Stats             bool     `long:"stats" description:"Include final scan statistics"`
 	NoStats           bool     `long:"no-stats" description:"Disable final scan statistics"`
 	MatchOnly         bool     `long:"match-only" description:"Only print matched templates"`
@@ -62,7 +62,7 @@ type neutronFlags struct {
 	Debug             bool     `long:"debug" description:"Enable debug logging"`
 }
 
-type neutronFinding struct {
+type neutronResult struct {
 	Timestamp string   `json:"timestamp,omitempty"`
 	Target    string   `json:"target"`
 	Matched   bool     `json:"matched"`
@@ -134,7 +134,7 @@ Rate and output:
   -o, --output       Write output to file.
   -j, --json         Output JSON Lines.
       --jsonl        Output JSON Lines.
-      --silent       Only output matched findings.
+      --silent       Only output matched loots.
       --all          Print matched and unmatched templates.
       --template-list  List selected templates and exit.
       --debug        Enable debug logging.
@@ -143,7 +143,7 @@ Examples:
   neutron -u http://target.com -s critical,high
   neutron -l targets.txt -tags cve,rce -c 10 --rate-limit 20
   neutron -u 10.0.0.1:8080 --finger nginx --max-per-finger 20
-  neutron -u http://target.com -t ./pocs --id shiro-detect -j -o findings.jsonl`
+  neutron -u http://target.com -t ./pocs --id shiro-detect -j -o loots.jsonl`
 }
 
 func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error {
@@ -256,12 +256,12 @@ func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error
 			if result.Error() != nil {
 				summary.Errors++
 			}
-			finding := findingFromResult(target, result)
-			if finding.Matched {
+			record := neutronResultFromExecution(target, result)
+			if record.Matched {
 				summary.Matched++
 			}
-			if shouldPrintFinding(finding, flags) {
-				sb.WriteString(formatFinding(finding, jsonOutput))
+			if shouldPrintNeutronResult(record, flags) {
+				sb.WriteString(formatNeutronResult(record, jsonOutput))
 			}
 		}
 		if ctx.Err() != nil {
@@ -433,41 +433,41 @@ func validateNeutronSeverities(groups ...[]string) error {
 	return nil
 }
 
-func shouldPrintFinding(finding neutronFinding, flags neutronFlags) bool {
+func shouldPrintNeutronResult(record neutronResult, flags neutronFlags) bool {
 	if flags.AllResults {
 		return true
 	}
 	if flags.MatchOnly || flags.Silent {
-		return finding.Matched
+		return record.Matched
 	}
-	return finding.Matched
+	return record.Matched
 }
 
-func findingFromResult(target string, result *sdkneutron.ExecuteResult) neutronFinding {
-	finding := neutronFinding{
+func neutronResultFromExecution(target string, result *sdkneutron.ExecuteResult) neutronResult {
+	record := neutronResult{
 		Timestamp: time.Now().Format(time.RFC3339),
 		Target:    target,
 		Matched:   result.Matched(),
 	}
 	if tmpl := result.Template(); tmpl != nil {
-		finding.Template = tmpl.Id
-		finding.Name = tmpl.Info.Name
-		finding.Severity = tmpl.Info.Severity
-		finding.Tags = cleanTemplateTags(tmpl)
-		finding.Fingers = append([]string(nil), tmpl.Fingers...)
+		record.Template = tmpl.Id
+		record.Name = tmpl.Info.Name
+		record.Severity = tmpl.Info.Severity
+		record.Tags = cleanTemplateTags(tmpl)
+		record.Fingers = append([]string(nil), tmpl.Fingers...)
 	}
 	if opResult := result.Result(); opResult != nil && opResult.Result != nil {
-		finding.Extracts = append([]string(nil), opResult.Result.OutputExtracts...)
+		record.Extracts = append([]string(nil), opResult.Result.OutputExtracts...)
 	}
 	if err := result.Error(); err != nil {
-		finding.Error = err.Error()
+		record.Error = err.Error()
 	}
-	return finding
+	return record
 }
 
-func formatFinding(finding neutronFinding, jsonOutput bool) string {
+func formatNeutronResult(record neutronResult, jsonOutput bool) string {
 	if jsonOutput {
-		data, err := json.Marshal(finding)
+		data, err := json.Marshal(record)
 		if err != nil {
 			return ""
 		}
@@ -475,33 +475,33 @@ func formatFinding(finding neutronFinding, jsonOutput bool) string {
 	}
 
 	status := "VULN"
-	if !finding.Matched {
+	if !record.Matched {
 		status = "MISS"
 	}
 	var b strings.Builder
 	b.WriteString("[")
 	b.WriteString(status)
 	b.WriteString("] ")
-	b.WriteString(finding.Target)
-	if finding.Template != "" {
+	b.WriteString(record.Target)
+	if record.Template != "" {
 		b.WriteString(" template=")
-		b.WriteString(finding.Template)
+		b.WriteString(record.Template)
 	}
-	if finding.Severity != "" {
+	if record.Severity != "" {
 		b.WriteString(" severity=")
-		b.WriteString(finding.Severity)
+		b.WriteString(record.Severity)
 	}
-	if finding.Name != "" {
+	if record.Name != "" {
 		b.WriteString(" name=")
-		b.WriteString(strconv.Quote(finding.Name))
+		b.WriteString(strconv.Quote(record.Name))
 	}
-	if len(finding.Extracts) > 0 {
+	if len(record.Extracts) > 0 {
 		b.WriteString(" extracts=")
-		b.WriteString(strconv.Quote(strings.Join(finding.Extracts, ",")))
+		b.WriteString(strconv.Quote(strings.Join(record.Extracts, ",")))
 	}
-	if finding.Error != "" {
+	if record.Error != "" {
 		b.WriteString(" error=")
-		b.WriteString(strconv.Quote(finding.Error))
+		b.WriteString(strconv.Quote(record.Error))
 	}
 	b.WriteByte('\n')
 	return b.String()
@@ -517,7 +517,6 @@ func cleanTemplateTags(tmpl *templates.Template) []string {
 	}
 	return tags
 }
-
 
 // resolveRelativePaths resolves relative file arguments against workDir.
 func (c *Command) resolveRelativePaths(args []string) []string {
@@ -564,7 +563,7 @@ func renderTemplateList(selected []*templates.Template, jsonOutput bool) string 
 		if tmpl == nil {
 			continue
 		}
-		finding := neutronFinding{
+		record := neutronResult{
 			Template: tmpl.Id,
 			Name:     tmpl.Info.Name,
 			Severity: tmpl.Info.Severity,
@@ -572,7 +571,7 @@ func renderTemplateList(selected []*templates.Template, jsonOutput bool) string 
 			Fingers:  append([]string(nil), tmpl.Fingers...),
 		}
 		if jsonOutput {
-			data, err := json.Marshal(finding)
+			data, err := json.Marshal(record)
 			if err == nil {
 				sb.Write(data)
 				sb.WriteByte('\n')

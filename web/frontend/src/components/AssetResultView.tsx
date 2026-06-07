@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
-import { AlertCircle, Brain, ChevronRight, File, Fingerprint, Folder, FolderOpen, Globe, Network, Server } from 'lucide-react'
+import { AlertCircle, Brain, ChevronRight, File, Fingerprint, Folder, FolderOpen, Globe, Link2, Network, Server } from 'lucide-react'
 import type { AssetItem, ScanResult } from '../api'
 import {
   buildResultModel,
@@ -13,6 +13,7 @@ import {
   itemKindTone,
   itemStateTone,
   itemTitle,
+  isAnalysisItem,
   pathIdentity,
   pathSearch,
   sameTarget,
@@ -25,6 +26,7 @@ import {
   type ViewAsset,
 } from '../lib/scan-result'
 import { cn } from '@/lib/utils'
+import MarkdownContent from './MarkdownContent'
 
 interface AssetResultViewProps {
   result: ScanResult
@@ -51,7 +53,7 @@ export default function AssetResultView({ result }: AssetResultViewProps) {
           <Metric label="Web" value={model.metrics.web} />
           <Metric label="Probes" value={model.metrics.probes} />
           <Metric label="Fingers" value={model.metrics.fingers} />
-          <Metric label="Items" value={model.metrics.items} />
+          <Metric label="Loots" value={model.metrics.loots} />
           <Metric label="Errors" value={model.metrics.errors} />
           <Metric label="Duration" value={model.metrics.duration} />
         </div>
@@ -81,10 +83,12 @@ function HostList({ hosts }: { hosts: HostGroup[] }) {
 function HostPanel({ host }: { host: HostGroup }) {
   const [open, setOpen] = useState(true)
   const webCount = host.services.filter((service) => service.web).length
+  const anchor = assetAnchor('host', host.id)
 
   return (
     <details
-      className="group py-3 first:pt-0 last:pb-0"
+      id={anchor}
+      className="group scroll-mt-24 py-3 first:pt-0 last:pb-0"
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
@@ -94,6 +98,7 @@ function HostPanel({ host }: { host: HostGroup }) {
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <span className="break-all font-mono text-sm font-semibold text-foreground">{host.host}</span>
+            <AnchorLink id={anchor} label={`Link to ${host.host}`} />
             <Badge>{formatCount(host.services.length, 'service')}</Badge>
             {webCount > 0 && <Badge tone="cyan">{webCountLabel(webCount)}</Badge>}
           </div>
@@ -122,6 +127,7 @@ function ServiceRow({ service }: { service: ServiceNode }) {
   const [open, setOpen] = useState(false)
   const [activePanelID, setActivePanelID] = useState(() => defaultPanelID(panels))
   const activePanel = panels.find((panel) => panel.id === activePanelID) || panels[0]
+  const anchor = assetAnchor('service', service.id)
 
   useEffect(() => {
     if (!panels.some((panel) => panel.id === activePanelID)) {
@@ -138,7 +144,7 @@ function ServiceRow({ service }: { service: ServiceNode }) {
 
   if (panels.length === 0) {
     return (
-      <div className="py-3 first:pt-0 last:pb-0">
+      <div id={anchor} className="scroll-mt-24 py-3 first:pt-0 last:pb-0">
         <ServiceLine service={service} />
       </div>
     )
@@ -146,13 +152,14 @@ function ServiceRow({ service }: { service: ServiceNode }) {
 
   return (
     <details
-      className="group/service py-3 first:pt-0 last:pb-0"
+      id={anchor}
+      className="group/service scroll-mt-24 py-3 first:pt-0 last:pb-0"
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
         <ServiceLine service={service} expandable />
-        <div className="mt-2 flex flex-wrap gap-1.5 pl-7 sm:pl-[7.25rem]">
+        <div className="mt-2 flex flex-wrap gap-1.5">
           {panels.map((panel) => (
             <TabChip
               key={panel.id}
@@ -166,7 +173,7 @@ function ServiceRow({ service }: { service: ServiceNode }) {
       </summary>
 
       {activePanel && (
-        <div className="mt-3 pl-7 sm:pl-[7.25rem]">
+        <div className="mt-3">
           {activePanel.render()}
         </div>
       )}
@@ -192,6 +199,7 @@ function ServiceLine({ service, expandable = false }: { service: ServiceNode; ex
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <ServiceIcon service={service} />
             <span className="font-medium text-foreground">{service.service || service.protocol || 'service'}</span>
+            <AnchorLink id={assetAnchor('service', service.id)} label={`Link to ${service.target || service.service || service.port}`} />
             {service.protocol && service.protocol !== service.service && <Badge>{service.protocol}</Badge>}
             {service.web && <Badge tone="cyan">{service.pathCount > 0 ? webCountLabel(service.pathCount) : 'web'}</Badge>}
             {service.title && (
@@ -208,7 +216,9 @@ function ServiceLine({ service, expandable = false }: { service: ServiceNode; ex
               <Badge key={`state:${state}`} tone={itemStateTone(state)}>{state}</Badge>
             ))}
             <FingerChips fingers={service.fingers} />
-            {service.aiItems.length > 0 && <span className="text-cyber-700 dark:text-cyber-300">{service.aiItems.length} AI</span>}
+            {service.analysisItems.length > 0 && (
+              <span className="text-cyber-700 dark:text-cyber-300">{service.analysisItems.length} analysis</span>
+            )}
           </div>
         </div>
       </div>
@@ -238,20 +248,12 @@ function servicePanels(service: ServiceNode): AssetPanel[] {
       render: () => <SitemapBlock items={service.paths} />,
     })
   }
-  if (service.aiItems.length > 0) {
+  if (service.analysisItems.length > 0) {
     panels.push({
-      id: 'ai',
-      label: 'AI',
-      count: service.aiItems.length,
-      render: () => <AssetItemsBlock asset={service.asset} items={service.aiItems} />,
-    })
-  }
-  if (service.detailItems.length > 0) {
-    panels.push({
-      id: 'details',
-      label: 'Details',
-      count: service.detailItems.length,
-      render: () => <AssetItemsBlock asset={service.asset} items={service.detailItems} />,
+      id: 'analysis',
+      label: 'Analysis',
+      count: service.analysisItems.length,
+      render: () => <AssetItemsBlock asset={service.asset} items={service.analysisItems} />,
     })
   }
   return panels
@@ -296,8 +298,10 @@ function AssetItemsBlock({ asset, items }: { asset: ViewAsset; items: AssetItem[
 }
 
 function AssetItemRow({ item, asset }: { item: AssetItem; asset: ViewAsset }) {
-  const title = itemTitle(item)
-  const detail = item.detail
+  const markdown = isAnalysisItem(item)
+  const title = markdown ? firstText(item.summary, item.title) : itemTitle(item)
+  const detail = itemContent(item)
+  const anchor = assetAnchor('item', itemAnchorValue(item, asset))
   const showTarget = item.target && !sameTarget(item.target, asset.target)
   const headerBadges = [
     { id: `kind:${item.kind}`, label: item.kind, tone: itemKindTone(item.kind) },
@@ -305,11 +309,11 @@ function AssetItemRow({ item, asset }: { item: AssetItem; asset: ViewAsset }) {
   const tags = tagBadges(item.tags, [...headerBadges.map((badge) => badge.label), ...itemFactValues(item)])
 
   return (
-    <div className={cn(
-      'rounded-md border p-3 text-xs',
+    <div id={anchor} className={cn(
+      'scroll-mt-24 rounded-md border p-3 text-xs',
       item.kind === 'error'
         ? 'border-red-400/20 bg-red-400/10'
-        : item.kind === 'finding'
+        : item.kind === 'loot'
           ? 'border-red-400/20 bg-red-400/5'
           : 'border-border/70 bg-background/30',
     )}>
@@ -318,13 +322,18 @@ function AssetItemRow({ item, asset }: { item: AssetItem; asset: ViewAsset }) {
         {headerBadges.map((badge) => (
           <Badge key={badge.id} tone={badge.tone}>{badge.label}</Badge>
         ))}
+        <AnchorLink id={anchor} label={`Link to ${title || item.kind}`} />
         {showTarget && <span className="break-all font-mono text-muted-foreground">{item.target}</span>}
       </div>
       {title && <div className="mt-1 break-words text-foreground">{title}</div>}
       <ItemFactLine item={item} className="mt-2" />
       {detail && (
-        <div className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-background/50 p-3 text-muted-foreground">
-          {detail}
+        <div className="mt-2 max-h-96 overflow-auto rounded-md border border-border bg-background/50 p-3 text-muted-foreground">
+          {markdown ? (
+            <MarkdownContent content={detail} compact muted />
+          ) : (
+            <div className="whitespace-pre-wrap">{detail}</div>
+          )}
         </div>
       )}
       {tags.length > 0 && (
@@ -338,8 +347,71 @@ function AssetItemRow({ item, asset }: { item: AssetItem; asset: ViewAsset }) {
   )
 }
 
+function AnchorLink({ id, label }: { id: string; label: string }) {
+  return (
+    <a
+      href={`#${id}`}
+      aria-label={label}
+      title={label}
+      onClick={(event) => event.stopPropagation()}
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground opacity-60 hover:bg-accent hover:text-foreground hover:opacity-100"
+    >
+      <Link2 className="h-3 w-3" />
+    </a>
+  )
+}
+
+function assetAnchor(prefix: string, value: string) {
+  return `asset-${prefix}-${anchorSlug(value)}`
+}
+
+function itemAnchorValue(item: AssetItem, asset: ViewAsset) {
+  return [
+    asset.key,
+    item.kind,
+    item.source,
+    item.target,
+    item.status,
+    item.title,
+    item.summary,
+  ].filter(Boolean).join('|')
+}
+
+function anchorSlug(value: string) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/<[^>]*>/g, '')
+    .replace(/&[a-z0-9#]+;/g, '')
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  return (slug || 'section').slice(0, 96)
+}
+
+function itemContent(item: AssetItem) {
+  return firstText(
+    item.detail,
+    dataText(item.data?.content),
+    dataText(item.data?.detail),
+    dataText(item.data?.markdown),
+    dataText(item.data?.narrative),
+    dataText(item.data?.evidence),
+    dataText(item.data?.response),
+    dataText(item.data?.output),
+  )
+}
+
+function dataText(value: unknown) {
+  return typeof value === 'string' ? value : ''
+}
+
+function firstText(...values: Array<string | undefined>) {
+  return values.find((value) => value && value.trim())?.trim() || ''
+}
+
 function ItemIcon({ kind }: { kind: string }) {
-  if (kind === 'finding') {
+  if (kind === 'loot') {
     return <AlertCircle className="h-3.5 w-3.5 text-red-700 dark:text-red-300" />
   }
   if (kind === 'note' || kind === 'response') {

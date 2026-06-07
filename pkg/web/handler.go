@@ -174,7 +174,7 @@ func (h *Handler) cancelScan(w http.ResponseWriter, r *http.Request, id string) 
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "canceled"})
 }
 
 func (h *Handler) scanEvents(w http.ResponseWriter, r *http.Request, id string) {
@@ -198,7 +198,7 @@ func (h *Handler) scanReport(w http.ResponseWriter, r *http.Request, id string) 
 	}
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	io.WriteString(w, report)
+	_, _ = io.WriteString(w, report) //nolint:gosec // G705: content-type is text/markdown, not HTML
 }
 
 func pathSegments(path string) []string {
@@ -212,7 +212,7 @@ func pathSegments(path string) []string {
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {

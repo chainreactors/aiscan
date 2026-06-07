@@ -41,7 +41,7 @@ type flags struct {
 	JSON            bool     `short:"j" long:"json" description:"Output raw gogo and spray results as JSON Lines"`
 	Report          bool     `long:"report" description:"Output a concise final markdown report"`
 	OutputFile      string   `short:"f" long:"file" description:"Write output to file without ANSI colors"`
-	FindingsFile    string   `short:"F" long:"format" description:"Write aggregated asset report to file"`
+	AssetReportFile string   `short:"F" long:"format" description:"Write aggregated asset report to file"`
 	NoColor         bool     `long:"no-color" description:"Disable ANSI colors in terminal output"`
 	Ports           string   `long:"ports" description:"Ports for gogo scanning; defaults to all in quick and - in full"`
 	Port            string   `long:"port" hidden:"true" description:"Alias for --ports"`
@@ -59,7 +59,7 @@ type flags struct {
 	Passwords       []string `long:"pwd" description:"Weakpass passwords. Can specify multiple."`
 	MaxNeutronPerFP int      `long:"max-neutron-per-finger" description:"Maximum neutron templates per fingerprint" default:"20"`
 	BroadPOC        bool     `long:"broad-poc" description:"Run POC templates even without matching fingerprints"`
-	Verify          string   `long:"verify" description:"Use AI to verify findings at priority threshold: auto, off, low, medium, high, or critical"`
+	Verify          string   `long:"verify" description:"Use AI to verify loots at priority threshold: auto, off, low, medium, high, or critical"`
 	VerifyTimeout   int      `long:"verify-timeout" hidden:"true" description:"Deprecated compatibility option; ignored" default:"120"`
 }
 
@@ -87,7 +87,7 @@ Inputs:
   -l, --list        File containing inputs, one per line. CIDR is allowed.
 Options:
       --mode        Scan profile: quick or full (default: quick)
-      --verify      Use AI to verify findings at threshold: auto, off, low, medium, high, critical
+      --verify      Use AI to verify loots at threshold: auto, off, low, medium, high, critical
       --sniper      Use AI to search public vulnerabilities for discovered fingerprints
       --deep        Run deep AI testing for discovered websites and fingerprinted assets
       --ai          Compatibility alias for --verify=high --sniper
@@ -115,7 +115,7 @@ Profiles:
   quick: fast exposure discovery, web probes, HTTP Basic weakpass, and fingerprint-based POC checks
   full: deeper ports, crawl depth=2, common backup/active web checks, and default web dictionary
 AI Skills:
-  --verify=<level>: validate findings with LLM-guided active checks
+  --verify=<level>: validate loots with LLM-guided active checks
   --sniper: search public CVEs/exploits for each fingerprint via AI agent
   --deep: run dynamic testing for discovered websites and fingerprinted assets
   --ai: compatibility alias for --verify=high --sniper
@@ -180,8 +180,8 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		return "", nil, err
 	}
 	if len(rawInputs) == 0 {
-		if flags.FindingsFile != "" {
-			return output.RenderRecordFileAsAsset(flags.FindingsFile, !flags.NoColor, AggregateStructuredResult)
+		if flags.AssetReportFile != "" {
+			return output.RenderRecordFileAsAsset(flags.AssetReportFile, !flags.NoColor, AggregateStructuredResult)
 		}
 		return "", nil, fmt.Errorf("scan: no input targets")
 	}
@@ -264,9 +264,9 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 			c.logger.Errorf("%s", err.Error())
 		}
 	}
-	if flags.FindingsFile != "" {
+	if flags.AssetReportFile != "" {
 		assetOut := coll.AssetReport()
-		if err := writeOutputFile(flags.FindingsFile, assetOut); err != nil {
+		if err := writeOutputFile(flags.AssetReportFile, assetOut); err != nil {
 			c.logger.Errorf("%s", err.Error())
 		}
 	}

@@ -1,7 +1,9 @@
-import { Shield, PanelLeftClose, PanelLeft, History } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Shield, PanelLeftClose, PanelLeft, History, Search, X } from 'lucide-react'
 import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
 import { Badge } from './ui/badge'
+import { Input } from './ui/input'
 import ScanHistory from './ScanHistory'
 import type { ScanJob } from '../api'
 
@@ -14,7 +16,15 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ open, onToggle, scans, activeId, onSelectScan }: SidebarProps) {
+  const [query, setQuery] = useState('')
   const runningCount = scans.filter(s => s.status === 'running').length
+  const normalizedQuery = query.trim().toLowerCase()
+  const filteredScans = useMemo(() => {
+    if (!normalizedQuery) {
+      return scans
+    }
+    return scans.filter((scan) => scan.target.toLowerCase().includes(normalizedQuery))
+  }, [normalizedQuery, scans])
 
   return (
     <>
@@ -79,7 +89,32 @@ export default function Sidebar({ open, onToggle, scans, activeId, onSelectScan 
               </Badge>
             )}
           </div>
-          <ScanHistory scans={scans} activeId={activeId} onSelect={onSelectScan} />
+          <div className="relative mb-3">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search targets"
+              aria-label="Search scan targets"
+              className="h-8 pl-8 pr-8 text-xs"
+            />
+            {query && (
+              <button
+                type="button"
+                aria-label="Clear target search"
+                onClick={() => setQuery('')}
+                className="absolute right-1.5 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          <ScanHistory
+            scans={filteredScans}
+            activeId={activeId}
+            onSelect={onSelectScan}
+            emptyMessage={normalizedQuery ? 'No matching targets.' : 'No scans yet.'}
+          />
         </div>
       ) : (
         <div className="flex flex-col items-center gap-2 pt-3">

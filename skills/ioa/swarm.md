@@ -28,7 +28,7 @@ Before starting any work phase, scan the space for:
 
 - `kind: profile` — who is online and their capabilities
 - `kind: claim` — what's already taken
-- `kind: asset` / `kind: finding` — what's been discovered (build on it, don't re-scan)
+- `kind: asset` / `kind: loot` - what's been discovered (build on it, don't re-scan)
 - `kind: blocker` — maybe you can help
 - `kind: result` / `kind: handoff` — what's complete
 
@@ -58,7 +58,7 @@ If two agents claim the same target simultaneously, the earlier message (by serv
 Your workflow is a **continuous loop**:
 
 ```
-read space → claim → work (share findings as you go) → report → read space → ...
+read space -> claim -> work (share loots as you go) -> report -> read space -> ...
 ```
 
 ### After completing a claim
@@ -78,7 +78,7 @@ read space → claim → work (share findings as you go) → report → read spa
 ### During work
 
 Don't go silent. At every significant phase boundary:
-- **Read** — check if peers sent relevant findings or blockers
+- **Read** - check if peers sent relevant loots or blockers
 - **Write** — share intermediate discoveries as they come in
 
 ## 5. Convergence
@@ -90,7 +90,7 @@ When there's no more work:
 3. Last agent (or broadest-view agent) compiles a final summary:
 
 ```json
-{"kind": "summary", "total_findings": N, "critical": X, "high": Y, "agents": ["scanner-01", "scanner-02"], "note": "all scopes complete"}
+{"kind": "summary", "total_loots": N, "critical": X, "high": Y, "agents": ["scanner-01", "scanner-02"], "note": "all scopes complete"}
 ```
 
 Don't wait indefinitely for slow peers. If a peer hasn't responded in a reasonable time, compile what you have and note the gap.
@@ -106,10 +106,10 @@ One agent takes web surface (spray, katana, neutron), the other takes network se
 Divide IP ranges, subdomains, or subsidiaries. Best when the target set is large and uniform.
 
 ### Pipeline
-Agents specialize by phase: Agent A does recon → hands off assets. Agent B does web analysis. Agent C does exploitation verification. Each starts as soon as upstream findings arrive.
+Agents specialize by phase: Agent A does recon -> hands off assets. Agent B does web analysis. Agent C does exploitation verification. Each starts as soon as upstream loots arrive.
 
 ### Reviewer
-One agent does primary scanning, the other independently verifies high-severity findings using different tools. Higher confidence, lower throughput.
+One agent does primary scanning, the other independently verifies high-severity loots using different tools. Higher confidence, lower throughput.
 
 ### Three or more agents
 The first to propose a plan naturally coordinates. The coordinator suggests splits, others acknowledge and start. The coordinator also does work.
@@ -118,7 +118,7 @@ The first to propose a plan naturally coordinates. The coordinator suggests spli
 
 - **Over-negotiating** — more than 2 messages before anyone starts working
 - **Waiting for permission** — claims are announcements, not requests
-- **Silent work** — scanning for minutes without sending findings or status
-- **Hoarding findings** — waiting until done to share everything at once
+- **Silent work** - scanning for minutes without sending loots or status
+- **Hoarding loots** - waiting until done to share everything at once
 - **Re-scanning claimed targets** — if a peer claimed it and is active, find something else
 - **Endless convergence** — one summary message is enough

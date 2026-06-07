@@ -61,7 +61,7 @@ func TestRealScanGogoAI(t *testing.T) {
 		Timeout: 180 * time.Second,
 		JudgeCriteria: "The scanner must have executed gogo against the target and the AI must have provided " +
 			"a meaningful analysis of discovered services. The analysis should mention specific ports, " +
-			"services, or findings — not just a generic summary.",
+			"services, or results - not just a generic summary.",
 	}.verifyScanner(t, h, "--ai", "--timeout", "120", "gogo", "-i", realTarget, "-p", "top100")
 }
 
@@ -72,7 +72,7 @@ func TestRealScanPipelineAI(t *testing.T) {
 		Prompt:  "",
 		Timeout: 300 * time.Second,
 		JudgeCriteria: "The scan pipeline must have run against the target. The AI analysis should identify " +
-			"specific open ports, running services, and any notable findings from the scan results.",
+			"specific open ports, running services, and any notable results from the scan output.",
 	}.verifyScanner(t, h, "--ai", "--timeout", "240", "scan", "-i", realSingleTarget, "--mode", "quick")
 }
 
@@ -92,7 +92,7 @@ func TestRealAgentGogoScan(t *testing.T) {
 		MaxTurns: 20,
 		JudgeCriteria: "The agent must have executed gogo against 101.132.149.35/28 with appropriate port arguments. " +
 			"The final output must list specific discovered services (port numbers, service names). " +
-			"Generic statements like 'scan completed' without specific findings are a failure.",
+			"Generic statements like 'scan completed' without specific results are a failure.",
 	}.Run(t, h)
 }
 
@@ -118,7 +118,7 @@ func TestRealAgentFullPipeline(t *testing.T) {
 		Prompt: fmt.Sprintf("Perform a comprehensive scan of %s:\n"+
 			"1. Use gogo to discover open ports and services\n"+
 			"2. For any HTTP services found, use spray to fingerprint them\n"+
-			"3. Summarize all findings: IPs, ports, services, web technologies", realSingleTarget),
+			"3. Summarize all results: IPs, ports, services, web technologies", realSingleTarget),
 		Steps: Steps(
 			Tool("bash").ArgContains("gogo").NoError(),
 		),
@@ -126,13 +126,13 @@ func TestRealAgentFullPipeline(t *testing.T) {
 		MaxTurns: 12,
 		JudgeCriteria: "The agent must execute a multi-step scan: (1) port discovery with gogo, " +
 			"(2) web fingerprinting with spray for any HTTP services found. " +
-			"The final summary must list concrete findings (specific IPs, ports, services). " +
+			"The final summary must list concrete results (specific IPs, ports, services). " +
 			"If no HTTP services are found, the agent should report that and skip spray — that's acceptable.",
 	}.Run(t, h)
 }
 
 // =====================================================================
-// Layer 4: Agent + skills — verify and analyze findings
+// Layer 4: Agent + skills - verify and analyze results
 // =====================================================================
 
 func TestRealAgentScanWithVerify(t *testing.T) {
@@ -179,7 +179,7 @@ func TestRealAgentParallelScan(t *testing.T) {
 		Prompt: fmt.Sprintf("I need to scan %s efficiently. Create 2 async subagents:\n"+
 			"1. Named 'port-scan': run gogo against the target with -p top100\n"+
 			"2. Named 'web-probe': run spray against http://%s with --finger\n"+
-			"Wait for both to complete, then produce a consolidated findings report.", realSingleTarget, realSingleTarget),
+			"Wait for both to complete, then produce a consolidated results report.", realSingleTarget, realSingleTarget),
 		Steps: Steps(
 			Tool("subagent").Arg("name", "port-scan"),
 			Tool("subagent").Arg("name", "web-probe"),
@@ -187,7 +187,7 @@ func TestRealAgentParallelScan(t *testing.T) {
 		Timeout:  300 * time.Second,
 		MaxTurns: 12,
 		JudgeCriteria: "The agent must create 2 async subagents for parallel scanning. " +
-			"Both subagents must complete. The final report must consolidate findings from both " +
+			"Both subagents must complete. The final report must consolidate results from both " +
 			"port scanning (gogo) and web probing (spray).",
 	}.Run(t, h)
 }
@@ -201,7 +201,7 @@ func TestRealAgentLoopScan(t *testing.T) {
 	Intent{
 		Name: "real-agent-loop-scan",
 		Prompt: fmt.Sprintf("Set up a recurring scan for %s:\n"+
-			"1. First, run gogo -i %s -p top100 immediately and report findings\n"+
+			"1. First, run gogo -i %s -p top100 immediately and report results\n"+
 			"2. Create a loop named 'monitor' with interval '30s' and prompt 'check if any new ports opened on %s'\n"+
 			"3. List loops to confirm the monitor is active\n"+
 			"4. Delete the loop named 'monitor'\n"+
@@ -216,9 +216,9 @@ func TestRealAgentLoopScan(t *testing.T) {
 		Timeout:  180 * time.Second,
 		MaxTurns: 10,
 		NoErrors: true,
-		JudgeCriteria: "The agent must: (1) run an initial gogo scan and report findings, " +
+		JudgeCriteria: "The agent must: (1) run an initial gogo scan and report results, " +
 			"(2) create a recurring loop for monitoring, (3) list loops to confirm, (4) delete the loop. " +
-			"All four steps must complete in order. The initial scan must produce actual findings (ports/services).",
+			"All four steps must complete in order. The initial scan must produce actual results (ports/services).",
 	}.Run(t, h)
 }
 

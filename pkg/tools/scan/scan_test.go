@@ -754,7 +754,7 @@ func TestScanDerivesTargetsFromResults(t *testing.T) {
 	}
 }
 
-func TestScanPipelineDoesNotDispatchFindingOrError(t *testing.T) {
+func TestScanPipelineDoesNotDispatchLootOrError(t *testing.T) {
 	coll := newCollector([]string{"seed"}, nil, false, false)
 	var runs int
 	capabilities := []pipeline.Capability{
@@ -779,7 +779,7 @@ func TestScanPipelineDoesNotDispatchFindingOrError(t *testing.T) {
 	}
 }
 
-func TestFindingPriorityDefaults(t *testing.T) {
+func TestLootPriorityDefaults(t *testing.T) {
 	fp := fingerprintLoot("http://127.0.0.1", []string{"nginx"}, false)
 	if got := fp.Priority; got != string(priorityLow) {
 		t.Fatalf("fingerprint priority = %s, want %s", got, priorityLow)
@@ -1229,14 +1229,14 @@ func TestScanUnifiesFrameworkOutput(t *testing.T) {
 	}
 }
 
-func TestScanFindingPriorityUsesFocusOutputOnly(t *testing.T) {
+func TestScanLootPriorityUsesFocusOutputOnly(t *testing.T) {
 	plain := formatEventLine(lootEvent(capSprayCheck, fingerprintLoot("http://127.0.0.1", []string{"nginx"}, false)), false)
 	if plain != "" {
 		t.Fatalf("plain non-focus fingerprint output = %q, want empty", plain)
 	}
 	plainFocus := formatEventLine(lootEvent(capSprayCheck, fingerprintLoot("http://127.0.0.1", []string{"struts2"}, true)), false)
 	if strings.Contains(plain, " low ") || strings.Contains(plain, " high ") {
-		t.Fatalf("plain finding output should not print priority text: %q", plain)
+		t.Fatalf("plain loot output should not print priority text: %q", plain)
 	}
 	if !strings.Contains(plainFocus, "[fingerprint]") || !strings.Contains(plainFocus, "struts2") {
 		t.Fatalf("plain focus output shape changed: %q", plainFocus)
@@ -1244,10 +1244,10 @@ func TestScanFindingPriorityUsesFocusOutputOnly(t *testing.T) {
 
 	colored := formatEventLine(lootEvent(capSprayCheck, fingerprintLoot("http://127.0.0.1", []string{"struts2"}, true)), true)
 	if strings.Contains(output.StripANSI(colored), " high ") {
-		t.Fatalf("colored finding output should not print priority text: %q", colored)
+		t.Fatalf("colored loot output should not print priority text: %q", colored)
 	}
 	if !strings.Contains(colored, logs.Red("[fingerprint]")) {
-		t.Fatalf("colored finding output should encode high priority in color: %q", colored)
+		t.Fatalf("colored loot output should encode high priority in color: %q", colored)
 	}
 }
 
@@ -1499,4 +1499,3 @@ func TestScanReportMarkdown(t *testing.T) {
 		}
 	}
 }
-

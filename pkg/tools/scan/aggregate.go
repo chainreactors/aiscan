@@ -184,14 +184,14 @@ func (b *assetBuilder) addLoot(loot *output.Loot) {
 	}
 	target := assetTargetFromValues(loot.Target)
 	keys := targetKeys(target, loot.Target)
-	status := output.FirstNonEmpty(loot.Priority, output.AssetItemFinding)
+	status := output.FirstNonEmpty(loot.Priority, output.AssetItemLoot)
 	data := make(map[string]any)
 	data["kind"] = loot.Kind
 	for k, v := range loot.Data {
 		data[k] = v
 	}
 	item := output.AssetItem{
-		Kind:    output.AssetItemFinding,
+		Kind:    output.AssetItemLoot,
 		Source:  loot.Kind,
 		Target:  loot.Target,
 		Status:  status,
@@ -201,7 +201,7 @@ func (b *assetBuilder) addLoot(loot *output.Loot) {
 		Data:    data,
 	}
 	identity := strings.Join(output.CompactStrings(
-		output.AssetItemFinding,
+		output.AssetItemLoot,
 		loot.Kind,
 		loot.Target,
 		loot.Description,
@@ -468,7 +468,7 @@ func preferredAssetKey(keys map[string]struct{}, target string) string {
 
 func deriveAssetTitle(asset output.Asset) string {
 	if title := firstItemText(asset.Items, func(item output.AssetItem) bool {
-		return (item.Kind == output.AssetItemFinding || item.Kind == output.AssetItemNote) && item.Status == "confirmed"
+		return (item.Kind == output.AssetItemLoot || item.Kind == output.AssetItemNote) && item.Status == "confirmed"
 	}); title != "" {
 		return title
 	}
@@ -478,7 +478,7 @@ func deriveAssetTitle(asset output.Asset) string {
 		return title
 	}
 	if title := firstItemText(asset.Items, func(item output.AssetItem) bool {
-		return item.Kind == output.AssetItemFinding || item.Kind == output.AssetItemNote
+		return item.Kind == output.AssetItemLoot || item.Kind == output.AssetItemNote
 	}); title != "" {
 		return title
 	}
@@ -515,8 +515,8 @@ func deriveAssetStatus(items []output.AssetItem) string {
 	bestRank := 0
 	for _, item := range items {
 		status := item.Status
-		if item.Kind == output.AssetItemFinding && status == "" {
-			status = output.AssetItemFinding
+		if item.Kind == output.AssetItemLoot && status == "" {
+			status = output.AssetItemLoot
 		}
 		if item.Kind == output.AssetItemError && status == "" {
 			status = output.AssetItemError
@@ -539,7 +539,7 @@ func assetStatusRank(kind, status string) int {
 		return 95
 	case string(priorityHigh):
 		return 90
-	case output.AssetItemFinding:
+	case output.AssetItemLoot:
 		return 85
 	case string(priorityMedium):
 		return 70
@@ -554,7 +554,7 @@ func assetStatusRank(kind, status string) int {
 	case "failed", output.AssetItemError:
 		return 20
 	}
-	if kind == output.AssetItemFinding {
+	if kind == output.AssetItemLoot {
 		return 85
 	}
 	if kind == output.AssetItemError {
@@ -588,7 +588,7 @@ func assetItemRank(kind string) int {
 		return 10
 	case output.AssetItemFingerprint:
 		return 20
-	case output.AssetItemFinding:
+	case output.AssetItemLoot:
 		return 30
 	case output.AssetItemNote:
 		return 40

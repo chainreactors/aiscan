@@ -18,18 +18,19 @@ interface ScanViewProps {
 export default function ScanView({ scan, lines, report, result, logCollapsed, onToggleLog }: ScanViewProps) {
   const hasReport = !!report
   const hasResult = !!result
+  const hasMarkdown = hasResult || hasReport
   const isRunning = scan.status === 'running'
   const verifyEnabled = !!scan.verify || (!!scan.ai && !scan.sniper)
   const sniperEnabled = !!scan.sniper || (!!scan.ai && !scan.verify)
   const [tab, setTab] = useState<'assets' | 'report'>('assets')
 
   useEffect(() => {
-    if (!hasResult && hasReport) {
+    if (!hasResult && hasMarkdown) {
       setTab('report')
     } else if (hasResult) {
       setTab('assets')
     }
-  }, [hasReport, hasResult, scan.id])
+  }, [hasMarkdown, hasResult, scan.id])
 
   return (
     <div className="space-y-4">
@@ -53,9 +54,9 @@ export default function ScanView({ scan, lines, report, result, logCollapsed, on
         />
       )}
 
-      {(hasResult || hasReport) && (
+      {hasMarkdown && (
         <div className="space-y-3">
-          {hasResult && hasReport && (
+          {hasResult && hasMarkdown && (
             <div className="inline-flex items-center rounded-md border border-input bg-secondary/50 p-0.5">
               <ResultTabButton active={tab === 'assets'} onClick={() => setTab('assets')}>
                 <TableProperties className="h-3.5 w-3.5" />
@@ -63,16 +64,16 @@ export default function ScanView({ scan, lines, report, result, logCollapsed, on
               </ResultTabButton>
               <ResultTabButton active={tab === 'report'} onClick={() => setTab('report')}>
                 <FileText className="h-3.5 w-3.5" />
-                <span>Narrative</span>
+                <span>Markdown</span>
               </ResultTabButton>
             </div>
           )}
 
           {hasResult && tab === 'assets' && <AssetResultView result={result} />}
 
-          {hasReport && tab === 'report' && (
+          {hasMarkdown && tab === 'report' && (
             <div className="animate-fade-in">
-              <ReportView report={report} />
+              <ReportView scan={scan} report={report} result={result} />
             </div>
           )}
         </div>
@@ -110,7 +111,7 @@ function StatusIndicator({ status }: { status: string }) {
     running: { label: 'Running', className: 'text-blue-700 bg-blue-400/10 dark:text-blue-400 animate-pulse' },
     completed: { label: 'Completed', className: 'text-cyber-700 bg-cyber-400/10 dark:text-cyber-400' },
     failed: { label: 'Failed', className: 'text-red-700 bg-red-400/10 dark:text-red-400' },
-    cancelled: { label: 'Cancelled', className: 'text-yellow-700 bg-yellow-400/10 dark:text-yellow-400' },
+    canceled: { label: 'Canceled', className: 'text-yellow-700 bg-yellow-400/10 dark:text-yellow-400' },
   }
   const { label, className } = config[status] || config.queued
   return (

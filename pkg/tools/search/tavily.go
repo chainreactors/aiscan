@@ -30,7 +30,7 @@ const (
 type searchBackend int
 
 const (
-	backendDDG    searchBackend = iota
+	backendDDG searchBackend = iota
 	backendTavily
 )
 
@@ -148,11 +148,11 @@ func parseTavilyArgs(args []string) (query string, num int, err error) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--num":
-			if i+1 >= len(args) {
+			i++
+			if i >= len(args) {
 				return "", 0, fmt.Errorf("search tavily: --num requires a value")
 			}
-			value := args[i+1]
-			i++
+			value := args[i] //nolint:gosec // G602: bounds checked by i >= len(args) above
 			n, parseErr := strconv.Atoi(value)
 			if parseErr != nil {
 				return "", 0, fmt.Errorf("search tavily: invalid --num value: %s", value)

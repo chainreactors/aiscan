@@ -70,12 +70,12 @@ func TestCommandTemplateListSupportsNucleiStyleFlagsAndJSON(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	out := buf.String()
-	var finding neutronFinding
-	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &finding); err != nil {
+	var result neutronResult
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
 		t.Fatalf("json output = %q, error = %v", out, err)
 	}
-	if finding.Template != "critical-cve" || finding.Severity != "critical" {
-		t.Fatalf("finding = %#v", finding)
+	if result.Template != "critical-cve" || result.Severity != "critical" {
+		t.Fatalf("result = %#v", result)
 	}
 }
 

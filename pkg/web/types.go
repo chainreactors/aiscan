@@ -13,24 +13,24 @@ const (
 	StatusRunning   ScanStatus = "running"
 	StatusCompleted ScanStatus = "completed"
 	StatusFailed    ScanStatus = "failed"
-	StatusCancelled ScanStatus = "cancelled"
+	StatusCanceled  ScanStatus = "canceled"
 )
 
 type ScanJob struct {
-	ID        string                    `json:"id"`
-	Target    string                    `json:"target"`
-	Mode      string                    `json:"mode"`
-	Verify    bool                      `json:"verify,omitempty"`
-	Sniper    bool                      `json:"sniper,omitempty"`
-	AI        bool                      `json:"ai,omitempty"`
-	Deep      bool                      `json:"deep,omitempty"`
-	Status    ScanStatus                `json:"status"`
-	Progress  string                    `json:"progress,omitempty"`
-	Report    string                    `json:"report,omitempty"`
+	ID        string         `json:"id"`
+	Target    string         `json:"target"`
+	Mode      string         `json:"mode"`
+	Verify    bool           `json:"verify,omitempty"`
+	Sniper    bool           `json:"sniper,omitempty"`
+	AI        bool           `json:"ai,omitempty"`
+	Deep      bool           `json:"deep,omitempty"`
+	Status    ScanStatus     `json:"status"`
+	Progress  string         `json:"progress,omitempty"`
+	Report    string         `json:"report,omitempty"`
 	Result    *output.Result `json:"result,omitempty"`
-	Error     string                    `json:"error,omitempty"`
-	CreatedAt time.Time                 `json:"created_at"`
-	UpdatedAt time.Time                 `json:"updated_at"`
+	Error     string         `json:"error,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
 }
 
 type ScanRequest struct {
@@ -72,10 +72,10 @@ type LLMConfig struct {
 }
 
 type ScanEvent struct {
-	Type   string                    `json:"type"`
-	ScanID string                    `json:"scan_id"`
-	Data   string                    `json:"data,omitempty"`
-	Status string                    `json:"status,omitempty"`
-	Error  string                    `json:"error,omitempty"`
+	Type   string         `json:"type"`
+	ScanID string         `json:"scan_id"`
+	Data   string         `json:"data,omitempty"`
+	Status string         `json:"status,omitempty"`
+	Error  string         `json:"error,omitempty"`
 	Result *output.Result `json:"result,omitempty"`
 }

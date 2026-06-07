@@ -419,7 +419,7 @@ func buildMarkdownReport(target, mode string, result *output.Result) string {
 	sb.WriteString(fmt.Sprintf("| Web | %d |\n", result.Summary.Webs))
 	sb.WriteString(fmt.Sprintf("| Probes | %d |\n", result.Summary.Probes))
 	sb.WriteString(fmt.Sprintf("| Fingerprints | %d |\n", resultFingerprintCount(result)))
-	sb.WriteString(fmt.Sprintf("| Findings | %d |\n", result.Summary.Loots))
+	sb.WriteString(fmt.Sprintf("| Loots | %d |\n", result.Summary.Loots))
 	sb.WriteString(fmt.Sprintf("| Errors | %d |\n", result.Summary.Errors))
 	if result.Summary.Duration != "" {
 		sb.WriteString(fmt.Sprintf("| Duration | %s |\n", result.Summary.Duration))
@@ -447,7 +447,7 @@ func buildMarkdownReport(target, mode string, result *output.Result) string {
 		if paths := assetPathCount(asset.Items); paths > 0 {
 			sb.WriteString(fmt.Sprintf("- **Paths:** %d\n", paths))
 		}
-		writeAssetFindingsMarkdown(&sb, asset.Items)
+		writeAssetLootMarkdown(&sb, asset.Items)
 		sb.WriteString("\n")
 	}
 
@@ -465,11 +465,11 @@ func writeMarkdownList(sb *strings.Builder, label string, values []string) {
 	sb.WriteString(fmt.Sprintf("- **%s:** %s\n", label, strings.Join(coded, ", ")))
 }
 
-func writeAssetFindingsMarkdown(sb *strings.Builder, items []output.AssetItem) {
+func writeAssetLootMarkdown(sb *strings.Builder, items []output.AssetItem) {
 	wrote := false
 	for _, item := range items {
 		switch item.Kind {
-		case output.AssetItemFinding, output.AssetItemNote, output.AssetItemResponse, output.AssetItemError:
+		case output.AssetItemLoot, output.AssetItemNote, output.AssetItemResponse, output.AssetItemError:
 			summary := output.FirstNonEmpty(item.Summary, item.Title)
 			detail := output.AssetItemDetail(item)
 			if summary == "" && detail == "" {

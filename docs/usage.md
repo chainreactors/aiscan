@@ -590,7 +590,7 @@ aiscan zombie -l services.txt --top 10
 aiscan neutron -u http://target.example -s critical,high
 aiscan neutron -u http://target.example --finger nginx --max-per-finger 20
 aiscan neutron -l targets.txt --tags cve,rce -c 10 --rate-limit 20
-aiscan neutron -u http://target.example -t ./pocs --id shiro-detect -j -o findings.jsonl
+aiscan neutron -u http://target.example -t ./pocs --id shiro-detect -j -o loots.jsonl
 aiscan neutron -u http://target.example --template-list
 ```
 

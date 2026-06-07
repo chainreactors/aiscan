@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getReport, getScan, listScans, submitScan, subscribeScanEvents } from '../api'
+import { getScan, listScans, submitScan, subscribeScanEvents } from '../api'
 import type { ScanEvent, ScanJob, ScanOptions, ScanResult } from '../api'
 import { isRootPath, scanIdFromPath, setScanRoute, type RouteMode } from '../lib/scan-route'
 
@@ -78,17 +78,21 @@ export function useScanSession() {
         setScanning(false)
         setLogCollapsed(true)
         setError('')
-        if (event.result) {
-          setResult(event.result)
-        }
+        if (event.result) setResult(event.result)
         setActiveScan((scan) =>
-          scan?.id === id ? { ...scan, status: 'completed', updated_at: new Date().toISOString() } : scan,
+          scan?.id === id
+            ? {
+                ...scan,
+                status: 'completed',
+                result: event.result || scan.result,
+                updated_at: new Date().toISOString(),
+              }
+            : scan,
         )
         refreshScans()
         if (!event.result) {
           loadResult(id)
         }
-        loadReport(id)
         return
       }
 
@@ -110,25 +114,13 @@ export function useScanSession() {
     })
   }
 
-  async function loadReport(id: string, activation?: number) {
-    try {
-      const nextReport = await getReport(id)
-      if (activation && activation !== activationRef.current) return
-      setReport(nextReport)
-    } catch {
-      try {
-        const job = await getScan(id)
-        if (activation && activation !== activationRef.current) return
-        if (job.report) setReport(job.report)
-      } catch {}
-    }
-  }
-
   async function loadResult(id: string, activation?: number) {
     try {
       const job = await getScan(id)
       if (activation && activation !== activationRef.current) return
       if (job.result) setResult(job.result)
+      if (job.report) setReport(job.report)
+      setActiveScan((scan) => (scan?.id === id ? { ...scan, ...job } : scan))
     } catch {}
   }
 
@@ -148,11 +140,6 @@ export function useScanSession() {
       setLogCollapsed(true)
       if (!scan.result) {
         await loadResult(scan.id, activation)
-      }
-      if (scan.report) {
-        if (activation === activationRef.current) setReport(scan.report)
-      } else {
-        await loadReport(scan.id, activation)
       }
     } else if (scan.status === 'queued' || scan.status === 'running') {
       subscribeToScan(scan.id)

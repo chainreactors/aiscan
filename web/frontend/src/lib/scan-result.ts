@@ -4,7 +4,7 @@ export const assetItemKind = {
   service: 'service',
   path: 'path',
   fingerprint: 'fingerprint',
-  finding: 'finding',
+  loot: 'loot',
   note: 'note',
   response: 'response',
   error: 'error',
@@ -29,7 +29,7 @@ export type ResultMetrics = {
   web: number
   probes: number
   fingers: number
-  items: number
+  loots: number
   errors: number
   duration: string
 }
@@ -60,7 +60,7 @@ export type ServiceNode = {
   statuses: string[]
   fingers: string[]
   paths: AssetItem[]
-  aiItems: AssetItem[]
+  analysisItems: AssetItem[]
   detailItems: AssetItem[]
   pathCount: number
   web: boolean
@@ -94,7 +94,7 @@ export function buildResultModel(result: ScanResult): ResultModel {
       web: result.summary.webs,
       probes: result.summary.probes,
       fingers: countFingerprints(assets),
-      items: countAssetItems(assets),
+      loots: result.summary.loots || result.loots?.length || countLootItems(assets),
       errors: result.summary.errors,
       duration: result.summary.duration,
     },
@@ -138,8 +138,8 @@ export function buildHostGroups(assets: ViewAsset[]): HostGroup[] {
 export function serviceNode(asset: ViewAsset): ServiceNode {
   const serviceItem = asset.items.find((item) => item.kind === assetItemKind.service)
   const paths = asset.items.filter((item) => item.kind === assetItemKind.path)
-  const aiItems = asset.items.filter(isAIItem)
-  const detailItems = asset.items.filter((item) => item.kind !== assetItemKind.path && !isAIItem(item))
+  const analysisItems = asset.items.filter(isAnalysisItem)
+  const detailItems = asset.items.filter((item) => item.kind !== assetItemKind.path && !isAnalysisItem(item))
   const protocol = firstText(dataString(serviceItem, 'protocol'), dataString(serviceItem, 'service'))
   const service = firstText(dataString(serviceItem, 'service'), serviceItem?.title, protocol)
   const host = dataString(serviceItem, 'ip') || 'Scan'
@@ -165,7 +165,7 @@ export function serviceNode(asset: ViewAsset): ServiceNode {
     statuses: statusCodeValues(paths),
     fingers: fingerprintValues(asset.items),
     paths,
-    aiItems,
+    analysisItems,
     detailItems,
     pathCount: paths.length,
     web,
@@ -191,20 +191,23 @@ export function itemFactValues(item: AssetItem) {
   ]
 }
 
-export function isAIItem(item: AssetItem) {
+export function isAnalysisItem(item: AssetItem) {
   if (item.kind === assetItemKind.note || item.kind === assetItemKind.response) {
     return true
   }
-  if (item.kind !== assetItemKind.finding) {
+  if (item.kind === assetItemKind.error) {
+    return true
+  }
+  if (item.kind !== assetItemKind.loot) {
     return false
   }
 
   const backendKind = dataString(item, 'kind').toLowerCase()
-  if (backendKind === 'zombie' || backendKind === 'vuln') {
+  if (backendKind === 'fingerprint') {
     return false
   }
 
-  return !!firstText(dataString(item, 'skill'), dataString(item, 'source'), item.source)
+  return true
 }
 
 export function buildSitemapTree(items: AssetItem[]): SitemapNode[] {
@@ -254,7 +257,7 @@ export function pathIdentity(item: AssetItem) {
 }
 
 export function itemTitle(item: AssetItem) {
-  return firstText(item.summary, item.title, item.raw)
+  return firstText(item.summary, item.title)
 }
 
 export function sameTarget(left?: string, right?: string) {
@@ -301,7 +304,7 @@ export function tagBadges(tags: string[] | undefined, excluded: Array<string | u
 }
 
 export function itemKindTone(kind: string): BadgeTone {
-  if (kind === assetItemKind.finding) return 'red'
+  if (kind === assetItemKind.loot) return 'red'
   if (kind === assetItemKind.note || kind === assetItemKind.response) return 'cyan'
   return 'muted'
 }
@@ -311,7 +314,7 @@ export function itemStateTone(status?: string): BadgeTone {
     case 'confirmed':
     case 'critical':
     case 'high':
-    case 'finding':
+    case 'loot':
     case 'error':
     case 'failed':
       return 'red'
@@ -357,9 +360,11 @@ function serviceSummary(asset: ViewAsset, serviceItem: AssetItem | undefined, ti
   return firstText(...values.filter((value) => labelKey(value) !== labelKey(title) && labelKey(value) !== labelKey(service)))
 }
 
-function countAssetItems(assets: ViewAsset[]) {
+function countLootItems(assets: ViewAsset[]) {
   return assets.reduce((sum, asset) => (
-    sum + asset.items.filter((item) => item.kind !== assetItemKind.path).length
+    sum + asset.items.filter((item) => (
+      item.kind === assetItemKind.loot && dataString(item, 'kind').toLowerCase() !== 'fingerprint'
+    )).length
   ), 0)
 }
 
