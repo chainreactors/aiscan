@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"os/exec"
 	"runtime"
 	"strings"
 	"testing"
@@ -74,6 +75,11 @@ func TestMultiRoundInteraction(t *testing.T) {
 	t.Log("Round 4 passed: PeekNew incremental read works")
 
 	// Round 5: interactive program (python3 REPL)
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Log("python3 not found, skipping Round 5")
+		mgr.Write(info.ID, []byte("exit\n"))
+		return
+	}
 	info2, err := mgr.Create(dir, "python3 -u -i", "python-repl", 30*time.Second, nil, "")
 	if err != nil {
 		t.Fatalf("Create python3: %v", err)

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
@@ -39,8 +38,8 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			bus.Emit(Event{
 				Type:        EventAgentEnd,
 				Turn:        result.Turns,
-				Messages:    append([]provider.ChatMessage(nil), result.Messages...),
-				NewMessages: append([]provider.ChatMessage(nil), result.NewMessages...),
+				Messages:    append([]ChatMessage(nil), result.Messages...),
+				NewMessages: append([]ChatMessage(nil), result.NewMessages...),
 				Err:         result.Err,
 				Stop:        stop,
 			})
@@ -50,7 +49,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 
 	for turn = 1; ; turn++ {
 		if err := ctx.Err(); err != nil {
-			failure := provider.NewTextMessage("assistant", "")
+			failure := NewTextMessage("assistant", "")
 			transcript.append(failure)
 			return end(nil, err, StopReasonCanceled)
 		}
@@ -82,7 +81,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		assistantMsg, usage, err := requestWithRetry(ctx, cfg, bus, reqMessages, cfg.Tools.ToolDefinitions(), turn)
 		transcript.recordTurnUsage(turn, usage)
 		if err != nil {
-			failure := provider.NewTextMessage("assistant", "")
+			failure := NewTextMessage("assistant", "")
 			transcript.append(failure)
 			bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: failure})
 			bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: failure})
@@ -104,10 +103,10 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			}
 		}
 
-		var toolResults []provider.ChatMessage
+		var toolResults []ChatMessage
 		terminate := false
 		if len(assistantMsg.ToolCalls) > 0 {
-			cfg.Messages = append([]provider.ChatMessage(nil), transcript.messages...)
+			cfg.Messages = append([]ChatMessage(nil), transcript.messages...)
 			batch, err := executeToolCalls(ctx, cfg, bus, assistantMsg, turn)
 			if err != nil {
 				return end(nil, err, StopReasonError)
@@ -158,27 +157,27 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 }
 
 type transcript struct {
-	messages       []provider.ChatMessage
-	newMessages    []provider.ChatMessage
+	messages       []ChatMessage
+	newMessages    []ChatMessage
 	completedTurns int
 	turnUsages     []TurnUsage
-	totalUsage     provider.Usage
+	totalUsage     Usage
 	contextTokens  int
 }
 
-func newTranscript(base []provider.ChatMessage, newCapacity int) *transcript {
+func newTranscript(base []ChatMessage, newCapacity int) *transcript {
 	return &transcript{
-		messages:    append([]provider.ChatMessage(nil), base...),
-		newMessages: make([]provider.ChatMessage, 0, newCapacity),
+		messages:    append([]ChatMessage(nil), base...),
+		newMessages: make([]ChatMessage, 0, newCapacity),
 	}
 }
 
-func (t *transcript) append(messages ...provider.ChatMessage) {
+func (t *transcript) append(messages ...ChatMessage) {
 	t.messages = append(t.messages, messages...)
 	t.newMessages = append(t.newMessages, messages...)
 }
 
-func (t *transcript) recordTurnUsage(turn int, usage *provider.Usage) {
+func (t *transcript) recordTurnUsage(turn int, usage *Usage) {
 	if usage == nil {
 		return
 	}
@@ -198,8 +197,8 @@ func (t *transcript) recordTurnUsage(turn int, usage *provider.Usage) {
 	t.contextTokens = usage.PromptTokens
 }
 
-func (t *transcript) snapshot() ([]provider.ChatMessage, []provider.ChatMessage) {
-	return append([]provider.ChatMessage(nil), t.messages...), append([]provider.ChatMessage(nil), t.newMessages...)
+func (t *transcript) snapshot() ([]ChatMessage, []ChatMessage) {
+	return append([]ChatMessage(nil), t.messages...), append([]ChatMessage(nil), t.newMessages...)
 }
 
 func (t *transcript) result(output string, turns int, err error) *Result {
@@ -218,11 +217,11 @@ func (t *transcript) result(output string, turns int, err error) *Result {
 
 
 type toolBatchResult struct {
-	messages  []provider.ChatMessage
+	messages  []ChatMessage
 	terminate bool
 }
 
-func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg provider.ChatMessage, turn int) (toolBatchResult, error) {
+func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg ChatMessage, turn int) (toolBatchResult, error) {
 	toolCalls := assistantMsg.ToolCalls
 	slots := make([]toolCallSlot, len(toolCalls))
 
@@ -280,7 +279,7 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 	}
 
 	// Phase 3: emit results in original order
-	messages := make([]provider.ChatMessage, 0, len(slots))
+	messages := make([]ChatMessage, 0, len(slots))
 	terminations := 0
 	for _, s := range slots {
 		bus.Emit(Event{
@@ -309,7 +308,7 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 }
 
 type toolCallSlot struct {
-	tc     provider.ToolCall
+	tc     ToolCall
 	mode   command.ExecutionMode
 	result toolExecution
 }
@@ -323,7 +322,7 @@ type toolExecution struct {
 	flow       ToolFlowDecision
 }
 
-func runToolCall(ctx context.Context, cfg Config, assistantMsg provider.ChatMessage, tc provider.ToolCall) toolExecution {
+func runToolCall(ctx context.Context, cfg Config, assistantMsg ChatMessage, tc ToolCall) toolExecution {
 	execution := beforeToolCall(ctx, cfg, assistantMsg, tc)
 	if execution.result == "" && !execution.isError {
 		toolResult, execErr := cfg.Tools.ExecuteTool(ctx, tc.Function.Name, tc.Function.Arguments)
@@ -355,23 +354,23 @@ func (e toolExecution) eventResult() string {
 	return e.result
 }
 
-func toolResultToMessage(toolCallID string, exec toolExecution) provider.ChatMessage {
+func toolResultToMessage(toolCallID string, exec toolExecution) ChatMessage {
 	if exec.fullResult != nil && exec.fullResult.HasImages() {
-		parts := make([]provider.ContentPart, 0, len(exec.fullResult.Content))
+		parts := make([]ContentPart, 0, len(exec.fullResult.Content))
 		for _, block := range exec.fullResult.Content {
 			switch block.Type {
 			case "text":
-				parts = append(parts, provider.TextPart(block.Text))
+				parts = append(parts, TextPart(block.Text))
 			case "image":
-				parts = append(parts, provider.ImagePart(block.MimeType, block.Base64Data, "high"))
+				parts = append(parts, ImagePart(block.MimeType, block.Base64Data, "high"))
 			}
 		}
-		return provider.ChatMessage{Role: "tool", ToolCallID: toolCallID, ContentParts: parts}
+		return ChatMessage{Role: "tool", ToolCallID: toolCallID, ContentParts: parts}
 	}
-	return provider.NewToolResultMessage(toolCallID, exec.result)
+	return NewToolResultMessage(toolCallID, exec.result)
 }
 
-func beforeToolCall(ctx context.Context, cfg Config, assistantMsg provider.ChatMessage, tc provider.ToolCall) toolExecution {
+func beforeToolCall(ctx context.Context, cfg Config, assistantMsg ChatMessage, tc ToolCall) toolExecution {
 	if cfg.BeforeToolCall == nil {
 		return toolExecution{}
 	}
@@ -394,7 +393,7 @@ func beforeToolCall(ctx context.Context, cfg Config, assistantMsg provider.ChatM
 	return toolExecution{result: result, isError: true}
 }
 
-func afterToolCall(ctx context.Context, cfg Config, assistantMsg provider.ChatMessage, tc provider.ToolCall, execution toolExecution) toolExecution {
+func afterToolCall(ctx context.Context, cfg Config, assistantMsg ChatMessage, tc ToolCall, execution toolExecution) toolExecution {
 	if cfg.AfterToolCall == nil {
 		return execution
 	}
@@ -448,26 +447,26 @@ func preview(value string, limit int) string {
 	return value[:limit] + "..."
 }
 
-func requestMessages(systemPrompt string, messages []provider.ChatMessage, transform TransformContextFunc) []provider.ChatMessage {
-	out := append([]provider.ChatMessage(nil), messages...)
+func requestMessages(systemPrompt string, messages []ChatMessage, transform TransformContextFunc) []ChatMessage {
+	out := append([]ChatMessage(nil), messages...)
 	if transform != nil {
 		out = transform(out)
 	}
 	if systemPrompt != "" {
-		out = append([]provider.ChatMessage{provider.NewTextMessage("system", systemPrompt)}, out...)
+		out = append([]ChatMessage{NewTextMessage("system", systemPrompt)}, out...)
 	}
 	return out
 }
 
 
-func messageContent(msg provider.ChatMessage) string {
+func messageContent(msg ChatMessage) string {
 	if msg.Content == nil {
 		return ""
 	}
 	return *msg.Content
 }
 
-func logAssistantAndUsage(logger telemetry.Logger, msg provider.ChatMessage, usage *provider.Usage) {
+func logAssistantAndUsage(logger telemetry.Logger, msg ChatMessage, usage *Usage) {
 	if content := messageContent(msg); content != "" {
 		logger.Infof("assistant output=%q", preview(compactLogContent(content), 500))
 	}
@@ -499,17 +498,17 @@ type messageBuilder struct {
 	role             string
 	content          strings.Builder
 	reasoningContent strings.Builder
-	toolCalls        map[int]*provider.ToolCall
+	toolCalls        map[int]*ToolCall
 }
 
 func newMessageBuilder() *messageBuilder {
 	return &messageBuilder{
 		role:      "assistant",
-		toolCalls: make(map[int]*provider.ToolCall),
+		toolCalls: make(map[int]*ToolCall),
 	}
 }
 
-func (b *messageBuilder) Apply(delta provider.ChatMessageDelta) provider.ChatMessage {
+func (b *messageBuilder) Apply(delta ChatMessageDelta) ChatMessage {
 	if delta.Role != "" {
 		b.role = delta.Role
 	}
@@ -522,7 +521,7 @@ func (b *messageBuilder) Apply(delta provider.ChatMessageDelta) provider.ChatMes
 	for _, tcDelta := range delta.ToolCalls {
 		tc := b.toolCalls[tcDelta.Index]
 		if tc == nil {
-			tc = &provider.ToolCall{Type: "function"}
+			tc = &ToolCall{Type: "function"}
 			b.toolCalls[tcDelta.Index] = tc
 		}
 		if tcDelta.ID != "" {
@@ -541,9 +540,9 @@ func (b *messageBuilder) Apply(delta provider.ChatMessageDelta) provider.ChatMes
 	return b.Message()
 }
 
-func (b *messageBuilder) Message() provider.ChatMessage {
+func (b *messageBuilder) Message() ChatMessage {
 	content := b.content.String()
-	msg := provider.ChatMessage{Role: b.role}
+	msg := ChatMessage{Role: b.role}
 	if content != "" {
 		msg.Content = &content
 	}
@@ -556,7 +555,7 @@ func (b *messageBuilder) Message() provider.ChatMessage {
 			indexes = append(indexes, index)
 		}
 		sort.Ints(indexes)
-		msg.ToolCalls = make([]provider.ToolCall, 0, len(indexes))
+		msg.ToolCalls = make([]ToolCall, 0, len(indexes))
 		for _, index := range indexes {
 			msg.ToolCalls = append(msg.ToolCalls, *b.toolCalls[index])
 		}

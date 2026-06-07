@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/skills"
@@ -37,21 +36,21 @@ func TestAgentAutomaticWorkflowUsesScan(t *testing.T) {
 	registry.Register(tmuxCmd, "core")
 
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.ChatMessage{
+		responses: []*ChatCompletionResponse{
+			chatResponse(ChatMessage{
 				Role: "assistant",
-				ToolCalls: []provider.ToolCall{
+				ToolCalls: []ToolCall{
 					{
 						ID:   "call-1",
 						Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: scannerBashArgs("scan -i 127.0.0.1 --mode quick"),
 						},
 					},
 				},
 			}),
-			chatResponse(provider.NewTextMessage("assistant", "final report")),
+			chatResponse(NewTextMessage("assistant", "final report")),
 		},
 	}
 
@@ -100,8 +99,8 @@ func TestAgentPromptIncludesEmbeddedSkillIndexAndExpansion(t *testing.T) {
 	registry.RegisterTool(command.NewReadTool(t.TempDir(), store))
 
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.NewTextMessage("assistant", "done")),
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "done")),
 		},
 	}
 	systemPrompt := buildTestSystemPrompt(registry, store.Skills)

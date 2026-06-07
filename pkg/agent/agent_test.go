@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
@@ -26,8 +25,8 @@ func testBus(handler func(Event)) *eventbus.Bus[Event] {
 func TestRunWithoutToolsReturnsFinalText(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.NewTextMessage("assistant", "done")),
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "done")),
 		},
 	}
 
@@ -57,19 +56,19 @@ func TestRunExecutesToolLoop(t *testing.T) {
 	echo := &recordingTool{name: "echo", output: "tool output"}
 	tools.RegisterTool(echo)
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.ChatMessage{
+		responses: []*ChatCompletionResponse{
+			chatResponse(ChatMessage{
 				Role: "assistant",
-				ToolCalls: []provider.ToolCall{{
+				ToolCalls: []ToolCall{{
 					ID:   "call-1",
 					Type: "function",
-					Function: provider.FunctionCall{
+					Function: FunctionCall{
 						Name:      "echo",
 						Arguments: `{"value":"x"}`,
 					},
 				}},
 			}),
-			chatResponse(provider.NewTextMessage("assistant", "final")),
+			chatResponse(NewTextMessage("assistant", "final")),
 		},
 	}
 
@@ -105,19 +104,19 @@ func TestRunEmitsTurnEndAfterToolResults(t *testing.T) {
 	tools := command.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.ChatMessage{
+		responses: []*ChatCompletionResponse{
+			chatResponse(ChatMessage{
 				Role: "assistant",
-				ToolCalls: []provider.ToolCall{{
+				ToolCalls: []ToolCall{{
 					ID:   "call-1",
 					Type: "function",
-					Function: provider.FunctionCall{
+					Function: FunctionCall{
 						Name:      "echo",
 						Arguments: `{"value":"x"}`,
 					},
 				}},
 			}),
-			chatResponse(provider.NewTextMessage("assistant", "final")),
+			chatResponse(NewTextMessage("assistant", "final")),
 		},
 	}
 
@@ -171,7 +170,7 @@ func TestContinueRequiresNonAssistantLastMessage(t *testing.T) {
 		t.Fatalf("Continue() error = %v, want no messages", err)
 	}
 
-	a.state.Messages = []provider.ChatMessage{provider.NewTextMessage("assistant", "done")}
+	a.state.Messages = []ChatMessage{NewTextMessage("assistant", "done")}
 	if _, err := a.Continue(context.Background()); err == nil || !strings.Contains(err.Error(), "assistant") {
 		t.Fatalf("Continue() error = %v, want assistant", err)
 	}
@@ -180,9 +179,9 @@ func TestContinueRequiresNonAssistantLastMessage(t *testing.T) {
 func TestAgentReusesConversationAcrossPrompts(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.NewTextMessage("assistant", "first")),
-			chatResponse(provider.NewTextMessage("assistant", "second")),
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "first")),
+			chatResponse(NewTextMessage("assistant", "second")),
 		},
 	}
 	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test"})
@@ -207,12 +206,12 @@ func TestAgentReusesConversationAcrossPrompts(t *testing.T) {
 func TestAgentPromptReturnsRunScopedNewMessages(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.NewTextMessage("assistant", "next")),
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "next")),
 		},
 	}
 	ag := NewAgent(Config{Provider: llm, Tools: tools, Model: "test"})
-	ag.state.Messages = []provider.ChatMessage{provider.NewTextMessage("user", "base")}
+	ag.state.Messages = []ChatMessage{NewTextMessage("user", "base")}
 	result, err := ag.Run(context.Background(), "prompt")
 	if err != nil {
 		t.Fatalf("Prompt() error = %v", err)
@@ -228,16 +227,16 @@ func TestAgentPromptReturnsRunScopedNewMessages(t *testing.T) {
 func TestTransformContextAppliesOnlyToProviderRequest(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.NewTextMessage("assistant", "one")),
-			chatResponse(provider.NewTextMessage("assistant", "two")),
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "one")),
+			chatResponse(NewTextMessage("assistant", "two")),
 		},
 	}
 	a := NewAgent(Config{
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
-		TransformContext: func(messages []provider.ChatMessage) []provider.ChatMessage {
+		TransformContext: func(messages []ChatMessage) []ChatMessage {
 			if len(messages) <= 1 {
 				return messages
 			}
@@ -310,19 +309,19 @@ func TestMaxTurnsStopsBeforeNextModelCall(t *testing.T) {
 	tools := command.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.ChatMessage{
+		responses: []*ChatCompletionResponse{
+			chatResponse(ChatMessage{
 				Role: "assistant",
-				ToolCalls: []provider.ToolCall{{
+				ToolCalls: []ToolCall{{
 					ID:   "call-1",
 					Type: "function",
-					Function: provider.FunctionCall{
+					Function: FunctionCall{
 						Name:      "echo",
 						Arguments: `{"value":"x"}`,
 					},
 				}},
 			}),
-			chatResponse(provider.NewTextMessage("assistant", "should not be called")),
+			chatResponse(NewTextMessage("assistant", "should not be called")),
 		},
 	}
 
@@ -346,10 +345,10 @@ func TestMaxTurnsStopsBeforeNextModelCall(t *testing.T) {
 func TestStreamingProviderEmitsMessageUpdates(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{
-		streamEvents: []provider.ChatCompletionStreamEvent{
-			{Delta: provider.ChatMessageDelta{Role: "assistant"}},
-			{Delta: provider.ChatMessageDelta{Content: strPtr("hel")}},
-			{Delta: provider.ChatMessageDelta{Content: strPtr("lo")}},
+		streamEvents: []ChatCompletionStreamEvent{
+			{Delta: ChatMessageDelta{Role: "assistant"}},
+			{Delta: ChatMessageDelta{Content: strPtr("hel")}},
+			{Delta: ChatMessageDelta{Content: strPtr("lo")}},
 			{Done: true},
 		},
 	}
@@ -379,10 +378,10 @@ func TestStreamingProviderEmitsMessageUpdates(t *testing.T) {
 func TestStatefulAgentTracksStreamingMessage(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{
-		streamEvents: []provider.ChatCompletionStreamEvent{
-			{Delta: provider.ChatMessageDelta{Role: "assistant"}},
-			{Delta: provider.ChatMessageDelta{Content: strPtr("hel")}},
-			{Delta: provider.ChatMessageDelta{Content: strPtr("lo")}},
+		streamEvents: []ChatCompletionStreamEvent{
+			{Delta: ChatMessageDelta{Role: "assistant"}},
+			{Delta: ChatMessageDelta{Content: strPtr("hel")}},
+			{Delta: ChatMessageDelta{Content: strPtr("lo")}},
 			{Done: true},
 		},
 	}
@@ -444,27 +443,27 @@ func TestStreamingToolCallDeltasAreAggregated(t *testing.T) {
 	echo := &recordingTool{name: "echo", output: "ok"}
 	tools.RegisterTool(echo)
 	llm := &scriptedProvider{
-		streamEventBatches: [][]provider.ChatCompletionStreamEvent{
+		streamEventBatches: [][]ChatCompletionStreamEvent{
 			{
-				{Delta: provider.ChatMessageDelta{Role: "assistant"}},
-				{Delta: provider.ChatMessageDelta{ToolCalls: []provider.ToolCallDelta{{
+				{Delta: ChatMessageDelta{Role: "assistant"}},
+				{Delta: ChatMessageDelta{ToolCalls: []ToolCallDelta{{
 					Index: 0,
 					ID:    "call-1",
 					Type:  "function",
-					Function: provider.FunctionCallDelta{
+					Function: FunctionCallDelta{
 						Name:      "echo",
 						Arguments: `{"value":`,
 					},
 				}}}},
-				{Delta: provider.ChatMessageDelta{ToolCalls: []provider.ToolCallDelta{{
+				{Delta: ChatMessageDelta{ToolCalls: []ToolCallDelta{{
 					Index:    0,
-					Function: provider.FunctionCallDelta{Arguments: `"x"}`},
+					Function: FunctionCallDelta{Arguments: `"x"}`},
 				}}}},
 				{Done: true},
 			},
 			{
-				{Delta: provider.ChatMessageDelta{Role: "assistant"}},
-				{Delta: provider.ChatMessageDelta{Content: strPtr("final")}},
+				{Delta: ChatMessageDelta{Role: "assistant"}},
+				{Delta: ChatMessageDelta{Content: strPtr("final")}},
 				{Done: true},
 			},
 		},
@@ -491,13 +490,13 @@ func TestToolHooksCanBlockRewriteAndTerminate(t *testing.T) {
 	echo := &recordingTool{name: "echo", output: "raw"}
 	tools.RegisterTool(echo)
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.ChatMessage{
+		responses: []*ChatCompletionResponse{
+			chatResponse(ChatMessage{
 				Role: "assistant",
-				ToolCalls: []provider.ToolCall{{
+				ToolCalls: []ToolCall{{
 					ID:   "call-1",
 					Type: "function",
-					Function: provider.FunctionCall{
+					Function: FunctionCall{
 						Name:      "echo",
 						Arguments: `{"value":"blocked"}`,
 					},
@@ -545,10 +544,10 @@ func (t *recordingTool) Name() string { return t.name }
 
 func (t *recordingTool) Description() string { return "recording tool" }
 
-func (t *recordingTool) Definition() provider.ToolDefinition {
-	return provider.ToolDefinition{
+func (t *recordingTool) Definition() ToolDefinition {
+	return ToolDefinition{
 		Type: "function",
-		Function: provider.FunctionDefinition{
+		Function: FunctionDefinition{
 			Name:        t.name,
 			Description: t.Description(),
 			Parameters:  map[string]any{"type": "object"},
@@ -574,11 +573,11 @@ func (t *recordingTool) callsSnapshot() []string {
 
 type scriptedProvider struct {
 	mu                 sync.Mutex
-	responses          []*provider.ChatCompletionResponse
+	responses          []*ChatCompletionResponse
 	err                error
-	streamEvents       []provider.ChatCompletionStreamEvent
-	streamEventBatches [][]provider.ChatCompletionStreamEvent
-	requests           []*provider.ChatCompletionRequest
+	streamEvents       []ChatCompletionStreamEvent
+	streamEventBatches [][]ChatCompletionStreamEvent
+	requests           []*ChatCompletionRequest
 }
 
 type blockingProvider struct {
@@ -587,12 +586,12 @@ type blockingProvider struct {
 	once    sync.Once
 
 	mu       sync.Mutex
-	requests []*provider.ChatCompletionRequest
+	requests []*ChatCompletionRequest
 }
 
 func (p *blockingProvider) Name() string { return "blocking" }
 
-func (p *blockingProvider) ChatCompletion(ctx context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+func (p *blockingProvider) ChatCompletion(ctx context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	p.mu.Lock()
 	p.requests = append(p.requests, cloneRequest(req))
 	p.mu.Unlock()
@@ -602,12 +601,12 @@ func (p *blockingProvider) ChatCompletion(ctx context.Context, req *provider.Cha
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	return chatResponse(provider.NewTextMessage("assistant", "done")), nil
+	return chatResponse(NewTextMessage("assistant", "done")), nil
 }
 
 func (p *scriptedProvider) Name() string { return "scripted" }
 
-func (p *scriptedProvider) ChatCompletion(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+func (p *scriptedProvider) ChatCompletion(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.requests = append(p.requests, cloneRequest(req))
@@ -622,17 +621,17 @@ func (p *scriptedProvider) ChatCompletion(_ context.Context, req *provider.ChatC
 	return resp, nil
 }
 
-func (p *scriptedProvider) ChatCompletionStream(ctx context.Context, req *provider.ChatCompletionRequest) (<-chan provider.ChatCompletionStreamEvent, error) {
+func (p *scriptedProvider) ChatCompletionStream(ctx context.Context, req *ChatCompletionRequest) (<-chan ChatCompletionStreamEvent, error) {
 	p.mu.Lock()
 	p.requests = append(p.requests, cloneRequest(req))
-	events := append([]provider.ChatCompletionStreamEvent(nil), p.streamEvents...)
+	events := append([]ChatCompletionStreamEvent(nil), p.streamEvents...)
 	if len(p.streamEventBatches) > 0 {
-		events = append([]provider.ChatCompletionStreamEvent(nil), p.streamEventBatches[0]...)
+		events = append([]ChatCompletionStreamEvent(nil), p.streamEventBatches[0]...)
 		p.streamEventBatches = p.streamEventBatches[1:]
 	}
 	p.mu.Unlock()
 
-	ch := make(chan provider.ChatCompletionStreamEvent)
+	ch := make(chan ChatCompletionStreamEvent)
 	go func() {
 		defer close(ch)
 		for _, event := range events {
@@ -646,30 +645,30 @@ func (p *scriptedProvider) ChatCompletionStream(ctx context.Context, req *provid
 	return ch, nil
 }
 
-func (p *scriptedProvider) requestsSnapshot() []*provider.ChatCompletionRequest {
+func (p *scriptedProvider) requestsSnapshot() []*ChatCompletionRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := make([]*provider.ChatCompletionRequest, 0, len(p.requests))
+	out := make([]*ChatCompletionRequest, 0, len(p.requests))
 	for _, req := range p.requests {
 		out = append(out, cloneRequest(req))
 	}
 	return out
 }
 
-func chatResponse(msg provider.ChatMessage) *provider.ChatCompletionResponse {
-	return &provider.ChatCompletionResponse{
-		Choices: []provider.Choice{{Message: msg}},
+func chatResponse(msg ChatMessage) *ChatCompletionResponse {
+	return &ChatCompletionResponse{
+		Choices: []Choice{{Message: msg}},
 	}
 }
 
-func cloneRequest(req *provider.ChatCompletionRequest) *provider.ChatCompletionRequest {
+func cloneRequest(req *ChatCompletionRequest) *ChatCompletionRequest {
 	cloned := *req
-	cloned.Messages = append([]provider.ChatMessage(nil), req.Messages...)
-	cloned.Tools = append([]provider.ToolDefinition(nil), req.Tools...)
+	cloned.Messages = append([]ChatMessage(nil), req.Messages...)
+	cloned.Tools = append([]ToolDefinition(nil), req.Tools...)
 	return &cloned
 }
 
-func hasToolMessage(messages []provider.ChatMessage, toolCallID, contains string) bool {
+func hasToolMessage(messages []ChatMessage, toolCallID, contains string) bool {
 	for _, msg := range messages {
 		if msg.Role != "tool" || msg.ToolCallID != toolCallID || msg.Content == nil {
 			continue
@@ -713,12 +712,12 @@ func TestRetryOnTransientError(t *testing.T) {
 	tools := command.NewRegistry()
 	callCount := 0
 	llm := &callbackProvider{
-		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 			callCount++
 			if callCount == 1 {
 				return nil, fmt.Errorf("API error (502): bad gateway")
 			}
-			return chatResponse(provider.NewTextMessage("assistant", "recovered")), nil
+			return chatResponse(NewTextMessage("assistant", "recovered")), nil
 		},
 	}
 
@@ -743,7 +742,7 @@ func TestNoRetryOnAuthError(t *testing.T) {
 	tools := command.NewRegistry()
 	callCount := 0
 	llm := &callbackProvider{
-		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 			callCount++
 			return nil, fmt.Errorf("API error (401): invalid_api_key")
 		},
@@ -767,7 +766,7 @@ func TestRetryExhaustedReturnsLastError(t *testing.T) {
 	tools := command.NewRegistry()
 	callCount := 0
 	llm := &callbackProvider{
-		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 			callCount++
 			return nil, fmt.Errorf("API error (503): service unavailable")
 		},
@@ -788,10 +787,10 @@ func TestRetryExhaustedReturnsLastError(t *testing.T) {
 }
 
 func TestRetryableProviderTimeoutAndStallErrors(t *testing.T) {
-	if !isRetryableError(fmt.Errorf("wrapped: %w", provider.ErrCallTimeout)) {
+	if !isRetryableError(fmt.Errorf("wrapped: %w", ErrCallTimeout)) {
 		t.Fatal("ErrCallTimeout should be retryable")
 	}
-	if !isRetryableError(fmt.Errorf("wrapped: %w", provider.ErrStreamStalled)) {
+	if !isRetryableError(fmt.Errorf("wrapped: %w", ErrStreamStalled)) {
 		t.Fatal("ErrStreamStalled should be retryable")
 	}
 	if !isRetryableError(retryableTimeoutError{}) {
@@ -811,7 +810,7 @@ func TestStreamAssistantMessageReturnsContextErrorOnClosedCanceledStream(t *test
 
 	_, _, err := streamAssistantMessageWithUsage(ctx,
 		&scriptedProvider{},
-		&provider.ChatCompletionRequest{Model: "test"},
+		&ChatCompletionRequest{Model: "test"},
 		newEmitter(eventbus.New[Event](), "test"),
 		telemetry.NopLogger(),
 		1,
@@ -824,10 +823,10 @@ func TestStreamAssistantMessageReturnsContextErrorOnClosedCanceledStream(t *test
 func TestTokenBudgetWarning(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &callbackProvider{
-		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
-			return &provider.ChatCompletionResponse{
-				Choices: []provider.Choice{{Message: provider.NewTextMessage("assistant", "done")}},
-				Usage:   &provider.Usage{PromptTokens: 700, CompletionTokens: 200, TotalTokens: 900},
+		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
+			return &ChatCompletionResponse{
+				Choices: []Choice{{Message: NewTextMessage("assistant", "done")}},
+				Usage:   &Usage{PromptTokens: 700, CompletionTokens: 200, TotalTokens: 900},
 			}, nil
 		},
 	}
@@ -856,24 +855,24 @@ func TestTokenBudgetExceeded(t *testing.T) {
 	tools := command.NewRegistry()
 	turn := 0
 	llm := &callbackProvider{
-		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 			turn++
 			if turn == 1 {
-				return &provider.ChatCompletionResponse{
-					Choices: []provider.Choice{{Message: provider.ChatMessage{
+				return &ChatCompletionResponse{
+					Choices: []Choice{{Message: ChatMessage{
 						Role: "assistant",
-						ToolCalls: []provider.ToolCall{{
+						ToolCalls: []ToolCall{{
 							ID:       "call-1",
 							Type:     "function",
-							Function: provider.FunctionCall{Name: "echo", Arguments: `{}`},
+							Function: FunctionCall{Name: "echo", Arguments: `{}`},
 						}},
 					}}},
-					Usage: &provider.Usage{TotalTokens: 600},
+					Usage: &Usage{TotalTokens: 600},
 				}, nil
 			}
-			return &provider.ChatCompletionResponse{
-				Choices: []provider.Choice{{Message: provider.NewTextMessage("assistant", "done")}},
-				Usage:   &provider.Usage{TotalTokens: 500},
+			return &ChatCompletionResponse{
+				Choices: []Choice{{Message: NewTextMessage("assistant", "done")}},
+				Usage:   &Usage{TotalTokens: 500},
 			}, nil
 		},
 	}
@@ -910,10 +909,10 @@ func TestTruncateResultIncludesSize(t *testing.T) {
 func TestResultIncludesTotalUsage(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &callbackProvider{
-		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
-			return &provider.ChatCompletionResponse{
-				Choices: []provider.Choice{{Message: provider.NewTextMessage("assistant", "done")}},
-				Usage:   &provider.Usage{PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150},
+		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
+			return &ChatCompletionResponse{
+				Choices: []Choice{{Message: NewTextMessage("assistant", "done")}},
+				Usage:   &Usage{PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150},
 			}, nil
 		},
 	}
@@ -937,23 +936,23 @@ func TestResultIncludesPerTurnUsageAndContextTokens(t *testing.T) {
 
 	turn := 0
 	llm := &callbackProvider{
-		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 			turn++
 			if turn == 1 {
-				return &provider.ChatCompletionResponse{
-					Choices: []provider.Choice{{Message: provider.ChatMessage{
+				return &ChatCompletionResponse{
+					Choices: []Choice{{Message: ChatMessage{
 						Role: "assistant",
-						ToolCalls: []provider.ToolCall{{
+						ToolCalls: []ToolCall{{
 							ID: "call-1", Type: "function",
-							Function: provider.FunctionCall{Name: "echo", Arguments: `{}`},
+							Function: FunctionCall{Name: "echo", Arguments: `{}`},
 						}},
 					}}},
-					Usage: &provider.Usage{PromptTokens: 200, CompletionTokens: 30, TotalTokens: 230},
+					Usage: &Usage{PromptTokens: 200, CompletionTokens: 30, TotalTokens: 230},
 				}, nil
 			}
-			return &provider.ChatCompletionResponse{
-				Choices: []provider.Choice{{Message: provider.NewTextMessage("assistant", "done")}},
-				Usage:   &provider.Usage{PromptTokens: 280, CompletionTokens: 20, TotalTokens: 300},
+			return &ChatCompletionResponse{
+				Choices: []Choice{{Message: NewTextMessage("assistant", "done")}},
+				Usage:   &Usage{PromptTokens: 280, CompletionTokens: 20, TotalTokens: 300},
 			}, nil
 		},
 	}
@@ -990,15 +989,15 @@ func TestResultIncludesPerTurnUsageAndContextTokens(t *testing.T) {
 func TestTurnEndEventCarriesUsage(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &callbackProvider{
-		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
-			return &provider.ChatCompletionResponse{
-				Choices: []provider.Choice{{Message: provider.NewTextMessage("assistant", "done")}},
-				Usage:   &provider.Usage{PromptTokens: 500, CompletionTokens: 40, TotalTokens: 540},
+		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
+			return &ChatCompletionResponse{
+				Choices: []Choice{{Message: NewTextMessage("assistant", "done")}},
+				Usage:   &Usage{PromptTokens: 500, CompletionTokens: 40, TotalTokens: 540},
 			}, nil
 		},
 	}
 
-	var turnEndUsage *provider.Usage
+	var turnEndUsage *Usage
 	var turnEndContext int
 	_, err := (NewAgent(Config{
 		Provider: llm,
@@ -1026,12 +1025,12 @@ func TestTurnEndEventCarriesUsage(t *testing.T) {
 }
 
 type callbackProvider struct {
-	fn func(context.Context, *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error)
+	fn func(context.Context, *ChatCompletionRequest) (*ChatCompletionResponse, error)
 }
 
 func (p *callbackProvider) Name() string { return "callback" }
 
-func (p *callbackProvider) ChatCompletion(ctx context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+func (p *callbackProvider) ChatCompletion(ctx context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	return p.fn(ctx, req)
 }
 

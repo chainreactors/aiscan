@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
@@ -16,7 +15,7 @@ func isRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, provider.ErrCallTimeout) || errors.Is(err, provider.ErrStreamStalled) {
+	if errors.Is(err, ErrCallTimeout) || errors.Is(err, ErrStreamStalled) {
 		return true
 	}
 	if errors.Is(err, context.Canceled) {
@@ -29,7 +28,7 @@ func isRetryableError(err error) bool {
 	if errors.As(err, &netErr) && netErr.Timeout() {
 		return true
 	}
-	var apiErr *provider.APIError
+	var apiErr *APIError
 	if errors.As(err, &apiErr) {
 		return apiErr.IsRetryable()
 	}
@@ -75,7 +74,7 @@ func retryDelay(attempt int) time.Duration {
 	return delay
 }
 
-func requestWithRetry(ctx context.Context, cfg Config, bus emitter, messages []provider.ChatMessage, tools []provider.ToolDefinition, turn int) (provider.ChatMessage, *provider.Usage, error) {
+func requestWithRetry(ctx context.Context, cfg Config, bus emitter, messages []ChatMessage, tools []ToolDefinition, turn int) (ChatMessage, *Usage, error) {
 	var lastErr error
 	maxAttempts := cfg.MaxRetries + 1
 	if cfg.MaxRetries < 0 {
@@ -88,7 +87,7 @@ func requestWithRetry(ctx context.Context, cfg Config, bus emitter, messages []p
 			select {
 			case <-time.After(delay):
 			case <-ctx.Done():
-				return provider.ChatMessage{}, nil, ctx.Err()
+				return ChatMessage{}, nil, ctx.Err()
 			}
 		}
 
@@ -99,17 +98,17 @@ func requestWithRetry(ctx context.Context, cfg Config, bus emitter, messages []p
 		lastErr = err
 
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			return provider.ChatMessage{}, nil, ctxErr
+			return ChatMessage{}, nil, ctxErr
 		}
 		if !isRetryableError(err) {
-			return provider.ChatMessage{}, nil, err
+			return ChatMessage{}, nil, err
 		}
 	}
-	return provider.ChatMessage{}, nil, lastErr
+	return ChatMessage{}, nil, lastErr
 }
 
-func requestAssistantMessageWithUsage(ctx context.Context, cfg Config, bus emitter, messages []provider.ChatMessage, tools []provider.ToolDefinition, turn int) (provider.ChatMessage, *provider.Usage, error) {
-	req := &provider.ChatCompletionRequest{
+func requestAssistantMessageWithUsage(ctx context.Context, cfg Config, bus emitter, messages []ChatMessage, tools []ToolDefinition, turn int) (ChatMessage, *Usage, error) {
+	req := &ChatCompletionRequest{
 		Model:          cfg.Model,
 		Messages:       messages,
 		Tools:          tools,
@@ -121,17 +120,17 @@ func requestAssistantMessageWithUsage(ctx context.Context, cfg Config, bus emitt
 	}
 	bus.Emit(Event{Type: EventLLMRequest, Turn: turn, Request: req})
 	if cfg.Stream {
-		if streaming, ok := cfg.Provider.(provider.StreamingProvider); ok {
+		if streaming, ok := cfg.Provider.(StreamingProvider); ok {
 			return streamAssistantMessageWithUsage(ctx, streaming, req, bus, cfg.Logger, turn)
 		}
 	}
 
 	resp, err := cfg.Provider.ChatCompletion(ctx, req)
 	if err != nil {
-		return provider.ChatMessage{}, nil, fmt.Errorf("LLM call failed at turn %d: %w", turn, err)
+		return ChatMessage{}, nil, fmt.Errorf("LLM call failed at turn %d: %w", turn, err)
 	}
 	if len(resp.Choices) == 0 {
-		return provider.ChatMessage{}, nil, fmt.Errorf("empty response from LLM at turn %d", turn)
+		return ChatMessage{}, nil, fmt.Errorf("empty response from LLM at turn %d", turn)
 	}
 	msg := resp.Choices[0].Message
 	bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: msg})
@@ -140,18 +139,18 @@ func requestAssistantMessageWithUsage(ctx context.Context, cfg Config, bus emitt
 	return msg, resp.Usage, nil
 }
 
-func streamAssistantMessageWithUsage(ctx context.Context, p provider.StreamingProvider, req *provider.ChatCompletionRequest, bus emitter, logger telemetry.Logger, turn int) (provider.ChatMessage, *provider.Usage, error) {
+func streamAssistantMessageWithUsage(ctx context.Context, p StreamingProvider, req *ChatCompletionRequest, bus emitter, logger telemetry.Logger, turn int) (ChatMessage, *Usage, error) {
 	events, err := p.ChatCompletionStream(ctx, req)
 	if err != nil {
-		return provider.ChatMessage{}, nil, fmt.Errorf("LLM stream failed at turn %d: %w", turn, err)
+		return ChatMessage{}, nil, fmt.Errorf("LLM stream failed at turn %d: %w", turn, err)
 	}
 
 	builder := newMessageBuilder()
 	started := false
-	var usage *provider.Usage
+	var usage *Usage
 	for event := range events {
 		if event.Err != nil {
-			return provider.ChatMessage{}, nil, fmt.Errorf("LLM stream failed at turn %d: %w", turn, event.Err)
+			return ChatMessage{}, nil, fmt.Errorf("LLM stream failed at turn %d: %w", turn, event.Err)
 		}
 		if event.Usage != nil {
 			usage = event.Usage
@@ -167,7 +166,7 @@ func streamAssistantMessageWithUsage(ctx context.Context, p provider.StreamingPr
 		bus.Emit(Event{Type: EventMessageUpdate, Turn: turn, Message: updated})
 	}
 	if err := ctx.Err(); err != nil {
-		return provider.ChatMessage{}, nil, err
+		return ChatMessage{}, nil, err
 	}
 
 	msg := builder.Message()

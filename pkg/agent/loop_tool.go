@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/command"
 )
 
@@ -32,7 +31,7 @@ type loopArgs struct {
 	Immediate bool   `json:"immediate,omitempty"  jsonschema:"description=Fire once immediately on creation"`
 }
 
-func (t *LoopTool) Definition() provider.ToolDefinition {
+func (t *LoopTool) Definition() ToolDefinition {
 	return command.ToolDef("loop", t.Description(), loopArgs{})
 }
 

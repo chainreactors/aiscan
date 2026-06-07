@@ -8,11 +8,10 @@ import (
 	"testing"
 
 	"github.com/chainreactors/aiscan/pkg/command"
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
-func skipUnlessLive(t *testing.T) (*provider.ProviderConfig, provider.Provider) {
+func skipUnlessLive(t *testing.T) (*ProviderConfig, Provider) {
 	t.Helper()
 	apiKey := os.Getenv("TEST_API_KEY")
 	baseURL := os.Getenv("TEST_BASE_URL")
@@ -20,17 +19,17 @@ func skipUnlessLive(t *testing.T) (*provider.ProviderConfig, provider.Provider) 
 	if apiKey == "" || baseURL == "" || model == "" {
 		t.Skip("set TEST_API_KEY, TEST_BASE_URL, TEST_MODEL to run live tests")
 	}
-	cfg := &provider.ProviderConfig{
+	cfg := &ProviderConfig{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
 		Model:   model,
 		Timeout: 60,
 	}
-	cfg, err := provider.Resolve(cfg)
+	cfg, err := ResolveProvider(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	prov, err := provider.NewProviderFromResolved(cfg)
+	prov, err := NewProviderFromResolved(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +57,7 @@ func TestMultiTurnContextInheritanceAndCache(t *testing.T) {
 		Tools:          tools,
 		Model:          cfg.Model,
 		SystemPrompt:   systemPrompt,
-		CacheRetention: provider.CacheShort,
+		CacheRetention: CacheShort,
 		Bus: testBus(func(e Event) { handler(e) }),
 		Logger:         telemetry.NopLogger(),
 		MaxRetries:     1,
@@ -156,7 +155,7 @@ func TestMultiTurnStreamingCache(t *testing.T) {
 		Model:          cfg.Model,
 		SystemPrompt:   systemPrompt,
 		Stream:         true,
-		CacheRetention: provider.CacheShort,
+		CacheRetention: CacheShort,
 		Logger:         telemetry.NopLogger(),
 		MaxRetries:     1,
 	}
@@ -221,7 +220,7 @@ func TestMultiTurnWithToolCallsCache(t *testing.T) {
 		Tools:          tools,
 		Model:          cfg.Model,
 		SystemPrompt:   systemPrompt,
-		CacheRetention: provider.CacheShort,
+		CacheRetention: CacheShort,
 		Bus: testBus(func(e Event) { handler(e) }),
 		Logger:         telemetry.NopLogger(),
 		MaxRetries:     1,
@@ -280,8 +279,8 @@ func TestMultiTurnWithToolCallsCache(t *testing.T) {
 // are correctly threaded through Config → Derive → request.
 func TestCacheConfigInheritance(t *testing.T) {
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.NewTextMessage("assistant", "done")),
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "done")),
 		},
 	}
 
@@ -290,14 +289,14 @@ func TestCacheConfigInheritance(t *testing.T) {
 		Tools:          command.NewRegistry(),
 		Model:          "test",
 		SystemPrompt:   "sys",
-		CacheRetention: provider.CacheShort,
+		CacheRetention: CacheShort,
 		SessionID:      "parent-session-123",
 	}
 
 	child := NewAgent(parentCfg).Derive()
 
-	if child.Cfg.CacheRetention != provider.CacheShort {
-		t.Errorf("child CacheRetention = %q, want %q", child.Cfg.CacheRetention, provider.CacheShort)
+	if child.Cfg.CacheRetention != CacheShort {
+		t.Errorf("child CacheRetention = %q, want %q", child.Cfg.CacheRetention, CacheShort)
 	}
 	if child.Cfg.SessionID == "" {
 		t.Error("child SessionID should be auto-generated, got empty")
@@ -316,8 +315,8 @@ func TestCacheConfigInheritance(t *testing.T) {
 	if len(reqs) != 1 {
 		t.Fatalf("expected 1 request, got %d", len(reqs))
 	}
-	if reqs[0].CacheRetention != provider.CacheShort {
-		t.Errorf("request CacheRetention = %q, want %q", reqs[0].CacheRetention, provider.CacheShort)
+	if reqs[0].CacheRetention != CacheShort {
+		t.Errorf("request CacheRetention = %q, want %q", reqs[0].CacheRetention, CacheShort)
 	}
 	if reqs[0].SessionID != child.Cfg.SessionID {
 		t.Errorf("request SessionID = %q, want child SessionID %q", reqs[0].SessionID, child.Cfg.SessionID)
@@ -326,7 +325,7 @@ func TestCacheConfigInheritance(t *testing.T) {
 
 func TestSessionIDAutoGeneration(t *testing.T) {
 	cfg := Config{
-		CacheRetention: provider.CacheShort,
+		CacheRetention: CacheShort,
 	}
 	initialized := cfg.init()
 
@@ -337,7 +336,7 @@ func TestSessionIDAutoGeneration(t *testing.T) {
 		t.Errorf("SessionID length = %d, want 16 hex chars, got %q", len(initialized.SessionID), initialized.SessionID)
 	}
 
-	cfg2 := Config{CacheRetention: provider.CacheNone}
+	cfg2 := Config{CacheRetention: CacheNone}
 	initialized2 := cfg2.init()
 	if initialized2.SessionID == "" {
 		t.Error("CacheNone should still generate SessionID for event tracking")
@@ -347,28 +346,28 @@ func TestSessionIDAutoGeneration(t *testing.T) {
 // TestTurnUsageCacheAccumulation verifies that cache tokens are correctly
 // accumulated in totalUsage across multiple turns using the scripted provider.
 func TestTurnUsageCacheAccumulation(t *testing.T) {
-	usage1 := &provider.Usage{
+	usage1 := &Usage{
 		PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120,
 		CacheReadTokens: 0, CacheWriteTokens: 80,
 	}
-	usage2 := &provider.Usage{
+	usage2 := &Usage{
 		PromptTokens: 150, CompletionTokens: 15, TotalTokens: 165,
 		CacheReadTokens: 80, CacheWriteTokens: 0,
 	}
 
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			{Choices: []provider.Choice{{
-				Message: provider.ChatMessage{
+		responses: []*ChatCompletionResponse{
+			{Choices: []Choice{{
+				Message: ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "call_1", Type: "function",
-						Function: provider.FunctionCall{Name: "read", Arguments: `{}`},
+						Function: FunctionCall{Name: "read", Arguments: `{}`},
 					}},
 				},
 			}}, Usage: usage1},
-			{Choices: []provider.Choice{{
-				Message: provider.NewTextMessage("assistant", "done"),
+			{Choices: []Choice{{
+				Message: NewTextMessage("assistant", "done"),
 			}}, Usage: usage2},
 		},
 	}
@@ -381,7 +380,7 @@ func TestTurnUsageCacheAccumulation(t *testing.T) {
 		Tools:          tools,
 		Model:          "test",
 		SystemPrompt:   "sys",
-		CacheRetention: provider.CacheShort,
+		CacheRetention: CacheShort,
 		Logger:         telemetry.NopLogger(),
 	})).Run(context.Background(), "read something")
 	if err != nil {
@@ -422,20 +421,20 @@ func truncateOutput(s string, n int) string {
 
 // Quick sanity check: does the full agent run print cache stats in events?
 func TestEventCarriesCacheUsage(t *testing.T) {
-	usage := &provider.Usage{
+	usage := &Usage{
 		PromptTokens: 100, CompletionTokens: 10, TotalTokens: 110,
 		CacheReadTokens: 60, CacheWriteTokens: 20,
 	}
 
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			{Choices: []provider.Choice{{
-				Message: provider.NewTextMessage("assistant", "hi"),
+		responses: []*ChatCompletionResponse{
+			{Choices: []Choice{{
+				Message: NewTextMessage("assistant", "hi"),
 			}}, Usage: usage},
 		},
 	}
 
-	var captured *provider.Usage
+	var captured *Usage
 	handler := func(e Event) {
 		if e.Type == EventTurnEnd && e.Usage != nil {
 			captured = e.Usage

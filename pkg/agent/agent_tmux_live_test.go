@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/command"
 )
@@ -37,7 +36,7 @@ func TestLiveLLMTmuxInteraction(t *testing.T) {
 		t.Skip("no LIVE_TEST_API_KEY set; skipping live LLM test")
 	}
 
-	llm, err := provider.NewProvider(&provider.ProviderConfig{
+	llm, err := NewProvider(&ProviderConfig{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
 		Model:   model,

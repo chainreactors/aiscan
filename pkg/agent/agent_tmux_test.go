@@ -3,12 +3,12 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"os/exec"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/command"
 )
@@ -53,22 +53,22 @@ func TestAgentTmuxMultiRoundInteraction(t *testing.T) {
 
 	// Each LLM response is a single bash tool call, except the last which is text.
 	// We build them in order, and verify intermediate tool results.
-	var capturedRequests []*provider.ChatCompletionRequest
+	var capturedRequests []*ChatCompletionRequest
 
 	turnIndex := 0
 	llm := &callbackProvider{
-		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 			capturedRequests = append(capturedRequests, cloneRequest(req))
 			turnIndex++
 
 			switch turnIndex {
 			case 1:
 				// Turn 1: create detached shell session
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "call-1", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux new -d -s worker "sh"`),
 						},
@@ -83,11 +83,11 @@ func TestAgentTmuxMultiRoundInteraction(t *testing.T) {
 				time.Sleep(500 * time.Millisecond)
 
 				// Turn 2: send echo command
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "call-2", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux send -t worker "echo HELLO_FROM_LLM" Enter`),
 						},
@@ -102,11 +102,11 @@ func TestAgentTmuxMultiRoundInteraction(t *testing.T) {
 				time.Sleep(500 * time.Millisecond)
 
 				// Turn 3: capture output
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "call-3", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux capture-pane -t worker --new`),
 						},
@@ -118,11 +118,11 @@ func TestAgentTmuxMultiRoundInteraction(t *testing.T) {
 				assertToolResult(t, req, "call-3", "HELLO_FROM_LLM")
 
 				// Turn 4: set a shell variable
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "call-4", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux send -t worker "MY_VAR=42" Enter`),
 						},
@@ -131,11 +131,11 @@ func TestAgentTmuxMultiRoundInteraction(t *testing.T) {
 
 			case 5:
 				// Turn 5: echo the variable
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "call-5", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux send -t worker "echo VAR_IS_$MY_VAR" Enter`),
 						},
@@ -147,11 +147,11 @@ func TestAgentTmuxMultiRoundInteraction(t *testing.T) {
 				time.Sleep(500 * time.Millisecond)
 
 				// Turn 6: capture to verify variable persisted
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "call-6", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux capture-pane -t worker --new`),
 						},
@@ -163,11 +163,11 @@ func TestAgentTmuxMultiRoundInteraction(t *testing.T) {
 				assertToolResult(t, req, "call-6", "VAR_IS_42")
 
 				// Turn 7: exit the shell
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "call-7", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux send -t worker "exit" Enter`),
 						},
@@ -176,11 +176,11 @@ func TestAgentTmuxMultiRoundInteraction(t *testing.T) {
 
 			case 8:
 				// Turn 8: list sessions to confirm completion
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "call-8", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux ls`),
 						},
@@ -189,7 +189,7 @@ func TestAgentTmuxMultiRoundInteraction(t *testing.T) {
 
 			case 9:
 				// Final turn: LLM produces summary
-				return chatResponse(provider.NewTextMessage("assistant",
+				return chatResponse(NewTextMessage("assistant",
 					"Interactive session completed. Verified: echo output, shell variable persistence, and clean exit.")), nil
 
 			default:
@@ -238,16 +238,16 @@ func TestAgentTmuxCtrlCInterrupt(t *testing.T) {
 
 	turnIndex := 0
 	llm := &callbackProvider{
-		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 			turnIndex++
 			switch turnIndex {
 			case 1:
 				// Start detached shell
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "c1", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux new -d -s runner "sh"`),
 						},
@@ -258,11 +258,11 @@ func TestAgentTmuxCtrlCInterrupt(t *testing.T) {
 				time.Sleep(500 * time.Millisecond)
 
 				// Start a long sleep
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "c2", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux send -t runner "sleep 999" Enter`),
 						},
@@ -273,11 +273,11 @@ func TestAgentTmuxCtrlCInterrupt(t *testing.T) {
 				time.Sleep(500 * time.Millisecond)
 
 				// Send Ctrl-C to interrupt
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "c3", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux send -t runner C-c`),
 						},
@@ -288,11 +288,11 @@ func TestAgentTmuxCtrlCInterrupt(t *testing.T) {
 				time.Sleep(500 * time.Millisecond)
 
 				// Send a new command after interrupt
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "c4", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux send -t runner "echo RECOVERED" Enter`),
 						},
@@ -303,11 +303,11 @@ func TestAgentTmuxCtrlCInterrupt(t *testing.T) {
 				time.Sleep(500 * time.Millisecond)
 
 				// Capture and verify recovery
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "c5", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux capture-pane -t runner --new`),
 						},
@@ -315,7 +315,7 @@ func TestAgentTmuxCtrlCInterrupt(t *testing.T) {
 				}), nil
 			case 6:
 				assertToolResult(t, req, "c5", "RECOVERED")
-				return chatResponse(provider.NewTextMessage("assistant", "Ctrl-C interrupt and recovery verified.")), nil
+				return chatResponse(NewTextMessage("assistant", "Ctrl-C interrupt and recovery verified.")), nil
 			default:
 				t.Fatalf("unexpected turn %d", turnIndex)
 				return nil, nil
@@ -343,6 +343,9 @@ func TestAgentTmuxInteractiveProgram(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only test")
 	}
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 not found")
+	}
 
 	dir := t.TempDir()
 	registry := command.NewRegistry()
@@ -358,16 +361,16 @@ func TestAgentTmuxInteractiveProgram(t *testing.T) {
 
 	turnIndex := 0
 	llm := &callbackProvider{
-		fn: func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 			turnIndex++
 			switch turnIndex {
 			case 1:
 				// Start python3 REPL
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "p1", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux new -d -s pyrepl "python3 -u -i"`),
 						},
@@ -378,11 +381,11 @@ func TestAgentTmuxInteractiveProgram(t *testing.T) {
 				time.Sleep(800 * time.Millisecond)
 
 				// Send first calculation
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "p2", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux send -t pyrepl "print(2**10)" Enter`),
 						},
@@ -393,11 +396,11 @@ func TestAgentTmuxInteractiveProgram(t *testing.T) {
 				time.Sleep(500 * time.Millisecond)
 
 				// Capture result
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "p3", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux capture-pane -t pyrepl --new`),
 						},
@@ -408,11 +411,11 @@ func TestAgentTmuxInteractiveProgram(t *testing.T) {
 				assertToolResult(t, req, "p3", "1024")
 
 				// Send second calculation
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "p4", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux send -t pyrepl "print('hello' + ' ' + 'world')" Enter`),
 						},
@@ -422,11 +425,11 @@ func TestAgentTmuxInteractiveProgram(t *testing.T) {
 				// Wait for python to compute
 				time.Sleep(500 * time.Millisecond)
 
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "p5", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux capture-pane -t pyrepl --new`),
 						},
@@ -436,18 +439,18 @@ func TestAgentTmuxInteractiveProgram(t *testing.T) {
 				assertToolResult(t, req, "p5", "hello world")
 
 				// Exit python
-				return chatResponse(provider.ChatMessage{
+				return chatResponse(ChatMessage{
 					Role: "assistant",
-					ToolCalls: []provider.ToolCall{{
+					ToolCalls: []ToolCall{{
 						ID: "p6", Type: "function",
-						Function: provider.FunctionCall{
+						Function: FunctionCall{
 							Name:      "bash",
 							Arguments: bashArgs(`tmux send -t pyrepl "exit()" Enter`),
 						},
 					}},
 				}), nil
 			case 7:
-				return chatResponse(provider.NewTextMessage("assistant",
+				return chatResponse(NewTextMessage("assistant",
 					"Python REPL interaction verified: 2^10=1024, string concat, clean exit.")), nil
 			default:
 				t.Fatalf("unexpected turn %d", turnIndex)
@@ -470,7 +473,7 @@ func TestAgentTmuxInteractiveProgram(t *testing.T) {
 	t.Logf("Python REPL interaction test passed in %d turns", turnIndex)
 }
 
-func assertToolResult(t *testing.T, req *provider.ChatCompletionRequest, toolCallID, contains string) {
+func assertToolResult(t *testing.T, req *ChatCompletionRequest, toolCallID, contains string) {
 	t.Helper()
 	if !hasToolMessage(req.Messages, toolCallID, contains) {
 		var actual string

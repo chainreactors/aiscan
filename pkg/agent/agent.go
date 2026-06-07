@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 )
 
 type Agent struct {
@@ -119,10 +118,10 @@ func (a *Agent) finishRun() {
 	a.running = false
 }
 
-func (a *Agent) messagesSnapshot() []provider.ChatMessage {
+func (a *Agent) messagesSnapshot() []ChatMessage {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return append([]provider.ChatMessage(nil), a.state.Messages...)
+	return append([]ChatMessage(nil), a.state.Messages...)
 }
 
 func (a *Agent) saveState(result *Result, err error) {
@@ -133,6 +132,6 @@ func (a *Agent) saveState(result *Result, err error) {
 		a.state.ErrorMessage = err.Error()
 	}
 	if result != nil {
-		a.state.Messages = append([]provider.ChatMessage(nil), result.Messages...)
+		a.state.Messages = append([]ChatMessage(nil), result.Messages...)
 	}
 }

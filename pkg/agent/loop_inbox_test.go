@@ -8,14 +8,13 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 )
 
 func TestInboxDrainedBeforeFirstTurnLLMCall(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.NewTextMessage("assistant", "ack")),
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "ack")),
 		},
 	}
 	ib := inbox.NewBuffered(4)
@@ -61,8 +60,8 @@ func TestInboxDrainedBeforeFirstTurnLLMCall(t *testing.T) {
 func TestInboxClosedDoesNotBlock(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.NewTextMessage("assistant", "done")),
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "done")),
 		},
 	}
 
@@ -81,7 +80,7 @@ func TestInboxClosedDoesNotBlock(t *testing.T) {
 }
 
 type pushingProvider struct {
-	inner  provider.Provider
+	inner  Provider
 	inbox  *inbox.Buffered
 	pushed bool
 	push   inbox.Message
@@ -89,7 +88,7 @@ type pushingProvider struct {
 
 func (p *pushingProvider) Name() string { return "pushing" }
 
-func (p *pushingProvider) ChatCompletion(ctx context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+func (p *pushingProvider) ChatCompletion(ctx context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	if !p.pushed {
 		p.pushed = true
 		p.inbox.Push(p.push)
@@ -102,16 +101,16 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
 
 	scripted := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.ChatMessage{
+		responses: []*ChatCompletionResponse{
+			chatResponse(ChatMessage{
 				Role: "assistant",
-				ToolCalls: []provider.ToolCall{{
+				ToolCalls: []ToolCall{{
 					ID:       "call_1",
 					Type:     "function",
-					Function: provider.FunctionCall{Name: "echo", Arguments: "{}"},
+					Function: FunctionCall{Name: "echo", Arguments: "{}"},
 				}},
 			}),
-			chatResponse(provider.NewTextMessage("assistant", "final")),
+			chatResponse(NewTextMessage("assistant", "final")),
 		},
 	}
 
@@ -164,9 +163,9 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 func TestRunWaitsWhenKeepAliveIsTrue(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.NewTextMessage("assistant", "waiting")),
-			chatResponse(provider.NewTextMessage("assistant", "final")),
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "waiting")),
+			chatResponse(NewTextMessage("assistant", "final")),
 		},
 	}
 	ib := inbox.NewBuffered(4)
@@ -207,7 +206,7 @@ func TestRunWaitsWhenKeepAliveIsTrue(t *testing.T) {
 	}
 }
 
-func contentOf(m provider.ChatMessage) string {
+func contentOf(m ChatMessage) string {
 	if m.Content == nil {
 		return ""
 	}

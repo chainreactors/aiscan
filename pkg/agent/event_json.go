@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 )
 
 const (
@@ -26,7 +25,7 @@ type EventJSON struct {
 	IsError       bool            `json:"is_error,omitempty"`
 	Error         string          `json:"error,omitempty"`
 	NewMessages   int             `json:"new_messages,omitempty"`
-	Usage         *provider.Usage `json:"usage,omitempty"`
+	Usage         *Usage `json:"usage,omitempty"`
 	ContextTokens int             `json:"context_tokens,omitempty"`
 }
 
@@ -76,7 +75,7 @@ func SerializableEvent(e Event) EventJSON {
 	return out
 }
 
-func ToMessageJSON(msg provider.ChatMessage) *MessageJSON {
+func ToMessageJSON(msg ChatMessage) *MessageJSON {
 	if msg.Role == "" && msg.Content == nil && len(msg.ContentParts) == 0 && len(msg.ToolCalls) == 0 && msg.ToolCallID == "" {
 		return nil
 	}
@@ -89,7 +88,7 @@ func ToMessageJSON(msg provider.ChatMessage) *MessageJSON {
 			if part.Type == "text" {
 				out.Content += part.Text
 			} else if part.Type == "image_url" && part.ImageURL != nil {
-				mediaType, _ := provider.ParseDataURI(part.ImageURL.URL)
+				mediaType, _ := ParseDataURI(part.ImageURL.URL)
 				out.Content += fmt.Sprintf("[image: %s]", mediaType)
 			}
 		}

@@ -12,6 +12,57 @@ import (
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
+// Re-export provider types so external consumers only import agent.
+
+type ChatMessage = provider.ChatMessage
+type ChatMessageDelta = provider.ChatMessageDelta
+type ToolCall = provider.ToolCall
+type ToolCallDelta = provider.ToolCallDelta
+type FunctionCall = provider.FunctionCall
+type FunctionCallDelta = provider.FunctionCallDelta
+type ToolDefinition = provider.ToolDefinition
+type FunctionDefinition = provider.FunctionDefinition
+type ContentPart = provider.ContentPart
+type ImageURL = provider.ImageURL
+type ChatCompletionRequest = provider.ChatCompletionRequest
+type ChatCompletionResponse = provider.ChatCompletionResponse
+type ChatCompletionStreamEvent = provider.ChatCompletionStreamEvent
+type Choice = provider.Choice
+type Usage = provider.Usage
+type APIError = provider.APIError
+type ResponseFormat = provider.ResponseFormat
+type JSONSchemaSpec = provider.JSONSchemaSpec
+type CacheRetention = provider.CacheRetention
+type Provider = provider.Provider
+type StreamingProvider = provider.StreamingProvider
+type ProviderConfig = provider.ProviderConfig
+
+const (
+	CacheNone  = provider.CacheNone
+	CacheShort = provider.CacheShort
+	CacheLong  = provider.CacheLong
+)
+
+var (
+	NewTextMessage       = provider.NewTextMessage
+	NewToolResultMessage = provider.NewToolResultMessage
+	NewMultimodalMessage = provider.NewMultimodalMessage
+	TextPart             = provider.TextPart
+	ImagePart            = provider.ImagePart
+	ParseDataURI         = provider.ParseDataURI
+
+	NewProvider              = provider.NewProvider
+	NewProviderFromResolved  = provider.NewProviderFromResolved
+	ResolveProvider          = provider.Resolve
+	InferProviderFromBaseURL = provider.InferFromBaseURL
+	KnownProviders           = provider.KnownProviders
+	APIKeyEnvName            = provider.APIKeyEnvName
+
+	ErrCallTimeout   = provider.ErrCallTimeout
+	ErrStreamStalled = provider.ErrStreamStalled
+)
+
+// Agent-specific types.
 
 type EventType string
 
@@ -44,11 +95,11 @@ type Event struct {
 	Type          EventType
 	SessionID     string
 	Turn          int
-	Request       *provider.ChatCompletionRequest
-	Message       provider.ChatMessage
-	Messages      []provider.ChatMessage
-	NewMessages   []provider.ChatMessage
-	ToolResults   []provider.ChatMessage
+	Request       *ChatCompletionRequest
+	Message       ChatMessage
+	Messages      []ChatMessage
+	NewMessages   []ChatMessage
+	ToolResults   []ChatMessage
 	ToolCallID    string
 	ToolName      string
 	Arguments     string
@@ -56,17 +107,17 @@ type Event struct {
 	IsError       bool
 	Err           error
 	Stop          StopReason
-	Usage         *provider.Usage
+	Usage         *Usage
 	ContextTokens int
 }
 
-type TransformContextFunc func([]provider.ChatMessage) []provider.ChatMessage
+type TransformContextFunc func([]ChatMessage) []ChatMessage
 
 type BeforeToolCallContext struct {
-	AssistantMessage provider.ChatMessage
-	ToolCall         provider.ToolCall
+	AssistantMessage ChatMessage
+	ToolCall         ToolCall
 	SystemPrompt     string
-	Messages         []provider.ChatMessage
+	Messages         []ChatMessage
 }
 
 type BeforeToolCallResult struct {
@@ -75,12 +126,12 @@ type BeforeToolCallResult struct {
 }
 
 type AfterToolCallContext struct {
-	AssistantMessage provider.ChatMessage
-	ToolCall         provider.ToolCall
+	AssistantMessage ChatMessage
+	ToolCall         ToolCall
 	Result           string
 	IsError          bool
 	SystemPrompt     string
-	Messages         []provider.ChatMessage
+	Messages         []ChatMessage
 }
 
 type ToolFlowDecision int
@@ -97,17 +148,17 @@ type AfterToolCallResult struct {
 }
 
 type Config struct {
-	Provider         provider.Provider
+	Provider         Provider
 	Tools            *command.CommandRegistry
 	Model            string
 	SystemPrompt     string
-	Messages         []provider.ChatMessage
+	Messages         []ChatMessage
 	MaxTokens        int
 	Temperature      *float64
 	Stream           bool
 	MaxRetries       int
 	TokenBudget      int
-	ResponseFormat   *provider.ResponseFormat
+	ResponseFormat   *ResponseFormat
 	Logger           telemetry.Logger
 	TransformContext TransformContextFunc
 	Bus              *eventbus.Bus[Event]
@@ -118,33 +169,33 @@ type Config struct {
 	Inbox            inbox.Inbox
 	Expander         *inbox.Expander
 	MaxResultSize    int
-	CacheRetention   provider.CacheRetention
+	CacheRetention   CacheRetention
 	SessionID        string
 }
 
 // Builder methods — each returns a modified copy (Config is a value type).
 
-func (c Config) WithProvider(p provider.Provider) Config         { c.Provider = p; return c }
-func (c Config) WithTools(t *command.CommandRegistry) Config     { c.Tools = t; return c }
-func (c Config) WithModel(m string) Config                       { c.Model = m; return c }
-func (c Config) WithSystemPrompt(s string) Config                { c.SystemPrompt = s; return c }
-func (c Config) WithMessages(msgs []provider.ChatMessage) Config { c.Messages = msgs; return c }
-func (c Config) WithStream(s bool) Config                        { c.Stream = s; return c }
-func (c Config) WithInbox(ib inbox.Inbox) Config                 { c.Inbox = ib; return c }
-func (c Config) WithLogger(l telemetry.Logger) Config            { c.Logger = l; return c }
-func (c Config) WithBus(b *eventbus.Bus[Event]) Config           { c.Bus = b; return c }
-func (c Config) WithMaxTokens(n int) Config                      { c.MaxTokens = n; return c }
-func (c Config) WithTemperature(t float64) Config                { c.Temperature = &t; return c }
-func (c Config) WithMaxRetries(n int) Config                     { c.MaxRetries = n; return c }
-func (c Config) WithTokenBudget(n int) Config                    { c.TokenBudget = n; return c }
-func (c Config) WithExpander(e *inbox.Expander) Config           { c.Expander = e; return c }
+func (c Config) WithProvider(p Provider) Config                { c.Provider = p; return c }
+func (c Config) WithTools(t *command.CommandRegistry) Config   { c.Tools = t; return c }
+func (c Config) WithModel(m string) Config                     { c.Model = m; return c }
+func (c Config) WithSystemPrompt(s string) Config              { c.SystemPrompt = s; return c }
+func (c Config) WithMessages(msgs []ChatMessage) Config        { c.Messages = msgs; return c }
+func (c Config) WithStream(s bool) Config                      { c.Stream = s; return c }
+func (c Config) WithInbox(ib inbox.Inbox) Config               { c.Inbox = ib; return c }
+func (c Config) WithLogger(l telemetry.Logger) Config          { c.Logger = l; return c }
+func (c Config) WithBus(b *eventbus.Bus[Event]) Config         { c.Bus = b; return c }
+func (c Config) WithMaxTokens(n int) Config                    { c.MaxTokens = n; return c }
+func (c Config) WithTemperature(t float64) Config              { c.Temperature = &t; return c }
+func (c Config) WithMaxRetries(n int) Config                   { c.MaxRetries = n; return c }
+func (c Config) WithTokenBudget(n int) Config                  { c.TokenBudget = n; return c }
+func (c Config) WithExpander(e *inbox.Expander) Config         { c.Expander = e; return c }
 func (c Config) WithTransformContext(fn TransformContextFunc) Config {
 	c.TransformContext = fn
 	return c
 }
-func (c Config) WithCacheRetention(r provider.CacheRetention) Config { c.CacheRetention = r; return c }
-func (c Config) WithSessionID(id string) Config                      { c.SessionID = id; return c }
-func (c Config) WithResponseFormat(rf *provider.ResponseFormat) Config {
+func (c Config) WithCacheRetention(r CacheRetention) Config    { c.CacheRetention = r; return c }
+func (c Config) WithSessionID(id string) Config                { c.SessionID = id; return c }
+func (c Config) WithResponseFormat(rf *ResponseFormat) Config {
 	c.ResponseFormat = rf
 	return c
 }
@@ -217,10 +268,10 @@ type TurnUsage struct {
 
 type Result struct {
 	Output        string
-	NewMessages   []provider.ChatMessage
-	Messages      []provider.ChatMessage
+	NewMessages   []ChatMessage
+	Messages      []ChatMessage
 	Turns         int
-	TotalUsage    provider.Usage
+	TotalUsage    Usage
 	TurnUsages    []TurnUsage
 	ContextTokens int
 	Err           error
@@ -228,7 +279,7 @@ type Result struct {
 
 type State struct {
 	SystemPrompt string
-	Messages     []provider.ChatMessage
+	Messages     []ChatMessage
 	Tools        *command.CommandRegistry
 	ErrorMessage string
 	LastError    error

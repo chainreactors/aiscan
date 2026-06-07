@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/command"
 )
 
@@ -35,7 +34,7 @@ type subAgentInfo struct {
 type SubAgentTool struct {
 	agent      *Agent
 	inbox      inbox.Inbox
-	messages   func() []provider.ChatMessage
+	messages   func() []ChatMessage
 	resolve    AgentTypeResolver
 	mu         sync.Mutex
 	running    map[string]*subAgentInfo
@@ -50,7 +49,7 @@ func NewSubAgentTool(agent *Agent, parentInbox inbox.Inbox, resolve AgentTypeRes
 	}
 }
 
-func (t *SubAgentTool) SetMessages(fn func() []provider.ChatMessage) {
+func (t *SubAgentTool) SetMessages(fn func() []ChatMessage) {
 	t.messages = fn
 }
 
@@ -70,7 +69,7 @@ type SubAgentArgs struct {
 	Timeout string `json:"timeout,omitempty" jsonschema:"description=Optional timeout for sync mode (e.g. 30s or 2m). Returns error on timeout."`
 }
 
-func (t *SubAgentTool) Definition() provider.ToolDefinition {
+func (t *SubAgentTool) Definition() ToolDefinition {
 	return command.ToolDef(t.Name(), t.Description(), SubAgentArgs{})
 }
 
@@ -330,8 +329,8 @@ func (t *SubAgentTool) uniqueName(base string) string {
 	return base + "-" + hex.EncodeToString(b)
 }
 
-func truncateToLastCompleteBoundary(messages []provider.ChatMessage) []provider.ChatMessage {
-	out := append([]provider.ChatMessage(nil), messages...)
+func truncateToLastCompleteBoundary(messages []ChatMessage) []ChatMessage {
+	out := append([]ChatMessage(nil), messages...)
 	for i := len(out) - 1; i >= 0; i-- {
 		msg := out[i]
 		if msg.Role == "tool" || msg.Role == "user" {

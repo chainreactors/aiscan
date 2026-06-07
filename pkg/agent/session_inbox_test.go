@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/command"
 )
@@ -35,16 +34,16 @@ func TestSessionCompletionInjectedIntoAgentLoop(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	scripted := &scriptedProvider{
-		responses: []*provider.ChatCompletionResponse{
-			chatResponse(provider.ChatMessage{
+		responses: []*ChatCompletionResponse{
+			chatResponse(ChatMessage{
 				Role: "assistant",
-				ToolCalls: []provider.ToolCall{{
+				ToolCalls: []ToolCall{{
 					ID:       "call_1",
 					Type:     "function",
-					Function: provider.FunctionCall{Name: "echo", Arguments: "{}"},
+					Function: FunctionCall{Name: "echo", Arguments: "{}"},
 				}},
 			}),
-			chatResponse(provider.NewTextMessage("assistant", "saw the background session")),
+			chatResponse(NewTextMessage("assistant", "saw the background session")),
 		},
 	}
 
