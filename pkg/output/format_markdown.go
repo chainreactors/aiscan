@@ -17,11 +17,6 @@ func RenderRecordsMarkdown(w io.Writer, records []Record) error {
 
 	for _, r := range records {
 		switch r.Type {
-		case TypeService:
-			d, _ := ParseRecordData[Loot](r)
-			_ = d // services rendered via Result
-		case TypeWeb:
-			// handled via Result
 		case TypeLoot:
 			d, _ := ParseRecordData[Loot](r)
 			result.Loots = append(result.Loots, d)

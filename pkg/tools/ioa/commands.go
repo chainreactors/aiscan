@@ -256,6 +256,11 @@ func (c *sendCommand) Execute(ctx context.Context, args []string, w io.Writer) e
 	if err != nil {
 		return fmt.Errorf("ioa_send: %w\n\n%s", err, c.Usage())
 	}
+
+	if sub == "checkpoint" {
+		return c.execCheckpoint(ctx, m, w)
+	}
+
 	content, _ := m["content"].(map[string]interface{})
 	if content == nil {
 		return fmt.Errorf("ioa_send: --content is required and must be a JSON object\n\n%s", c.Usage())
@@ -264,8 +269,6 @@ func (c *sendCommand) Execute(ctx context.Context, args []string, w io.Writer) e
 	body := ioamodel.SendMessage{Content: content}
 
 	switch sub {
-	case "checkpoint":
-		return c.execCheckpoint(ctx, m, w)
 	case "to":
 		node, _ := m["node"].(string)
 		if node == "" {

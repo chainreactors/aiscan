@@ -258,6 +258,68 @@ func TestSendUnknownSubcommand(t *testing.T) {
 	}
 }
 
+func TestSendCheckpoint(t *testing.T) {
+	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	cmds := NewCommands(client, "tester", nil)
+	joinSpace(t, cmds)
+
+	var buf bytes.Buffer
+	if err := findCmd(t, cmds, "ioa_send").Execute(context.Background(), []string{
+		"checkpoint",
+		"--kind", "verify",
+		"--title", "SQL Injection Found",
+		"--content", "Confirmed via error-based injection on /login",
+		"--target", "http://10.0.0.1:8080",
+		"--status", "confirmed",
+	}, &buf); err != nil {
+		t.Fatalf("ioa_send checkpoint: %v", err)
+	}
+	if len(client.sentSpaceIDs) != 1 || client.sentSpaceIDs[0] != knownSpaceID {
+		t.Fatalf("sent to %v, want [%s]", client.sentSpaceIDs, knownSpaceID)
+	}
+	content := client.lastSentBody.Content
+	if content["type"] != "checkpoint" {
+		t.Fatalf("content type = %v, want checkpoint", content["type"])
+	}
+	if content["kind"] != "verify" {
+		t.Fatalf("content kind = %v, want verify", content["kind"])
+	}
+	if content["title"] != "SQL Injection Found" {
+		t.Fatalf("content title = %v", content["title"])
+	}
+	if content["target"] != "http://10.0.0.1:8080" {
+		t.Fatalf("content target = %v", content["target"])
+	}
+	if content["status"] != "confirmed" {
+		t.Fatalf("content status = %v", content["status"])
+	}
+}
+
+func TestSendCheckpointMissingArgs(t *testing.T) {
+	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	cmds := NewCommands(client, "tester", nil)
+	joinSpace(t, cmds)
+
+	err := findCmd(t, cmds, "ioa_send").Execute(context.Background(), []string{
+		"checkpoint", "--kind", "verify",
+	}, discard{})
+	if err == nil || !strings.Contains(err.Error(), "--title") {
+		t.Fatalf("expected --title required error, got: %v", err)
+	}
+}
+
+func TestSendCheckpointWithoutSpace(t *testing.T) {
+	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	cmds := NewCommands(client, "tester", nil)
+
+	err := findCmd(t, cmds, "ioa_send").Execute(context.Background(), []string{
+		"checkpoint", "--kind", "verify", "--title", "test",
+	}, discard{})
+	if err == nil || !strings.Contains(err.Error(), "no space joined") {
+		t.Fatalf("expected no-space error, got: %v", err)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // ioa_read subcommands
 // ---------------------------------------------------------------------------
