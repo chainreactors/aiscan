@@ -16,8 +16,7 @@ const (
 	TypeScanStart RecordType = "scan_start"
 	TypeService   RecordType = "service"
 	TypeWeb       RecordType = "web"
-	TypeFinding   RecordType = "finding"
-	TypeAISkill   RecordType = "ai_skill"
+	TypeLoot      RecordType = "loot"
 	TypeScanEnd   RecordType = "scan_end"
 )
 

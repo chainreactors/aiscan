@@ -11,9 +11,7 @@ type Result struct {
 	Assets    []Asset                  `json:"assets,omitempty"`
 	Services  []*sdktypes.GOGOResult   `json:"services,omitempty"`
 	WebProbes []*sdktypes.SprayResult  `json:"web_probes,omitempty"`
-	Risks     []*sdktypes.ZombieResult `json:"risks,omitempty"`
-	Vulns     []*sdktypes.VulnResult   `json:"vulns,omitempty"`
-	AI        []AIFinding              `json:"ai,omitempty"`
+	Loots     []Loot                   `json:"loots,omitempty"`
 	Errors    []Error                  `json:"errors,omitempty"`
 }
 
@@ -22,9 +20,7 @@ type Summary struct {
 	Services   int       `json:"services"`
 	Webs       int       `json:"webs"`
 	Probes     int       `json:"probes"`
-	Risks      int       `json:"risks"`
-	Vulns      int       `json:"vulns"`
-	Verified   int       `json:"verified"`
+	Loots      int       `json:"loots"`
 	Errors     int       `json:"errors"`
 	Tasks      int64     `json:"tasks"`
 	Requests   int64     `json:"requests"`
@@ -32,6 +28,32 @@ type Summary struct {
 	StartedAt  time.Time `json:"started_at,omitempty"`
 	FinishedAt time.Time `json:"finished_at,omitempty"`
 }
+
+// Loot represents a valuable scan output — a confirmed vulnerability,
+// compromised credential, identified technology stack, or other
+// security-relevant discovery.
+type Loot struct {
+	Kind        string         `json:"kind"`
+	Target      string         `json:"target"`
+	Priority    string         `json:"priority"`
+	Description string         `json:"description,omitempty"`
+	Tags        []string       `json:"tags,omitempty"`
+	Data        map[string]any `json:"data,omitempty"`
+}
+
+func (l Loot) Key() string {
+	key := l.Kind + "|" + l.Target
+	if id, _ := l.Data["key"].(string); id != "" {
+		key += "|" + id
+	}
+	return key
+}
+
+const (
+	LootFingerprint = "fingerprint"
+	LootWeakpass    = "weakpass"
+	LootVuln        = "vuln"
+)
 
 type Asset struct {
 	ID     string      `json:"id"`
@@ -65,21 +87,6 @@ type AssetItem struct {
 	Raw     string         `json:"raw,omitempty"`
 }
 
-type AIFinding struct {
-	Kind         string `json:"kind"`
-	Target       string `json:"target,omitempty"`
-	Priority     string `json:"priority,omitempty"`
-	Status       string `json:"status,omitempty"`
-	Summary      string `json:"summary,omitempty"`
-	Detail       string `json:"detail,omitempty"`
-	Evidence     string `json:"evidence,omitempty"`
-	Skill        string `json:"skill,omitempty"`
-	Source       string `json:"source,omitempty"`
-	OriginalKind string `json:"original_kind,omitempty"`
-	OriginalKey  string `json:"original_key,omitempty"`
-	Raw          string `json:"raw,omitempty"`
-}
-
 type Error struct {
 	Source  string `json:"source,omitempty"`
 	Message string `json:"message"`
@@ -98,17 +105,6 @@ type ScanEnd struct {
 	Targets  int     `json:"targets"`
 	Services int     `json:"services"`
 	Webs     int     `json:"webs"`
-	Findings int     `json:"findings"`
-	AISkills int     `json:"ai_skills"`
+	Loots    int     `json:"loots"`
 	Errors   int     `json:"errors"`
 }
-
-type AISkill struct {
-	Skill    string  `json:"skill"`
-	Target   string  `json:"target"`
-	Status   string  `json:"status"`
-	Summary  string  `json:"summary"`
-	Detail   string  `json:"detail,omitempty"`
-	Duration float64 `json:"duration_s"`
-}
-

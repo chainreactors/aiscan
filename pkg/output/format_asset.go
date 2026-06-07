@@ -16,13 +16,12 @@ func FormatAssetReport(result *Result, color bool) string {
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Assets: %d total\n", len(result.Assets))
-	fmt.Fprintf(&sb, "Summary: %d target(s), %d service(s), %d web endpoint(s), %d probe(s), %d finding(s), %d tool call(s), %d error(s), %s\n\n",
+	fmt.Fprintf(&sb, "Summary: %d target(s), %d service(s), %d web endpoint(s), %d probe(s), %d finding(s), %d error(s), %s\n\n",
 		result.Summary.Targets,
 		result.Summary.Services,
 		result.Summary.Webs,
 		result.Summary.Probes,
-		result.Summary.Risks+result.Summary.Vulns,
-		len(result.ToolCalls),
+		result.Summary.Loots,
 		result.Summary.Errors,
 		result.Summary.Duration,
 	)

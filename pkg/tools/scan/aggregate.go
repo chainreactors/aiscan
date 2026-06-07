@@ -54,22 +54,8 @@ func AggregateStructuredResult(result *output.Result) []output.Asset {
 			}
 		}
 	}
-	for _, risk := range result.Risks {
-		builder.addZombieFinding(risk)
-	}
-	for _, vuln := range result.Vulns {
-		builder.addVulnFinding(vuln)
-	}
-	for _, tc := range result.ToolCalls {
-		view := output.ParseToolCallView(tc)
-		kind := output.AssetItemNote
-		switch view.Status {
-		case string(verificationConfirmed):
-			kind = output.AssetItemFinding
-		case "response":
-			kind = output.AssetItemResponse
-		}
-		builder.addToolCallFinding(view, kind)
+	for i := range result.Loots {
+		builder.addLoot(&result.Loots[i])
 	}
 	for _, err := range result.Errors {
 		builder.addError(err)
@@ -192,111 +178,33 @@ func (b *assetBuilder) addFrameworkFingerprint(targetStr, name string, focus boo
 	b.addItem(target, keys, identity, item)
 }
 
-func (b *assetBuilder) addZombieFinding(zr *sdktypes.ZombieResult) {
-	if zr == nil {
+func (b *assetBuilder) addLoot(loot *output.Loot) {
+	if loot == nil {
 		return
 	}
-	target := assetTargetFromValues(zr.Address())
-	keys := targetKeys(target, zr.Address())
-	summary := zr.Service
-	if zr.Username != "" || zr.Password != "" {
-		summary += " " + zr.Username + "/" + zr.Password
+	target := assetTargetFromValues(loot.Target)
+	keys := targetKeys(target, loot.Target)
+	status := output.FirstNonEmpty(loot.Priority, output.AssetItemFinding)
+	data := make(map[string]any)
+	data["kind"] = loot.Kind
+	for k, v := range loot.Data {
+		data[k] = v
 	}
-	data := assetData(
-		"kind", "zombie",
-		"service", zr.Service,
-		"username", zr.Username,
-		"password", zr.Password,
-	)
 	item := output.AssetItem{
 		Kind:    output.AssetItemFinding,
-		Source:  capZombieWeakpass,
-		Target:  zr.Address(),
-		Status:  output.AssetItemFinding,
-		Title:   summary,
-		Summary: summary,
-		Tags:    output.CompactStrings("zombie", zr.Service),
+		Source:  loot.Kind,
+		Target:  loot.Target,
+		Status:  status,
+		Title:   loot.Description,
+		Summary: loot.Description,
+		Tags:    output.CompactStrings(append([]string{loot.Kind}, loot.Tags...)...),
 		Data:    data,
 	}
 	identity := strings.Join(output.CompactStrings(
 		output.AssetItemFinding,
-		"zombie",
-		zr.Address(),
-		zr.Service,
-		zr.Username,
-		zr.Password,
-	), "|")
-	b.addItem(target, keys, identity, item)
-}
-
-func (b *assetBuilder) addVulnFinding(vr *sdktypes.VulnResult) {
-	if vr == nil {
-		return
-	}
-	target := assetTargetFromValues(vr.Target)
-	keys := targetKeys(target, vr.Target)
-	summary := vr.TemplateID
-	if vr.TemplateName != "" {
-		summary += " — " + vr.TemplateName
-	}
-	status := output.FirstNonEmpty(vr.Severity, output.AssetItemFinding)
-	data := assetData(
-		"kind", "vuln",
-		"template_id", vr.TemplateID,
-		"template_name", vr.TemplateName,
-		"severity", vr.Severity,
-	)
-	item := output.AssetItem{
-		Kind:    output.AssetItemFinding,
-		Source:  capNeutronPOC,
-		Target:  vr.Target,
-		Status:  status,
-		Title:   summary,
-		Summary: summary,
-		Tags:    output.CompactStrings("vuln", vr.Severity, vr.TemplateID),
-		Data:    data,
-	}
-	identity := strings.Join(output.CompactStrings(
-		output.AssetItemFinding,
-		"vuln",
-		vr.Target,
-		vr.TemplateID,
-	), "|")
-	b.addItem(target, keys, identity, item)
-}
-
-func (b *assetBuilder) addToolCallFinding(view output.ToolCallView, itemKind string) {
-	target := assetTargetFromValues(view.Target, view.Title)
-	keys := targetKeys(target, view.Target)
-	status := view.Status
-	if itemKind == output.AssetItemFinding && status == "" {
-		status = output.AssetItemFinding
-	}
-	summary := output.FirstNonEmpty(output.ToolCallSummary(view), view.Kind)
-	detail := output.ToolCallDetail(view)
-	data := assetData(
-		"tool", view.Tool,
-		"kind", view.Kind,
-		"status", view.Status,
-	)
-	item := output.AssetItem{
-		Kind:    itemKind,
-		Source:  output.FirstNonEmpty(view.Kind, view.Tool),
-		Target:  view.Target,
-		Status:  status,
-		Title:   summary,
-		Summary: summary,
-		Detail:  detail,
-		Tags:    output.CompactStrings(view.Kind, view.Status, view.Tool),
-		Data:    data,
-	}
-	identity := strings.Join(output.CompactStrings(
-		itemKind,
-		view.Tool,
-		view.Kind,
-		view.Target,
-		view.Status,
-		view.Title,
+		loot.Kind,
+		loot.Target,
+		loot.Description,
 	), "|")
 	b.addItem(target, keys, identity, item)
 }
@@ -560,7 +468,7 @@ func preferredAssetKey(keys map[string]struct{}, target string) string {
 
 func deriveAssetTitle(asset output.Asset) string {
 	if title := firstItemText(asset.Items, func(item output.AssetItem) bool {
-		return (item.Kind == output.AssetItemFinding || item.Kind == output.AssetItemNote) && item.Status == string(verificationConfirmed)
+		return (item.Kind == output.AssetItemFinding || item.Kind == output.AssetItemNote) && item.Status == "confirmed"
 	}); title != "" {
 		return title
 	}
@@ -625,7 +533,7 @@ func deriveAssetStatus(items []output.AssetItem) string {
 func assetStatusRank(kind, status string) int {
 	status = strings.ToLower(strings.TrimSpace(status))
 	switch status {
-	case string(verificationConfirmed):
+	case "confirmed":
 		return 100
 	case string(priorityCritical):
 		return 95
@@ -639,11 +547,11 @@ func assetStatusRank(kind, status string) int {
 		return 60
 	case string(priorityLow):
 		return 50
-	case string(verificationInconclusive):
+	case "inconclusive":
 		return 40
-	case string(verificationNotConfirmed):
+	case "not_confirmed":
 		return 30
-	case string(verificationFailed), output.AssetItemError:
+	case "failed", output.AssetItemError:
 		return 20
 	}
 	if kind == output.AssetItemFinding {

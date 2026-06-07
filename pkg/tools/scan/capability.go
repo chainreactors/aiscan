@@ -17,9 +17,6 @@ const (
 	capHTTPBasicAuth  = "http_basic_auth"
 	capZombieWeakpass = "zombie_weakpass"
 	capNeutronPOC     = "neutron_poc"
-	capAgentVerify    = "agent_verify"
-	capAgentSniper    = "agent_sniper"
-	capAgentDeep      = "agent_deep"
 )
 
 // CapabilityBuilder builds additional pipeline capabilities for a given
@@ -199,12 +196,6 @@ func (c *Command) buildCapabilities(flags flags, opts scanOptions, profile profi
 		capabilities = append(capabilities, builder(c, flags, opts, profile)...)
 	}
 
-	for _, skill := range scanAISkills {
-		if !aiSkillEnabled(skill, flags) {
-			continue
-		}
-		capabilities = append(capabilities, buildAISkillCap(c, skill))
-	}
 	return capabilities
 }
 

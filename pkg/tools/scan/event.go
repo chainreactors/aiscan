@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/parsers"
 	sdktypes "github.com/chainreactors/sdk/pkg/types"
 )
@@ -13,22 +14,22 @@ import (
 type eventKind string
 
 const (
-	eventTarget  eventKind = "target"
-	eventFinding eventKind = "finding"
-	eventError   eventKind = "error"
-	eventStats   eventKind = "stats"
+	eventTarget eventKind = "target"
+	eventLoot   eventKind = "loot"
+	eventError  eventKind = "error"
+	eventStats  eventKind = "stats"
 )
 
 var statsEventSeq uint64
 
 type event struct {
-	Kind    eventKind
-	Source  string
-	Raw     string
-	Target  target
-	Finding finding
-	Error   errorEvent
-	Stats   sdktypes.Stats
+	Kind   eventKind
+	Source string
+	Raw    string
+	Target target
+	Loot   *output.Loot
+	Error  errorEvent
+	Stats  sdktypes.Stats
 }
 
 func targetEvent(source, raw string, target target) event {
@@ -38,8 +39,8 @@ func targetEvent(source, raw string, target target) event {
 	return event{Kind: eventTarget, Source: source, Raw: raw, Target: target}
 }
 
-func findingEvent(source string, finding finding) event {
-	return event{Kind: eventFinding, Source: source, Finding: finding}
+func lootEvent(source string, loot output.Loot) event {
+	return event{Kind: eventLoot, Source: source, Loot: &loot}
 }
 
 func errorEventOf(source, message string) event {
@@ -58,11 +59,11 @@ func (e event) Key() string {
 			return ""
 		}
 		return fmt.Sprintf("%s|%s", e.Target.Kind(), e.Target.Key())
-	case eventFinding:
-		if e.Finding == nil {
+	case eventLoot:
+		if e.Loot == nil {
 			return ""
 		}
-		return fmt.Sprintf("%s|%s", e.Finding.Kind(), e.Finding.Key())
+		return e.Loot.Key()
 	case eventError:
 		return string(eventError) + "|" + e.Error.Message
 	case eventStats:
@@ -81,9 +82,9 @@ func (e event) label() string {
 		if e.Target != nil {
 			return string(e.Target.Kind())
 		}
-	case eventFinding:
-		if e.Finding != nil {
-			return string(e.Finding.Kind())
+	case eventLoot:
+		if e.Loot != nil {
+			return e.Loot.Kind
 		}
 	case eventError:
 		return string(eventError)
@@ -92,23 +93,6 @@ func (e event) label() string {
 	}
 	return string(e.Kind)
 }
-
-type finding interface {
-	Kind() findingKind
-	Key() string
-	Priority() priority
-}
-
-type findingKind string
-
-const (
-	findingFingerprint  findingKind = "fingerprint"
-	findingWeakpass     findingKind = "weakpass-finding"
-	findingVuln         findingKind = "vuln-finding"
-	findingVerification findingKind = "verification-finding"
-	findingAISkill      findingKind = "ai-skill"
-	findingAIResponse   findingKind = "ai-response"
-)
 
 type errorEvent struct {
 	Message string
@@ -180,160 +164,74 @@ func reportableSprayResultForCapability(result *parsers.SprayResult, capability 
 	return capability == capSprayCheck || result.Source != parsers.CheckSource
 }
 
-func reportableVerificationFinding(finding verificationFinding) bool {
-	return finding.Status == verificationConfirmed && (finding.Target != "" || finding.Summary != "" || finding.Evidence != "")
-}
+// --- Loot constructors ---
 
-type fingerprintFinding struct {
-	Target  string
-	Fingers []string
-	Focus   bool
-}
-
-func (f fingerprintFinding) Kind() findingKind { return findingFingerprint }
-
-func (f fingerprintFinding) Priority() priority {
-	if f.Focus {
-		return priorityHigh
+func fingerprintLoot(target string, fingers []string, focus bool) output.Loot {
+	pri := string(priorityLow)
+	if focus {
+		pri = string(priorityHigh)
 	}
-	return priorityLow
-}
-
-func (f fingerprintFinding) Key() string {
-	return strings.ToLower(f.Target) + "|" + strings.Join(f.Fingers, ",") + fmt.Sprintf("|focus=%t", f.Focus)
-}
-
-type weakpassFinding struct {
-	Result *parsers.ZombieResult
-}
-
-func (f weakpassFinding) Kind() findingKind { return findingWeakpass }
-
-func (f weakpassFinding) Priority() priority { return priorityHigh }
-
-func (f weakpassFinding) Key() string {
-	if f.Result == nil {
-		return ""
+	return output.Loot{
+		Kind:        output.LootFingerprint,
+		Target:      target,
+		Priority:    pri,
+		Description: strings.Join(fingers, ", "),
+		Tags:        fingers,
+		Data: map[string]any{
+			"key":     strings.ToLower(target) + "|" + strings.Join(fingers, ","),
+			"fingers": fingers,
+			"focus":   focus,
+		},
 	}
-	return fmt.Sprintf("%s|%s|%s|%s|%d",
-		strings.ToLower(f.Result.Service),
-		strings.ToLower(f.Result.Address()),
-		f.Result.Username,
-		f.Result.Password,
-		f.Result.Mod,
-	)
 }
 
-type vulnFinding struct {
-	Result *sdktypes.VulnResult
-}
-
-func (f vulnFinding) Kind() findingKind { return findingVuln }
-
-func (f vulnFinding) Priority() priority {
-	if f.Result != nil {
-		switch f.Result.Severity {
-		case "critical":
-			return priorityCritical
-		case "high":
-			return priorityHigh
-		case "medium":
-			return priorityMedium
-		case "info":
-			return priorityLow
-		}
+func weakpassLoot(result *parsers.ZombieResult) output.Loot {
+	desc := result.Service
+	if result.Username != "" || result.Password != "" {
+		desc += " " + result.Username + "/" + result.Password
 	}
-	return priorityHigh
-}
-
-func (f vulnFinding) Key() string { return f.String() }
-
-func (f vulnFinding) String() string {
-	if f.Result == nil {
-		return ""
+	return output.Loot{
+		Kind:        output.LootWeakpass,
+		Target:      result.Address(),
+		Priority:    string(priorityHigh),
+		Description: desc,
+		Tags:        []string{result.Service},
+		Data: map[string]any{
+			"key":      fmt.Sprintf("%s|%s|%s|%s", result.Service, result.Address(), result.Username, result.Password),
+			"service":  result.Service,
+			"username": result.Username,
+			"password": result.Password,
+		},
 	}
-	return strings.TrimSpace(parsers.JoinOutput(f.Result.Target, f.Result.TemplateID, f.Result.Severity, f.Result.TemplateName))
 }
 
-type aiSkillFinding struct {
-	Skill        string
-	Target       string
-	Status       string
-	Summary      string
-	Detail       string
-	OriginalKey  string
-	OriginalKind findingKind
-}
-
-func (f aiSkillFinding) Kind() findingKind { return findingAISkill }
-
-func (f aiSkillFinding) Priority() priority {
-	if f.Status == "confirmed" {
-		return priorityHigh
+func vulnLoot(result *sdktypes.VulnResult) output.Loot {
+	pri := string(priorityHigh)
+	switch result.Severity {
+	case "critical":
+		pri = string(priorityCritical)
+	case "high":
+		pri = string(priorityHigh)
+	case "medium":
+		pri = string(priorityMedium)
+	case "info":
+		pri = string(priorityLow)
 	}
-	return priorityMedium
-}
-
-func (f aiSkillFinding) Key() string {
-	return f.Skill + "|" + f.Target + "|" + f.OriginalKey
-}
-
-type aiSkillResponse struct {
-	Skill        string
-	Target       string
-	Status       string
-	Summary      string
-	Detail       string
-	Raw          string
-	OriginalKey  string
-	OriginalKind findingKind
-}
-
-func (f aiSkillResponse) Kind() findingKind { return findingAIResponse }
-
-func (f aiSkillResponse) Priority() priority { return priorityLow }
-
-func (f aiSkillResponse) Key() string {
-	return f.Skill + "|" + f.Target + "|" + f.Status + "|" + f.OriginalKey + "|" + firstLine(f.Raw)
-}
-
-func firstLine(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
+	desc := result.TemplateID
+	if result.TemplateName != "" {
+		desc += " — " + result.TemplateName
 	}
-	if idx := strings.IndexByte(value, '\n'); idx >= 0 {
-		value = value[:idx]
+	return output.Loot{
+		Kind:        output.LootVuln,
+		Target:      result.Target,
+		Priority:    pri,
+		Description: desc,
+		Tags:        []string{result.Severity, result.TemplateID},
+		Data: map[string]any{
+			"key":           result.Target + "|" + result.TemplateID,
+			"template_id":   result.TemplateID,
+			"template_name": result.TemplateName,
+			"severity":      result.Severity,
+		},
 	}
-	if len(value) > 160 {
-		value = value[:160]
-	}
-	return value
-}
-
-type verificationStatus string
-
-const (
-	verificationConfirmed    verificationStatus = "confirmed"
-	verificationNotConfirmed verificationStatus = "not_confirmed"
-	verificationInconclusive verificationStatus = "inconclusive"
-	verificationFailed       verificationStatus = "failed"
-)
-
-type verificationFinding struct {
-	OriginalKey      string
-	OriginalKind     findingKind
-	OriginalPriority priority
-	Status           verificationStatus
-	Target           string
-	Summary          string
-	Evidence         string
-}
-
-func (f verificationFinding) Kind() findingKind { return findingVerification }
-
-func (f verificationFinding) Priority() priority { return f.OriginalPriority }
-
-func (f verificationFinding) Key() string {
-	return fmt.Sprintf("%s|%s|%s", f.OriginalKind, f.OriginalKey, f.Status)
 }

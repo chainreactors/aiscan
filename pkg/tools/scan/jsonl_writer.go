@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
@@ -100,8 +99,8 @@ func observationToRecords(e event) []output.Record {
 	switch e.Kind {
 	case eventTarget:
 		return targetToRecords(e)
-	case eventFinding:
-		return findingToRecords(e)
+	case eventLoot:
+		return lootToRecords(e)
 	default:
 		return nil
 	}
@@ -121,22 +120,11 @@ func targetToRecords(e event) []output.Record {
 	return nil
 }
 
-func findingToRecords(e event) []output.Record {
-	switch finding := e.Finding.(type) {
-	case weakpassFinding:
-		if finding.Result != nil {
-			return []output.Record{output.NewRecord(output.TypeFinding, finding.Result)}
-		}
-	case vulnFinding:
-		if finding.String() != "" {
-			return []output.Record{output.NewRecord(output.TypeFinding, finding.Result)}
-		}
-	case aiSkillFinding:
-		if finding.Summary != "" || finding.Detail != "" {
-			return []output.Record{output.NewRecord(output.TypeToolCall, aiSkillToToolCall(finding))}
-		}
+func lootToRecords(e event) []output.Record {
+	if e.Loot == nil {
+		return nil
 	}
-	return nil
+	return []output.Record{output.NewRecord(output.TypeLoot, e.Loot)}
 }
 
 func ObservationToRecord(obs pipeline.Observation) *output.Record {
@@ -152,57 +140,6 @@ func ObservationToRecord(obs pipeline.Observation) *output.Record {
 		return nil
 	}
 	return &records[0]
-}
-
-func aiSkillToToolCall(finding aiSkillFinding) provider.ToolCall {
-	args, _ := json.Marshal(map[string]any{
-		"kind":    finding.Skill,
-		"title":   finding.Summary,
-		"content": finding.Detail,
-		"target":  finding.Target,
-		"status":  finding.Status,
-	})
-	return provider.ToolCall{
-		Type: "function",
-		Function: provider.FunctionCall{
-			Name:      "checkpoint",
-			Arguments: string(args),
-		},
-	}
-}
-
-func aiSkillResponseToToolCall(response aiSkillResponse) provider.ToolCall {
-	args, _ := json.Marshal(map[string]any{
-		"kind":    response.Skill,
-		"title":   response.Summary,
-		"content": response.Detail,
-		"target":  response.Target,
-		"status":  response.Status,
-	})
-	return provider.ToolCall{
-		Type: "function",
-		Function: provider.FunctionCall{
-			Name:      "checkpoint",
-			Arguments: string(args),
-		},
-	}
-}
-
-func verificationToToolCall(finding verificationFinding) provider.ToolCall {
-	args, _ := json.Marshal(map[string]any{
-		"kind":    "verify",
-		"title":   finding.Summary,
-		"content": finding.Evidence,
-		"target":  finding.Target,
-		"status":  string(finding.Status),
-	})
-	return provider.ToolCall{
-		Type: "function",
-		Function: provider.FunctionCall{
-			Name:      "checkpoint",
-			Arguments: string(args),
-		},
-	}
 }
 
 type ServiceResult = parsers.GOGOResult

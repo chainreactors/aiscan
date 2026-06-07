@@ -170,9 +170,7 @@ func (c *Command) runPOCCapability(ctx context.Context, flags flags, input targe
 		if result == nil || !result.Matched() {
 			continue
 		}
-		emit(findingEvent(capNeutronPOC, vulnFinding{
-			Result: result.VulnResult(target.Target),
-		}))
+		emit(lootEvent(capNeutronPOC, vulnLoot(result.VulnResult(target.Target))))
 	}
 }
 
@@ -191,7 +189,7 @@ func deriveServiceResult(profile profile, source string, result *parsers.GOGORes
 		emit(targetEvent(source, "", newWebTarget("", target, "")))
 	}
 	if len(fingers) > 0 {
-		emit(findingEvent(source, fingerprintFinding{Target: target, Fingers: parsers.NormalizeNames(fingers), Focus: result.Frameworks.IsFocus()}))
+		emit(lootEvent(source, fingerprintLoot(target, parsers.NormalizeNames(fingers), result.Frameworks.IsFocus())))
 	}
 	if len(fingers) > 0 || profile.AllowBroadPOC {
 		emit(targetEvent(source, "", newPOCTarget("", target, fingers)))
@@ -219,7 +217,7 @@ func deriveWebProbeResult(profile profile, source string, result *parsers.SprayR
 	}
 	fingers := parsers.FrameworkNames(result.Frameworks)
 	if len(fingers) > 0 {
-		emit(findingEvent(source, fingerprintFinding{Target: result.UrlString, Fingers: parsers.NormalizeNames(fingers), Focus: result.Frameworks.IsFocus()}))
+		emit(lootEvent(source, fingerprintLoot(result.UrlString, parsers.NormalizeNames(fingers), result.Frameworks.IsFocus())))
 	}
 	if result.Status > 0 && (len(fingers) > 0 || profile.AllowBroadPOC) {
 		emit(targetEvent(source, "", newPOCTarget("", result.UrlString, fingers)))
@@ -310,7 +308,7 @@ func deriveWeakpassResult(source string, result *parsers.ZombieResult, emit func
 	if result == nil {
 		return
 	}
-	emit(findingEvent(source, weakpassFinding{Result: result}))
+	emit(lootEvent(source, weakpassLoot(result)))
 	if webURL := zombieResultWebURL(result); webURL != "" {
 		emit(targetEvent(source, "", newWebTarget("", webURL, "")))
 	}

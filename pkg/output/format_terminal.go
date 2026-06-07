@@ -6,8 +6,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-
-	sdktypes "github.com/chainreactors/sdk/pkg/types"
 )
 
 func RenderRecordsTerminal(w io.Writer, records []Record) error {
@@ -37,40 +35,21 @@ func RenderRecordsTerminal(w io.Writer, records []Record) error {
 				c.Code(ANSIGreen), c.Code(ANSIReset),
 				d.URL, d.Status, d.Title, fingers)
 
-		case TypeFinding:
-			// Try zombie result first, then vuln result.
-			var zr sdktypes.ZombieResult
-			if err := json.Unmarshal(r.Data, &zr); err == nil && zr.Service != "" {
-				fmt.Fprintf(w, "%s[zombie]%s %s %s %s/%s\n",
-					c.Code(ANSIYellow), c.Code(ANSIReset), zr.Address(), zr.Service, zr.Username, zr.Password)
-			} else {
-				var vr sdktypes.VulnResult
-				if err := json.Unmarshal(r.Data, &vr); err == nil && vr.TemplateID != "" {
-					color := ANSIYellow
-					if vr.Severity == "high" || vr.Severity == "critical" {
-						color = ANSIRed
-					}
-					fmt.Fprintf(w, "%s[vuln]%s %s %s — %s\n",
-						c.Code(color), c.Code(ANSIReset), vr.Target, vr.TemplateID, vr.TemplateName)
-				}
+		case TypeLoot:
+			d, _ := ParseRecordData[Loot](r)
+			prefix := d.Kind
+			color := ANSIYellow
+			if d.Priority == "high" || d.Priority == "critical" {
+				color = ANSIRed
 			}
-
-		case TypeAISkill:
-			d, _ := ParseRecordData[AISkill](r)
-			color := ANSIGreen
-			if d.Status == "inconclusive" {
-				color = ANSIYellow
-			}
-			fmt.Fprintf(w, "%s[ai:%s]%s %s %s — %s %s(%.1fs)%s\n",
-				c.Code(color), d.Skill, c.Code(ANSIReset),
-				d.Target, d.Status, d.Summary,
-				c.Code(ANSIDim), d.Duration, c.Code(ANSIReset))
+			fmt.Fprintf(w, "%s[%s]%s %s %s\n",
+				c.Code(color), c.Code(ANSIReset), prefix, d.Target, d.Description)
 
 		case TypeScanEnd:
 			d, _ := ParseRecordData[ScanEnd](r)
-			fmt.Fprintf(w, "%s[done]%s %.1fs targets=%d services=%d webs=%d findings=%d ai=%d errors=%d\n",
+			fmt.Fprintf(w, "%s[done]%s %.1fs targets=%d services=%d webs=%d loots=%d errors=%d\n",
 				c.Code(ANSIDim), c.Code(ANSIReset),
-				d.Duration, d.Targets, d.Services, d.Webs, d.Findings, d.AISkills, d.Errors)
+				d.Duration, d.Targets, d.Services, d.Webs, d.Loots, d.Errors)
 		}
 	}
 	return nil

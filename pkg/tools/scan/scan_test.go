@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
@@ -766,7 +764,7 @@ func TestScanPipelineDoesNotDispatchFindingOrError(t *testing.T) {
 	}
 	p := newTestPipeline(context.Background(), capabilities, coll, false)
 	p.Run(testSeeds(
-		findingEvent("test", fingerprintFinding{Target: "http://127.0.0.1", Fingers: []string{"nginx"}}),
+		lootEvent("test", fingerprintLoot("http://127.0.0.1", []string{"nginx"}, false)),
 		errorEventOf("test", "boom"),
 	))
 
@@ -782,20 +780,21 @@ func TestScanPipelineDoesNotDispatchFindingOrError(t *testing.T) {
 }
 
 func TestFindingPriorityDefaults(t *testing.T) {
-	if got := (fingerprintFinding{Target: "http://127.0.0.1", Fingers: []string{"nginx"}}).Priority(); got != priorityLow {
+	fp := fingerprintLoot("http://127.0.0.1", []string{"nginx"}, false)
+	if got := fp.Priority; got != string(priorityLow) {
 		t.Fatalf("fingerprint priority = %s, want %s", got, priorityLow)
 	}
-	if got := (fingerprintFinding{Target: "http://127.0.0.1", Fingers: []string{"struts2"}, Focus: true}).Priority(); got != priorityHigh {
+	fpFocus := fingerprintLoot("http://127.0.0.1", []string{"struts2"}, true)
+	if got := fpFocus.Priority; got != string(priorityHigh) {
 		t.Fatalf("focus fingerprint priority = %s, want %s", got, priorityHigh)
 	}
-	if got := (weakpassFinding{Result: &parsers.ZombieResult{IP: "127.0.0.1", Port: "22", Service: "ssh"}}).Priority(); got != priorityHigh {
+	wp := weakpassLoot(&parsers.ZombieResult{IP: "127.0.0.1", Port: "22", Service: "ssh"})
+	if got := wp.Priority; got != string(priorityHigh) {
 		t.Fatalf("weakpass priority = %s, want %s", got, priorityHigh)
 	}
-	if got := (vulnFinding{Result: &sdktypes.VulnResult{Target: "http://127.0.0.1", TemplateID: "test", Severity: "high", TemplateName: "test high"}}).Priority(); got != priorityHigh {
+	vl := vulnLoot(&sdktypes.VulnResult{Target: "http://127.0.0.1", TemplateID: "test", Severity: "high", TemplateName: "test high"})
+	if got := vl.Priority; got != string(priorityHigh) {
 		t.Fatalf("vuln priority = %s, want %s", got, priorityHigh)
-	}
-	if got := (aiSkillFinding{Skill: "sniper", Status: "info", Summary: "CVE lead"}).Priority(); got != priorityMedium {
-		t.Fatalf("sniper intelligence priority = %s, want %s", got, priorityMedium)
 	}
 }
 
@@ -811,435 +810,19 @@ func TestFocusFingerprintIsDerivedAsHighPriority(t *testing.T) {
 		events = append(events, event)
 	})
 
-	var got fingerprintFinding
+	var got *output.Loot
 	for _, event := range events {
-		if finding, ok := event.Finding.(fingerprintFinding); ok {
-			got = finding
+		if event.Kind == eventLoot && event.Loot != nil && event.Loot.Kind == output.LootFingerprint {
+			got = event.Loot
 			break
 		}
 	}
-	if !got.Focus || got.Priority() != priorityHigh {
-		t.Fatalf("focus fingerprint = %#v, want high priority focus", got)
+	if got == nil {
+		t.Fatal("no fingerprint loot found")
 	}
-}
-
-func TestScanPipelineDispatchesHighPriorityFindingToAgentVerifier(t *testing.T) {
-	coll := newCollector([]string{"seed"}, nil, false, false)
-	var runs int
-	capabilities := []pipeline.Capability{
-		wrapCapability(capAgentVerify, func(e event) bool {
-			return e.Kind == eventFinding && e.Finding != nil && e.Finding.Kind() != findingVerification && e.Finding.Priority().atLeast(priorityHigh)
-		}, 1, func(_ context.Context, e event, emit func(event)) {
-			runs++
-			emit(findingEvent(capAgentVerify, verificationFinding{
-				OriginalKey:      e.Finding.Key(),
-				OriginalKind:     e.Finding.Kind(),
-				OriginalPriority: e.Finding.Priority(),
-				Status:           verificationConfirmed,
-				Target:           findingTarget(e.Finding),
-				Summary:          "confirmed by test",
-			}))
-		}),
-	}
-	p := newTestPipeline(context.Background(), capabilities, coll, false)
-	p.Run(testSeeds(
-		findingEvent("test", fingerprintFinding{Target: "http://127.0.0.1", Fingers: []string{"nginx"}}),
-		findingEvent("test", vulnFinding{Result: &sdktypes.VulnResult{Target: "http://127.0.0.1", TemplateID: "test", Severity: "high", TemplateName: "test high"}}),
-	))
-
-	if runs != 1 {
-		t.Fatalf("verifier runs = %d, want 1", runs)
-	}
-	if len(coll.verifications) != 1 {
-		t.Fatalf("verifications = %d, want 1", len(coll.verifications))
-	}
-	if coll.verifications[0].Finding.Status != verificationConfirmed {
-		t.Fatalf("verification status = %s, want %s", coll.verifications[0].Finding.Status, verificationConfirmed)
-	}
-}
-
-func TestAgentVerifyCapabilityAcceptsFocusFingerprint(t *testing.T) {
-	var promptSeen string
-	agentFn := func(_ context.Context, prompt string) (*agentRunResult, error) {
-		promptSeen = prompt
-		return &agentRunResult{
-			raw: `not_confirmed`,
-			checkpoint: &command.CheckpointResult{
-				Kind:    "verify",
-				Title:   "focus fingerprint requires vulnerability-specific evidence",
-				Content: "safe validation should check exact version",
-				Target:  "http://127.0.0.1",
-				Status:  "not_confirmed",
-			},
-		}, nil
-	}
-	cmd := New(&engine.Set{}, withTestAgent(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
-	verifySkill := scanAISkills[0]
-	cap := buildAISkillCap(cmd, verifySkill)
-	coll := newCollector([]string{"seed"}, nil, false, false)
-	p := newTestPipeline(context.Background(), []pipeline.Capability{cap}, coll, false)
-	p.Run(testSeeds(
-		findingEvent(capSprayCheck, fingerprintFinding{Target: "http://127.0.0.1", Fingers: []string{"struts2"}, Focus: true}),
-	))
-
-	if !strings.Contains(promptSeen, "struts2") {
-		t.Fatalf("verification prompt missing fingerprint evidence: %q", promptSeen)
-	}
-}
-
-func TestAgentVerifyCapabilityUsesProviderAndEmitsVerification(t *testing.T) {
-	var calls int
-	agentFn := func(_ context.Context, prompt string) (*agentRunResult, error) {
-		calls++
-		return &agentRunResult{
-			raw: `confirmed`,
-			checkpoint: &command.CheckpointResult{
-				Kind:    "verify",
-				Title:   "direct evidence supports the vulnerability",
-				Content: "template matched",
-				Target:  "http://127.0.0.1",
-				Status:  "confirmed",
-			},
-		}, nil
-	}
-	cmd := New(&engine.Set{}, withTestAgent(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
-	verifySkill := scanAISkills[0]
-	cap := buildAISkillCap(cmd, verifySkill)
-	coll := newCollector([]string{"seed"}, nil, false, false)
-	p := newTestPipeline(context.Background(), []pipeline.Capability{cap}, coll, false)
-	p.Run(testSeeds(
-		findingEvent(capNeutronPOC, vulnFinding{Result: &sdktypes.VulnResult{Target: "http://127.0.0.1", TemplateID: "test", Severity: "high", TemplateName: "test high"}}),
-	))
-
-	if len(coll.aiSkillResults) != 1 {
-		t.Fatalf("ai skill results = %d, want 1", len(coll.aiSkillResults))
-	}
-	got := coll.aiSkillResults[0].Finding
-	if got.Status != "confirmed" {
-		t.Fatalf("status = %s, want confirmed", got.Status)
-	}
-	if got.Target != "http://127.0.0.1" {
-		t.Fatalf("target = %q, want http://127.0.0.1", got.Target)
-	}
-	if calls != 1 {
-		t.Fatalf("verify calls = %d, want 1", calls)
-	}
-}
-
-func TestAISkillFailureIsStructured(t *testing.T) {
-	agentFn := func(_ context.Context, prompt string) (*agentRunResult, error) {
-		return nil, errors.New("API error (402): Insufficient Balance")
-	}
-	cmd := New(&engine.Set{}, withTestAgent(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
-	deepSkill := scanAISkills[2]
-	cap := buildAISkillCap(cmd, deepSkill)
-	coll := newCollector([]string{"seed"}, nil, false, false)
-	p := newTestPipeline(context.Background(), []pipeline.Capability{cap}, coll, false)
-	p.Run(testSeeds(targetEvent(capGogoPortscan, "", newWebTarget("", "http://127.0.0.1:8080", ""))))
-
-	if len(coll.aiSkillResults) != 0 {
-		t.Fatalf("ai skill results = %d, want 0", len(coll.aiSkillResults))
-	}
-	if len(coll.aiSkillResponses) != 1 {
-		t.Fatalf("ai skill responses = %d, want 1", len(coll.aiSkillResponses))
-	}
-	got := coll.aiSkillResponses[0].Response
-	if got.Skill != "deep" || got.Status != "failed" || got.Target != "http://127.0.0.1:8080" {
-		t.Fatalf("ai failure = %#v", got)
-	}
-	if !strings.Contains(got.Detail, "Insufficient Balance") {
-		t.Fatalf("ai failure detail = %q", got.Detail)
-	}
-	result := coll.StructuredResult()
-	if len(result.ToolCalls) != 1 || len(result.Assets) == 0 {
-		t.Fatalf("structured result missing ToolCalls/assets: %#v", result)
-	}
-	var found bool
-	for _, asset := range result.Assets {
-		if asset.Target != "http://127.0.0.1:8080" {
-			continue
-		}
-		for _, item := range asset.Items {
-			if item.Source == "deep" && item.Status == "failed" {
-				found = true
-			}
-		}
-	}
-	if !found {
-		t.Fatalf("asset did not contain failed deep item: %#v", result.Assets)
-	}
-}
-
-func TestDeepAssetTargetKeyUsesAssetOrigin(t *testing.T) {
-	root := deepAssetTargetKey(targetEvent(capCoreWeb, "", newWebTarget("", "http://127.0.0.1:8765/", "")))
-	path := deepAssetTargetKey(targetEvent(capCoreWeb, "", newWebTarget("", "http://127.0.0.1:8765/pages/a.html", "")))
-	otherPort := deepAssetTargetKey(targetEvent(capCoreWeb, "", newWebTarget("", "http://127.0.0.1:8766/pages/a.html", "")))
-
-	if root == "" {
-		t.Fatal("root deep asset key is empty")
-	}
-	if path != root {
-		t.Fatalf("path deep asset key = %q, want same as root %q", path, root)
-	}
-	if otherPort == root {
-		t.Fatalf("different port deep asset key = %q, want different from %q", otherPort, root)
-	}
-}
-
-func TestAISkillConfigVerifyModeDoesNotEnableSniper(t *testing.T) {
-	cmd := New(&engine.Set{}, WithAISkillConfig(AISkillConfig{VerifyMode: "medium"}))
-	var flags flags
-	cmd.applyAISkillConfig(&flags)
-
-	if flags.AI || flags.Sniper {
-		t.Fatalf("verify-only config should not enable full AI skills: %#v", flags)
-	}
-	if flags.Verify != "medium" {
-		t.Fatalf("verify mode = %q, want medium", flags.Verify)
-	}
-}
-
-func TestAISkillConfigEnableKeepsFullAIBehavior(t *testing.T) {
-	cmd := New(&engine.Set{}, WithAISkillConfig(AISkillConfig{Enable: true, VerifyMode: "medium"}))
-	var flags flags
-	cmd.applyAISkillConfig(&flags)
-
-	if !flags.AI || !flags.Sniper || flags.Verify != "high" {
-		t.Fatalf("full AI config = %#v, want AI+sniper with high verify default", flags)
-	}
-}
-
-func TestDeepAISkillIsExplicitOnly(t *testing.T) {
-	cmd := New(&engine.Set{})
-	profile := profile{}
-
-	aiCaps := cmd.buildCapabilities(flags{AI: true}, scanOptions{}, profile)
-	if capabilityNames(aiCaps)[capAgentDeep] {
-		t.Fatal("--ai should not enable deep testing")
-	}
-
-	deepCaps := cmd.buildCapabilities(flags{Deep: true}, scanOptions{}, profile)
-	if !capabilityNames(deepCaps)[capAgentDeep] {
-		t.Fatal("--deep should enable deep testing")
-	}
-}
-
-func TestDeepAISkillAcceptsWebAndFingerprintAssets(t *testing.T) {
-	deepSkill := scanAISkills[2]
-	if !deepSkill.Accept(targetEvent("test", "", newWebTarget("", "http://127.0.0.1:8080", ""))) {
-		t.Fatal("deep should accept discovered web targets")
-	}
-	if !deepSkill.Accept(findingEvent("test", fingerprintFinding{Target: "127.0.0.1:445", Fingers: []string{"smb"}})) {
-		t.Fatal("deep should accept fingerprinted assets")
-	}
-	if deepSkill.Accept(findingEvent("test", fingerprintFinding{Target: "127.0.0.1:445"})) {
-		t.Fatal("deep should reject fingerprint events without fingerprints")
-	}
-}
-
-func TestDeepAISkillRunsFingerprintAssessment(t *testing.T) {
-	var promptSeen string
-	agentFn := func(_ context.Context, prompt string) (*agentRunResult, error) {
-		promptSeen = prompt
-		return &agentRunResult{
-			raw: `info`,
-			checkpoint: &command.CheckpointResult{
-				Kind:    "deep",
-				Title:   "SMB fingerprint requires review",
-				Content: "SMB exposure is meaningful but not proof of exploitability.",
-				Status:  "info",
-			},
-		}, nil
-	}
-	cmd := New(&engine.Set{}, withTestAgent(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
-	deepSkill := scanAISkills[2]
-	cap := buildAISkillCap(cmd, deepSkill)
-	coll := newCollector([]string{"seed"}, nil, false, false)
-	p := newTestPipeline(context.Background(), []pipeline.Capability{cap}, coll, false)
-	p.Run(testSeeds(
-		findingEvent(capGogoPortscan, fingerprintFinding{Target: "127.0.0.1:445", Fingers: []string{"smb"}, Focus: true}),
-	))
-
-	if !strings.Contains(promptSeen, "fingerprinted asset") || !strings.Contains(promptSeen, "smb") {
-		t.Fatalf("deep fingerprint prompt = %q", promptSeen)
-	}
-	if len(coll.aiSkillResults) != 1 {
-		t.Fatalf("ai skill results = %d, want 1", len(coll.aiSkillResults))
-	}
-	got := coll.aiSkillResults[0].Finding
-	if got.Target != "127.0.0.1:445" {
-		t.Fatalf("deep fingerprint target = %q, want 127.0.0.1:445", got.Target)
-	}
-	if got.OriginalKind != findingFingerprint {
-		t.Fatalf("original kind = %s, want fingerprint", got.OriginalKind)
-	}
-}
-
-func TestDeepAISkillSkipsFindingWhenCheckpointMissing(t *testing.T) {
-	agentFn := func(_ context.Context, prompt string) (*agentRunResult, error) {
-		return &agentRunResult{
-			raw: "I inspected the browser evidence, but did not submit checkpoint.",
-			checkpoint: &command.CheckpointResult{
-				Title:  "agent did not submit checkpoint",
-				Status: "inconclusive",
-			},
-		}, nil
-	}
-	browserFn := func(context.Context, string) (string, error) {
-		return "Title: Directory listing for /\nForms: none\nLinks: pages/, export.yaml", nil
-	}
-
-	cmd := New(&engine.Set{},
-		withTestAgent(agentFn),
-		WithDeepBrowserFunc(browserFn),
-		WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}),
-	)
-	deepSkill := scanAISkills[2]
-	cap := buildAISkillCap(cmd, deepSkill)
-	coll := newCollector([]string{"seed"}, nil, false, false)
-	p := newTestPipeline(context.Background(), []pipeline.Capability{cap}, coll, false)
-	p.Run(testSeeds(targetEvent(capCoreWeb, "", newWebTarget("", "http://127.0.0.1:8765/pages/a.html", ""))))
-
-	if len(coll.aiSkillResults) != 0 {
-		t.Fatalf("checkpoint results = %d, want 0", len(coll.aiSkillResults))
-	}
-	if len(coll.aiSkillResponses) != 0 {
-		t.Fatalf("ai skill responses = %d, want 0", len(coll.aiSkillResponses))
-	}
-	result := coll.StructuredResult()
-	if len(result.ToolCalls) != 0 {
-		t.Fatalf("structured ToolCalls response = %#v, want none", result.ToolCalls)
-	}
-}
-
-func capabilityNames(caps []pipeline.Capability) map[string]bool {
-	out := make(map[string]bool, len(caps))
-	for _, cap := range caps {
-		out[cap.Name] = true
-	}
-	return out
-}
-
-func TestAgentVerifyCapabilityUsesFallbackPromptWhenSkillBodyMissing(t *testing.T) {
-	var calls int
-	agentFn := func(_ context.Context, prompt string) (*agentRunResult, error) {
-		calls++
-		return &agentRunResult{
-			raw: `not_confirmed`,
-			checkpoint: &command.CheckpointResult{
-				Kind:    "verify",
-				Title:   "no exploit evidence",
-				Content: "403",
-				Target:  "http://127.0.0.1",
-				Status:  "not_confirmed",
-			},
-		}, nil
-	}
-	cmd := New(&engine.Set{}, withTestAgent(agentFn), WithAISkillConfig(AISkillConfig{Model: "test-model", Timeout: 5, Enable: true}))
-	verifySkill := scanAISkills[0]
-	cap := buildAISkillCap(cmd, verifySkill)
-	coll := newCollector([]string{"seed"}, nil, false, false)
-	p := newTestPipeline(context.Background(), []pipeline.Capability{cap}, coll, false)
-	p.Run(testSeeds(
-		findingEvent(capNeutronPOC, vulnFinding{Result: &sdktypes.VulnResult{Target: "http://127.0.0.1", TemplateID: "test", Severity: "high", TemplateName: "test high"}}),
-	))
-
-	if calls != 1 {
-		t.Fatalf("verify calls = %d, want 1", calls)
-	}
-}
-
-func TestAgentVerifyCapabilitySuppressesUnconfirmedOutput(t *testing.T) {
-	finding := verificationFinding{
-		OriginalKey:      "fingerprint|1",
-		OriginalKind:     findingFingerprint,
-		OriginalPriority: priorityHigh,
-		Status:           verificationNotConfirmed,
-		Target:           "https://open.kingdee.com/k3cloud",
-		Summary:          "fingerprint only",
-		Evidence:         "historical vulnerabilities exist but no exploit evidence",
-	}
-	if reportableVerificationFinding(finding) {
-		t.Fatal("not_confirmed verification should not be reportable")
-	}
-	if line := formatEventLine(findingEvent(capAgentVerify, finding), false); line != "" {
-		t.Fatalf("not_confirmed verification line = %q, want empty", line)
-	}
-
-	coll := newCollector([]string{"seed"}, nil, false, false)
-	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentVerify, finding)})
-	if len(coll.verifications) != 0 {
-		t.Fatalf("verifications = %d, want 0", len(coll.verifications))
-	}
-	if out := coll.ReportMarkdown(); strings.Contains(out, "fingerprint only") {
-		t.Fatalf("markdown report included unconfirmed verification:\n%s", out)
-	}
-}
-
-func TestAgentVerifyAcceptsSniperFindingsButRejectsOwnOutput(t *testing.T) {
-	verifySkill := scanAISkills[0]
-
-	// Sniper finding with summary should be accepted by verify.
-	sniper := aiSkillFinding{
-		Skill:   "sniper",
-		Target:  "http://10.0.0.1:8080",
-		Status:  "info",
-		Summary: "CVE-2016-4437 Shiro deserialization",
-		Detail:  "Known critical CVE",
-	}
-	if got := sniper.Priority(); got != priorityMedium {
-		t.Fatalf("sniper priority = %s, want %s; verification eligibility should not be encoded as priority", got, priorityMedium)
-	}
-	sniperFinding := findingEvent(capAgentSniper, sniper)
-	if !verifySkill.Accept(sniperFinding) {
-		t.Fatal("verify should accept sniper finding with summary")
-	}
-
-	// Verify's own output should be rejected.
-	verifyOwnFinding := findingEvent(capAgentVerify, aiSkillFinding{
-		Skill:   "verify",
-		Target:  "http://10.0.0.1:8080",
-		Status:  "confirmed",
-		Summary: "direct evidence supports the vulnerability",
-	})
-	if verifySkill.Accept(verifyOwnFinding) {
-		t.Fatal("verify should NOT accept its own output")
-	}
-
-	// Sniper finding without summary should not be accepted (priorityMedium).
-	emptySniperFinding := findingEvent(capAgentSniper, aiSkillFinding{
-		Skill:  "sniper",
-		Target: "http://10.0.0.1:8080",
-		Status: "info",
-	})
-	if verifySkill.Accept(emptySniperFinding) {
-		t.Fatal("verify should NOT accept empty sniper finding")
-	}
-}
-
-func TestVerifyPromptTailoredForSniperFindings(t *testing.T) {
-	verifySkill := scanAISkills[0]
-
-	sniperEvent := findingEvent(capAgentSniper, aiSkillFinding{
-		Skill:   "sniper",
-		Target:  "http://10.0.0.1:8080",
-		Status:  "info",
-		Summary: "CVE-2016-4437 Shiro deserialization",
-		Detail:  "Apache Shiro < 1.2.5 allows remote code execution",
-	})
-	prompt := verifySkill.Prompt(sniperEvent)
-	if !strings.Contains(prompt, "CVE intelligence") {
-		t.Fatalf("sniper prompt should mention CVE intelligence, got: %s", prompt)
-	}
-	if !strings.Contains(prompt, "NOT a confirmed exploit") {
-		t.Fatalf("sniper prompt should warn about unconfirmed status, got: %s", prompt)
-	}
-
-	// Regular vulnFinding should get the standard prompt.
-	vulnEvent := findingEvent(capNeutronPOC, vulnFinding{Result: &sdktypes.VulnResult{Target: "http://10.0.0.1", TemplateID: "test-vuln"}})
-	regularPrompt := verifySkill.Prompt(vulnEvent)
-	if !strings.Contains(regularPrompt, "Finding to verify") {
-		t.Fatalf("regular prompt should use standard format, got: %s", regularPrompt)
+	focus, _ := got.Data["focus"].(bool)
+	if !focus || got.Priority != string(priorityHigh) {
+		t.Fatalf("focus fingerprint loot = %#v, want high priority focus", got)
 	}
 }
 
@@ -1267,7 +850,7 @@ func TestScanPipelineFanoutAndDedup(t *testing.T) {
 			if !ok {
 				return
 			}
-			emit(findingEvent("test", fingerprintFinding{Target: web.URL, Fingers: []string{"nginx"}}))
+			emit(lootEvent("test", fingerprintLoot(web.URL, []string{"nginx"}, false)))
 		}),
 	}
 
@@ -1647,30 +1230,19 @@ func TestScanUnifiesFrameworkOutput(t *testing.T) {
 }
 
 func TestScanFindingPriorityUsesFocusOutputOnly(t *testing.T) {
-	plain := formatEventLine(findingEvent(capSprayCheck, fingerprintFinding{
-		Target:  "http://127.0.0.1",
-		Fingers: []string{"nginx"},
-	}), false)
+	plain := formatEventLine(lootEvent(capSprayCheck, fingerprintLoot("http://127.0.0.1", []string{"nginx"}, false)), false)
 	if plain != "" {
 		t.Fatalf("plain non-focus fingerprint output = %q, want empty", plain)
 	}
-	plainFocus := formatEventLine(findingEvent(capSprayCheck, fingerprintFinding{
-		Target:  "http://127.0.0.1",
-		Fingers: []string{"struts2"},
-		Focus:   true,
-	}), false)
+	plainFocus := formatEventLine(lootEvent(capSprayCheck, fingerprintLoot("http://127.0.0.1", []string{"struts2"}, true)), false)
 	if strings.Contains(plain, " low ") || strings.Contains(plain, " high ") {
 		t.Fatalf("plain finding output should not print priority text: %q", plain)
 	}
-	if !strings.Contains(plainFocus, "[fingerprint] http://127.0.0.1 [struts2]") {
+	if !strings.Contains(plainFocus, "[fingerprint]") || !strings.Contains(plainFocus, "struts2") {
 		t.Fatalf("plain focus output shape changed: %q", plainFocus)
 	}
 
-	colored := formatEventLine(findingEvent(capSprayCheck, fingerprintFinding{
-		Target:  "http://127.0.0.1",
-		Fingers: []string{"struts2"},
-		Focus:   true,
-	}), true)
+	colored := formatEventLine(lootEvent(capSprayCheck, fingerprintLoot("http://127.0.0.1", []string{"struts2"}, true)), true)
 	if strings.Contains(output.StripANSI(colored), " high ") {
 		t.Fatalf("colored finding output should not print priority text: %q", colored)
 	}
@@ -1709,29 +1281,11 @@ func TestScanSummaryUsesStructuredFields(t *testing.T) {
 
 	out := coll.String()
 	for _, want := range []string{
-		"[summary] completed 1 target 1 service 0 web 0 probes 0 fingerprints 0 risks 0 vulns 0 verified 0 errors 0 tasks 0 requests",
+		"[summary] completed 1 target 1 service 0 web 0 probes 0 fingerprints 0 loots 0 errors 0 tasks 0 requests",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("summary output missing %q:\n%s", want, out)
 		}
-	}
-}
-
-func TestScanSummaryCountsConfirmedAISkillVerify(t *testing.T) {
-	coll := newCollector([]string{"seed"}, nil, false, false)
-	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentVerify, aiSkillFinding{
-		Skill:   "verify",
-		Target:  "http://127.0.0.1",
-		Status:  "confirmed",
-		Summary: "direct evidence supports the finding",
-	})})
-	coll.Finish()
-
-	if out := coll.String(); !strings.Contains(out, "1 verified") {
-		t.Fatalf("summary missing confirmed AI verify count:\n%s", out)
-	}
-	if report := coll.ReportMarkdown(); !strings.Contains(report, "| AI verifications | 1 |") {
-		t.Fatalf("report missing confirmed AI verification metric:\n%s", report)
 	}
 }
 
@@ -1865,62 +1419,6 @@ func TestScanAggregatesAssets(t *testing.T) {
 	}
 }
 
-func TestScanAggregatesAIAsAssetItems(t *testing.T) {
-	coll := newCollector([]string{"seed"}, nil, false, false)
-	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentDeep, aiSkillFinding{
-		Skill:   "deep",
-		Target:  "http://127.0.0.1:8080",
-		Status:  "confirmed",
-		Summary: "confirmed exposure",
-		Detail:  "evidence",
-	})})
-	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentSniper, aiSkillFinding{
-		Skill:   "sniper",
-		Target:  "http://127.0.0.1:8080",
-		Status:  "info",
-		Summary: "public CVE lead",
-	})})
-	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentDeep, aiSkillResponse{
-		Skill:   "deep",
-		Target:  "http://127.0.0.1:8080",
-		Status:  "response",
-		Summary: "manual agent response",
-		Raw:     "manual response body",
-	})})
-	coll.Finish()
-
-	result := coll.StructuredResult()
-	if len(result.Assets) != 1 {
-		t.Fatalf("assets = %d, want 1: %#v", len(result.Assets), result.Assets)
-	}
-	kinds := assetItemKindCounts(result.Assets[0].Items)
-	if kinds[output.AssetItemFinding] != 1 || kinds[output.AssetItemNote] != 1 || kinds[output.AssetItemResponse] != 1 {
-		t.Fatalf("AI asset item kinds = %#v, want one finding, one note, and one response", kinds)
-	}
-}
-
-func TestScanFormatFileWritesAssetReportWithoutAI(t *testing.T) {
-	cmd := New(&engine.Set{})
-	file := filepath.Join(t.TempDir(), "assets.txt")
-	err := cmd.Execute(context.Background(), []string{
-		"-i", "http://127.0.0.1:1",
-		"--mode", "quick",
-		"--verify=off",
-		"-F", file,
-	}, io.Discard)
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	data, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatalf("read -F output: %v", err)
-	}
-	out := string(data)
-	if !strings.Contains(out, "Assets:") || !strings.Contains(out, "Summary:") {
-		t.Fatalf("-F output missing asset report:\n%s", out)
-	}
-}
-
 func assetItemKindCounts(items []output.AssetItem) map[string]int {
 	counts := make(map[string]int)
 	for _, item := range items {
@@ -1989,105 +1487,16 @@ func TestScanReportMarkdown(t *testing.T) {
 		Status:    200,
 		Distance:  1,
 	}))})
-	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentVerify, verificationFinding{
-		OriginalKey:      "vuln|1",
-		OriginalKind:     findingVuln,
-		OriginalPriority: priorityHigh,
-		Status:           verificationConfirmed,
-		Target:           "http://127.0.0.1",
-		Summary:          "confirmed by test",
-	})})
 	coll.Finish()
 
 	report := coll.ReportMarkdown()
 	if hasANSI(report) {
 		t.Fatalf("report contains ANSI: %q", report)
 	}
-	for _, want := range []string{"# Scan Report", "## Metrics", "## Open Services", "## AI Review", "confirmed by test"} {
+	for _, want := range []string{"# Scan Report", "## Metrics", "## Open Services"} {
 		if !strings.Contains(report, want) {
 			t.Fatalf("report missing %q:\n%s", want, report)
 		}
 	}
 }
 
-func TestScanReportMarkdownKeepsAIResponseDetailAsMarkdown(t *testing.T) {
-	coll := newCollector([]string{"seed"}, nil, false, false)
-	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentDeep, aiSkillResponse{
-		Skill:   "deep",
-		Target:  "http://127.0.0.1:8092",
-		Status:  "response",
-		Summary: "manual agent response",
-		Detail:  "Let me analyze the collected browser evidence.\n\n## Evidence Analysis\n\n| Asset | Details |\n|---|---|\n| API | GET /api/scans |",
-	})})
-	coll.Finish()
-
-	report := coll.ReportMarkdown()
-	for _, want := range []string{"## Tool Call Responses", "[deep:response]", "## Evidence Analysis", "| Asset | Details |"} {
-		if !strings.Contains(report, want) {
-			t.Fatalf("report missing %q:\n%s", want, report)
-		}
-	}
-	for _, bad := range []string{`\\n`, `"Let me analyze`} {
-		if strings.Contains(report, bad) {
-			t.Fatalf("report still contains escaped markdown %q:\n%s", bad, report)
-		}
-	}
-}
-
-func TestGenerateAIReportUsesAnnotatedMarkdown(t *testing.T) {
-	coll := newCollector([]string{"seed"}, nil, false, false)
-	finding := vulnFinding{Result: &sdktypes.VulnResult{Target: "http://127.0.0.1", TemplateID: "CVE-2016-4437", Severity: "high"}}
-	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capNeutronPOC, finding)})
-	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentVerify, aiSkillFinding{
-		Skill:        "verify",
-		Target:       "http://127.0.0.1",
-		Status:       "not_confirmed",
-		Summary:      "blocked by 403",
-		Detail:       "HTTP/1.1 403 Forbidden",
-		OriginalKey:  finding.Key(),
-		OriginalKind: finding.Kind(),
-	})})
-	coll.Finish()
-
-	var promptSeen string
-	cmd := New(&engine.Set{}, withTestReport(func(_ context.Context, prompt string) (string, error) {
-		promptSeen = prompt
-		return "report body", nil
-	}))
-	out := cmd.generateAIReport(context.Background(), coll)
-
-	if out != "report body\n" {
-		t.Fatalf("report output = %q, want generated report", out)
-	}
-	if !strings.Contains(promptSeen, "~~[vuln] http://127.0.0.1 CVE-2016-4437 high~~ *(not confirmed)*") {
-		t.Fatalf("AI report prompt missing not_confirmed markdown annotation:\n%s", promptSeen)
-	}
-}
-
-func TestReportMarkdownMarksInconclusiveVerification(t *testing.T) {
-	coll := newCollector([]string{"seed"}, nil, false, false)
-	finding := vulnFinding{Result: &sdktypes.VulnResult{Target: "http://127.0.0.1", TemplateID: "CVE-lead", Severity: "high"}}
-	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capNeutronPOC, finding)})
-	coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: findingEvent(capAgentVerify, aiSkillFinding{
-		Skill:        "verify",
-		Target:       "http://127.0.0.1",
-		Status:       "inconclusive",
-		Summary:      "unstable connectivity",
-		OriginalKey:  finding.Key(),
-		OriginalKind: finding.Kind(),
-	})})
-	coll.Finish()
-
-	report := coll.ReportMarkdown()
-	if !strings.Contains(report, "**[inconclusive]** [vuln] http://127.0.0.1 CVE-lead high") {
-		t.Fatalf("report missing inconclusive annotation:\n%s", report)
-	}
-}
-
-func withTestAgent(fn func(context.Context, string) (*agentRunResult, error)) Option {
-	return func(c *Command) { c.testAgent = fn }
-}
-
-func withTestReport(fn func(context.Context, string) (string, error)) Option {
-	return func(c *Command) { c.testReport = fn }
-}

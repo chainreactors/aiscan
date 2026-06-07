@@ -54,10 +54,7 @@ func formatMarkdown(d *collector) string {
 	sb.WriteString(fmt.Sprintf("| Web endpoints | %d |\n", len(d.seenWeb)))
 	sb.WriteString(fmt.Sprintf("| Web probes | %d |\n", len(d.sprayResults)))
 	sb.WriteString(fmt.Sprintf("| Fingerprints | %d |\n", len(d.seenFinger)))
-	sb.WriteString(fmt.Sprintf("| Weakpass findings | %d |\n", len(d.zombieResults)))
-	sb.WriteString(fmt.Sprintf("| Vulnerability findings | %d |\n", len(d.neutronMatches)))
-	sb.WriteString(fmt.Sprintf("| AI verifications | %d |\n", d.confirmedVerificationCountLocked()))
-	sb.WriteString(fmt.Sprintf("| AI skill findings | %d |\n", len(d.aiSkillResults)))
+	sb.WriteString(fmt.Sprintf("| Loots | %d |\n", len(d.loots)))
 	sb.WriteString(fmt.Sprintf("| Errors | %d |\n", len(d.errors)))
 	sb.WriteString(fmt.Sprintf("| Tasks | %d |\n", stats.Tasks))
 	sb.WriteString(fmt.Sprintf("| Requests | %d |\n", stats.Requests))
@@ -94,57 +91,15 @@ func formatMarkdown(d *collector) string {
 		}
 	}
 
-	if len(d.zombieResults) > 0 {
-		sb.WriteString("\n## Risks\n\n")
-		for _, result := range d.zombieResults {
-			finding := weakpassFinding{Result: result}
-			status := d.verificationStatus(finding.Kind(), finding.Key())
-			line := formatEventLine(findingEvent(capZombieWeakpass, finding), false)
-			writeMarkdownStatusLine(&sb, line, status)
-		}
-	}
-
-	if len(d.neutronMatches) > 0 {
-		sb.WriteString("\n## Vulnerabilities\n\n")
-		for _, finding := range sortedCopy(d.neutronMatches, func(a, b vulnFinding) bool {
-			return a.String() < b.String()
-		}) {
-			status := d.verificationStatus(finding.Kind(), finding.Key())
-			line := formatEventLine(findingEvent(capNeutronPOC, finding), false)
-			writeMarkdownStatusLine(&sb, line, status)
-		}
-	}
-
-	if len(d.verifications) > 0 {
-		sb.WriteString("\n## AI Review\n\n")
-		for _, item := range sortedCopy(d.verifications, func(a, b verificationResult) bool {
-			left := a.Finding
-			right := b.Finding
-			return string(left.Status)+"|"+left.Target+"|"+left.OriginalKey < string(right.Status)+"|"+right.Target+"|"+right.OriginalKey
-		}) {
-			writeMarkdownEventLine(&sb, findingEvent(item.Source, item.Finding))
-		}
-	}
-
-	if len(d.aiSkillResults) > 0 {
-		sb.WriteString("\n## AI Skill Findings\n\n")
-		for _, item := range sortedCopy(d.aiSkillResults, func(a, b aiSkillResult) bool {
-			return a.Finding.Skill+"|"+a.Finding.Target < b.Finding.Skill+"|"+b.Finding.Target
-		}) {
-			line := formatEventLine(findingEvent(item.Source, item.Finding), false)
-			if line == "" {
-				continue
+	if len(d.loots) > 0 {
+		sb.WriteString("\n## Loots\n\n")
+		for _, loot := range sortedCopy(d.loots, func(a, b output.Loot) bool {
+			if a.Kind != b.Kind {
+				return a.Kind < b.Kind
 			}
-			writeMarkdownStatusLine(&sb, line, d.aiSkillReportStatus(item.Finding))
-		}
-	}
-
-	if len(d.aiSkillResponses) > 0 {
-		sb.WriteString("\n## AI Agent Responses\n\n")
-		for _, item := range sortedCopy(d.aiSkillResponses, func(a, b aiSkillResponseResult) bool {
-			return a.Response.Skill+"|"+a.Response.Target < b.Response.Skill+"|"+b.Response.Target
+			return a.Description < b.Description
 		}) {
-			writeMarkdownEventLine(&sb, findingEvent(item.Source, item.Response))
+			writeMarkdownEventLine(&sb, lootEvent(loot.Kind, loot))
 		}
 	}
 
@@ -167,7 +122,6 @@ func formatMarkdown(d *collector) string {
 	return sb.String()
 }
 
-
 func formatScanSummaryLine(d *collector, stats statsSnapshot, color bool) string {
 	parts := []string{"completed"}
 	parts = appendCount(parts, stats.Inputs, "target", "targets")
@@ -175,9 +129,7 @@ func formatScanSummaryLine(d *collector, stats statsSnapshot, color bool) string
 	parts = appendCount(parts, len(d.seenWeb), "web", "web")
 	parts = appendCount(parts, len(d.sprayResults), "probe", "probes")
 	parts = appendCount(parts, len(d.seenFinger), "fingerprint", "fingerprints")
-	parts = appendCount(parts, len(d.zombieResults), "risk", "risks")
-	parts = appendCount(parts, len(d.neutronMatches), "vuln", "vulns")
-	parts = appendCount(parts, d.confirmedVerificationCountLocked(), "verified", "verified")
+	parts = appendCount(parts, len(d.loots), "loot", "loots")
 	parts = appendCount(parts, len(d.errors), "error", "errors")
 	parts = appendCount64(parts, stats.Tasks, "task", "tasks")
 	parts = appendCount64(parts, stats.Requests, "request", "requests")
@@ -281,17 +233,17 @@ func writeMarkdownStatusLine(sb *strings.Builder, line, status string) {
 	}
 	sb.WriteString("- ")
 	switch status {
-	case string(verificationNotConfirmed):
+	case "not_confirmed":
 		sb.WriteString("~~")
 		sb.WriteString(line)
 		sb.WriteString("~~ *(not confirmed)*")
-	case string(verificationConfirmed):
+	case "confirmed":
 		sb.WriteString("**[verified]** ")
 		sb.WriteString(line)
-	case string(verificationInconclusive):
+	case "inconclusive":
 		sb.WriteString("**[inconclusive]** ")
 		sb.WriteString(line)
-	case string(verificationFailed):
+	case "failed":
 		sb.WriteString("**[verification failed]** ")
 		sb.WriteString(line)
 	default:
@@ -300,24 +252,26 @@ func writeMarkdownStatusLine(sb *strings.Builder, line, status string) {
 	sb.WriteString("\n")
 }
 
-func (d *collector) aiSkillReportStatus(finding aiSkillFinding) string {
-	status := strings.TrimSpace(finding.Status)
-	if status == string(verificationNotConfirmed) || status == string(verificationInconclusive) {
-		return status
-	}
-	if finding.OriginalKey != "" {
-		status = verificationDowngrade(status, d.verificationStatus(finding.OriginalKind, finding.OriginalKey))
-	}
-	return verificationDowngrade(status, d.verificationStatus(finding.Kind(), finding.Key()))
+func sameMarkdownText(left, right string) bool {
+	return strings.TrimSpace(left) == strings.TrimSpace(right)
 }
 
-func verificationDowngrade(current, verified string) string {
-	switch verified {
-	case string(verificationNotConfirmed), string(verificationInconclusive):
-		return verified
-	default:
-		return current
+func writeMarkdownBlock(sb *strings.Builder, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return
 	}
+	sb.WriteString(value)
+	sb.WriteString("\n\n")
+}
+
+func markdownCode(value string) string {
+	value = strings.TrimSpace(value)
+	return "`" + strings.ReplaceAll(value, "`", "\\`") + "`"
+}
+
+func markdownHeading(value string) string {
+	return strings.ReplaceAll(strings.TrimSpace(value), "\n", " ")
 }
 
 func sortedMapKeys(values map[string]int) []string {

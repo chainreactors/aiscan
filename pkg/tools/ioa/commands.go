@@ -41,31 +41,6 @@ func NewCommands(client ioaclient.API, nodeName string, meta map[string]any) []c
 	}
 }
 
-// CheckpointSink returns a command.CheckpointSink that sends checkpoint
-// results to the current IOA space. Safe to call when no space is bound
-// (silently skips). Attach via CheckpointTool.OnCheckpoint().
-func CheckpointSink(client ioaclient.API, registry *command.CommandRegistry) command.CheckpointSink {
-	return func(ctx context.Context, result *command.CheckpointResult) {
-		var binding *spaceBinding
-		for _, cmd := range registry.All() {
-			if sc, ok := cmd.(*spaceCommand); ok {
-				binding = sc.binding
-				break
-			}
-		}
-		if binding == nil {
-			return
-		}
-		spaceID := binding.get()
-		if spaceID == "" || client.NodeID() == "" {
-			return
-		}
-		_, _ = client.Send(ctx, spaceID, ioamodel.SendMessage{
-			Content: result.IOAContent(),
-		})
-	}
-}
-
 func ensureNode(ctx context.Context, client ioaclient.API, name string, meta map[string]any) error {
 	if client.NodeID() != "" {
 		return nil
@@ -252,12 +227,17 @@ Subcommands:
   ioa_send --content '{"content": "msg"}'                        Send to space (broadcast)
   ioa_send to --node <node_id> --content '{"content": "msg"}'    Send to a specific node
   ioa_send reply --to <message_id> --content '{"content": "re"}' Reply to a message
+  ioa_send checkpoint --kind <kind> --title <title> --content <body> [--target <url>] [--status <status>]
 
 Options:
-  --content         Structured message content as JSON object (required)
+  --content         Structured message content as JSON object (required, except for checkpoint)
   --node            Target node ID (for "to" subcommand)
   --to              Message ID to reply to (for "reply" subcommand)
-  --refs            Raw references JSON: '{"messages": ["id"], "nodes": ["id"]}'`
+  --refs            Raw references JSON: '{"messages": ["id"], "nodes": ["id"]}'
+  --kind            Checkpoint kind: verify, sniper, deep
+  --title           Short finding title (checkpoint)
+  --target          Target host:port or URL (checkpoint)
+  --status          Verification status: confirmed, not_confirmed, info, inconclusive (checkpoint)`
 }
 
 func (c *sendCommand) Execute(ctx context.Context, args []string, w io.Writer) error {
@@ -284,6 +264,8 @@ func (c *sendCommand) Execute(ctx context.Context, args []string, w io.Writer) e
 	body := ioamodel.SendMessage{Content: content}
 
 	switch sub {
+	case "checkpoint":
+		return c.execCheckpoint(ctx, m, w)
 	case "to":
 		node, _ := m["node"].(string)
 		if node == "" {
@@ -312,6 +294,41 @@ func (c *sendCommand) Execute(ctx context.Context, args []string, w io.Writer) e
 		return err
 	}
 	msg, err := c.client.Send(ctx, spaceID, body)
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, msg)
+}
+
+func (c *sendCommand) execCheckpoint(ctx context.Context, m map[string]interface{}, w io.Writer) error {
+	spaceID := c.binding.get()
+	if spaceID == "" {
+		return fmt.Errorf("no space joined. Use ioa_space join first")
+	}
+	kind, _ := m["kind"].(string)
+	title, _ := m["title"].(string)
+	contentStr, _ := m["content"].(string)
+	if kind == "" || title == "" {
+		return fmt.Errorf("ioa_send checkpoint: --kind and --title are required\n\n%s", c.Usage())
+	}
+	checkpointContent := map[string]interface{}{
+		"type":    "checkpoint",
+		"kind":    kind,
+		"title":   title,
+		"content": contentStr,
+	}
+	if target, _ := m["target"].(string); target != "" {
+		checkpointContent["target"] = target
+	}
+	if status, _ := m["status"].(string); status != "" {
+		checkpointContent["status"] = status
+	}
+	if err := ensureNode(ctx, c.client, "", nil); err != nil {
+		return err
+	}
+	msg, err := c.client.Send(ctx, spaceID, ioamodel.SendMessage{
+		Content: checkpointContent,
+	})
 	if err != nil {
 		return err
 	}

@@ -21,41 +21,21 @@ type sprayObservation struct {
 	Capability string
 }
 
-type verificationResult struct {
-	Finding verificationFinding
-	Source  string
-}
-
-type aiSkillResult struct {
-	Finding aiSkillFinding
-	Source  string
-}
-
-type aiSkillResponseResult struct {
-	Response aiSkillResponse
-	Source   string
-}
-
 type collector struct {
-	mu               sync.Mutex
-	inputs           []string
-	debug            bool
-	stats            *statsCollector
-	gogoResults      []*parsers.GOGOResult
-	sprayResults     []sprayObservation
-	zombieResults    []*parsers.ZombieResult
-	neutronMatches   []vulnFinding
-	verifications    []verificationResult
-	aiSkillResults   []aiSkillResult
-	aiSkillResponses []aiSkillResponseResult
-	verifyIndex      map[string]string // "kind|key" → status
-	errors           []string
-	trace            []string
-	seenWeb          map[string]struct{}
-	seenFinger       map[string]int
-	stream           io.Writer
-	streamColor      bool
-	fileLines        []string
+	mu             sync.Mutex
+	inputs         []string
+	debug          bool
+	stats          *statsCollector
+	gogoResults    []*parsers.GOGOResult
+	sprayResults   []sprayObservation
+	loots          []output.Loot
+	errors         []string
+	trace          []string
+	seenWeb        map[string]struct{}
+	seenFinger     map[string]int
+	stream         io.Writer
+	streamColor    bool
+	fileLines      []string
 }
 
 func newCollector(inputs []string, stream io.Writer, streamColor, debug bool) *collector {
@@ -65,7 +45,6 @@ func newCollector(inputs []string, stream io.Writer, streamColor, debug bool) *c
 		stats:       newStatsCollector(len(inputs)),
 		seenWeb:     make(map[string]struct{}),
 		seenFinger:  make(map[string]int),
-		verifyIndex: make(map[string]string),
 		stream:      stream,
 		streamColor: streamColor,
 		fileLines:   make([]string, 0),
@@ -112,8 +91,8 @@ func (c *collector) recordAcceptedEvent(event event) {
 	switch event.Kind {
 	case eventTarget:
 		c.recordTargetEvent(event)
-	case eventFinding:
-		c.recordFindingEvent(event)
+	case eventLoot:
+		c.recordLootEvent(event)
 	case eventError:
 		if event.Error.Message != "" {
 			c.errors = append(c.errors, event.Error.Message)
@@ -146,51 +125,23 @@ func (c *collector) recordTargetEvent(event event) {
 	}
 }
 
-func (c *collector) recordFindingEvent(event event) {
-	switch finding := event.Finding.(type) {
-	case fingerprintFinding:
-		for _, name := range parsers.NormalizeNames(finding.Fingers) {
-			key := strings.ToLower(finding.Target) + "|" + strings.ToLower(name)
+func (c *collector) recordLootEvent(event event) {
+	if event.Loot == nil {
+		return
+	}
+	loot := *event.Loot
+	switch loot.Kind {
+	case output.LootFingerprint:
+		fingers := loot.Tags
+		for _, name := range parsers.NormalizeNames(fingers) {
+			key := strings.ToLower(loot.Target) + "|" + strings.ToLower(name)
 			if _, ok := c.seenFinger[key]; ok {
 				continue
 			}
 			c.seenFinger[key] = len(c.seenFinger)
 		}
-	case weakpassFinding:
-		if finding.Result != nil {
-			c.zombieResults = append(c.zombieResults, finding.Result)
-		}
-	case vulnFinding:
-		if finding.String() != "" {
-			c.neutronMatches = append(c.neutronMatches, finding)
-		}
-	case verificationFinding:
-		if reportableVerificationFinding(finding) {
-			c.verifications = append(c.verifications, verificationResult{
-				Finding: finding,
-				Source:  event.Source,
-			})
-		}
-	case aiSkillFinding:
-		if finding.Summary != "" || finding.Detail != "" {
-			c.aiSkillResults = append(c.aiSkillResults, aiSkillResult{
-				Finding: finding,
-				Source:  event.Source,
-			})
-		}
-		// Build verification index for original finding downgrade
-		if finding.OriginalKey != "" && finding.Status != "" {
-			indexKey := string(finding.OriginalKind) + "|" + finding.OriginalKey
-			c.verifyIndex[indexKey] = finding.Status
-		}
-	case aiSkillResponse:
-		if finding.Summary != "" || finding.Detail != "" || finding.Raw != "" {
-			c.aiSkillResponses = append(c.aiSkillResponses, aiSkillResponseResult{
-				Response: finding,
-				Source:   event.Source,
-			})
-		}
 	}
+	c.loots = append(c.loots, loot)
 }
 
 func (c *collector) Finish() {
@@ -199,22 +150,6 @@ func (c *collector) Finish() {
 	if c.stats != nil {
 		c.stats.Finish()
 	}
-}
-
-// verificationStatus returns the AI verification status for an original finding,
-// or "" if the finding was not verified.
-func (c *collector) verificationStatus(kind findingKind, key string) string {
-	return c.verifyIndex[string(kind)+"|"+key]
-}
-
-func (c *collector) confirmedVerificationCountLocked() int {
-	count := len(c.verifications)
-	for _, item := range c.aiSkillResults {
-		if item.Finding.Skill == "verify" && item.Finding.Status == string(verificationConfirmed) {
-			count++
-		}
-	}
-	return count
 }
 
 func (c *collector) statsSnapshotLocked() statsSnapshot {
@@ -247,13 +182,6 @@ func (c *collector) PlainText() string {
 	lines := append([]string(nil), c.fileLines...)
 	c.mu.Unlock()
 	return formatPlainText(c, lines)
-}
-
-func (c *collector) PlainTextWithFindings() string {
-	c.mu.Lock()
-	lines := append([]string(nil), c.fileLines...)
-	c.mu.Unlock()
-	return formatPlainTextWithFindings(c, lines)
 }
 
 func (c *collector) AssetReport() string {

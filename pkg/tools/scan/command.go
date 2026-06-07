@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
@@ -19,22 +18,12 @@ import (
 )
 
 type Command struct {
-	engines        *engine.Set
-	parent         *agent.Agent
-	aiConfig       AISkillConfig
-	deepBrowser    DeepBrowserFunc
-	checkpointSink command.CheckpointSink
-	logger         telemetry.Logger
-	proxy          string
-	workDir        string
-
-	testAgent  func(ctx context.Context, prompt string) (*agentRunResult, error)
-	testReport func(ctx context.Context, prompt string) (string, error)
-}
-
-type agentRunResult struct {
-	raw        string
-	checkpoint *command.CheckpointResult
+	engines     *engine.Set
+	parent      *agent.Agent
+	deepBrowser DeepBrowserFunc
+	logger      telemetry.Logger
+	proxy       string
+	workDir     string
 }
 
 func (c *Command) SetWorkDir(dir string) { c.workDir = dir }
@@ -175,13 +164,11 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		defer restoreDebug()
 		c.logger.Debugf("scan debug enabled")
 	}
-	c.applyAISkillConfig(&flags)
-
 	profile, err := profileForMode(flags.Mode)
 	if err != nil {
 		return "", nil, fmt.Errorf("scan: %w", err)
 	}
-	if verificationEnabled(flags.Verify) {
+	if flags.Verify != "" && flags.Verify != "off" {
 		if _, err := parsePriority(flags.Verify); err != nil {
 			return "", nil, fmt.Errorf("scan: %w", err)
 		}
@@ -249,8 +236,6 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		if err != nil {
 			return "", nil, fmt.Errorf("scan json output: %w", err)
 		}
-	} else if flags.Report && flags.AI && c.parent != nil {
-		out = c.generateAIReport(ctx, coll)
 	} else if flags.Report {
 		out = coll.ReportMarkdown()
 	} else {
@@ -261,22 +246,20 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		stats := coll.statsSnapshotLocked()
 		gogoCount := len(coll.gogoResults)
 		webCount := len(coll.seenWeb)
-		vulnCount := len(coll.neutronMatches) + len(coll.zombieResults)
-		toolCallCount := len(coll.aiSkillResults)
+		lootCount := len(coll.loots)
 		errCount := len(coll.errors)
 		coll.mu.Unlock()
 		scanWriter.WriteRecord(output.NewRecord(output.TypeScanEnd, output.ScanEnd{
-			Duration:  stats.Duration().Seconds(),
-			Targets:   stats.Inputs,
-			Services:  gogoCount,
-			Webs:      webCount,
-			Findings:  vulnCount,
-			ToolCalls: toolCallCount,
-			Errors:    errCount,
+			Duration: stats.Duration().Seconds(),
+			Targets:  stats.Inputs,
+			Services: gogoCount,
+			Webs:     webCount,
+			Loots:    lootCount,
+			Errors:   errCount,
 		}))
 	}
 	if flags.OutputFile != "" && !flags.JSON {
-		plainOut := coll.PlainTextWithFindings()
+		plainOut := coll.PlainText()
 		if err := writeOutputFile(flags.OutputFile, plainOut); err != nil {
 			c.logger.Errorf("%s", err.Error())
 		}
@@ -288,40 +271,6 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 		}
 	}
 	return out, coll.StructuredResult(), nil
-}
-
-func (c *Command) applyAISkillConfig(flags *flags) {
-	if flags == nil {
-		return
-	}
-	if c.aiConfig.Enable {
-		flags.AI = true
-	}
-	if flags.AI {
-		if strings.TrimSpace(flags.Verify) == "" {
-			flags.Verify = "high"
-		}
-		flags.Sniper = true
-		return
-	}
-	if strings.TrimSpace(flags.Verify) != "" {
-		return
-	}
-	if mode := defaultVerifyModeFromConfig(c.aiConfig.VerifyMode); mode != "" {
-		flags.Verify = mode
-	}
-}
-
-func defaultVerifyModeFromConfig(mode string) string {
-	mode = strings.ToLower(strings.TrimSpace(mode))
-	switch mode {
-	case "", "off":
-		return ""
-	case "auto":
-		return "high"
-	default:
-		return mode
-	}
 }
 
 func (c *Command) resolveRelativePaths(args []string) []string {

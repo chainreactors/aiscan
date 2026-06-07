@@ -50,28 +50,6 @@ func FirstNonEmpty(values ...string) string {
 	return ""
 }
 
-func AIFindingSummary(finding AIFinding) string {
-	if summary := strings.TrimSpace(finding.Summary); summary != "" {
-		return summary
-	}
-	if summary := ExtractQuotedSummary(finding.Raw); summary != "" {
-		return summary
-	}
-	if detail := AIFindingDetail(finding); detail != "" {
-		return firstContentLine(detail)
-	}
-	return strings.TrimSpace(finding.Raw)
-}
-
-func AIFindingDetail(finding AIFinding) string {
-	for _, value := range []string{finding.Detail, finding.Evidence} {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ExtractQuotedMarkdown(finding.Raw)
-}
-
 func AssetItemDetail(item AssetItem) string {
 	for _, value := range []string{item.Detail, item.Raw} {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {

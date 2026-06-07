@@ -166,7 +166,7 @@ func (s *Service) SubmitScan(ctx context.Context, target, mode string, verify, s
 		return nil, fmt.Errorf("store create: %w", err)
 	}
 
-	go s.runScan(job.ID)
+	go s.runScan(job.ID) //nolint:gosec // G118: background scan outlives the request
 
 	return job, nil
 }
@@ -192,7 +192,7 @@ func (s *Service) CancelScan(id string) error {
 		return err
 	}
 	if job.Status == StatusRunning || job.Status == StatusQueued {
-		job.Status = StatusCancelled
+		job.Status = StatusCanceled
 		job.UpdatedAt = time.Now()
 		return s.store.Update(ctx, job)
 	}
@@ -227,13 +227,13 @@ func (s *Service) runScan(jobID string) {
 	if err != nil {
 		return
 	}
-	if job.Status == StatusCancelled {
+	if job.Status == StatusCanceled {
 		return
 	}
 
 	job.Status = StatusRunning
 	job.UpdatedAt = time.Now()
-	s.store.Update(ctx, job)
+	_ = s.store.Update(ctx, job)
 
 	s.hub.Broadcast(jobID, ScanEvent{
 		Type:   "status",
@@ -257,7 +257,7 @@ func (s *Service) runScan(jobID string) {
 		job.Status = StatusFailed
 		job.Error = err.Error()
 		job.UpdatedAt = time.Now()
-		s.store.Update(ctx, job)
+		_ = s.store.Update(ctx, job)
 		s.hub.Broadcast(jobID, ScanEvent{
 			Type:   "error",
 			ScanID: jobID,
@@ -272,7 +272,7 @@ func (s *Service) runScan(jobID string) {
 	job.Report = report
 	job.Result = result
 	job.UpdatedAt = time.Now()
-	s.store.Update(ctx, job)
+	_ = s.store.Update(ctx, job)
 
 	s.hub.Broadcast(jobID, ScanEvent{
 		Type:   "complete",
@@ -380,7 +380,7 @@ func (w *sseStreamWriter) Write(p []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if current.Status == StatusCancelled {
+		if current.Status == StatusCanceled {
 			return 0, context.Canceled
 		}
 		current.Progress = line
@@ -419,8 +419,7 @@ func buildMarkdownReport(target, mode string, result *output.Result) string {
 	sb.WriteString(fmt.Sprintf("| Web | %d |\n", result.Summary.Webs))
 	sb.WriteString(fmt.Sprintf("| Probes | %d |\n", result.Summary.Probes))
 	sb.WriteString(fmt.Sprintf("| Fingerprints | %d |\n", resultFingerprintCount(result)))
-	sb.WriteString(fmt.Sprintf("| Findings | %d |\n", result.Summary.Risks+result.Summary.Vulns))
-	sb.WriteString(fmt.Sprintf("| AI | %d |\n", len(result.AI)))
+	sb.WriteString(fmt.Sprintf("| Findings | %d |\n", result.Summary.Loots))
 	sb.WriteString(fmt.Sprintf("| Errors | %d |\n", result.Summary.Errors))
 	if result.Summary.Duration != "" {
 		sb.WriteString(fmt.Sprintf("| Duration | %s |\n", result.Summary.Duration))
@@ -467,28 +466,76 @@ func writeMarkdownList(sb *strings.Builder, label string, values []string) {
 }
 
 func writeAssetFindingsMarkdown(sb *strings.Builder, items []output.AssetItem) {
-	var lines []string
+	wrote := false
 	for _, item := range items {
 		switch item.Kind {
 		case output.AssetItemFinding, output.AssetItemNote, output.AssetItemResponse, output.AssetItemError:
-			text := output.FirstNonEmpty(item.Summary, item.Title, item.Detail, item.Raw)
-			if text == "" {
+			summary := output.FirstNonEmpty(item.Summary, item.Title)
+			detail := output.AssetItemDetail(item)
+			if summary == "" && detail == "" {
 				continue
 			}
 			prefix := output.FirstNonEmpty(item.Source, item.Kind)
 			if item.Status != "" {
 				prefix += ":" + item.Status
 			}
-			lines = append(lines, fmt.Sprintf("  - **%s** %s", prefix, text))
+			if !wrote {
+				sb.WriteString("\n#### Analysis\n\n")
+				wrote = true
+			}
+			if summary == "" {
+				summary = firstMarkdownLine(detail)
+			}
+			sb.WriteString(fmt.Sprintf("##### %s\n\n", markdownHeading(summary)))
+			sb.WriteString(fmt.Sprintf("**Source:** %s\n\n", markdownCode(prefix)))
+			if detail != "" && !sameMarkdownText(summary, detail) {
+				writeMarkdownBlock(sb, detail)
+			} else if detail == "" && summary != "" {
+				sb.WriteString(summary)
+				sb.WriteString("\n\n")
+			}
 		}
 	}
-	if len(lines) == 0 {
+}
+
+func firstMarkdownLine(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if idx := strings.IndexByte(value, '\n'); idx >= 0 {
+		return strings.TrimSpace(value[:idx])
+	}
+	return value
+}
+
+func sameMarkdownText(left, right string) bool {
+	return strings.TrimSpace(left) == strings.TrimSpace(right)
+}
+
+func writeIndentedMarkdown(sb *strings.Builder, value, indent string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
 		return
 	}
-	sb.WriteString("- **Findings:**\n")
-	for _, line := range lines {
-		sb.WriteString(line + "\n")
+	for _, line := range strings.Split(value, "\n") {
+		if strings.TrimSpace(line) == "" {
+			sb.WriteByte('\n')
+			continue
+		}
+		sb.WriteString(indent)
+		sb.WriteString(line)
+		sb.WriteByte('\n')
 	}
+}
+
+func writeMarkdownBlock(sb *strings.Builder, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return
+	}
+	sb.WriteString(value)
+	sb.WriteString("\n\n")
 }
 
 func assetServiceFacts(items []output.AssetItem) []string {
@@ -563,6 +610,15 @@ func resultFingerprintCount(result *output.Result) int {
 func markdownCode(value string) string {
 	value = strings.ReplaceAll(value, "`", "'")
 	return "`" + value + "`"
+}
+
+func markdownHeading(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.ReplaceAll(value, "\n", " ")
+	if value == "" {
+		return "Analysis"
+	}
+	return strings.TrimLeft(value, "# ")
 }
 
 func generateID() string {
