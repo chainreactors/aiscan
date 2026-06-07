@@ -7,11 +7,11 @@ require (
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c
 	github.com/chainreactors/ioa v0.0.0-20260519070109-6746bd1fdaef
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
-	github.com/chainreactors/neutron v0.0.0-20260530143533-ea958251e73e
+	github.com/chainreactors/neutron v0.0.1
 	github.com/chainreactors/parsers v0.0.0-20260517174207-da1ebd0e7f68
 	github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593
 	github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3
-	github.com/chainreactors/sdk v0.2.3-0.20260529125956-4741de355c3a
+	github.com/chainreactors/sdk v0.2.3
 	github.com/chainreactors/spray v1.3.1-0.20260529172359-9caf4ee3567c
 	github.com/chainreactors/utils v0.0.0-20260529172343-6465cb8568b2
 	github.com/chainreactors/zombie v1.2.3-0.20260529172356-6b3bf94a7dfc
@@ -22,6 +22,7 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/muesli/termenv v0.16.0
+	github.com/projectdiscovery/gologger v1.1.68
 	github.com/projectdiscovery/katana v1.6.1
 	github.com/projectdiscovery/uncover v1.2.1
 	github.com/projectdiscovery/utils v0.10.1
@@ -144,6 +145,7 @@ require (
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/knadh/go-pop3 v1.0.2 // indirect
+	github.com/lcvvvv/logs v0.0.3 // indirect
 	github.com/lib/pq v1.12.3 // indirect
 	github.com/logrusorgru/aurora v2.0.3+incompatible // indirect
 	github.com/logrusorgru/aurora/v4 v4.0.0 // indirect
@@ -180,7 +182,6 @@ require (
 	github.com/projectdiscovery/dsl v0.8.17 // indirect
 	github.com/projectdiscovery/fastdialer v0.5.6 // indirect
 	github.com/projectdiscovery/goflags v0.1.74 // indirect
-	github.com/projectdiscovery/gologger v1.1.68 // indirect
 	github.com/projectdiscovery/gostruct v0.0.2 // indirect
 	github.com/projectdiscovery/hmap v0.0.100 // indirect
 	github.com/projectdiscovery/mapcidr v1.1.97 // indirect
