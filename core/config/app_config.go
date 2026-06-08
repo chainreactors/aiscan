@@ -1,6 +1,8 @@
 package config
 
 import (
+	"strings"
+
 	"github.com/chainreactors/aiscan/pkg/app"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
@@ -42,8 +44,23 @@ func AppConfig(option *Option, features RuntimeFeatures, logger telemetry.Logger
 			BashTimeout: 300,
 			TavilyKeys:  DefaultTavilyKeys,
 		},
-		Logger: logger,
+		Logger:        logger,
+		CLISkillPaths: skillPathsFromOptions(option),
 	}
+}
+
+func skillPathsFromOptions(option *Option) []string {
+	var paths []string
+	for _, s := range option.Skills {
+		if looksLikePath(s) {
+			paths = append(paths, s)
+		}
+	}
+	return paths
+}
+
+func looksLikePath(s string) bool {
+	return strings.ContainsAny(s, `/\`) || strings.HasPrefix(s, ".")
 }
 
 func intOptionValue(p *int) int {

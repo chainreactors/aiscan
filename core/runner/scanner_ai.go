@@ -68,7 +68,7 @@ func resolveScannerIntent(option *cfg.Option, store *skills.Store, command strin
 	skillName := scan.ScannerSkillName(command)
 	if skillName != "" && cfg.ScannerCommandAvailable(command) {
 		if skill, ok := store.ByName(skillName); ok {
-			sections = append(sections, skills.FormatInvocation(skill, ""))
+			sections = append(sections, store.FormatInvocation(skill, ""))
 		}
 	}
 
