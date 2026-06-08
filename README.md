@@ -22,34 +22,41 @@
 - **AI Agent 模式** — 自然语言描述任务，agent 自主选择扫描路径、分析结果、生成结论
 - **内置扫描引擎** — 集成 [gogo](https://github.com/chainreactors/gogo)（端口/服务发现）、[spray](https://github.com/chainreactors/spray)（Web 探测/指纹）、[zombie](https://github.com/chainreactors/zombie)（弱口令）、[neutron](https://github.com/chainreactors/neutron)（POC 检测）
 - **多 LLM 支持** — OpenAI、DeepSeek、Anthropic、OpenRouter、Groq、Moonshot、Ollama 等
-- **AI 验证** — 对扫描发现进行 LLM 驱动的自动验证，减少误报
+- **AI 增强** — `--verify` 自动验证减少误报，`--sniper` 搜索公开漏洞，`--deep` 深度动态测试
+- **Playwright 浏览器**（full 版）— 交互式浏览器会话、headless 模板引擎、session recorder
+- **TMux 终端** — PTY 交互式会话，agent 可执行长时间任务
+- **Proxy 代理管理** — Clash 订阅 + 多协议支持（trojan/vless/anytls/hy2/ss）
+- **Passive Recon**（full 版）— FOFA / Hunter 网络空间搜索
 - **分布式协作** — [IOA 架构](docs/ioa.md)支持多 worker 节点通过消息空间协同扫描
 - **多种输出** — 终端实时流式、JSON Lines、Markdown 报告
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│                    aiscan CLI                    │
-├──────────┬──────────┬──────────┬────────────────┤
-│   scan   │  agent   │ scanner  │      ioa       │
-│ pipeline │ LLM agent│  direct  │ collaboration  │
-├──────────┴──────────┴──────────┴────────────────┤
-│              Command Registry & Skills           │
-├────────┬────────┬─────────┬─────────┬───────────┤
-│  gogo  │ spray  │ zombie  │ neutron │  browser  │
-│  port  │  web   │  weak   │   poc   │ headless  │
-│ scan   │ probe  │  pass   │  check  │  render   │
-├────────┴────────┴─────────┴─────────┴───────────┤
-│         LLM Providers  │  Cyberhub Resources     │
-└─────────────────────────┴────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                         aiscan CLI                            │
+├──────────┬──────────┬──────────┬──────────┬──────────────────┤
+│   scan   │  agent   │ scanner  │   ioa    │      tools       │
+│ pipeline │ LLM agent│  direct  │  collab  │ tmux/proxy/search│
+├──────────┴──────────┴──────────┴──────────┴──────────────────┤
+│                  Command Registry & Skills                    │
+├────────┬────────┬────────┬─────────┬─────────┬───────────────┤
+│  gogo  │ spray  │ zombie │ neutron │playwright│  passive/kata │
+│  port  │  web   │  weak  │   poc   │ browser │  recon/crawl  │
+│  scan  │ probe  │  pass  │  check  │ headless│   (full)      │
+├────────┴────────┴────────┴─────────┴─────────┴───────────────┤
+│           LLM Providers   │    Cyberhub Resources             │
+└────────────────────────────┴──────────────────────────────────┘
 ```
 
 ## Quick Start
 
 ### 安装
 
-从 [GitHub Releases](https://github.com/chainreactors/aiscan/releases/latest) 下载对应平台的二进制文件：
+从 [GitHub Releases](https://github.com/chainreactors/aiscan/releases/latest) 下载对应平台的二进制文件。提供两个版本：
+
+- **aiscan** — 基础版，包含 scan/agent/gogo/spray/zombie/neutron
+- **aiscan-full** — 完整版，额外包含 playwright 浏览器、passive recon、katana 爬虫
 
 ```bash
 # Linux
@@ -77,8 +84,11 @@ aiscan scan -i 192.168.1.0/24
 # 完整扫描：增加路径爆破和更深爬取
 aiscan scan -i 192.168.1.0/24 --mode full
 
-# JSON 输出
-aiscan scan -i 192.168.1.0/24 -j
+# AI 增强：验证 + 狙击公开漏洞
+aiscan scan -i http://target.example --verify=high --sniper
+
+# 深度测试：对发现的资产进行动态 AI 测试
+aiscan scan -i http://target.example --mode full --deep
 ```
 
 ### Agent 模式（需要 LLM）
@@ -104,11 +114,11 @@ aiscan agent
 
 ## Supported Platforms
 
-| 系统 | 架构 | 文件 |
-| --- | --- | --- |
-| Linux | amd64 / arm64 | `aiscan_linux_amd64` / `aiscan_linux_arm64` |
-| macOS | Intel / Apple Silicon | `aiscan_darwin_amd64` / `aiscan_darwin_arm64` |
-| Windows | amd64 | `aiscan_windows_amd64.exe` |
+| 系统 | 架构 | 基础版 | 完整版 |
+| --- | --- | --- | --- |
+| Linux | amd64 / arm64 | `aiscan_linux_amd64` | `aiscan-full_linux_amd64` |
+| macOS | Intel / Apple Silicon | `aiscan_darwin_amd64` | `aiscan-full_darwin_arm64` |
+| Windows | amd64 | `aiscan_windows_amd64.exe` | `aiscan-full_windows_amd64.exe` |
 
 ## License
 

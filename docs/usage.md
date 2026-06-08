@@ -1,6 +1,6 @@
 # aiscan 使用文档
 
-本文档基于 `v0.1.0` 源码编写，面向 GitHub Release 发布的二进制版本。
+本文档基于 `v0.2.0` 源码编写，面向 GitHub Release 发布的二进制版本。
 
 aiscan 是一个 agentic security scanner：它既可以像普通 CLI 一样直接运行扫描器，也可以让 LLM agent 根据自然语言目标选择工具、执行扫描、读取证据并输出结论。请只在明确授权的目标上使用。
 
@@ -83,11 +83,13 @@ aiscan [全局参数] <subcommand> [子命令参数]
 | 命令 | 类型 | 功能 |
 | --- | --- | --- |
 | `agent` | agentic | LLM agent；无任务输入时进入交互式 CLI，`--loop` 时作为 IOA worker |
-| `scan` | pipeline | 自动扫描流水线，串联 gogo → spray → zombie → neutron → 可选 AI 验证 |
+| `scan` | pipeline | 自动扫描流水线，串联 gogo → spray → zombie → neutron → 可选 AI 验证/sniper/deep |
 | `gogo` | scanner | 主机存活、端口、服务、banner 和指纹发现 |
 | `spray` | scanner | Web 探测、HTTP 指纹、常见文件、爬取和路径检查 |
 | `zombie` | scanner | 授权弱口令检测 |
 | `neutron` | scanner | 模板化 POC 检测 |
+| `katana` | scanner | Web 爬虫（仅 full 版） |
+| `passive` | scanner | 网络空间搜索 FOFA/Hunter（仅 full 版） |
 | `cyberhub` | query | 查询已加载的指纹和 POC 模板 |
 | `ioa serve` | service | 启动 IOA HTTP server |
 | `ioa spaces` | query | 列出 IOA 空间 |
@@ -111,14 +113,14 @@ aiscan neutron -h
 
 ### LLM 参数
 
-| 参数 | 别名 | 说明 |
-| --- | --- | --- |
-| `--llm-provider` | `--provider` | LLM provider 名称 |
-| `--llm-base-url` | `--base-url` | LLM API base URL |
-| `--llm-api-key` | `--api-key` | LLM API key |
-| `--llm-model` | `--model` | 模型名称（默认 `gpt-4o`） |
-| `--llm-proxy` | `--proxy` | 访问 LLM API 的 HTTP proxy |
-| `--ai` | | 对 scanner 输出使用 LLM 分析 |
+| 参数 | 说明 |
+| --- | --- |
+| `--provider` | LLM provider 名称 |
+| `--base-url` | LLM API base URL |
+| `--api-key` | LLM API key |
+| `--model` | 模型名称（默认 `gpt-4o`） |
+| `--llm-proxy` | 访问 LLM API 的 HTTP proxy |
+| `--ai` | 对 scanner 输出使用 LLM 分析（等效 `--verify=high --sniper`） |
 
 ### Agent 参数
 
@@ -320,6 +322,8 @@ full 模式额外增加：
 | `--max-neutron-per-finger` | 每个指纹最大 neutron 模板数 | `20` |
 | `--broad-poc` | 无指纹时也运行 POC | |
 | `--verify` | AI 验证模式：`off`, `low`, `medium`, `high`, `critical` | `off` |
+| `--sniper` | AI 搜索公开漏洞：对发现的指纹搜索已知 CVE/exploit | |
+| `--deep` | AI 深度测试：对发现的 Web 资产和指纹进行动态测试 | |
 | `-j, --json` | JSON Lines 输出 | |
 | `--report` | Markdown 报告输出 | |
 | `-f, --file` | 输出写入文件（不含 ANSI 颜色） | |
