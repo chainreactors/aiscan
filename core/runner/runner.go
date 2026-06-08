@@ -17,7 +17,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/app"
 	cmdpkg "github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
-	"github.com/chainreactors/aiscan/pkg/swarm"
+	"github.com/chainreactors/ioa/protocols/swarm"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
 	"github.com/chainreactors/aiscan/skills"
@@ -86,7 +86,7 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		Space:       option.Space,
 	}
 	for _, name := range option.Skills {
-		body := skills.ReadBody(name)
+		body := rt.App.Skills.ReadBody(name)
 		if body == "" {
 			body = skills.ReadFile("skills/" + name + ".md")
 		}
@@ -170,7 +170,7 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 			return agent.AgentType{}, fmt.Errorf("skill %q is not configured as an agent type", name)
 		}
 		return agent.AgentType{
-			FormattedPrompt: skills.FormatInvocation(s, ""),
+			FormattedPrompt: rt.App.Skills.FormatInvocation(s, ""),
 			Model:           s.AgentModel,
 			Background:      s.AgentBackground,
 		}, nil

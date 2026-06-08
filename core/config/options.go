@@ -45,7 +45,7 @@ type ScannerOptions struct {
 type AgentOptions struct {
 	Prompt    string   `short:"p" long:"prompt" description:"Natural language task for the agent"`
 	Inputs    []string `short:"i" long:"input" description:"Target input: IP, URL, IP:port, or CIDR. Can specify multiple"`
-	Skills    []string `short:"s" long:"skill" description:"Embedded skill to apply. Can specify multiple"`
+	Skills    []string `short:"s" long:"skill" description:"Skill to apply (name or file path). Can specify multiple"`
 	TaskFile  string   `long:"task-file" description:"File containing task description"`
 	Loop      bool     `long:"loop" description:"Run as an IOA loop worker instead of local agent mode"`
 	Heartbeat int      `long:"heartbeat" description:"Run an IOA heartbeat agent turn every N minutes in agent --loop (0 disables)" default:"0"`
@@ -175,7 +175,7 @@ func ApplySelectedSkills(text string, selected []string, store *skills.Store) (s
 			if sb.Len() > 0 {
 				sb.WriteString("\n\n")
 			}
-			sb.WriteString(skills.FormatInvocation(skill, ""))
+			sb.WriteString(store.FormatInvocation(skill, ""))
 			continue
 		}
 		body := skills.ReadFile("skills/" + name + ".md")

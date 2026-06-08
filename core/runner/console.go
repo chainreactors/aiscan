@@ -241,7 +241,7 @@ func (r *AgentConsole) runPrompt(ctx context.Context, input string) error {
 }
 
 func (r *AgentConsole) runSkill(ctx context.Context, skill skillpkg.Skill, input string) error {
-	prompt := skillpkg.FormatInvocation(skill, input)
+	prompt := r.application.Skills.FormatInvocation(skill, input)
 	prompt, err := cfg.ApplySelectedSkills(prompt, r.option.Skills, r.application.Skills)
 	if err != nil {
 		return err

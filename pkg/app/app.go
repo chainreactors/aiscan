@@ -21,11 +21,12 @@ import (
 )
 
 type Config struct {
-	Provider ProviderConfig
-	Scanner  ScannerConfig
-	Tools    ToolConfig
-	IOA      *IOAConfig
-	Logger   telemetry.Logger
+	Provider      ProviderConfig
+	Scanner       ScannerConfig
+	Tools         ToolConfig
+	IOA           *IOAConfig
+	Logger        telemetry.Logger
+	CLISkillPaths []string
 }
 
 type ProviderConfig struct {
@@ -85,7 +86,7 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		logger = telemetry.NopLogger()
 	}
 
-	store, diagnostics := skills.LoadEmbeddedStore()
+	store, diagnostics := skills.LoadAll(cfg.CLISkillPaths)
 	app.Skills = store
 	app.SkillDiagnostics = diagnostics
 
@@ -363,7 +364,7 @@ func (a *App) InitIOA(ctx context.Context, cfg IOAConfig) error {
 		command.BuildGroup("ioa", deps, a.Commands)
 	}
 	if cfg.AutoRegister && client != nil && client.NodeID() == "" {
-		_, err := client.RegisterNode(ctx, cfg.NodeName, cfg.NodeMeta)
+		_, err := client.RegisterNode(ctx, cfg.NodeName, "", cfg.NodeMeta)
 		if err != nil {
 			return err
 		}
