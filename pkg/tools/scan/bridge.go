@@ -32,14 +32,23 @@ func subscribePipeline(bus *eventbus.Bus[pipeline.Observation], coll *collector,
 	}
 }
 
-func wrapCapability(name string, accept func(event) bool, worker int, run func(context.Context, event, func(event))) pipeline.Capability {
+func wrapRoutes(accept func(event) bool, sources ...string) []pipeline.Route {
+	filter := func(e pipeline.Event) bool {
+		se, ok := e.(event)
+		return ok && accept != nil && accept(se)
+	}
+	routes := make([]pipeline.Route, len(sources))
+	for i, src := range sources {
+		routes[i] = pipeline.Route{From: src, Accept: filter}
+	}
+	return routes
+}
+
+func wrapCapability(name string, routes []pipeline.Route, worker int, run func(context.Context, event, func(event))) pipeline.Capability {
 	return pipeline.Capability{
 		Name:   name,
+		Routes: routes,
 		Worker: worker,
-		Accept: func(e pipeline.Event) bool {
-			se, ok := e.(event)
-			return ok && accept != nil && accept(se)
-		},
 		Run: func(ctx context.Context, e pipeline.Event, emit func(pipeline.Event)) {
 			se, ok := e.(event)
 			if !ok {

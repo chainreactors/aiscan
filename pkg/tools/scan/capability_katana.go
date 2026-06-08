@@ -25,9 +25,6 @@ const (
 )
 
 func init() {
-	RegisterCrawlSource(capKatanaCrawl)
-	RegisterCrawlSource(capKatanaDeep)
-
 	RegisterProfileExtender(func(mode string, p *profile) {
 		switch mode {
 		case scanModeQuick:
@@ -43,6 +40,7 @@ func init() {
 
 	RegisterCapabilityBuilder(func(c *Command, f flags, opts scanOptions, p profile) []pipeline.Capability {
 		var caps []pipeline.Capability
+		katanaWebRoutes := wrapRoutes(acceptsTarget(targetWeb), webSources()...)
 		if p.Enabled(capKatanaCrawl) {
 			depth := p.CrawlDepth
 			if depth <= 0 {
@@ -50,7 +48,7 @@ func init() {
 			}
 			caps = append(caps, wrapCapability(
 				capKatanaCrawl,
-				acceptsNonCrawlTarget(targetWeb),
+				katanaWebRoutes,
 				2,
 				func(ctx context.Context, e event, emit func(event)) {
 					runKatanaCrawl(ctx, c, e, depth, false, emit)
@@ -60,7 +58,7 @@ func init() {
 		if p.Enabled(capKatanaDeep) {
 			caps = append(caps, wrapCapability(
 				capKatanaDeep,
-				acceptsNonCrawlTarget(targetWeb),
+				katanaWebRoutes,
 				1,
 				func(ctx context.Context, e event, emit func(event)) {
 					runKatanaCrawl(ctx, c, e, 3, true, emit)

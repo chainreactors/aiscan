@@ -223,10 +223,13 @@ func (c *Command) execute(ctx context.Context, args []string, stream io.Writer) 
 	}
 
 	capabilities := c.buildCapabilities(flags, options, profile)
-	p := pipeline.New(ctx, pipeline.Config{
+	p, err := pipeline.New(ctx, pipeline.Config{
 		Capabilities: capabilities,
 		Bus:          pipelineBus,
 	})
+	if err != nil {
+		return "", nil, fmt.Errorf("scan: %w", err)
+	}
 	p.Run(seedsToEvents(seeds))
 	coll.Finish()
 

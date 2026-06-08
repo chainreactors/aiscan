@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/chainreactors/aiscan/pkg/eventbus"
@@ -17,8 +18,7 @@ const (
 	ActionEmit            ActionKind = "emit"
 	ActionAccept          ActionKind = "accept"
 	ActionDispatch        ActionKind = "dispatch"
-	ActionDedupEvent      ActionKind = "dedup event"
-	ActionDedupRun        ActionKind = "dedup run"
+	ActionDedupRoute      ActionKind = "dedup route"
 	ActionCapabilityStart ActionKind = "capability start"
 	ActionCapabilityDone  ActionKind = "capability done"
 )
@@ -29,9 +29,14 @@ type Observation struct {
 	Event      Event
 }
 
+type Route struct {
+	From   string
+	Accept func(Event) bool
+}
+
 type Capability struct {
 	Name   string
-	Accept func(Event) bool
+	Routes []Route
 	Worker int
 	RunKey func(Event) string
 	Run    func(ctx context.Context, event Event, emit func(Event))
@@ -49,44 +54,95 @@ type Config struct {
 	Bus          *eventbus.Bus[Observation]
 }
 
+type routedEvent struct {
+	event  Event
+	source string
+}
+
+type routeEntry struct {
+	from   string
+	cap    *Capability
+	accept func(Event) bool
+	mu     sync.Mutex
+	seen   map[string]struct{}
+}
+
 type Pipeline struct {
 	ctx            context.Context
 	capabilities   []Capability
 	bus            *eventbus.Bus[Observation]
-	events         chan Event
+	events         chan routedEvent
 	queues         map[string]chan Event
+	routes         map[string][]*routeEntry
 	dispatcherDone chan struct{}
 	workersDone    sync.WaitGroup
 	mu             sync.Mutex
 	cond           *sync.Cond
 	pending        int
-	seenEvents     map[string]struct{}
-	seenRuns       map[string]struct{}
 }
 
-func New(ctx context.Context, cfg Config) *Pipeline {
+// RouteStats returns per-route dedup map sizes. Keyed by "from->cap".
+// A value of -1 means the map has been freed. For testing only.
+func (p *Pipeline) RouteStats() map[string]int {
+	stats := make(map[string]int)
+	for source, entries := range p.routes {
+		for _, entry := range entries {
+			key := source + "->" + entry.cap.Name
+			entry.mu.Lock()
+			if entry.seen != nil {
+				stats[key] = len(entry.seen)
+			} else {
+				stats[key] = -1
+			}
+			entry.mu.Unlock()
+		}
+	}
+	return stats
+}
+
+const seedSource = ""
+
+func New(ctx context.Context, cfg Config) (*Pipeline, error) {
 	bus := cfg.Bus
 	if bus == nil {
 		bus = eventbus.New[Observation]()
 	}
+
+	if err := validateDAG(cfg.Capabilities); err != nil {
+		return nil, err
+	}
+
 	p := &Pipeline{
 		ctx:            ctx,
 		capabilities:   cfg.Capabilities,
 		bus:            bus,
-		events:         make(chan Event, 1024),
+		events:         make(chan routedEvent, 1024),
 		queues:         make(map[string]chan Event, len(cfg.Capabilities)),
+		routes:         make(map[string][]*routeEntry),
 		dispatcherDone: make(chan struct{}),
-		seenEvents:     make(map[string]struct{}),
-		seenRuns:       make(map[string]struct{}),
 	}
 	p.cond = sync.NewCond(&p.mu)
-	return p
+
+	for i := range cfg.Capabilities {
+		cap := &cfg.Capabilities[i]
+		for _, route := range cap.Routes {
+			entry := &routeEntry{
+				from:   route.From,
+				cap:    cap,
+				accept: route.Accept,
+				seen:   make(map[string]struct{}),
+			}
+			p.routes[route.From] = append(p.routes[route.From], entry)
+		}
+	}
+
+	return p, nil
 }
 
 func (p *Pipeline) Run(seeds []Event) {
 	p.start()
 	for _, seed := range seeds {
-		p.Submit(seed)
+		p.submit(seed, seedSource)
 	}
 	p.waitIdle()
 	close(p.events)
@@ -98,31 +154,41 @@ func (p *Pipeline) Run(seeds []Event) {
 	p.cleanup()
 }
 
+func (p *Pipeline) Submit(e Event) {
+	p.submit(e, seedSource)
+}
+
 func (p *Pipeline) cleanup() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	clear(p.seenEvents)
-	p.seenEvents = nil
-	clear(p.seenRuns)
-	p.seenRuns = nil
+	for _, entries := range p.routes {
+		for _, entry := range entries {
+			entry.mu.Lock()
+			clear(entry.seen)
+			entry.seen = nil
+			entry.mu.Unlock()
+		}
+	}
+	p.routes = nil
 	p.queues = nil
 }
 
 func (p *Pipeline) start() {
-	for _, cap := range p.capabilities {
+	for i := range p.capabilities {
+		cap := &p.capabilities[i]
 		workers := cap.Worker
 		if workers <= 0 {
 			workers = 1
 		}
 		queue := make(chan Event, 256)
 		p.queues[cap.Name] = queue
-		for i := 0; i < workers; i++ {
+		for j := 0; j < workers; j++ {
 			p.workersDone.Add(1)
-			go func(cap Capability, queue <-chan Event) {
+			go func(cap *Capability, queue <-chan Event) {
 				defer p.workersDone.Done()
 				for input := range queue {
 					p.emit(ActionCapabilityStart, cap.Name, input)
-					cap.Run(p.ctx, input, p.Submit)
+					cap.Run(p.ctx, input, func(e Event) {
+						p.submit(e, cap.Name)
+					})
 					p.emit(ActionCapabilityDone, cap.Name, input)
 					p.done()
 				}
@@ -132,61 +198,70 @@ func (p *Pipeline) start() {
 
 	go func() {
 		defer close(p.dispatcherDone)
-		for event := range p.events {
-			p.dispatch(event)
+		for re := range p.events {
+			p.dispatch(re)
 			p.done()
 		}
 	}()
 }
 
-func (p *Pipeline) Submit(e Event) {
+func (p *Pipeline) submit(e Event, source string) {
 	if e == nil || e.Key() == "" {
 		return
 	}
-	p.emit(ActionEmit, "", e)
+	p.emit(ActionEmit, source, e)
 	p.add()
 	select {
-	case p.events <- e:
+	case p.events <- routedEvent{event: e, source: source}:
 	case <-p.ctx.Done():
 		p.done()
 	}
 }
 
-func (p *Pipeline) dispatch(e Event) {
-	key := e.Key()
+func (p *Pipeline) dispatch(re routedEvent) {
+	key := re.event.Key()
 	if key == "" {
 		return
 	}
 
-	p.mu.Lock()
-	if _, ok := p.seenEvents[key]; ok {
-		p.mu.Unlock()
-		p.emit(ActionDedupEvent, "", e)
-		return
-	}
-	p.seenEvents[key] = struct{}{}
-	p.mu.Unlock()
+	dispatched := false
+	matched := false
+	entries := p.routes[re.source]
+	for _, entry := range entries {
+		if entry.accept != nil && !entry.accept(re.event) {
+			continue
+		}
+		matched = true
 
-	p.emit(ActionAccept, "", e)
-	for _, cap := range p.capabilities {
-		if cap.Accept == nil || !cap.Accept(e) {
+		dedupKey := entry.cap.KeyFor(re.event)
+		if dedupKey == "" {
 			continue
 		}
-		runKey := cap.KeyFor(e)
-		if runKey == "" {
+
+		entry.mu.Lock()
+		if _, seen := entry.seen[dedupKey]; seen {
+			entry.mu.Unlock()
+			p.emit(ActionDedupRoute, entry.cap.Name, re.event)
 			continue
 		}
-		if !p.markRun(runKey) {
-			p.emit(ActionDedupRun, cap.Name, e)
-			continue
+		entry.seen[dedupKey] = struct{}{}
+		entry.mu.Unlock()
+
+		if !dispatched {
+			p.emit(ActionAccept, re.source, re.event)
+			dispatched = true
 		}
-		p.emit(ActionDispatch, cap.Name, e)
+		p.emit(ActionDispatch, entry.cap.Name, re.event)
 		p.add()
 		select {
-		case p.queues[cap.Name] <- e:
+		case p.queues[entry.cap.Name] <- re.event:
 		case <-p.ctx.Done():
 			p.done()
 		}
+	}
+
+	if !matched {
+		p.emit(ActionAccept, re.source, re.event)
 	}
 }
 
@@ -213,16 +288,57 @@ func (p *Pipeline) waitIdle() {
 	p.mu.Unlock()
 }
 
-func (p *Pipeline) markRun(key string) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if _, ok := p.seenRuns[key]; ok {
-		return false
-	}
-	p.seenRuns[key] = struct{}{}
-	return true
-}
-
 func (p *Pipeline) emit(action ActionKind, capability string, e Event) {
 	p.bus.Emit(Observation{Action: action, Capability: capability, Event: e})
+}
+
+func validateDAG(capabilities []Capability) error {
+	adj := make(map[string]map[string]struct{})
+	nodes := make(map[string]struct{})
+	for _, cap := range capabilities {
+		nodes[cap.Name] = struct{}{}
+		for _, route := range cap.Routes {
+			from := route.From
+			if from == seedSource {
+				continue
+			}
+			if _, ok := adj[from]; !ok {
+				adj[from] = make(map[string]struct{})
+			}
+			adj[from][cap.Name] = struct{}{}
+		}
+	}
+
+	const (
+		white = 0
+		gray  = 1
+		black = 2
+	)
+	color := make(map[string]int)
+
+	var visit func(string) error
+	visit = func(node string) error {
+		color[node] = gray
+		for next := range adj[node] {
+			switch color[next] {
+			case gray:
+				return fmt.Errorf("pipeline: cycle detected involving %q -> %q", node, next)
+			case white:
+				if err := visit(next); err != nil {
+					return err
+				}
+			}
+		}
+		color[node] = black
+		return nil
+	}
+
+	for node := range nodes {
+		if color[node] == white {
+			if err := visit(node); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

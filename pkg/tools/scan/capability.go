@@ -58,30 +58,14 @@ func acceptsTarget(kinds ...targetKind) func(event) bool {
 	}
 }
 
-// crawlSources lists capability names whose output should not re-trigger
-// other crawlers. spray_check still processes them for enrichment.
-var crawlSources = map[string]struct{}{
-	capSprayCrawl: {},
+// webSources returns the sources that produce webTarget events for probing capabilities.
+func webSources() []string {
+	return []string{"", capGogoPortscan}
 }
 
-// RegisterCrawlSource marks a capability as a crawl source so its
-// output does not re-trigger other crawlers.
-func RegisterCrawlSource(name string) {
-	crawlSources[name] = struct{}{}
-}
-
-// acceptsNonCrawlTarget builds an accept function that skips events
-// emitted by crawl capabilities. This prevents crawl→crawl loops while
-// still letting spray_check enrich every discovered URL.
-func acceptsNonCrawlTarget(kinds ...targetKind) func(event) bool {
-	base := acceptsTarget(kinds...)
-	return func(e event) bool {
-		if !base(e) {
-			return false
-		}
-		_, isCrawl := crawlSources[e.Source]
-		return !isCrawl
-	}
+// crawlSources returns the sources whose output feeds into spray_check for enrichment.
+func crawlSources() []string {
+	return []string{capSprayCrawl}
 }
 
 func (c *Command) buildCapabilities(flags flags, opts scanOptions, profile profile) []pipeline.Capability {
@@ -100,7 +84,7 @@ func (c *Command) buildCapabilities(flags flags, opts scanOptions, profile profi
 		gogoBuilt = true
 		capabilities = append(capabilities, wrapCapability(
 			capGogoPortscan,
-			acceptsTarget(targetScan),
+			wrapRoutes(acceptsTarget(targetScan), ""),
 			capWorkers(c.engines.Capacity.Gogo, flags.Threads),
 			func(ctx context.Context, e event, emit func(event)) {
 				c.runPortDiscoveryCapability(ctx, opts.Discovery, profile, e.Target, emit)
@@ -108,21 +92,22 @@ func (c *Command) buildCapabilities(flags flags, opts scanOptions, profile profi
 		))
 	}
 
-	addSpray := func(name string, sopts engine.SprayCheckOptions) {
+	addSpray := func(name string, sopts engine.SprayCheckOptions, sources []string) {
 		if !profile.Enabled(name) || !hasSpray(c.engines) {
 			return
 		}
 		sopts.Proxy = c.proxy
 		sprayBuilt = true
-		capabilities = append(capabilities, sprayCapability(c, flags, opts.Web, name, sopts, c.runSprayCapability))
+		capabilities = append(capabilities, sprayCapability(c, flags, opts.Web, name, sources, sopts, c.runSprayCapability))
 	}
 
-	addSpray(capSprayCheck, engine.SprayCheckOptions{Finger: true})
+	sprayCheckSources := append(webSources(), crawlSources()...)
+	addSpray(capSprayCheck, engine.SprayCheckOptions{Finger: true}, sprayCheckSources)
 
 	if profile.Enabled(capCoreWeb) {
 		capabilities = append(capabilities, wrapCapability(
 			capCoreWeb,
-			acceptsTarget(targetWebProbe),
+			wrapRoutes(acceptsTarget(targetWebProbe), capSprayCheck, capSprayPlugins, capSprayBrute),
 			2,
 			func(ctx context.Context, e event, emit func(event)) {
 				runWebResultAnalysisCapability(ctx, profile, e.Target, emit)
@@ -135,13 +120,13 @@ func (c *Command) buildCapabilities(flags flags, opts scanOptions, profile profi
 		BakPlugin:    true,
 		ActivePlugin: true,
 		Finger:       true,
-	})
+	}, webSources())
 
 	if profile.Enabled(capSprayCrawl) && hasSpray(c.engines) {
 		sprayBuilt = true
 		capabilities = append(capabilities, wrapCapability(
 			capSprayCrawl,
-			acceptsNonCrawlTarget(targetWeb),
+			wrapRoutes(acceptsTarget(targetWeb), webSources()...),
 			capWorkers(c.engines.Capacity.Spray, flags.SprayThreads),
 			func(ctx context.Context, e event, emit func(event)) {
 				c.runSprayCapability(ctx, flags, opts.Web, e.Target, capSprayCrawl, engine.SprayCheckOptions{Crawl: true, CrawlDepth: profile.CrawlDepth}, emit)
@@ -149,13 +134,13 @@ func (c *Command) buildCapabilities(flags flags, opts scanOptions, profile profi
 		))
 	}
 
-	addSpray(capSprayBrute, engine.SprayCheckOptions{DefaultDict: true})
+	addSpray(capSprayBrute, engine.SprayCheckOptions{DefaultDict: true}, webSources())
 
 	if profile.Enabled(capZombieWeakpass) && hasZombie(c.engines) {
 		weakpassBuilt = true
 		capabilities = append(capabilities, wrapCapability(
 			capHTTPBasicAuth,
-			acceptsTarget(targetWebProbe),
+			wrapRoutes(acceptsTarget(targetWebProbe), capSprayCheck, capSprayPlugins),
 			capWorkers(c.engines.Capacity.Zombie, flags.ZombieThreads),
 			func(ctx context.Context, e event, emit func(event)) {
 				c.runHTTPBasicAuthCapability(ctx, flags, e.Target, emit)
@@ -163,7 +148,7 @@ func (c *Command) buildCapabilities(flags flags, opts scanOptions, profile profi
 		))
 		capabilities = append(capabilities, wrapCapability(
 			capZombieWeakpass,
-			acceptsTarget(targetWeakpass),
+			wrapRoutes(acceptsTarget(targetWeakpass), "", capGogoPortscan, capCoreWeb, capHTTPBasicAuth),
 			capWorkers(c.engines.Capacity.Zombie, flags.ZombieThreads),
 			func(ctx context.Context, e event, emit func(event)) {
 				c.runWeakpassCapability(ctx, flags, opts.Credentials, e.Target, emit)
@@ -174,7 +159,7 @@ func (c *Command) buildCapabilities(flags flags, opts scanOptions, profile profi
 	if profile.Enabled(capNeutronPOC) && hasNeutron(c.engines) {
 		capabilities = append(capabilities, wrapCapability(
 			capNeutronPOC,
-			acceptsTarget(targetPOC),
+			wrapRoutes(acceptsTarget(targetPOC), capGogoPortscan, capCoreWeb),
 			capWorkers(c.engines.Capacity.Neutron, 1),
 			func(ctx context.Context, e event, emit func(event)) {
 				c.runPOCCapability(ctx, flags, e.Target, emit)
@@ -199,10 +184,10 @@ func (c *Command) buildCapabilities(flags flags, opts scanOptions, profile profi
 	return capabilities
 }
 
-func sprayCapability(c *Command, flags flags, web webOptions, name string, opts engine.SprayCheckOptions, run func(context.Context, flags, webOptions, target, string, engine.SprayCheckOptions, func(event))) pipeline.Capability {
+func sprayCapability(c *Command, flags flags, web webOptions, name string, sources []string, opts engine.SprayCheckOptions, run func(context.Context, flags, webOptions, target, string, engine.SprayCheckOptions, func(event))) pipeline.Capability {
 	return wrapCapability(
 		name,
-		acceptsTarget(targetWeb),
+		wrapRoutes(acceptsTarget(targetWeb), sources...),
 		capWorkers(c.engines.Capacity.Spray, flags.SprayThreads),
 		func(ctx context.Context, e event, emit func(event)) {
 			run(ctx, flags, web, e.Target, name, opts, emit)

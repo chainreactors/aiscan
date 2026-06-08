@@ -222,9 +222,6 @@ func deriveWebProbeResult(profile profile, source string, result *parsers.SprayR
 	if result.Status > 0 && (len(fingers) > 0 || profile.AllowBroadPOC) {
 		emit(targetEvent(source, "", newPOCTarget("", result.UrlString, fingers)))
 	}
-	if result.RedirectURL != "" {
-		emit(targetEvent(source+":redirect", "", newWebTarget("", result.RedirectURL, hostHeader)))
-	}
 }
 
 func webTargetScope(target webTarget) []string {
@@ -309,9 +306,6 @@ func deriveWeakpassResult(source string, result *parsers.ZombieResult, emit func
 		return
 	}
 	emit(lootEvent(source, weakpassLoot(result)))
-	if webURL := zombieResultWebURL(result); webURL != "" {
-		emit(targetEvent(source, "", newWebTarget("", webURL, "")))
-	}
 }
 
 func zombieTargetFromGogo(result *parsers.GOGOResult) (sdkzombie.Target, bool) {
@@ -351,23 +345,6 @@ func gogoZombieService(result *parsers.GOGOResult) (string, bool) {
 		return "", false
 	}
 	return service, true
-}
-
-func zombieResultWebURL(result *parsers.ZombieResult) string {
-	if result == nil {
-		return ""
-	}
-	if result.Service != "http" && result.Service != "https" && !utils.IsWebPort(result.Port) {
-		return ""
-	}
-	scheme := result.Scheme
-	if scheme == "" {
-		scheme = result.Service
-	}
-	if scheme == "" || scheme == "unknown" {
-		scheme = webSchemeFromPort(result.Port)
-	}
-	return utils.URLFromHostPort(scheme, result.IP, result.Port)
 }
 
 func webSchemeFromPort(port string) string {

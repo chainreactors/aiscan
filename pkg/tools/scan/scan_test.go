@@ -34,13 +34,18 @@ import (
 	sdkzombie "github.com/chainreactors/sdk/zombie"
 )
 
-func newTestPipeline(ctx context.Context, caps []pipeline.Capability, coll *collector, debug bool) *pipeline.Pipeline {
+func newTestPipeline(t *testing.T, ctx context.Context, caps []pipeline.Capability, coll *collector, debug bool) *pipeline.Pipeline {
+	t.Helper()
 	bus := eventbus.New[pipeline.Observation]()
 	subscribePipeline(bus, coll, debug)
-	return pipeline.New(ctx, pipeline.Config{
+	p, err := pipeline.New(ctx, pipeline.Config{
 		Capabilities: caps,
 		Bus:          bus,
 	})
+	if err != nil {
+		t.Fatalf("pipeline.New() error = %v", err)
+	}
+	return p
 }
 
 func testSeeds(events ...event) []pipeline.Event {
@@ -253,7 +258,7 @@ func TestSprayCapabilityAppliesWebStrategyOptions(t *testing.T) {
 		Advance:      true,
 	}
 	cmd := &Command{engines: &engine.Set{Capacity: distributeCapacity(1000)}}
-	cap := sprayCapability(cmd, flags{SprayThreads: 7, Timeout: 9}, web, capSprayPlugins, engine.SprayCheckOptions{CommonPlugin: true, BakPlugin: true, ActivePlugin: true, Finger: true}, func(_ context.Context, f flags, gotWeb webOptions, input target, source string, opts engine.SprayCheckOptions, emit func(event)) {
+	cap := sprayCapability(cmd, flags{SprayThreads: 7, Timeout: 9}, web, capSprayPlugins, webSources(), engine.SprayCheckOptions{CommonPlugin: true, BakPlugin: true, ActivePlugin: true, Finger: true}, func(_ context.Context, f flags, gotWeb webOptions, input target, source string, opts engine.SprayCheckOptions, emit func(event)) {
 		target, ok := input.(webTarget)
 		if !ok {
 			t.Fatalf("input = %#v, want webTarget", input)
@@ -758,11 +763,11 @@ func TestScanPipelineDoesNotDispatchLootOrError(t *testing.T) {
 	coll := newCollector([]string{"seed"}, nil, false, false)
 	var runs int
 	capabilities := []pipeline.Capability{
-		wrapCapability("web", acceptsTarget(targetWeb), 1, func(_ context.Context, _ event, _ func(event)) {
+		wrapCapability("web", wrapRoutes(acceptsTarget(targetWeb), ""), 1, func(_ context.Context, _ event, _ func(event)) {
 			runs++
 		}),
 	}
-	p := newTestPipeline(context.Background(), capabilities, coll, false)
+	p := newTestPipeline(t, context.Background(), capabilities, coll, false)
 	p.Run(testSeeds(
 		lootEvent("test", fingerprintLoot("http://127.0.0.1", []string{"nginx"}, false)),
 		errorEventOf("test", "boom"),
@@ -832,7 +837,7 @@ func TestScanPipelineFanoutAndDedup(t *testing.T) {
 	seen := make([]string, 0)
 
 	capabilities := []pipeline.Capability{
-		wrapCapability("service-to-web", acceptsTarget(targetService), 1, func(_ context.Context, e event, emit func(event)) {
+		wrapCapability("service-to-web", wrapRoutes(acceptsTarget(targetService), ""), 1, func(_ context.Context, e event, emit func(event)) {
 			mu.Lock()
 			seen = append(seen, "service-to-web")
 			mu.Unlock()
@@ -842,7 +847,7 @@ func TestScanPipelineFanoutAndDedup(t *testing.T) {
 			}
 			emit(targetEvent("test", "", newWebTarget("", service.Result.GetBaseURL(), "")))
 		}),
-		wrapCapability("web-to-finger", acceptsTarget(targetWeb), 1, func(_ context.Context, e event, emit func(event)) {
+		wrapCapability("web-to-finger", wrapRoutes(acceptsTarget(targetWeb), "service-to-web"), 1, func(_ context.Context, e event, emit func(event)) {
 			mu.Lock()
 			seen = append(seen, "web-to-finger")
 			mu.Unlock()
@@ -854,7 +859,7 @@ func TestScanPipelineFanoutAndDedup(t *testing.T) {
 		}),
 	}
 
-	p := newTestPipeline(context.Background(), capabilities, coll, false)
+	p := newTestPipeline(t, context.Background(), capabilities, coll, false)
 	result := parsers.NewGOGOResult("127.0.0.1", "80")
 	result.Protocol = "http"
 	service := targetEvent("test", "", newServiceTarget("", result))
@@ -945,9 +950,9 @@ func hasTargetKind(events []event, kind targetKind) bool {
 func TestScanPipelineDebugTrace(t *testing.T) {
 	coll := newCollector([]string{"seed"}, nil, false, true)
 	capabilities := []pipeline.Capability{
-		wrapCapability("noop", acceptsTarget(targetWeb), 1, func(context.Context, event, func(event)) {}),
+		wrapCapability("noop", wrapRoutes(acceptsTarget(targetWeb), ""), 1, func(context.Context, event, func(event)) {}),
 	}
-	p := newTestPipeline(context.Background(), capabilities, coll, true)
+	p := newTestPipeline(t, context.Background(), capabilities, coll, true)
 	p.Run(testSeeds(targetEvent("test", "", newWebTarget("", "http://127.0.0.1", ""))))
 
 	if len(coll.trace) == 0 {
@@ -966,12 +971,12 @@ func TestScanPipelineCancelReturns(t *testing.T) {
 
 	coll := newCollector([]string{"seed"}, nil, false, false)
 	capabilities := []pipeline.Capability{
-		wrapCapability("wait", acceptsTarget(targetWeb), 1, func(ctx context.Context, _ event, _ func(event)) {
+		wrapCapability("wait", wrapRoutes(acceptsTarget(targetWeb), ""), 1, func(ctx context.Context, _ event, _ func(event)) {
 			once.Do(func() { close(started) })
 			<-ctx.Done()
 		}),
 	}
-	p := newTestPipeline(ctx, capabilities, coll, false)
+	p := newTestPipeline(t, ctx, capabilities, coll, false)
 
 	go func() {
 		p.Run(testSeeds(targetEvent("test", "", newWebTarget("", "http://127.0.0.1", ""))))
@@ -1497,5 +1502,149 @@ func TestScanReportMarkdown(t *testing.T) {
 		if !strings.Contains(report, want) {
 			t.Fatalf("report missing %q:\n%s", want, report)
 		}
+	}
+}
+
+func TestPipelinePerRouteDedupIsolation(t *testing.T) {
+	// Two capabilities both subscribe to seed webTargets.
+	// The same URL sent as seed should be deduped within each route,
+	// but both capabilities should still process it once.
+	var mu sync.Mutex
+	runs := make(map[string]int)
+
+	capabilities := []pipeline.Capability{
+		wrapCapability("cap-a", wrapRoutes(acceptsTarget(targetWeb), ""), 1, func(_ context.Context, _ event, _ func(event)) {
+			mu.Lock()
+			runs["cap-a"]++
+			mu.Unlock()
+		}),
+		wrapCapability("cap-b", wrapRoutes(acceptsTarget(targetWeb), ""), 1, func(_ context.Context, _ event, _ func(event)) {
+			mu.Lock()
+			runs["cap-b"]++
+			mu.Unlock()
+		}),
+	}
+
+	p := newTestPipeline(t, context.Background(), capabilities, nil, false)
+	url1 := targetEvent("test", "", newWebTarget("", "http://127.0.0.1", ""))
+	url2 := targetEvent("test", "", newWebTarget("", "http://127.0.0.2", ""))
+	// Send url1 twice + url2 once
+	p.Run(testSeeds(url1, url1, url2))
+
+	mu.Lock()
+	defer mu.Unlock()
+	// Each cap runs once per unique URL = 2 times each
+	if runs["cap-a"] != 2 {
+		t.Fatalf("cap-a runs = %d, want 2", runs["cap-a"])
+	}
+	if runs["cap-b"] != 2 {
+		t.Fatalf("cap-b runs = %d, want 2", runs["cap-b"])
+	}
+}
+
+func TestPipelineCleanupFreesAllDedupMaps(t *testing.T) {
+	capabilities := []pipeline.Capability{
+		wrapCapability("producer", wrapRoutes(acceptsTarget(targetScan), ""), 1, func(_ context.Context, _ event, emit func(event)) {
+			emit(targetEvent("producer", "", newWebTarget("", "http://10.0.0.1", "")))
+		}),
+		wrapCapability("consumer", wrapRoutes(acceptsTarget(targetWeb), "producer"), 1, func(_ context.Context, _ event, _ func(event)) {}),
+	}
+
+	p := newTestPipeline(t, context.Background(), capabilities, nil, false)
+
+	// Before Run: dedup maps exist and are empty
+	before := p.RouteStats()
+	for key, size := range before {
+		if size != 0 {
+			t.Fatalf("before Run: route %q has %d entries, want 0", key, size)
+		}
+	}
+	if len(before) != 2 {
+		t.Fatalf("before Run: %d routes, want 2", len(before))
+	}
+
+	p.Run(testSeeds(targetEvent("test", "", newScanTarget("", "10.0.0.0/32", ""))))
+
+	// After Run: all dedup maps freed (nil = -1)
+	after := p.RouteStats()
+	for key, size := range after {
+		if size != -1 {
+			t.Fatalf("after Run: route %q size = %d, want -1 (freed)", key, size)
+		}
+	}
+}
+
+func TestPipelineDAGValidationRejectsCycle(t *testing.T) {
+	capabilities := []pipeline.Capability{
+		{
+			Name:   "A",
+			Routes: []pipeline.Route{{From: "B", Accept: func(pipeline.Event) bool { return true }}},
+			Worker: 1,
+			Run:    func(context.Context, pipeline.Event, func(pipeline.Event)) {},
+		},
+		{
+			Name:   "B",
+			Routes: []pipeline.Route{{From: "A", Accept: func(pipeline.Event) bool { return true }}},
+			Worker: 1,
+			Run:    func(context.Context, pipeline.Event, func(pipeline.Event)) {},
+		},
+	}
+
+	_, err := pipeline.New(context.Background(), pipeline.Config{Capabilities: capabilities})
+	if err == nil {
+		t.Fatal("expected cycle detection error")
+	}
+	if !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("error = %q, want cycle mention", err)
+	}
+}
+
+func TestPipelineDAGValidationAcceptsValidGraph(t *testing.T) {
+	capabilities := []pipeline.Capability{
+		{
+			Name:   "A",
+			Routes: []pipeline.Route{{From: "", Accept: func(pipeline.Event) bool { return true }}},
+			Worker: 1,
+			Run:    func(context.Context, pipeline.Event, func(pipeline.Event)) {},
+		},
+		{
+			Name:   "B",
+			Routes: []pipeline.Route{{From: "A", Accept: func(pipeline.Event) bool { return true }}},
+			Worker: 1,
+			Run:    func(context.Context, pipeline.Event, func(pipeline.Event)) {},
+		},
+		{
+			Name:   "C",
+			Routes: []pipeline.Route{{From: "A"}, {From: "B"}},
+			Worker: 1,
+			Run:    func(context.Context, pipeline.Event, func(pipeline.Event)) {},
+		},
+	}
+
+	_, err := pipeline.New(context.Background(), pipeline.Config{Capabilities: capabilities})
+	if err != nil {
+		t.Fatalf("unexpected error for valid DAG: %v", err)
+	}
+}
+
+func TestPipelineRouteDedupPreventsRedundantWork(t *testing.T) {
+	// producer emits the same webTarget 3 times; consumer should only run once.
+	var consumerRuns int
+	capabilities := []pipeline.Capability{
+		wrapCapability("producer", wrapRoutes(acceptsTarget(targetScan), ""), 1, func(_ context.Context, _ event, emit func(event)) {
+			for i := 0; i < 3; i++ {
+				emit(targetEvent("producer", "", newWebTarget("", "http://dup.example.com", "")))
+			}
+		}),
+		wrapCapability("consumer", wrapRoutes(acceptsTarget(targetWeb), "producer"), 1, func(_ context.Context, _ event, _ func(event)) {
+			consumerRuns++
+		}),
+	}
+
+	p := newTestPipeline(t, context.Background(), capabilities, nil, false)
+	p.Run(testSeeds(targetEvent("test", "", newScanTarget("", "10.0.0.1", ""))))
+
+	if consumerRuns != 1 {
+		t.Fatalf("consumer runs = %d, want 1 (dedup should suppress duplicates)", consumerRuns)
 	}
 }
