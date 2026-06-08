@@ -276,7 +276,8 @@ func (c *sendCommand) Execute(ctx context.Context, args []string, w io.Writer) e
 		return fmt.Errorf("ioa_send: --content is required and must be a JSON object\n\n%s", c.Usage())
 	}
 
-	body := ioamodel.SendMessage{Content: content}
+	contentType, _ := m["content_type"].(string)
+	body := ioamodel.SendMessage{ContentType: contentType, Content: content}
 
 	switch sub {
 	case "to":

@@ -5,6 +5,7 @@ import (
 	ioaclient "github.com/chainreactors/ioa/client"
 
 	_ "github.com/chainreactors/ioa/protocols/checkpoint"
+	_ "github.com/chainreactors/ioa/protocols/swarm"
 )
 
 func init() {

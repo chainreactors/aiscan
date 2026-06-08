@@ -5,7 +5,7 @@ go 1.26.1
 require (
 	github.com/chainreactors/fingers v1.2.1-0.20260530143622-9b9b6fe7ccf7
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c
-	github.com/chainreactors/ioa v0.0.0-20260608054742-8d0ba96bc360
+	github.com/chainreactors/ioa v0.0.0-20260608071724-9514d2328199
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
 	github.com/chainreactors/neutron v0.0.0-20260605022800-0c41c379805e
 	github.com/chainreactors/parsers v0.0.0-20260517174207-da1ebd0e7f68
