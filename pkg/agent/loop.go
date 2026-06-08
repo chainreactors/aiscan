@@ -75,7 +75,11 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			}
 		}
 
-		reqMessages := requestMessages(cfg.SystemPrompt, transcript.messages, cfg.TransformContext)
+		systemPrompt := cfg.SystemPrompt
+		if cfg.SystemPromptFn != nil {
+			systemPrompt = cfg.SystemPromptFn(&cfg)
+		}
+		reqMessages := requestMessages(systemPrompt, transcript.messages, cfg.TransformContext)
 		cfg.Logger.Debugf("[turn %d] sending %d messages to LLM", turn, len(reqMessages))
 
 		assistantMsg, usage, err := requestWithRetry(ctx, cfg, bus, reqMessages, cfg.Tools.ToolDefinitions(), turn)

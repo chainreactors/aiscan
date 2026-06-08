@@ -171,14 +171,24 @@ func ApplySelectedSkills(text string, selected []string, store *skills.Store) (s
 		if name == "" {
 			continue
 		}
-		skill, ok := store.ByName(name)
-		if !ok {
+		if skill, ok := store.ByName(name); ok {
+			if sb.Len() > 0 {
+				sb.WriteString("\n\n")
+			}
+			sb.WriteString(skills.FormatInvocation(skill, ""))
+			continue
+		}
+		body := skills.ReadFile("skills/" + name + ".md")
+		if body == "" {
+			body = skills.ReadFile(name)
+		}
+		if body == "" {
 			return "", fmt.Errorf("unknown skill %q", name)
 		}
 		if sb.Len() > 0 {
 			sb.WriteString("\n\n")
 		}
-		sb.WriteString(skills.FormatInvocation(skill, ""))
+		sb.WriteString(body)
 	}
 	if strings.TrimSpace(text) != "" {
 		if sb.Len() > 0 {

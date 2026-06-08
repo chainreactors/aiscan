@@ -18,7 +18,7 @@ func TestBuildSystemPromptIncludesSkills(t *testing.T) {
 	prompt := BuildSystemPrompt(&PromptConfig{
 		Tools:  tools,
 		Skills: loaded,
-	})
+	}, nil)
 	for _, want := range []string{
 		"## Available Skills",
 		"<available_skills>",
@@ -37,8 +37,47 @@ func TestBuildSystemPromptIncludesSkills(t *testing.T) {
 }
 
 func TestBuildSystemPromptAllowsNilConfig(t *testing.T) {
-	prompt := BuildSystemPrompt(nil)
-	if !strings.Contains(prompt, "## Available Tools") {
-		t.Fatalf("prompt missing tools section:\n%s", prompt)
+	prompt := BuildSystemPrompt(nil, nil)
+	if !strings.Contains(prompt, "## Environment") {
+		t.Fatalf("prompt missing environment section:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "## Key Principles") {
+		t.Fatalf("prompt missing principles section:\n%s", prompt)
+	}
+}
+
+func TestSystemPromptFuncAdaptsToTools(t *testing.T) {
+	cfg := &PromptConfig{}
+	fn := SystemPromptFunc(cfg)
+
+	result := fn(nil)
+	if strings.Contains(result, "## Available Tools") {
+		t.Fatal("should not have tools section with empty registry")
+	}
+}
+
+func TestBuildSystemPromptLoadsSkillBody(t *testing.T) {
+	prompt := BuildSystemPrompt(&PromptConfig{
+		LoadedSkills: []LoadedSkill{
+			{Name: "scan/verify", Body: "Verify all high-priority findings with active probing."},
+			{Name: "scan/sniper", Body: "Search public CVEs for fingerprints."},
+		},
+	}, nil)
+
+	for _, want := range []string{
+		"## Skill: scan/verify",
+		"Verify all high-priority findings with active probing.",
+		"## Skill: scan/sniper",
+		"Search public CVEs for fingerprints.",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, prompt)
+		}
+	}
+	// Loaded skills should appear before Key Principles
+	skillIdx := strings.Index(prompt, "## Skill: scan/verify")
+	principlesIdx := strings.Index(prompt, "## Key Principles")
+	if skillIdx > principlesIdx {
+		t.Fatal("loaded skills should appear before principles")
 	}
 }

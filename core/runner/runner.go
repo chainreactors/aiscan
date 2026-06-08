@@ -85,10 +85,22 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		NodeName:    ResolveIOANodeName(option),
 		Space:       option.Space,
 	}
+	for _, name := range option.Skills {
+		body := skills.ReadBody(name)
+		if body == "" {
+			body = skills.ReadFile("skills/" + name + ".md")
+		}
+		if body == "" {
+			body = skills.ReadFile(name)
+		}
+		if body != "" {
+			pc.LoadedSkills = append(pc.LoadedSkills, LoadedSkill{Name: name, Body: body})
+		}
+	}
 	if rc != nil && rc.PromptConfig != nil {
 		pc = rc.PromptConfig
 	}
-	rt.SystemPrompt = BuildSystemPrompt(pc)
+	rt.SystemPrompt = BuildSystemPrompt(pc, nil)
 	logger.Debugf("system prompt length: %d chars", len(rt.SystemPrompt))
 
 	if rc == nil || !rc.NoOutput {

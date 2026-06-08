@@ -147,11 +147,16 @@ type AfterToolCallResult struct {
 	Flow    ToolFlowDecision
 }
 
+// SystemPromptFunc is called at the start of each turn to produce the system prompt.
+// Receives the current config context so it can adapt to active tools, model, etc.
+type SystemPromptFunc func(cfg *Config) string
+
 type Config struct {
 	Provider         Provider
 	Tools            *command.CommandRegistry
 	Model            string
 	SystemPrompt     string
+	SystemPromptFn   SystemPromptFunc
 	Messages         []ChatMessage
 	MaxTokens        int
 	Temperature      *float64
