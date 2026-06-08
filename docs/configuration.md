@@ -69,15 +69,6 @@ llm:
   model: ""           # 模型名称
   proxy: ""           # 访问 LLM API 的 HTTP proxy
 
-# Vision（可选，独立的视觉模型配置）
-vision:
-  enabled: false
-  provider: ""
-  base_url: ""
-  api_key: ""
-  model: ""
-  proxy: ""
-
 # Cyberhub 资源服务
 cyberhub:
   url: ""

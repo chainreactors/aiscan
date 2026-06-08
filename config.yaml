@@ -28,15 +28,6 @@ llm:
   # 环境变量: AISCAN_LLM_PROXY
   proxy: ""
 
-# Vision 配置
-vision:
-  enabled: false
-  provider: ""
-  base_url: ""
-  api_key: ""
-  model: ""
-  proxy: ""
-
 # Cyberhub 资源服务
 cyberhub:
   url: ""
