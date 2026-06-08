@@ -3,18 +3,18 @@ module github.com/chainreactors/aiscan
 go 1.26.1
 
 require (
-	github.com/chainreactors/fingers v1.2.1-0.20260530143622-9b9b6fe7ccf7
+	github.com/chainreactors/fingers v1.2.1-0.20260608084741-385e7d586d6f
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c
 	github.com/chainreactors/ioa v0.0.0-20260608071724-9514d2328199
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
-	github.com/chainreactors/neutron v0.0.0-20260605022800-0c41c379805e
-	github.com/chainreactors/parsers v0.0.0-20260517174207-da1ebd0e7f68
+	github.com/chainreactors/neutron v0.0.0-20260608084636-c81691731908
+	github.com/chainreactors/parsers v0.0.0-20260608085142-3d2c51baa8fe
 	github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593
 	github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3
-	github.com/chainreactors/sdk v0.2.4-0.20260605033510-b6044d15639e
-	github.com/chainreactors/spray v1.3.1-0.20260529172359-9caf4ee3567c
+	github.com/chainreactors/sdk v0.2.4-0.20260608090513-9be651f748f0
+	github.com/chainreactors/spray v1.3.1-0.20260608085629-66dafe7eab4f
 	github.com/chainreactors/utils v0.0.0-20260529172343-6465cb8568b2
-	github.com/chainreactors/zombie v1.2.3-0.20260529172356-6b3bf94a7dfc
+	github.com/chainreactors/zombie v1.2.3-0.20260608085910-705f548f7da1
 	github.com/charmbracelet/glamour v0.8.0
 	github.com/go-rod/rod v0.116.2
 	github.com/go-rod/stealth v0.4.9
@@ -71,7 +71,7 @@ require (
 	github.com/carapace-sh/carapace-shlex v1.0.1 // indirect
 	github.com/censys/censys-sdk-go v0.19.1 // indirect
 	github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0 // indirect
-	github.com/chainreactors/proton v0.0.0-20260521032855-e7e7b12b4506 // indirect
+	github.com/chainreactors/proton v0.2.1-0.20260608085216-03df34ba928d // indirect
 	github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4 // indirect
 	github.com/charlievieth/fastwalk v1.0.14 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
