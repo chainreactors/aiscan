@@ -492,39 +492,20 @@ aiscan> /continue
 
 agent 通过 bash 伪命令调用以下工具：
 
-| 伪命令 | 说明 |
-| --- | --- |
-| `scan` | 自动化扫描流水线 |
-| `gogo` | 端口扫描 / 服务发现 |
-| `spray` | Web 探测 / 指纹 / 路径扫描 |
-| `zombie` | 弱口令检测 |
-| `neutron` | POC 漏洞验证 |
-| `search tavily <query>` | Web 搜索（搜索 CVE、漏洞信息等） |
-| `search fetch <url>` | 抓取网页内容 |
-| `search cyberhub <args>` | 查询本地指纹库和 POC 模板 |
-| `proxy` | 代理节点管理 |
-| `tmux` | 后台任务管理（长时间命令自动转入后台） |
+- `scan` / `gogo` / `spray` / `zombie` / `neutron` — 扫描器
+- `search tavily <query>` — Web 搜索
+- `search fetch <url>` — 抓取网页内容
+- `search cyberhub <args>` — 查询本地指纹库和 POC 模板
+- `proxy` — 代理节点管理
+- `tmux` — 后台任务管理
 
-agent 还可以使用标准工具：`bash`（直接执行 shell 命令如 curl）、`read`/`write`（文件操作）、`glob`（文件搜索）。
+此外还有通用工具：`bash`（shell 命令）、`read`/`write`（文件）、`glob`（文件搜索）。
 
 ### Skills
 
-aiscan 内置一组 skill，为 agent 提供特定场景的知识和工作流程。
+agent 按需加载的 skill（知识文件），通过 `-s` 指定或自动加载：
 
-| Skill | 说明 |
-| --- | --- |
-| `aiscan` | 核心机制和工具调用规则 |
-| `scan` | 扫描流水线编排（含 sniper/deep 子 skill） |
-| `search` | 统一搜索：web search / URL fetch / cyberhub 查询 |
-| `report` | 安全评估报告生成 |
-| `gogo` | 主机/端口发现 |
-| `spray` | Web 探测 |
-| `zombie` | 弱口令检测 |
-| `neutron` | POC 检测 |
-| `ioa` | IOA 多 agent 协作 |
-| `playwright` | 浏览器交互（仅 full 版） |
-| `passive` | 网络空间搜索（仅 full 版） |
-| `katana` | Web 爬虫（仅 full 版） |
+`aiscan` / `scan` / `search` / `report` / `gogo` / `spray` / `zombie` / `neutron` / `ioa` / `playwright`(full) / `passive`(full) / `katana`(full)
 
 通过 `-s` 参数指定 skill：
 
