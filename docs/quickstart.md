@@ -6,7 +6,10 @@
 
 ## 安装
 
-从 [GitHub Releases](https://github.com/chainreactors/aiscan/releases/latest) 下载对应平台的二进制文件。
+从 [GitHub Releases](https://github.com/chainreactors/aiscan/releases/latest) 下载对应平台的二进制文件。提供两个版本：
+
+- **aiscan** — 基础版，包含 scan/agent/gogo/spray/zombie/neutron
+- **aiscan-full** — 完整版，额外包含 playwright 浏览器、passive recon（FOFA/Hunter）、katana 爬虫
 
 ### Linux
 
@@ -134,10 +137,13 @@ export DEEPSEEK_API_KEY="..."
 export AISCAN_API_KEY="..."
 ```
 
-也可以通过 CLI 参数：
+也可以通过 CLI 参数（aiscan 会从 `--base-url` 自动推断 provider）：
 
 ```bash
 aiscan agent --api-key "sk-..." --model gpt-4o -p "检查目标" -i http://target.example
+
+# DeepSeek
+aiscan agent --base-url "https://api.deepseek.com" --api-key "..." --model deepseek-chat -p "扫描目标" -i 10.0.0.0/24
 ```
 
 详细配置参考 [配置指南](configuration.md)。
@@ -157,16 +163,18 @@ aiscan agent -i http://target.example
 
 ### AI 增强扫描
 
-给 scanner 加 `--ai` 让 LLM 分析结果：
-
 ```bash
-aiscan --ai scan -i http://target.example
-```
+# AI 验证 + 漏洞情报搜索（等效 --verify=high --sniper）
+aiscan scan -i http://target.example --ai
 
-启用 AI 验证减少误报：
+# 仅搜索指纹对应的公开 CVE/Exploit
+aiscan scan -i http://target.example --sniper
 
-```bash
-aiscan scan -i http://target.example --verify=high
+# 深度动态测试
+aiscan scan -i http://target.example --deep
+
+# 全部启用 + 报告
+aiscan scan -i http://target.example --mode full --verify=high --sniper --deep --report
 ```
 
 ---

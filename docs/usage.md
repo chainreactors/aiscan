@@ -170,7 +170,7 @@ aiscan neutron -h
 
 `agent`、`agent --loop`、`scan --verify` 和 scanner 的 `--ai` 模式需要 LLM provider。
 
-默认 provider 是 `openai`，默认模型是 `gpt-4o`。aiscan 可以从 `--llm-base-url` 自动推断 provider（如 URL 包含 `deepseek.com` 则推断为 `deepseek`）。
+默认 provider 是 `openai`，默认模型是 `gpt-4o`。aiscan 可以从 `--base-url` 自动推断 provider（如 URL 包含 `deepseek.com` 则推断为 `deepseek`）。
 
 ### 支持的 Provider
 
@@ -200,21 +200,21 @@ OpenAI：
 
 ```bash
 export OPENAI_API_KEY="sk-..."
-aiscan agent --llm-model gpt-4o -p "发现 Web 服务并检查高风险漏洞" -i 192.168.1.0/24
+aiscan agent --model gpt-4o -p "发现 Web 服务并检查高风险漏洞" -i 192.168.1.0/24
 ```
 
 DeepSeek：
 
 ```bash
 export DEEPSEEK_API_KEY="..."
-aiscan agent --llm-provider deepseek --llm-model deepseek-chat -p "枚举服务并输出风险摘要" -i 10.0.0.0/24
+aiscan agent --provider deepseek --model deepseek-chat -p "枚举服务并输出风险摘要" -i 10.0.0.0/24
 ```
 
 Ollama 本地模型：
 
 ```bash
 ollama run llama3
-aiscan agent --llm-provider ollama --llm-model llama3 --llm-base-url http://localhost:11434/v1 -p "检查这个站点" -i http://target.example
+aiscan agent --provider ollama --model llama3 --base-url http://localhost:11434/v1 -p "检查这个站点" -i http://target.example
 ```
 
 通过代理访问 API：
@@ -226,7 +226,7 @@ aiscan agent --llm-proxy http://127.0.0.1:7890 -p "检查目标暴露面" -i htt
 任意 OpenAI 兼容 API：
 
 ```bash
-aiscan agent --llm-base-url https://my-proxy.example/v1 --llm-api-key "$MY_KEY" --llm-model my-model -p "扫描目标" -i 10.0.0.0/24
+aiscan agent --base-url https://my-proxy.example/v1 --api-key "$MY_KEY" --model my-model -p "扫描目标" -i 10.0.0.0/24
 ```
 
 OpenAI/Codex 风格环境变量：
@@ -339,6 +339,28 @@ full 模式额外增加：
 | zombie | 10% | 100/次 |
 | neutron | 10% | - |
 
+### AI 能力
+
+scan 命令提供三种 AI 增强模式，需要 LLM provider：
+
+| 参数 | 说明 |
+| --- | --- |
+| `--verify=<level>` | 对发现的漏洞进行 LLM 主动验证 |
+| `--sniper` | 对发现的指纹搜索公开 CVE/Exploit（通过 web search） |
+| `--deep` | 对发现的 Web 资产进行动态 AI 测试 |
+| `--ai` | 兼容别名，等效 `--verify=high --sniper` |
+
+```bash
+# 验证 + 漏洞情报
+aiscan scan -i http://target.example --verify=high --sniper
+
+# 深度测试
+aiscan scan -i http://target.example --mode full --deep
+
+# 全部启用
+aiscan scan -i http://target.example --mode full --verify=high --sniper --deep --report
+```
+
 ### AI 验证
 
 `scan --verify=<priority>` 启用 `agent_verify`，对达到指定优先级的发现进行 LLM 验证。
@@ -357,7 +379,7 @@ full 模式额外增加：
 > 当未显式传 `--verify` 时，aiscan 使用编译时 `auto` 默认策略：尝试以 `high` 优先级启用验证。如果 LLM provider 未配置，验证会被跳过，扫描主体仍可运行。
 
 ```bash
-aiscan scan -i http://target.example --mode quick --verify=high --llm-api-key "$OPENAI_API_KEY" --llm-model gpt-4o
+aiscan scan -i http://target.example --mode quick --verify=high --api-key "$OPENAI_API_KEY" --model gpt-4o
 aiscan scan -i http://target.example --mode full --verify=critical
 aiscan scan -i http://target.example --verify=off
 ```
@@ -440,7 +462,7 @@ echo "检查这个网段的暴露面" | aiscan agent -i 192.168.1.0/24
 直接运行 `aiscan agent` 且不提供任何输入时，进入交互式 REPL。支持命令历史和补全，会话上下文保留，适合连续追问。
 
 ```bash
-aiscan agent --llm-model gpt-4o
+aiscan agent --model gpt-4o
 ```
 
 交互式命令：
@@ -457,7 +479,7 @@ aiscan agent --llm-model gpt-4o
 | `/context <space> <id>` | 查看消息上下文（需 `--ioa-url`） |
 | `/nodes [space]` | 列出节点（需 `--ioa-url`） |
 
-内置 skill 自动注册为 REPL 命令。当前包括 `/aiscan`、`/scan`、`/gogo`、`/spray`、`/zombie`、`/neutron`。输入普通文本（非 `/` 开头）会直接作为 prompt 发送给 agent。
+内置 skill 自动注册为 REPL 命令。输入普通文本（非 `/` 开头）会直接作为 prompt 发送给 agent。
 
 ```text
 aiscan> 扫描 192.168.1.0/24 的 Web 服务
@@ -466,23 +488,49 @@ aiscan> /neutron 用 critical 级别 POC 检查 http://target.example
 aiscan> /continue
 ```
 
+### Agent 内置工具
+
+agent 通过 bash 伪命令调用以下工具：
+
+| 伪命令 | 说明 |
+| --- | --- |
+| `scan` | 自动化扫描流水线 |
+| `gogo` | 端口扫描 / 服务发现 |
+| `spray` | Web 探测 / 指纹 / 路径扫描 |
+| `zombie` | 弱口令检测 |
+| `neutron` | POC 漏洞验证 |
+| `search tavily <query>` | Web 搜索（搜索 CVE、漏洞信息等） |
+| `search fetch <url>` | 抓取网页内容 |
+| `search cyberhub <args>` | 查询本地指纹库和 POC 模板 |
+| `proxy` | 代理节点管理 |
+| `tmux` | 后台任务管理（长时间命令自动转入后台） |
+
+agent 还可以使用标准工具：`bash`（直接执行 shell 命令如 curl）、`read`/`write`（文件操作）、`glob`（文件搜索）。
+
 ### Skills
 
-aiscan 内置一组 skill，为 agent 提供特定扫描器的使用指南和工作流程。
+aiscan 内置一组 skill，为 agent 提供特定场景的知识和工作流程。
 
 | Skill | 说明 |
 | --- | --- |
 | `aiscan` | 核心机制和工具调用规则 |
-| `scan` | 扫描流水线编排 |
+| `scan` | 扫描流水线编排（含 sniper/deep 子 skill） |
+| `search` | 统一搜索：web search / URL fetch / cyberhub 查询 |
+| `report` | 安全评估报告生成 |
 | `gogo` | 主机/端口发现 |
 | `spray` | Web 探测 |
 | `zombie` | 弱口令检测 |
 | `neutron` | POC 检测 |
+| `ioa` | IOA 多 agent 协作 |
+| `playwright` | 浏览器交互（仅 full 版） |
+| `passive` | 网络空间搜索（仅 full 版） |
+| `katana` | Web 爬虫（仅 full 版） |
 
 通过 `-s` 参数指定 skill：
 
 ```bash
 aiscan agent -s aiscan -s scan -p "全面扫描这个网段" -i 10.0.0.0/24
+aiscan agent -s report -p "根据扫描结果生成报告" -i http://target.example
 ```
 
 ### agent 适合
@@ -653,7 +701,7 @@ aiscan ioa serve --ioa-url http://127.0.0.1:8765 --ioa-db ./ioa.db
 
 ```bash
 # 基本 loop worker
-aiscan agent --loop --ioa-url http://127.0.0.1:8765 --space case-1 --llm-model gpt-4o
+aiscan agent --loop --ioa-url http://127.0.0.1:8765 --space case-1 --model gpt-4o
 
 # 带初始 intent 和 skill
 aiscan agent --loop --ioa-url http://127.0.0.1:8765 --space case-1 -p "负责内网 Web 资产扫描和漏洞验证" -s aiscan -s scan
@@ -742,6 +790,24 @@ aiscan scan -i http://target.example --cyberhub-url http://127.0.0.1:9000 --cybe
 
 agent 输出会通过 Markdown 渲染（终端支持时），`--no-color` 可禁用。
 
+### 回看扫描记录
+
+`-F/--view` 可以回放之前 `-f` 保存的 JSONL 扫描记录：
+
+```bash
+# 保存扫描记录
+aiscan scan -i 192.168.1.0/24 -f scan_result.jsonl
+
+# 终端回看
+aiscan -F scan_result.jsonl
+
+# 生成 Markdown 报告
+aiscan -F scan_result.jsonl -o markdown
+
+# 输出到文件
+aiscan -F scan_result.jsonl -o markdown -f report.md
+```
+
 ---
 
 ## 场景选择建议
@@ -750,11 +816,15 @@ agent 输出会通过 Markdown 渲染（终端支持时），`--no-color` 可禁
 | --- | --- |
 | 快速资产发现和风险初筛 | `aiscan scan -i <target>` |
 | 深入扫描和更多 Web 路径 | `aiscan scan -i <target> --mode full` |
+| 搜索已知漏洞情报 | `aiscan scan -i <target> --sniper` |
+| 深度动态测试 | `aiscan scan -i <target> --deep` |
+| AI 主动验证 + 漏洞搜索 | `aiscan scan -i <target> --ai` |
 | 自动解释结果和生成结论 | `aiscan agent -p "<任务>" -i <target>` |
 | 对 scanner 输出做 AI 摘要 | `aiscan --ai -p "<意图>" <scanner> ...` |
 | 查询已加载的指纹和 POC | `aiscan cyberhub list poc --severity critical` |
 | 机器读取结果 | `aiscan scan -i <target> -j` |
 | 人读报告 | `aiscan scan -i <target> --report` |
+| 回看历史记录 | `aiscan -F result.jsonl` |
 | 多 worker 协作 | `aiscan ioa serve` + `aiscan agent --loop` |
 | 交互式探索 | `aiscan agent` |
 
@@ -764,11 +834,11 @@ agent 输出会通过 Markdown 渲染（终端支持时），`--no-color` 可禁
 
 ### agent 报 provider 未配置
 
-`agent` 必须有可用 LLM provider。设置对应环境变量或显式传入 `--llm-api-key`。
+`agent` 必须有可用 LLM provider。设置对应环境变量或显式传入 `--api-key`。
 
 ```bash
 export OPENAI_API_KEY="sk-..."
-aiscan agent --llm-model gpt-4o -p "检查目标" -i http://target.example
+aiscan agent --model gpt-4o -p "检查目标" -i http://target.example
 ```
 
 ### scan --verify 没有产生 AI 验证
@@ -778,7 +848,7 @@ aiscan agent --llm-model gpt-4o -p "检查目标" -i http://target.example
 3. 未显式传 `--verify` 时默认策略为 `auto`（等效 `high`），如果 provider 不可用会静默跳过
 
 ```bash
-aiscan scan -i http://target.example --verify=low --llm-api-key "$OPENAI_API_KEY"
+aiscan scan -i http://target.example --verify=low --api-key "$OPENAI_API_KEY"
 ```
 
 ### 输出太多或包含颜色
