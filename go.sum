@@ -169,8 +169,8 @@ github.com/chainreactors/fingers v1.2.1-0.20260530143622-9b9b6fe7ccf7 h1:AslD/Fx
 github.com/chainreactors/fingers v1.2.1-0.20260530143622-9b9b6fe7ccf7/go.mod h1:OZ59xWLLYAWIxpRbzHyMr66umbdO8x9zciQazPm19DA=
 github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c h1:JKTBb/O2XPZh9BsdkoTkR3KI9ZlLqsR2eUToE1qYm5Q=
 github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c/go.mod h1:PWgWQ3eqfz3474PscYtDAVJDn+ksi2ijL2wJ6Rz0qYY=
-github.com/chainreactors/ioa v0.0.0-20260519070109-6746bd1fdaef h1:oGwbsyOXeVzvSTN9jsOH2/eVhVEaA57OCuOuOMLaZCM=
-github.com/chainreactors/ioa v0.0.0-20260519070109-6746bd1fdaef/go.mod h1:z290CAm+cFV92/vKcYmXxWPy8Yt6Hys6RGIvot0TnSA=
+github.com/chainreactors/ioa v0.0.0-20260608054742-8d0ba96bc360 h1:PknczQUeCFJGFw3SCwp/PcgsXv4srbEKaKd8xXoB4M8=
+github.com/chainreactors/ioa v0.0.0-20260608054742-8d0ba96bc360/go.mod h1:z290CAm+cFV92/vKcYmXxWPy8Yt6Hys6RGIvot0TnSA=
 github.com/chainreactors/logs v0.0.0-20250312104344-9f30fa69d3c9/go.mod h1:6Mv6W70JrtL6VClulZhmMRZnoYpcTahcDTKLMNEjK0o=
 github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c h1:6Net2Mgo/qo6ADFBZJWWScKuMfZ0rbzLqSCVDuLKFdc=
 github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c/go.mod h1:VrXmYPbNN5AVoo1sc5aeyPVBYqubMdb3KO/tn5rRZpo=
@@ -189,6 +189,8 @@ github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593 h1:tnX
 github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593/go.mod h1:xSNRChMYF8en5O5ZQVmCOmNTTyQhvsrk0D0vluh/JKk=
 github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3 h1:WVEb3Bjq3AC67oa9pNjHJfIH+mX6PozJO3S5ccVZJYQ=
 github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3/go.mod h1:4BG8xIxTebn0VoOTEwQ2pmYIB3K2qwGINxnRHALBNZg=
+github.com/chainreactors/sdk v0.2.4-0.20260605033510-b6044d15639e h1:Dc5b/N65Ssv3jguossv6qits5Mo4sTZhSiHyVt9XIXg=
+github.com/chainreactors/sdk v0.2.4-0.20260605033510-b6044d15639e/go.mod h1:WQwQQru3Yi3vZxQVcCbg3c3WuVDEzboSBgYJp2cL9Ko=
 github.com/chainreactors/spray v1.3.1-0.20260529172359-9caf4ee3567c h1:FRQyUuEofv1POzzsykkluw8HEFisr2ZsGC5m8MZl5H4=
 github.com/chainreactors/spray v1.3.1-0.20260529172359-9caf4ee3567c/go.mod h1:k8zI1Ly1JRalKpiEHCwlj5KAbAThqH+bMZhGHiDRv6M=
 github.com/chainreactors/utils v0.0.0-20240716182459-e85f2b01ee16/go.mod h1:LajXuvESQwP+qCMAvlcoSXppQCjuLlBrnQpu9XQ1HtU=
