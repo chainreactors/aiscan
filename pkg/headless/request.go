@@ -1,4 +1,4 @@
-//go:build browser
+//go:build full
 
 // Request implements neutron's protocols.Request for the headless protocol.
 // Ported from nuclei pkg/protocols/headless/request.go.

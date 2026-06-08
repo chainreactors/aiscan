@@ -1,4 +1,4 @@
-//go:build browser
+//go:build full
 
 package playwright
 

@@ -1,4 +1,4 @@
-//go:build browser
+//go:build full
 
 // Ported from nuclei pkg/protocols/headless/engine/hijack.go.
 // Native CDP Fetch-domain based hijack for response capture without modification.

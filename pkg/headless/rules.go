@@ -1,4 +1,4 @@
-//go:build browser
+//go:build full
 
 // Ported from nuclei pkg/protocols/headless/engine (rules.go + page_actions.go:164-169).
 

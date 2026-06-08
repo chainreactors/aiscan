@@ -1,4 +1,4 @@
-//go:build browser
+//go:build full
 
 // Ported from nuclei pkg/protocols/headless/engine/instance.go.
 // Provides isolated incognito browser context per template execution.

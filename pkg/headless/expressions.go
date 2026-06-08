@@ -1,4 +1,4 @@
-//go:build browser
+//go:build full
 
 // Expression evaluation wrapping neutron's common.Evaluate.
 // Replaces the hand-rolled {{var}} regex in action.go with full DSL support.

@@ -1,4 +1,4 @@
-//go:build recon
+//go:build full
 
 package skills
 

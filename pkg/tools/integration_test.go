@@ -1,4 +1,4 @@
-//go:build recon && integration
+//go:build full && integration
 
 //	Run with: AISCAN_INTEGRATION=1 FOFA_EMAIL=... FOFA_KEY=... \
 //	  go test -tags 'full integration' ./pkg/tools/... -run TestIntegration -v

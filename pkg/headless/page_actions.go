@@ -1,4 +1,4 @@
-//go:build browser
+//go:build full
 
 // Individual action handlers, ported from nuclei engine/page_actions.go.
 // All action args are resolved via act.GetArg() with the action's already-interpolated Data.
