@@ -605,7 +605,7 @@ func newFakeIOAClient(spaces ...ioamodel.SpaceInfo) *fakeIOAClient {
 
 func (c *fakeIOAClient) NodeID() string { return c.nodeID }
 
-func (c *fakeIOAClient) RegisterNode(_ context.Context, name string, _ map[string]interface{}) (ioamodel.Node, error) {
+func (c *fakeIOAClient) RegisterNode(_ context.Context, name string, _ string, _ map[string]interface{}) (ioamodel.Node, error) {
 	c.nodeID = "node-1"
 	return ioamodel.Node{ID: c.nodeID, Name: name}, nil
 }

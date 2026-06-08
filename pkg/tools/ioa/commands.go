@@ -12,6 +12,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/command"
 	ioamodel "github.com/chainreactors/ioa"
 	ioaclient "github.com/chainreactors/ioa/client"
+	"github.com/chainreactors/ioa/protocols"
 )
 
 // spaceBinding holds the current space ID shared across all IOA commands.
@@ -51,7 +52,7 @@ func ensureNode(ctx context.Context, client ioaclient.API, name string, meta map
 	if meta == nil {
 		meta = map[string]any{}
 	}
-	_, err := client.RegisterNode(ctx, name, meta)
+	_, err := client.RegisterNode(ctx, name, "", meta)
 	return err
 }
 
@@ -257,8 +258,17 @@ func (c *sendCommand) Execute(ctx context.Context, args []string, w io.Writer) e
 		return fmt.Errorf("ioa_send: %w\n\n%s", err, c.Usage())
 	}
 
-	if sub == "checkpoint" {
-		return c.execCheckpoint(ctx, m, w)
+	if h := protocols.SendHandler(sub); h != nil {
+		if err := ensureNode(ctx, c.client, "", nil); err != nil {
+			return err
+		}
+		env := &protocols.Env{Client: c.client, SpaceID: spaceID}
+		result, err := h(ctx, env, m)
+		if err != nil {
+			return err
+		}
+		_, err = io.WriteString(w, result)
+		return err
 	}
 
 	content, _ := m["content"].(map[string]interface{})
@@ -290,7 +300,9 @@ func (c *sendCommand) Execute(ctx context.Context, args []string, w io.Writer) e
 			}
 		}
 	default:
-		return fmt.Errorf("ioa_send: unknown subcommand %q\n\n%s", sub, c.Usage())
+		if sub != "" {
+			return fmt.Errorf("ioa_send: unknown subcommand %q\n\n%s", sub, c.Usage())
+		}
 	}
 
 	if err := ensureNode(ctx, c.client, "", nil); err != nil {
@@ -303,40 +315,6 @@ func (c *sendCommand) Execute(ctx context.Context, args []string, w io.Writer) e
 	return writeJSON(w, msg)
 }
 
-func (c *sendCommand) execCheckpoint(ctx context.Context, m map[string]interface{}, w io.Writer) error {
-	spaceID := c.binding.get()
-	if spaceID == "" {
-		return fmt.Errorf("no space joined. Use ioa_space join first")
-	}
-	kind, _ := m["kind"].(string)
-	title, _ := m["title"].(string)
-	contentStr, _ := m["content"].(string)
-	if kind == "" || title == "" {
-		return fmt.Errorf("ioa_send checkpoint: --kind and --title are required\n\n%s", c.Usage())
-	}
-	checkpointContent := map[string]interface{}{
-		"type":    "checkpoint",
-		"kind":    kind,
-		"title":   title,
-		"content": contentStr,
-	}
-	if target, _ := m["target"].(string); target != "" {
-		checkpointContent["target"] = target
-	}
-	if status, _ := m["status"].(string); status != "" {
-		checkpointContent["status"] = status
-	}
-	if err := ensureNode(ctx, c.client, "", nil); err != nil {
-		return err
-	}
-	msg, err := c.client.Send(ctx, spaceID, ioamodel.SendMessage{
-		Content: checkpointContent,
-	})
-	if err != nil {
-		return err
-	}
-	return writeJSON(w, msg)
-}
 
 // --- ioa_read ---
 

@@ -3,6 +3,8 @@ package ioa
 import (
 	"github.com/chainreactors/aiscan/pkg/command"
 	ioaclient "github.com/chainreactors/ioa/client"
+
+	_ "github.com/chainreactors/ioa/protocols/checkpoint"
 )
 
 func init() {
