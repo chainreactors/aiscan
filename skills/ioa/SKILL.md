@@ -49,6 +49,29 @@ ioa_read new --after <message_id>  Messages after a cursor (pagination)
 
 Without `all`, only messages explicitly directed at your node are returned.
 
+**Direction filter** (with `thread`):
+
+```
+ioa_read thread --id <msg_id> --direction downstream   Only descendants (replies)
+ioa_read thread --id <msg_id> --direction upstream     Only ancestors (parents)
+```
+
+### Background Monitoring
+
+To monitor a space or thread in real time without blocking, use the ioa CLI directly via tmux:
+
+```bash
+# Monitor entire space — run in background tmux session
+ioa read -s <space_id> --listen --token <token>
+
+# Monitor a specific thread only
+ioa read -s <space_id> -m <root_message_id> --listen --token <token>
+```
+
+This opens an SSE connection and outputs new messages as JSONL (one JSON object per line). Use `tmux peek` to check for new messages, `tmux kill` to stop.
+
+This is **preferred over polling** — start a listener when you join a space, peek when you need updates.
+
 ## 2. Message Format
 
 Messages use structured JSON content with a `kind` field for routing:

@@ -163,6 +163,8 @@ github.com/chainreactors/fingers v1.2.1-0.20260608084741-385e7d586d6f h1:YRhBdXc
 github.com/chainreactors/fingers v1.2.1-0.20260608084741-385e7d586d6f/go.mod h1:HL+9nwb5HNXJMboiQ7Kwy00ZSTXYTAuWw9IrYIoARH8=
 github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c h1:JKTBb/O2XPZh9BsdkoTkR3KI9ZlLqsR2eUToE1qYm5Q=
 github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c/go.mod h1:PWgWQ3eqfz3474PscYtDAVJDn+ksi2ijL2wJ6Rz0qYY=
+github.com/chainreactors/ioa v0.0.0-20260609170545-7ec2ed23664d h1:bwagpFfRhSMbatA8dZaDwkoalcPrRIXbRfCH8N5PI2Q=
+github.com/chainreactors/ioa v0.0.0-20260609170545-7ec2ed23664d/go.mod h1:IqHyULc67RKEmr9qsyPpJzgSGJRK8JeRXXXVthQu5Z8=
 github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c h1:6Net2Mgo/qo6ADFBZJWWScKuMfZ0rbzLqSCVDuLKFdc=
 github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c/go.mod h1:VrXmYPbNN5AVoo1sc5aeyPVBYqubMdb3KO/tn5rRZpo=
 github.com/chainreactors/malice-network/external/console v0.0.0-20260422184128-e856ed004d32 h1:NU1N1TTk+fmjL/O8Ytvgcg315Rv6fg/R6FrEki7Zcgc=

@@ -2,13 +2,10 @@ package runner
 
 import (
 	"context"
-	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
@@ -17,7 +14,6 @@ import (
 	"github.com/chainreactors/aiscan/pkg/app"
 	cmdpkg "github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
-	"github.com/chainreactors/aiscan/pkg/ioaswarm"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
 	"github.com/chainreactors/aiscan/skills"
@@ -278,9 +274,6 @@ func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetr
 // ---------------------------------------------------------------------------
 
 func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) error {
-	if option.Heartbeat < 0 {
-		return fmt.Errorf("--heartbeat must be greater than or equal to 0")
-	}
 	ioaURL := option.IOAURL
 	if ioaURL == "" {
 		ioaURL = "http://127.0.0.1:8765"
@@ -294,7 +287,7 @@ func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) e
 			NodeName:      option.IOANodeName,
 			Space:         option.Space,
 			RegisterTools: true,
-			AutoRegister:  false,
+			AutoRegister:  true,
 		},
 	})
 	if err != nil {
@@ -302,69 +295,14 @@ func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) e
 	}
 	defer rt.Close()
 
-	streamClient := rt.App.IOAStreamClient
-	if streamClient == nil {
-		return fmt.Errorf("loop requires streaming IOA client")
-	}
-
-	rawPrompt := strings.TrimSpace(option.Prompt)
-	if rawPrompt != "" && len(option.Inputs) > 0 {
-		rawPrompt = fmt.Sprintf("%s\n\nTargets:\n%s", rawPrompt, cfg.FormatInputs(option.Inputs))
-	}
-
-	nodeMeta, err := buildNodeMeta(option.Skills, rt.App.Skills)
-	if err != nil {
-		return err
+	prompt := strings.TrimSpace(option.Prompt)
+	if prompt != "" && len(option.Inputs) > 0 {
+		prompt = fmt.Sprintf("%s\n\nTargets:\n%s", prompt, cfg.FormatInputs(option.Inputs))
 	}
 
 	loopCfg := rt.Config.WithSystemPrompt(rt.SystemPrompt).WithStream(true)
-	runOnce := func(ctx context.Context, prompt string) (*agent.Result, error) {
-		return agent.NewAgent(loopCfg).Run(ctx, prompt)
-	}
-
-	node := ioaswarm.NewNode(ioaswarm.NodeConfig{
-		Client:                streamClient,
-		NodeName:              ResolveIOANodeName(option),
-		SpaceName:             option.Space,
-		SpaceDescription:      "aiscan loop worker",
-		PollInterval:          2 * time.Second,
-		HeartbeatInterval:     time.Duration(option.Heartbeat) * time.Minute,
-		HeartbeatContextLimit: 50,
-		Prompt:                rawPrompt,
-		Meta:                  nodeMeta,
-		ForkDepth:             1,
-		OnTask: func(ctx context.Context, st ioaswarm.Task) (string, error) {
-			result, err := runOnce(ctx, st.Prompt())
-			if err != nil {
-				return "", err
-			}
-			return result.Output, nil
-		},
-		OnPeer: func(peer ioaswarm.PeerMessage) bool {
-			return rt.Config.Inbox.Push(peerToInboxMessage(peer)) == nil
-		},
-		OnHeartbeat: func(ctx context.Context, prompt string) (string, error) {
-			result, err := runOnce(ctx, prompt)
-			if err != nil {
-				return "", err
-			}
-			return result.Output, nil
-		},
-		Logger: logger,
-	})
-
-	if option.Heartbeat > 0 {
-		_ = rt.Config.LoopScheduler.Add(ctx, agent.LoopEntry{
-			Name:     "heartbeat",
-			Interval: time.Duration(option.Heartbeat) * time.Minute,
-			Mode:     agent.ModeIndependent,
-			OnFire: func(fctx context.Context, e agent.LoopEntry) (string, error) {
-				return "", node.RunHeartbeat(fctx)
-			},
-		})
-	}
-
-	return node.Run(ctx)
+	_, err = agent.NewAgent(loopCfg).Run(ctx, prompt)
+	return err
 }
 
 // ---------------------------------------------------------------------------
@@ -458,46 +396,6 @@ func scannerCommandSupportsDebug(name string) bool {
 // Helpers
 // ---------------------------------------------------------------------------
 
-func buildNodeMeta(selected []string, store *skills.Store) (map[string]any, error) {
-	meta := map[string]any{
-		"kind": "agent",
-	}
-	if h, _ := os.Hostname(); h != "" {
-		meta["hostname"] = h
-	}
-	if len(selected) == 0 {
-		return meta, nil
-	}
-	type skillEntry struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-	}
-	var skills []skillEntry
-	seen := make(map[string]struct{}, len(selected))
-	for _, name := range selected {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		skill, ok := store.ByName(name)
-		if !ok {
-			return nil, fmt.Errorf("unknown skill %q", name)
-		}
-		seen[name] = struct{}{}
-		skills = append(skills, skillEntry{
-			Name:        skill.Name,
-			Description: skill.Description,
-		})
-	}
-	if len(skills) > 0 {
-		meta["skills"] = skills
-	}
-	return meta, nil
-}
-
 func registerIOATools(ctx context.Context, application *app.App, option *cfg.Option) error {
 	ioaURL := option.IOAURL
 	if ioaURL == "" {
@@ -516,82 +414,6 @@ func registerIOATools(ctx context.Context, application *app.App, option *cfg.Opt
 		ioaCfg.NodeName = ResolveIOANodeName(option)
 	}
 	return application.InitIOA(ctx, ioaCfg)
-}
-
-func formatPeerForLLM(peer ioaswarm.PeerMessage) string {
-	var sb strings.Builder
-	sb.WriteString("<swarm_peer")
-	if peer.Sender != "" {
-		writeXMLAttr(&sb, "sender", peer.Sender)
-	}
-	if peer.MessageID != "" {
-		writeXMLAttr(&sb, "message_id", peer.MessageID)
-	}
-	sb.WriteString(">\n")
-	_ = xml.EscapeText(&sb, []byte(peerPayload(peer)))
-	sb.WriteString("\n</swarm_peer>")
-	return sb.String()
-}
-
-func writeXMLAttr(sb *strings.Builder, name, value string) {
-	sb.WriteByte(' ')
-	sb.WriteString(name)
-	sb.WriteString("=\"")
-	_ = xml.EscapeText(sb, []byte(value))
-	sb.WriteByte('"')
-}
-
-func peerPayload(peer ioaswarm.PeerMessage) string {
-	if strings.TrimSpace(peer.Content) != "" {
-		return peer.Content
-	}
-	if len(peer.RawContent) == 0 {
-		return ""
-	}
-	data, err := json.MarshalIndent(peer.RawContent, "", "  ")
-	if err != nil {
-		return fmt.Sprint(peer.RawContent)
-	}
-	return string(data)
-}
-
-func peerToInboxMessage(peer ioaswarm.PeerMessage) inboxpkg.Message {
-	if peer.ContentType == "ioa/fork" {
-		msg := inboxpkg.NewMessage(inboxpkg.OriginSystem, "user", formatForkForLLM(peer))
-		msg.Priority = inboxpkg.PriorityLow
-		msg.Meta = map[string]any{
-			"sender":     peer.Sender,
-			"message_id": peer.MessageID,
-			"refs":       peer.Refs,
-			"type":       "fork",
-		}
-		return msg
-	}
-	msg := inboxpkg.NewMessage(inboxpkg.OriginPeer, "user", formatPeerForLLM(peer))
-	msg.Meta = map[string]any{
-		"sender":     peer.Sender,
-		"message_id": peer.MessageID,
-		"refs":       peer.Refs,
-	}
-	return msg
-}
-
-func formatForkForLLM(peer ioaswarm.PeerMessage) string {
-	var sb strings.Builder
-	sb.WriteString("<fork_notification")
-	if peer.Sender != "" {
-		writeXMLAttr(&sb, "sender", peer.Sender)
-	}
-	if peer.MessageID != "" {
-		writeXMLAttr(&sb, "message_id", peer.MessageID)
-	}
-	if len(peer.Refs.Messages) > 0 {
-		writeXMLAttr(&sb, "fork_point", peer.Refs.Messages[0])
-	}
-	sb.WriteString(">\n")
-	_ = xml.EscapeText(&sb, []byte(peerPayload(peer)))
-	sb.WriteString("\n</fork_notification>")
-	return sb.String()
 }
 
 func bashSessionManager(reg interface {

@@ -5,7 +5,7 @@ go 1.26.1
 require (
 	github.com/chainreactors/fingers v1.2.1-0.20260608084741-385e7d586d6f
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c
-	github.com/chainreactors/ioa v0.0.0-20260608071724-9514d2328199
+	github.com/chainreactors/ioa v0.0.0-20260609170545-7ec2ed23664d
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
 	github.com/chainreactors/neutron v0.0.0-20260608084636-c81691731908
 	github.com/chainreactors/parsers v0.0.0-20260608085142-3d2c51baa8fe
@@ -269,7 +269,6 @@ require (
 )
 
 replace (
-	github.com/chainreactors/ioa => /mnt/chainreactors/internet-of-agent
 	github.com/reeflective/console => github.com/chainreactors/malice-network/external/console v0.0.0-20260422184128-e856ed004d32
 	github.com/reeflective/readline => github.com/chainreactors/malice-network/external/readline v0.0.0-20260422184128-e856ed004d32
 )
