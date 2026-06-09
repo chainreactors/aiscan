@@ -312,7 +312,7 @@ func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) e
 		rawPrompt = fmt.Sprintf("%s\n\nTargets:\n%s", rawPrompt, cfg.FormatInputs(option.Inputs))
 	}
 
-	skillRefs, err := buildSkillRefs(option.Skills, rt.App.Skills)
+	nodeMeta, err := buildNodeMeta(option.Skills, rt.App.Skills)
 	if err != nil {
 		return err
 	}
@@ -331,8 +331,8 @@ func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) e
 		HeartbeatInterval:     time.Duration(option.Heartbeat) * time.Minute,
 		HeartbeatContextLimit: 50,
 		Prompt:                rawPrompt,
-		Skills:                option.Skills,
-		SkillRefs:             skillRefs,
+		Meta:                  nodeMeta,
+		ForkDepth:             1,
 		OnTask: func(ctx context.Context, st swarm.Task) (string, error) {
 			result, err := runOnce(ctx, st.Prompt())
 			if err != nil {
@@ -458,11 +458,21 @@ func scannerCommandSupportsDebug(name string) bool {
 // Helpers
 // ---------------------------------------------------------------------------
 
-func buildSkillRefs(selected []string, store *skills.Store) ([]swarm.SkillRef, error) {
-	if len(selected) == 0 {
-		return nil, nil
+func buildNodeMeta(selected []string, store *skills.Store) (map[string]any, error) {
+	meta := map[string]any{
+		"kind": "agent",
 	}
-	refs := make([]swarm.SkillRef, 0, len(selected))
+	if h, _ := os.Hostname(); h != "" {
+		meta["hostname"] = h
+	}
+	if len(selected) == 0 {
+		return meta, nil
+	}
+	type skillEntry struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	var skills []skillEntry
 	seen := make(map[string]struct{}, len(selected))
 	for _, name := range selected {
 		name = strings.TrimSpace(name)
@@ -477,13 +487,15 @@ func buildSkillRefs(selected []string, store *skills.Store) ([]swarm.SkillRef, e
 			return nil, fmt.Errorf("unknown skill %q", name)
 		}
 		seen[name] = struct{}{}
-		refs = append(refs, swarm.SkillRef{
+		skills = append(skills, skillEntry{
 			Name:        skill.Name,
 			Description: skill.Description,
-			Location:    skill.Location,
 		})
 	}
-	return refs, nil
+	if len(skills) > 0 {
+		meta["skills"] = skills
+	}
+	return meta, nil
 }
 
 func registerIOATools(ctx context.Context, application *app.App, option *cfg.Option) error {
@@ -544,12 +556,42 @@ func peerPayload(peer swarm.PeerMessage) string {
 }
 
 func peerToInboxMessage(peer swarm.PeerMessage) inboxpkg.Message {
+	if peer.ContentType == "ioa/fork" {
+		msg := inboxpkg.NewMessage(inboxpkg.OriginSystem, "user", formatForkForLLM(peer))
+		msg.Priority = inboxpkg.PriorityLow
+		msg.Meta = map[string]any{
+			"sender":     peer.Sender,
+			"message_id": peer.MessageID,
+			"refs":       peer.Refs,
+			"type":       "fork",
+		}
+		return msg
+	}
 	msg := inboxpkg.NewMessage(inboxpkg.OriginPeer, "user", formatPeerForLLM(peer))
 	msg.Meta = map[string]any{
 		"sender":     peer.Sender,
 		"message_id": peer.MessageID,
+		"refs":       peer.Refs,
 	}
 	return msg
+}
+
+func formatForkForLLM(peer swarm.PeerMessage) string {
+	var sb strings.Builder
+	sb.WriteString("<fork_notification")
+	if peer.Sender != "" {
+		writeXMLAttr(&sb, "sender", peer.Sender)
+	}
+	if peer.MessageID != "" {
+		writeXMLAttr(&sb, "message_id", peer.MessageID)
+	}
+	if len(peer.Refs.Messages) > 0 {
+		writeXMLAttr(&sb, "fork_point", peer.Refs.Messages[0])
+	}
+	sb.WriteString(">\n")
+	_ = xml.EscapeText(&sb, []byte(peerPayload(peer)))
+	sb.WriteString("\n</fork_notification>")
+	return sb.String()
 }
 
 func bashSessionManager(reg interface {

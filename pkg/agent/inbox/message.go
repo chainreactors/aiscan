@@ -91,6 +91,9 @@ func (m Message) renderContent() string {
 		if sender, _ := m.Meta["sender"].(string); sender != "" {
 			sb.WriteString(fmt.Sprintf(" sender=%q", sender))
 		}
+		if msgID, _ := m.Meta["message_id"].(string); msgID != "" {
+			sb.WriteString(fmt.Sprintf(" message_id=%q", msgID))
+		}
 		sb.WriteString(">\n")
 		sb.WriteString(body)
 		renderAttachments(&sb, m.Attachments)
