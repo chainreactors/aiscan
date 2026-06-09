@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/ioa"
+	"github.com/chainreactors/ioa/protocols"
 	ioaclient "github.com/chainreactors/ioa/client"
 	ioaserver "github.com/chainreactors/ioa/server"
 )
 
-func sendMessage(content, nodeID string) ioa.SendMessage {
-	return ioa.SendMessage{
+func sendMessage(content, nodeID string) protocols.SendMessage {
+	return protocols.SendMessage{
 		Content: map[string]any{"content": content},
-		Refs:    &ioa.Ref{Nodes: []string{nodeID}},
+		Refs:    &protocols.Ref{Nodes: []string{nodeID}},
 	}
 }
 
@@ -252,7 +252,7 @@ func TestRealIOALoopScanTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if _, err := controller.RegisterNode(ctx, "controller", nil); err != nil {
+	if _, err := controller.RegisterNode(ctx, "controller", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	space, err := controller.Space(ctx, "real-scan", "real scan test")

@@ -12,7 +12,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent"
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/command"
-	ioamodel "github.com/chainreactors/ioa"
+	"github.com/chainreactors/ioa/protocols"
 )
 
 const knownSpaceID = "a34763e95c29179802a4451597446c35"
@@ -22,7 +22,7 @@ const knownSpaceID = "a34763e95c29179802a4451597446c35"
 // ---------------------------------------------------------------------------
 
 func TestSpaceJoinExplicit(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 
 	var buf bytes.Buffer
@@ -40,7 +40,7 @@ func TestSpaceJoinExplicit(t *testing.T) {
 }
 
 func TestSpaceJoinImplicit(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 
 	// no "join" subcommand, should still work
@@ -77,8 +77,8 @@ func TestSpaceJoinMissingArgs(t *testing.T) {
 
 func TestSpaceList(t *testing.T) {
 	client := newFullFakeIOAClient(
-		ioamodel.SpaceInfo{ID: "s1", Name: "space-one"},
-		ioamodel.SpaceInfo{ID: "s2", Name: "space-two"},
+		protocols.SpaceInfo{ID: "s1", Name: "space-one"},
+		protocols.SpaceInfo{ID: "s2", Name: "space-two"},
 	)
 	cmds := NewCommands(client, "tester", nil)
 
@@ -92,9 +92,9 @@ func TestSpaceList(t *testing.T) {
 }
 
 func TestSpaceNodes(t *testing.T) {
-	client := newFullFakeIOAClient(ioamodel.SpaceInfo{
+	client := newFullFakeIOAClient(protocols.SpaceInfo{
 		ID: knownSpaceID, Name: "test-space",
-		Nodes: []ioamodel.SpaceNode{{ID: "n1", Name: "scanner-01"}},
+		Nodes: []protocols.Node{{ID: "n1", Name: "scanner-01"}},
 	})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpaceByName(t, cmds, "test-space")
@@ -117,10 +117,10 @@ func TestSpaceNodesWithoutJoin(t *testing.T) {
 }
 
 func TestSpaceTopics(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
-	client.messages = []ioamodel.Message{
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client.messages = []protocols.Message{
 		{ID: "root-1", Sender: "n1", Content: map[string]interface{}{"content": "topic A"}},
-		{ID: "reply-1", Sender: "n2", Content: map[string]interface{}{"content": "re"}, Refs: ioamodel.Ref{Messages: []string{"root-1"}}},
+		{ID: "reply-1", Sender: "n2", Content: map[string]interface{}{"content": "re"}, Refs: protocols.Ref{Messages: []string{"root-1"}}},
 		{ID: "root-2", Sender: "n1", Content: map[string]interface{}{"content": "topic B"}},
 	}
 	cmds := NewCommands(client, "tester", nil)
@@ -151,7 +151,7 @@ func TestSpaceUnknownSubcommand(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestSendBroadcast(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -169,7 +169,7 @@ func TestSendBroadcast(t *testing.T) {
 }
 
 func TestSendToNode(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -184,7 +184,7 @@ func TestSendToNode(t *testing.T) {
 }
 
 func TestSendToNodeMissingFlag(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -197,7 +197,7 @@ func TestSendToNodeMissingFlag(t *testing.T) {
 }
 
 func TestSendReply(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -212,7 +212,7 @@ func TestSendReply(t *testing.T) {
 }
 
 func TestSendReplyMissingTo(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -235,7 +235,7 @@ func TestSendWithoutSpace(t *testing.T) {
 }
 
 func TestSendWithoutContent(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -246,7 +246,7 @@ func TestSendWithoutContent(t *testing.T) {
 }
 
 func TestSendUnknownSubcommand(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -259,7 +259,7 @@ func TestSendUnknownSubcommand(t *testing.T) {
 }
 
 func TestSendCheckpoint(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -277,10 +277,10 @@ func TestSendCheckpoint(t *testing.T) {
 	if len(client.sentSpaceIDs) != 1 || client.sentSpaceIDs[0] != knownSpaceID {
 		t.Fatalf("sent to %v, want [%s]", client.sentSpaceIDs, knownSpaceID)
 	}
-	content := client.lastSentBody.Content
-	if content["type"] != "checkpoint" {
-		t.Fatalf("content type = %v, want checkpoint", content["type"])
+	if client.lastSentBody.ContentType != "checkpoint" {
+		t.Fatalf("content_type = %q, want checkpoint", client.lastSentBody.ContentType)
 	}
+	content := client.lastSentBody.Content
 	if content["kind"] != "verify" {
 		t.Fatalf("content kind = %v, want verify", content["kind"])
 	}
@@ -296,7 +296,7 @@ func TestSendCheckpoint(t *testing.T) {
 }
 
 func TestSendCheckpointMissingArgs(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -309,7 +309,7 @@ func TestSendCheckpointMissingArgs(t *testing.T) {
 }
 
 func TestSendCheckpointWithoutSpace(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 
 	err := findCmd(t, cmds, "ioa_send").Execute(context.Background(), []string{
@@ -325,7 +325,7 @@ func TestSendCheckpointWithoutSpace(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestReadDefault(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -338,7 +338,7 @@ func TestReadDefault(t *testing.T) {
 }
 
 func TestReadAll(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -356,7 +356,7 @@ func TestReadAll(t *testing.T) {
 }
 
 func TestReadThread(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -371,7 +371,7 @@ func TestReadThread(t *testing.T) {
 }
 
 func TestReadThreadMissingID(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -382,7 +382,7 @@ func TestReadThreadMissingID(t *testing.T) {
 }
 
 func TestReadNew(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -405,7 +405,7 @@ func TestReadWithoutSpace(t *testing.T) {
 }
 
 func TestReadUnknownSubcommand(t *testing.T) {
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "my-space"})
 	cmds := NewCommands(client, "tester", nil)
 	joinSpace(t, cmds)
 
@@ -463,7 +463,7 @@ func TestLLMIOAToolUsage(t *testing.T) {
 		t.Fatalf("NewProvider: %v", err)
 	}
 
-	client := newFakeIOAClient(ioamodel.SpaceInfo{ID: knownSpaceID, Name: "test-space"})
+	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "test-space"})
 	cmds := NewCommands(client, "llm-tester", nil)
 
 	registry := command.NewRegistry()
@@ -586,17 +586,17 @@ func (discard) Write(p []byte) (int, error) { return len(p), nil }
 
 type fakeIOAClient struct {
 	nodeID       string
-	spaces       map[string]ioamodel.SpaceInfo
-	messages     []ioamodel.Message // returned by Read
+	spaces       map[string]protocols.SpaceInfo
+	messages     []protocols.Message // returned by Read
 	spaceCalls   []string
 	sentSpaceIDs []string
 	readSpaceIDs []string
-	lastSentBody ioamodel.SendMessage
-	lastReadOpts ioamodel.ReadOptions
+	lastSentBody protocols.SendMessage
+	lastReadOpts protocols.ReadOptions
 }
 
-func newFakeIOAClient(spaces ...ioamodel.SpaceInfo) *fakeIOAClient {
-	c := &fakeIOAClient{spaces: make(map[string]ioamodel.SpaceInfo)}
+func newFakeIOAClient(spaces ...protocols.SpaceInfo) *fakeIOAClient {
+	c := &fakeIOAClient{spaces: make(map[string]protocols.SpaceInfo)}
 	for _, s := range spaces {
 		c.spaces[s.Name] = s
 	}
@@ -605,42 +605,42 @@ func newFakeIOAClient(spaces ...ioamodel.SpaceInfo) *fakeIOAClient {
 
 func (c *fakeIOAClient) NodeID() string { return c.nodeID }
 
-func (c *fakeIOAClient) RegisterNode(_ context.Context, name string, _ string, _ map[string]interface{}) (ioamodel.Node, error) {
+func (c *fakeIOAClient) RegisterNode(_ context.Context, name string, _ string, _ map[string]interface{}) (protocols.Node, error) {
 	c.nodeID = "node-1"
-	return ioamodel.Node{ID: c.nodeID, Name: name}, nil
+	return protocols.Node{ID: c.nodeID, Name: name}, nil
 }
 
-func (c *fakeIOAClient) Space(_ context.Context, name, _ string, _ ...string) (ioamodel.SpaceInfo, error) {
+func (c *fakeIOAClient) Space(_ context.Context, name, _ string, _ ...string) (protocols.SpaceInfo, error) {
 	c.spaceCalls = append(c.spaceCalls, name)
 	if s, ok := c.spaces[name]; ok {
 		return s, nil
 	}
-	s := ioamodel.SpaceInfo{ID: "created-" + name, Name: name}
+	s := protocols.SpaceInfo{ID: "created-" + name, Name: name}
 	c.spaces[name] = s
 	return s, nil
 }
 
-func (c *fakeIOAClient) Send(_ context.Context, spaceID string, body ioamodel.SendMessage) (ioamodel.Message, error) {
+func (c *fakeIOAClient) Send(_ context.Context, spaceID string, body protocols.SendMessage) (protocols.Message, error) {
 	if body.Content == nil {
-		return ioamodel.Message{}, fmt.Errorf("content is required")
+		return protocols.Message{}, fmt.Errorf("content is required")
 	}
 	c.sentSpaceIDs = append(c.sentSpaceIDs, spaceID)
 	c.lastSentBody = body
-	return ioamodel.Message{ID: "msg-sent", Sender: c.nodeID, Content: body.Content, Refs: derefRef(body.Refs)}, nil
+	return protocols.Message{ID: "msg-sent", Sender: c.nodeID, Content: body.Content, Refs: derefRef(body.Refs)}, nil
 }
 
-func (c *fakeIOAClient) Read(_ context.Context, spaceID string, opts ioamodel.ReadOptions) ([]ioamodel.Message, error) {
+func (c *fakeIOAClient) Read(_ context.Context, spaceID string, opts protocols.ReadOptions) ([]protocols.Message, error) {
 	c.readSpaceIDs = append(c.readSpaceIDs, spaceID)
 	c.lastReadOpts = opts
 	if c.messages != nil {
 		return c.messages, nil
 	}
-	return []ioamodel.Message{{ID: "msg-1", Sender: c.nodeID}}, nil
+	return []protocols.Message{{ID: "msg-1", Sender: c.nodeID}}, nil
 }
 
-func derefRef(r *ioamodel.Ref) ioamodel.Ref {
+func derefRef(r *protocols.Ref) protocols.Ref {
 	if r == nil {
-		return ioamodel.Ref{}
+		return protocols.Ref{}
 	}
 	return *r
 }
@@ -651,10 +651,10 @@ func derefRef(r *ioamodel.Ref) ioamodel.Ref {
 
 type fullFakeIOAClient struct {
 	fakeIOAClient
-	allSpaces []ioamodel.SpaceInfo
+	allSpaces []protocols.SpaceInfo
 }
 
-func newFullFakeIOAClient(spaces ...ioamodel.SpaceInfo) *fullFakeIOAClient {
+func newFullFakeIOAClient(spaces ...protocols.SpaceInfo) *fullFakeIOAClient {
 	c := &fullFakeIOAClient{
 		fakeIOAClient: *newFakeIOAClient(spaces...),
 		allSpaces:     spaces,
@@ -662,15 +662,15 @@ func newFullFakeIOAClient(spaces ...ioamodel.SpaceInfo) *fullFakeIOAClient {
 	return c
 }
 
-func (c *fullFakeIOAClient) ListSpaces(_ context.Context) ([]ioamodel.SpaceInfo, error) {
+func (c *fullFakeIOAClient) ListSpaces(_ context.Context) ([]protocols.SpaceInfo, error) {
 	return c.allSpaces, nil
 }
 
-func (c *fullFakeIOAClient) GetSpaceInfo(_ context.Context, spaceID string) (ioamodel.SpaceInfo, error) {
+func (c *fullFakeIOAClient) GetSpaceInfo(_ context.Context, spaceID string) (protocols.SpaceInfo, error) {
 	for _, s := range c.allSpaces {
 		if s.ID == spaceID {
 			return s, nil
 		}
 	}
-	return ioamodel.SpaceInfo{}, fmt.Errorf("space %q not found", spaceID)
+	return protocols.SpaceInfo{}, fmt.Errorf("space %q not found", spaceID)
 }

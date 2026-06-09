@@ -17,7 +17,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/app"
 	cmdpkg "github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
-	"github.com/chainreactors/ioa/protocols/swarm"
+	"github.com/chainreactors/aiscan/pkg/ioaswarm"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
 	"github.com/chainreactors/aiscan/skills"
@@ -322,7 +322,7 @@ func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) e
 		return agent.NewAgent(loopCfg).Run(ctx, prompt)
 	}
 
-	node := swarm.NewNode(swarm.NodeConfig{
+	node := ioaswarm.NewNode(ioaswarm.NodeConfig{
 		Client:                streamClient,
 		NodeName:              ResolveIOANodeName(option),
 		SpaceName:             option.Space,
@@ -333,14 +333,14 @@ func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) e
 		Prompt:                rawPrompt,
 		Meta:                  nodeMeta,
 		ForkDepth:             1,
-		OnTask: func(ctx context.Context, st swarm.Task) (string, error) {
+		OnTask: func(ctx context.Context, st ioaswarm.Task) (string, error) {
 			result, err := runOnce(ctx, st.Prompt())
 			if err != nil {
 				return "", err
 			}
 			return result.Output, nil
 		},
-		OnPeer: func(peer swarm.PeerMessage) bool {
+		OnPeer: func(peer ioaswarm.PeerMessage) bool {
 			return rt.Config.Inbox.Push(peerToInboxMessage(peer)) == nil
 		},
 		OnHeartbeat: func(ctx context.Context, prompt string) (string, error) {
@@ -518,7 +518,7 @@ func registerIOATools(ctx context.Context, application *app.App, option *cfg.Opt
 	return application.InitIOA(ctx, ioaCfg)
 }
 
-func formatPeerForLLM(peer swarm.PeerMessage) string {
+func formatPeerForLLM(peer ioaswarm.PeerMessage) string {
 	var sb strings.Builder
 	sb.WriteString("<swarm_peer")
 	if peer.Sender != "" {
@@ -541,7 +541,7 @@ func writeXMLAttr(sb *strings.Builder, name, value string) {
 	sb.WriteByte('"')
 }
 
-func peerPayload(peer swarm.PeerMessage) string {
+func peerPayload(peer ioaswarm.PeerMessage) string {
 	if strings.TrimSpace(peer.Content) != "" {
 		return peer.Content
 	}
@@ -555,7 +555,7 @@ func peerPayload(peer swarm.PeerMessage) string {
 	return string(data)
 }
 
-func peerToInboxMessage(peer swarm.PeerMessage) inboxpkg.Message {
+func peerToInboxMessage(peer ioaswarm.PeerMessage) inboxpkg.Message {
 	if peer.ContentType == "ioa/fork" {
 		msg := inboxpkg.NewMessage(inboxpkg.OriginSystem, "user", formatForkForLLM(peer))
 		msg.Priority = inboxpkg.PriorityLow
@@ -576,7 +576,7 @@ func peerToInboxMessage(peer swarm.PeerMessage) inboxpkg.Message {
 	return msg
 }
 
-func formatForkForLLM(peer swarm.PeerMessage) string {
+func formatForkForLLM(peer ioaswarm.PeerMessage) string {
 	var sb strings.Builder
 	sb.WriteString("<fork_notification")
 	if peer.Sender != "" {

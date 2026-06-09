@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/ioa"
+	"github.com/chainreactors/ioa/protocols"
 	ioaclient "github.com/chainreactors/ioa/client"
 	ioaserver "github.com/chainreactors/ioa/server"
 )
@@ -40,7 +40,7 @@ func TestIOALoopReceivesTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if _, err := controller.RegisterNode(ctx, "controller", nil); err != nil {
+	if _, err := controller.RegisterNode(ctx, "controller", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	space, err := controller.Space(ctx, "test-loop", "e2e test")
@@ -57,9 +57,9 @@ func TestIOALoopReceivesTask(t *testing.T) {
 	}
 	workerNodeID := nodes[0].ID
 
-	_, err = controller.Send(ctx, space.ID, ioa.SendMessage{
+	_, err = controller.Send(ctx, space.ID, protocols.SendMessage{
 		Content: map[string]any{"content": "Run 'echo ioa_task_received' in bash and report the output."},
-		Refs:    &ioa.Ref{Nodes: []string{workerNodeID}},
+		Refs:    &protocols.Ref{Nodes: []string{workerNodeID}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestIOALoopMultipleWorkers(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if _, err := controller.RegisterNode(ctx, "controller", nil); err != nil {
+	if _, err := controller.RegisterNode(ctx, "controller", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := controller.Space(ctx, "multi-worker", "e2e multi"); err != nil {
@@ -144,7 +144,7 @@ func TestIOALoopPeerMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if _, err := controller.RegisterNode(ctx, "controller", nil); err != nil {
+	if _, err := controller.RegisterNode(ctx, "controller", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	space, err := controller.Space(ctx, "peer-test", "e2e peer")
@@ -161,15 +161,15 @@ func TestIOALoopPeerMessage(t *testing.T) {
 	}
 	workerNodeID := nodes[0].ID
 
-	_, err = controller.Send(ctx, space.ID, ioa.SendMessage{
+	_, err = controller.Send(ctx, space.ID, protocols.SendMessage{
 		Content: map[string]any{"content": "Run echo peer_hello and report result"},
-		Refs:    &ioa.Ref{Nodes: []string{workerNodeID}},
+		Refs:    &protocols.Ref{Nodes: []string{workerNodeID}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = controller.Send(ctx, space.ID, ioa.SendMessage{
+	_, err = controller.Send(ctx, space.ID, protocols.SendMessage{
 		Content: map[string]any{"content": "Additional context: also run 'echo peer_context_received'"},
 	})
 	if err != nil {
@@ -205,7 +205,7 @@ func TestIOATaskSpawnsSubagents(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if _, err := controller.RegisterNode(ctx, "controller", nil); err != nil {
+	if _, err := controller.RegisterNode(ctx, "controller", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	space, err := controller.Space(ctx, "subagent-fan", "e2e")
@@ -228,14 +228,14 @@ func TestIOATaskSpawnsSubagents(t *testing.T) {
 		t.Fatal("no worker node found")
 	}
 
-	_, err = controller.Send(ctx, space.ID, ioa.SendMessage{
+	_, err = controller.Send(ctx, space.ID, protocols.SendMessage{
 		Content: map[string]any{
 			"content": "I need you to gather system info in parallel. " +
 				"Create 2 async subagents: one runs 'echo subagent_alpha_ok' in bash, " +
 				"the other runs 'echo subagent_beta_ok' in bash. " +
 				"Wait for both results, then respond with a combined summary that includes both markers.",
 		},
-		Refs: &ioa.Ref{Nodes: []string{workerNodeID}},
+		Refs: &protocols.Ref{Nodes: []string{workerNodeID}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -275,7 +275,7 @@ func TestIOATwoWorkersDispatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if _, err := controller.RegisterNode(ctx, "controller", nil); err != nil {
+	if _, err := controller.RegisterNode(ctx, "controller", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	space, err := controller.Space(ctx, "dispatch-2", "e2e dispatch")
@@ -287,7 +287,7 @@ func TestIOATwoWorkersDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var workers []ioa.Node
+	var workers []protocols.Node
 	for _, n := range nodes {
 		if strings.HasPrefix(n.Name, "worker-") {
 			workers = append(workers, n)
@@ -299,11 +299,11 @@ func TestIOATwoWorkersDispatch(t *testing.T) {
 
 	for i, w := range workers {
 		marker := fmt.Sprintf("dispatch_marker_%d", i+1)
-		_, err = controller.Send(ctx, space.ID, ioa.SendMessage{
+		_, err = controller.Send(ctx, space.ID, protocols.SendMessage{
 			Content: map[string]any{
 				"content": fmt.Sprintf("Run 'echo %s' in bash and report.", marker),
 			},
-			Refs: &ioa.Ref{Nodes: []string{w.ID}},
+			Refs: &protocols.Ref{Nodes: []string{w.ID}},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -319,7 +319,7 @@ func TestIOATwoWorkersDispatch(t *testing.T) {
 // requireIOAMessageContains checks that at least one message in the space contains substr.
 func requireIOAMessageContains(t *testing.T, client *ioaclient.Client, ctx context.Context, spaceID, substr string) {
 	t.Helper()
-	msgs, err := client.Read(ctx, spaceID, ioa.ReadOptions{All: true})
+	msgs, err := client.Read(ctx, spaceID, protocols.ReadOptions{All: true})
 	if err != nil {
 		t.Fatalf("read space: %v", err)
 	}
