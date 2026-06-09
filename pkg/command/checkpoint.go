@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/chainreactors/ioa"
 )
 
 type CheckpointArgs struct {
@@ -46,7 +45,7 @@ func (t *CheckpointTool) Description() string {
 	return "Submit the final checkpoint after completing verification or analysis. This terminates the current session. Call exactly once with your conclusion."
 }
 
-func (t *CheckpointTool) Definition() ioa.ToolDefinition {
+func (t *CheckpointTool) Definition() ToolDefinition {
 	return ToolDef("checkpoint", t.Description(), CheckpointArgs{})
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	"github.com/chainreactors/aiscan/skills"
 	ioaclient "github.com/chainreactors/ioa/client"
+	"github.com/chainreactors/ioa/protocols"
 
 	// Register scanner command factories with the unified command registry.
 	_ "github.com/chainreactors/aiscan/pkg/tools"
@@ -75,7 +76,7 @@ type App struct {
 	Engines          *engine.Set
 	Skills           *skills.Store
 	SkillDiagnostics []skills.Diagnostic
-	IOAClient          ioaclient.API
+	IOAClient          protocols.ClientAPI
 	IOAStreamClient    ioaclient.StreamAPI
 }
 
@@ -387,7 +388,7 @@ func (a *App) setIOASpace(spaceID string) {
 	}
 }
 
-func newIOAClient(cfg IOAConfig) (ioaclient.API, error) {
+func newIOAClient(cfg IOAConfig) (protocols.ClientAPI, error) {
 	if cfg.URL == "" {
 		return nil, nil
 	}

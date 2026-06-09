@@ -21,8 +21,7 @@ func RunServe(ctx context.Context, cfg Config, logger telemetry.Logger) error {
 		defer func() { _ = closeStore() }()
 	}
 	return ioaserver.RunServer(ctx, ioaserver.ServerOptions{
-		URL:    cfg.URL,
-		Store:  store,
-		Logger: logger,
+		URL:   cfg.URL,
+		Store: store,
 	})
 }

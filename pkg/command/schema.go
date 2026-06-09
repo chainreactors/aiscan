@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/chainreactors/ioa"
 	"github.com/invopop/jsonschema"
 )
 
@@ -37,12 +36,12 @@ func SchemaOf(proto any) map[string]any {
 	return m
 }
 
-// ToolDef builds a complete ioa.ToolDefinition from a name,
+// ToolDef builds a complete ToolDefinition from a name,
 // description, and an args struct prototype.
-func ToolDef(name, description string, argsProto any) ioa.ToolDefinition {
-	return ioa.ToolDefinition{
+func ToolDef(name, description string, argsProto any) ToolDefinition {
+	return ToolDefinition{
 		Type: "function",
-		Function: ioa.FunctionDefinition{
+		Function: FunctionDefinition{
 			Name:        name,
 			Description: description,
 			Parameters:  SchemaOf(argsProto),

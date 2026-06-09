@@ -14,8 +14,8 @@ import (
 	"github.com/chainreactors/aiscan/cmd/ioaserve"
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
-	"github.com/chainreactors/ioa"
 	ioaclient "github.com/chainreactors/ioa/client"
+	"github.com/chainreactors/ioa/protocols"
 )
 
 func RunIOAServe(ctx context.Context, option *cfg.Option, logger telemetry.Logger) error {
@@ -85,7 +85,7 @@ func RunIOAMessages(ctx context.Context, client *ioaclient.Client, option *cfg.O
 	if err != nil {
 		return err
 	}
-	messages, err := client.ReadPublic(ctx, space.ID, ioa.ReadOptions{})
+	messages, err := client.ReadPublic(ctx, space.ID, protocols.ReadOptions{})
 	if err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ func RunIOAContext(ctx context.Context, client *ioaclient.Client, option *cfg.Op
 	if err != nil {
 		return err
 	}
-	messages, err := client.ReadPublic(ctx, space.ID, ioa.ReadOptions{MessageID: args.MessageID})
+	messages, err := client.ReadPublic(ctx, space.ID, protocols.ReadOptions{MessageID: args.MessageID})
 	if err != nil {
 		return err
 	}

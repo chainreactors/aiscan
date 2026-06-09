@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chainreactors/ioa"
 	"github.com/chainreactors/aiscan/pkg/agent/tmux"
 )
 
@@ -61,7 +60,7 @@ type BashArgs struct {
 	Command string `json:"command" jsonschema:"description=The command to execute. For shell commands: any valid sh command. For pseudo-commands (scan, gogo, tmux, etc.): pass them directly here."`
 }
 
-func (t *BashTool) Definition() ioa.ToolDefinition {
+func (t *BashTool) Definition() ToolDefinition {
 	return ToolDef("bash", t.Description(), BashArgs{})
 }
 
@@ -112,7 +111,7 @@ func (t *BashTool) waitOrBackground(id string, ctx context.Context) (ToolResult,
 }
 
 func (t *BashTool) collectResult(id string, ctx context.Context) ToolResult {
-	output := t.tasks.PeekOrEmpty(id, 0)
+	output := t.tasks.PeekOrEmpty(id, 2000)
 	if len(output) > maxOutputSize {
 		original := len(output)
 		output = output[:maxOutputSize] + fmt.Sprintf("\n\n[truncated: showing %d of %d bytes]", maxOutputSize, original)

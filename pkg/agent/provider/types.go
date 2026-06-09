@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/chainreactors/ioa"
 )
 
 // CacheRetention controls prompt caching behavior across providers.
@@ -112,9 +111,16 @@ type FunctionCallDelta struct {
 	Arguments string `json:"arguments,omitempty"`
 }
 
-type ToolDefinition = ioa.ToolDefinition
+type ToolDefinition struct {
+	Type     string             `json:"type"`
+	Function FunctionDefinition `json:"function"`
+}
 
-type FunctionDefinition = ioa.FunctionDefinition
+type FunctionDefinition struct {
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Parameters  map[string]interface{} `json:"parameters"`
+}
 
 type ResponseFormat struct {
 	Type       string          `json:"type"`

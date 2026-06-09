@@ -10,8 +10,6 @@ import (
 	"sync"
 
 	"github.com/chainreactors/aiscan/pkg/command"
-	ioamodel "github.com/chainreactors/ioa"
-	ioaclient "github.com/chainreactors/ioa/client"
 	"github.com/chainreactors/ioa/protocols"
 )
 
@@ -33,7 +31,7 @@ func (b *spaceBinding) set(id string) {
 	b.spaceID = id
 }
 
-func NewCommands(client ioaclient.API, nodeName string, meta map[string]any) []command.Command {
+func NewCommands(client protocols.ClientAPI, nodeName string, meta map[string]any) []command.Command {
 	binding := &spaceBinding{}
 	return []command.Command{
 		&spaceCommand{client: client, binding: binding, nodeName: nodeName, meta: meta},
@@ -42,7 +40,7 @@ func NewCommands(client ioaclient.API, nodeName string, meta map[string]any) []c
 	}
 }
 
-func ensureNode(ctx context.Context, client ioaclient.API, name string, meta map[string]any) error {
+func ensureNode(ctx context.Context, client protocols.ClientAPI, name string, meta map[string]any) error {
 	if client.NodeID() != "" {
 		return nil
 	}
@@ -68,7 +66,7 @@ func writeJSON(w io.Writer, v any) error {
 // --- ioa_space ---
 
 type spaceCommand struct {
-	client   ioaclient.API
+	client   protocols.ClientAPI
 	binding  *spaceBinding
 	nodeName string
 	meta     map[string]any
@@ -141,25 +139,25 @@ func (c *spaceCommand) execJoin(ctx context.Context, m map[string]interface{}, w
 	}
 	c.binding.set(info.ID)
 
-	allMessages, readErr := c.client.Read(ctx, info.ID, ioamodel.ReadOptions{All: true})
+	allMessages, readErr := c.client.Read(ctx, info.ID, protocols.ReadOptions{All: true})
 	if readErr != nil {
 		return writeJSON(w, info)
 	}
-	var startMessages []ioamodel.Message
+	var startMessages []protocols.Message
 	for _, msg := range allMessages {
 		if len(msg.Refs.Messages) == 0 && len(msg.Refs.Nodes) == 0 {
 			startMessages = append(startMessages, msg)
 		}
 	}
 	return writeJSON(w, struct {
-		ioamodel.SpaceInfo
-		StartMessages []ioamodel.Message `json:"start_messages"`
+		protocols.SpaceInfo
+		StartMessages []protocols.Message `json:"start_messages"`
 	}{info, startMessages})
 }
 
 func (c *spaceCommand) execList(ctx context.Context, w io.Writer) error {
 	type lister interface {
-		ListSpaces(ctx context.Context) ([]ioamodel.SpaceInfo, error)
+		ListSpaces(ctx context.Context) ([]protocols.SpaceInfo, error)
 	}
 	l, ok := c.client.(lister)
 	if !ok {
@@ -178,7 +176,7 @@ func (c *spaceCommand) execNodes(ctx context.Context, w io.Writer) error {
 		return fmt.Errorf("no space joined. Use ioa_space join --name <name> --description <role> first")
 	}
 	type infoGetter interface {
-		GetSpaceInfo(ctx context.Context, spaceID string) (ioamodel.SpaceInfo, error)
+		GetSpaceInfo(ctx context.Context, spaceID string) (protocols.SpaceInfo, error)
 	}
 	g, ok := c.client.(infoGetter)
 	if !ok {
@@ -199,11 +197,11 @@ func (c *spaceCommand) execTopics(ctx context.Context, w io.Writer) error {
 	if err := ensureNode(ctx, c.client, c.nodeName, c.meta); err != nil {
 		return err
 	}
-	messages, err := c.client.Read(ctx, spaceID, ioamodel.ReadOptions{All: true})
+	messages, err := c.client.Read(ctx, spaceID, protocols.ReadOptions{All: true})
 	if err != nil {
 		return err
 	}
-	var topics []ioamodel.Message
+	var topics []protocols.Message
 	for _, msg := range messages {
 		if len(msg.Refs.Messages) == 0 && len(msg.Refs.Nodes) == 0 {
 			topics = append(topics, msg)
@@ -215,7 +213,7 @@ func (c *spaceCommand) execTopics(ctx context.Context, w io.Writer) error {
 // --- ioa_send ---
 
 type sendCommand struct {
-	client  ioaclient.API
+	client  protocols.ClientAPI
 	binding *spaceBinding
 }
 
@@ -277,7 +275,7 @@ func (c *sendCommand) Execute(ctx context.Context, args []string, w io.Writer) e
 	}
 
 	contentType, _ := m["content_type"].(string)
-	body := ioamodel.SendMessage{ContentType: contentType, Content: content}
+	body := protocols.SendMessage{ContentType: contentType, Content: content}
 
 	switch sub {
 	case "to":
@@ -285,17 +283,17 @@ func (c *sendCommand) Execute(ctx context.Context, args []string, w io.Writer) e
 		if node == "" {
 			return fmt.Errorf("ioa_send to: --node <node_id> is required")
 		}
-		body.Refs = &ioamodel.Ref{Nodes: []string{node}}
+		body.Refs = &protocols.Ref{Nodes: []string{node}}
 	case "reply":
 		to, _ := m["to"].(string)
 		if to == "" {
 			return fmt.Errorf("ioa_send reply: --to <message_id> is required")
 		}
-		body.Refs = &ioamodel.Ref{Messages: []string{to}}
+		body.Refs = &protocols.Ref{Messages: []string{to}}
 	case "broadcast", "":
 		if refs, ok := m["refs"].(map[string]interface{}); ok {
 			data, _ := json.Marshal(refs)
-			var r ioamodel.Ref
+			var r protocols.Ref
 			if json.Unmarshal(data, &r) == nil {
 				body.Refs = &r
 			}
@@ -320,7 +318,7 @@ func (c *sendCommand) Execute(ctx context.Context, args []string, w io.Writer) e
 // --- ioa_read ---
 
 type readCommand struct {
-	client  ioaclient.API
+	client  protocols.ClientAPI
 	binding *spaceBinding
 }
 
@@ -358,7 +356,7 @@ func (c *readCommand) Execute(ctx context.Context, args []string, w io.Writer) e
 		return fmt.Errorf("ioa_read: %w\n\n%s", err, c.Usage())
 	}
 
-	opts := ioamodel.ReadOptions{}
+	opts := protocols.ReadOptions{}
 	if v, ok := m["limit"].(int); ok {
 		opts.Limit = v
 	}

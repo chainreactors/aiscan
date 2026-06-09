@@ -8,8 +8,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chainreactors/ioa"
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
+
 )
+
+type ToolDefinition = provider.ToolDefinition
+
+type FunctionDefinition = provider.FunctionDefinition
 
 type Command interface {
 	Name() string
@@ -20,7 +25,7 @@ type Command interface {
 type AgentTool interface {
 	Name() string
 	Description() string
-	Definition() ioa.ToolDefinition
+	Definition() ToolDefinition
 	Execute(ctx context.Context, arguments string) (ToolResult, error)
 }
 
@@ -85,9 +90,9 @@ func (r *CommandRegistry) GetTool(name string) (AgentTool, bool) {
 	return t, ok
 }
 
-func (r *CommandRegistry) ToolDefinitions() []ioa.ToolDefinition {
+func (r *CommandRegistry) ToolDefinitions() []ToolDefinition {
 	tools := r.Tools()
-	defs := make([]ioa.ToolDefinition, 0, len(tools))
+	defs := make([]ToolDefinition, 0, len(tools))
 	for _, t := range tools {
 		defs = append(defs, t.Definition())
 	}

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/chainreactors/ioa"
 )
 
 const maxGlobResults = 500
@@ -37,7 +36,7 @@ type GlobArgs struct {
 	Path    string `json:"path,omitempty" jsonschema:"description=Base directory for the search (default: working directory)"`
 }
 
-func (t *GlobTool) Definition() ioa.ToolDefinition {
+func (t *GlobTool) Definition() ToolDefinition {
 	return ToolDef("glob", t.Description(), GlobArgs{})
 }
 
