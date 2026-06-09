@@ -50,7 +50,7 @@ func TestRealScanDirectPipeline(t *testing.T) {
 }
 
 // =====================================================================
-// Layer 2: Scanner + AI pipeline skills (--ai flag)
+// Layer 2: Scanner AI analysis and scan pipeline AI skills
 // =====================================================================
 
 func TestRealScanGogoAI(t *testing.T) {
@@ -65,15 +65,16 @@ func TestRealScanGogoAI(t *testing.T) {
 	}.verifyScanner(t, h, "--ai", "--timeout", "120", "gogo", "-i", realTarget, "-p", "top100")
 }
 
-func TestRealScanPipelineAI(t *testing.T) {
+func TestRealScanPipelineAISkills(t *testing.T) {
 	h := New(t)
 	Intent{
-		Name:    "real-scan-pipeline-ai",
+		Name:    "real-scan-pipeline-ai-skills",
 		Prompt:  "",
 		Timeout: 300 * time.Second,
-		JudgeCriteria: "The scan pipeline must have run against the target. The AI analysis should identify " +
-			"specific open ports, running services, and any notable results from the scan output.",
-	}.verifyScanner(t, h, "--ai", "--timeout", "240", "scan", "-i", realSingleTarget, "--mode", "quick")
+		JudgeCriteria: "The scan pipeline must have run against the target with explicit AI verification " +
+			"and sniper options. The output should include concrete scan findings or AI skill results, " +
+			"not just a generic completion message.",
+	}.verifyScanner(t, h, "--timeout", "240", "scan", "-i", realSingleTarget, "--mode", "quick", "--verify=high", "--sniper")
 }
 
 // =====================================================================

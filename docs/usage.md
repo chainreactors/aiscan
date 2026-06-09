@@ -122,7 +122,7 @@ aiscan neutron -h
 | `--api-key` | LLM API key |
 | `--model` | 模型名称（默认 `gpt-4o`） |
 | `--llm-proxy` | 访问 LLM API 的 HTTP proxy |
-| `--ai` | 对 scanner 输出使用 LLM 分析（等效 `--verify=high --sniper`） |
+| `--ai` | 对 scanner 输出使用 LLM 分析 |
 
 ### Agent 参数
 
@@ -171,7 +171,7 @@ aiscan neutron -h
 
 ## LLM Provider 配置
 
-`agent`、`agent --loop`、`scan --verify` 和 scanner 的 `--ai` 模式需要 LLM provider。
+`agent`、`agent --loop`、`scan --verify/--sniper/--deep` 和 scanner 的 `--ai` 模式需要 LLM provider。
 
 默认 provider 是 `openai`，默认模型是 `gpt-4o`。aiscan 可以从 `--base-url` 自动推断 provider（如 URL 包含 `deepseek.com` 则推断为 `deepseek`）。
 
@@ -353,7 +353,6 @@ scan 命令提供三种 AI 增强模式，需要 LLM provider：
 | `--verify=<level>` | 对发现的漏洞进行 LLM 主动验证 |
 | `--sniper` | 对发现的指纹搜索公开 CVE/Exploit（通过 web search） |
 | `--deep` | 对发现的 Web 资产进行动态 AI 测试 |
-| `--ai` | 兼容别名，等效 `--verify=high --sniper` |
 
 ```bash
 # 验证 + 漏洞情报
@@ -537,7 +536,7 @@ aiscan agent -s report -p "根据扫描结果生成报告" -i http://target.exam
 
 ## scanner 的 --ai 模式
 
-直接 scanner 命令加 `--ai` 时，aiscan 会先执行 scanner，再让 LLM 解释结果。对 `scan` 以外的 scanner（gogo、spray、zombie、neutron），`--ai` 会启动一个完整的 scanner agent，agent 可以使用工具进一步分析输出。对 `scan` 命令，`--ai` 在扫描完成后进行低成本的 LLM 总结。
+直接 scanner 命令加顶层 `--ai` 时，aiscan 会先执行 scanner，再让 LLM 解释结果。对 `gogo`、`spray`、`zombie`、`neutron`，`--ai` 会启动一个完整的 scanner agent，agent 可以使用工具进一步分析输出。
 
 ```bash
 # gogo 结果由 agent 分析（可调用工具）
@@ -548,18 +547,15 @@ aiscan --ai -p "判断这些 Web 指纹是否值得进一步验证" spray -u htt
 
 # neutron 结果分析
 aiscan --ai -p "解释命中的 POC 影响和复现条件" neutron -u http://target.example -s critical,high
-
-# scan 结果总结
-aiscan --ai scan -i http://target.example --mode quick
 ```
 
-`--ai` 会自动加载对应 scanner 的 skill。也可以额外指定 skill：
+顶层 `--ai` 会自动加载对应 scanner 的 skill。也可以额外指定 skill：
 
 ```bash
 aiscan --ai --skill scan gogo -i 192.168.1.0/24 -p all
 ```
 
-> `--ai` 更适合对 scanner 输出做总结、解释和筛选；`scan --verify` 更适合对发现进行自动化证据验证。两者可以组合使用。
+> 顶层 `--ai` 更适合对 scanner 输出做总结、解释和筛选；`scan --verify` 更适合对发现进行自动化证据验证。
 
 ---
 
@@ -857,7 +853,7 @@ aiscan -F scan_result.jsonl -o markdown -f report.md
 | 深入扫描和更多 Web 路径 | `aiscan scan -i <target> --mode full` |
 | 搜索已知漏洞情报 | `aiscan scan -i <target> --sniper` |
 | 深度动态测试 | `aiscan scan -i <target> --deep` |
-| AI 主动验证 + 漏洞搜索 | `aiscan scan -i <target> --ai` |
+| AI 主动验证 + 漏洞搜索 | `aiscan scan -i <target> --verify=high --sniper` |
 | 自动解释结果和生成结论 | `aiscan agent -p "<任务>" -i <target>` |
 | 对 scanner 输出做 AI 摘要 | `aiscan --ai -p "<意图>" <scanner> ...` |
 | 查询已加载的指纹和 POC | `aiscan cyberhub list poc --severity critical` |
@@ -906,9 +902,9 @@ aiscan scan -i 127.0.0.1 -f result.txt --no-color
 aiscan scan -i 192.168.1.0/24 --port top100 --thread 500
 ```
 
-### --ai 需要 LLM 但 scan 不需要
+### 顶层 --ai 需要 LLM 但 scan 不需要
 
-`--ai` 对所有 scanner 都需要 LLM provider。`scan` 的核心流水线不依赖 LLM；`scan --verify` 在 LLM 不可用时会自动跳过验证。
+顶层 `--ai` 对 scanner 输出做 LLM 分析，因此需要 LLM provider。`scan` 的核心流水线不依赖 LLM；`scan --verify` 在 LLM 不可用时会自动跳过验证。
 
 ### cyberhub 没有结果
 

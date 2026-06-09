@@ -15,10 +15,9 @@ func DirectScannerRuntimeFeatures(rest []string) (config.RuntimeFeatures, []stri
 		return config.RuntimeFeatures{}, rest, nil
 	}
 	verifyMode, explicit := scannerVerifyMode(rest[1:])
-	aiEnabled := HasScannerFlag(rest[1:], "--ai")
 	sniperEnabled := HasScannerFlag(rest[1:], "--sniper")
 	deepEnabled := HasScannerFlag(rest[1:], "--deep")
-	aiSkillRequested := aiEnabled || sniperEnabled || deepEnabled
+	aiSkillRequested := sniperEnabled || deepEnabled
 
 	features := config.RuntimeFeatures{}
 

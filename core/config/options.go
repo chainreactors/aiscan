@@ -32,7 +32,7 @@ type LLMOptions struct {
 	APIKey   string `long:"api-key" config:"api_key" description:"LLM API key (or set env: OPENAI_API_KEY, AISCAN_API_KEY)"`
 	Model    string `long:"model" config:"model" description:"LLM model name"`
 	LLMProxy string `long:"llm-proxy" config:"proxy" description:"Proxy for LLM API requests"`
-	AI       bool   `long:"ai" description:"Enable AI verification, sniper fingerprint analysis, and summarize results"`
+	AI       bool   `long:"ai" description:"Analyze direct scanner output with an LLM"`
 }
 
 type ScannerOptions struct {

@@ -98,7 +98,7 @@ misc:
 
 ## LLM Provider
 
-`agent`、`scan --verify` 和 `--ai` 模式需要 LLM Provider。
+`agent`、`scan --verify/--sniper/--deep` 和顶层 scanner `--ai` 模式需要 LLM Provider。
 
 ### 支持的 Provider
 

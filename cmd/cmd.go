@@ -190,7 +190,7 @@ func parseCLI(args []string) (parsedCLI, error) {
 
 func parseScannerCLI(scannerName string, rootArgs, scannerRest []string) (parsedCLI, error) {
 	var manual cfg.Option
-	filteredRootArgs, err := applyScannerCommandArgs(scannerName, rootArgs, &manual)
+	filteredRootArgs, err := applyScannerCommandArgs("", rootArgs, &manual)
 	if err != nil {
 		return parsedCLI{}, err
 	}
@@ -270,7 +270,7 @@ func newCLIParser(cli *cliOptions, options goflags.Options) *goflags.Parser {
 aiscan - AI-assisted security scanner
 
 Commands:
-  scan           Scan a target, with optional AI skills (--ai, --sniper, --deep)
+  scan           Scan a target, with optional AI skills (--verify, --sniper, --deep)
   agent          Run the natural-language agent
 
 Advanced scanners:
@@ -286,11 +286,11 @@ Infrastructure:
 
 Examples:
   aiscan scan -i 127.0.0.1
-  aiscan scan -i http://target.com --ai --model gpt-4o
+  aiscan scan -i http://target.com --verify=high --sniper --model gpt-4o
   aiscan scan -i http://target.com --sniper
   aiscan scan -i http://target.com --mode full --deep
   aiscan scan -i 192.168.1.0/24 --mode full
-  aiscan scan -i http://target.com --mode full --ai --report
+  aiscan scan -i http://target.com --mode full --verify=high --sniper --report
   aiscan agent -p "find web services and check vulnerabilities" -i 192.168.1.0/24
   aiscan ioa serve
   aiscan ioa spaces --ioa-url http://127.0.0.1:8765
@@ -496,7 +496,7 @@ func applyScannerRootArgs(args []string, option *cfg.Option) ([]string, error) {
 	return applyScannerCommandArgs("", args, option)
 }
 
-func applyScannerCommandArgs(_ string, args []string, option *cfg.Option) ([]string, error) {
+func applyScannerCommandArgs(scannerName string, args []string, option *cfg.Option) ([]string, error) {
 	out := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -505,6 +505,9 @@ func applyScannerCommandArgs(_ string, args []string, option *cfg.Option) ([]str
 		for _, f := range scannerKnownFlags {
 			if !containsString(f.names, key) {
 				continue
+			}
+			if scannerName == "scan" && key == "--ai" {
+				break
 			}
 			matched = true
 			if f.arity == 0 {

@@ -35,7 +35,6 @@ Notes:
 - `--verify=<level>` enables active validation for loots at or above the selected priority.
 - `--sniper` enables fingerprint vulnerability intelligence.
 - `--deep` enables browser-backed testing for discovered websites and fingerprint-based deep assessment for fingerprinted assets.
-- `--ai` is a compatibility alias for `--verify=high --sniper`. It does not enable `--deep`.
 - User intent decides whether scan output should be summarized, analyzed, validated, reported, or used to choose follow-up commands.
 
 ## AI Sub-Skills

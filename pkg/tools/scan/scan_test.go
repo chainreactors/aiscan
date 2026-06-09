@@ -166,6 +166,24 @@ func TestScanUsageHidesDeprecatedAliases(t *testing.T) {
 	if strings.Contains(usage, "--port        ") || strings.Contains(usage, "--port top100") {
 		t.Fatal("usage should not advertise deprecated --port alias")
 	}
+	if strings.Contains(usage, "--ai") {
+		t.Fatal("usage should not advertise removed --ai alias")
+	}
+}
+
+func TestScanRejectsRemovedAIFlag(t *testing.T) {
+	cmd := New(&engine.Set{})
+	err := cmd.Execute(context.Background(), []string{
+		"-i", "http://127.0.0.1",
+		"--ai",
+		"--no-color",
+	}, io.Discard)
+	if err == nil {
+		t.Fatal("Execute() with removed --ai flag should fail")
+	}
+	if !strings.Contains(err.Error(), "unknown flag") || !strings.Contains(err.Error(), "ai") {
+		t.Fatalf("error = %v, want unknown ai flag", err)
+	}
 }
 
 func TestScanAcceptsDeprecatedCompatibilityFlags(t *testing.T) {

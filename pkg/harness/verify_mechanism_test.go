@@ -26,25 +26,25 @@ func TestVerifyOffProducesNoAIOutput(t *testing.T) {
 	t.Logf("verify=off output (%d bytes):\n%s", len(r.Stdout), clip(r.Stdout, 2000))
 }
 
-// TestVerifyHighTriggersAIVerification runs scan with --ai (which sets
-// verify=high) and confirms that the scan pipeline completes with AI skills
-// enabled. When targets have high-priority loots, AI verify and sniper
-// skills produce output.
-func TestVerifyHighTriggersAIVerification(t *testing.T) {
+// TestVerifyHighWithSniperTriggersAIVerification runs scan with explicit
+// verify and sniper options and confirms that the scan pipeline completes with
+// AI skills enabled. When targets have high-priority loots, AI verify and
+// sniper skills produce output.
+func TestVerifyHighWithSniperTriggersAIVerification(t *testing.T) {
 	h := New(t)
 	r := h.RunWithTimeout(600*time.Second,
-		"scan", "-i", verifyTarget, "--mode", "quick", "--ai", "--timeout", "5",
+		"scan", "-i", verifyTarget, "--mode", "quick", "--verify=high", "--sniper", "--timeout", "5",
 	)
 	Verify(t, r).OK().Done()
 
 	if !hasSummaryLine(r.Stdout) {
 		t.Fatal("expected [summary] line in output")
 	}
-	t.Logf("--ai output (%d bytes):\n%s", len(r.Stdout), clip(r.Stdout, 3000))
+	t.Logf("verify+sniper output (%d bytes):\n%s", len(r.Stdout), clip(r.Stdout, 3000))
 }
 
 // TestVerifyExplicitModeWithoutSniper runs scan with --verify=high explicitly
-// (no --ai) and checks that verify runs but sniper is NOT activated.
+// (no --sniper) and checks that verify runs but sniper is NOT activated.
 func TestVerifyExplicitModeWithoutSniper(t *testing.T) {
 	h := New(t)
 	r := h.RunWithTimeout(600*time.Second,
@@ -53,7 +53,7 @@ func TestVerifyExplicitModeWithoutSniper(t *testing.T) {
 	Verify(t, r).OK().Done()
 
 	if hasSniperOutput(r.Stdout) {
-		t.Fatal("--verify=high without --ai should not produce sniper output")
+		t.Fatal("--verify=high without --sniper should not produce sniper output")
 	}
 	if !hasSummaryLine(r.Stdout) {
 		t.Fatal("expected [summary] line in output")
@@ -61,16 +61,16 @@ func TestVerifyExplicitModeWithoutSniper(t *testing.T) {
 	t.Logf("verify=high output (%d bytes):\n%s", len(r.Stdout), clip(r.Stdout, 2000))
 }
 
-// TestScanAINoPostAnalysis verifies that the old post-analysis one-shot LLM
-// call no longer runs. With the degradation path removed, --ai triggers only
-// in-pipeline AI skills (verify + sniper), not a separate "analysis" step.
+// TestScanVerifySniperNoPostAnalysis verifies that the old post-analysis
+// one-shot LLM call no longer runs. Explicit scan AI skills trigger only
+// in-pipeline AI work (verify + sniper), not a separate "analysis" step.
 // The output should contain the [summary] line from the scan pipeline but
 // should not contain the "analysis" output section that runScannerPostAnalysis
 // used to produce.
-func TestScanAINoPostAnalysis(t *testing.T) {
+func TestScanVerifySniperNoPostAnalysis(t *testing.T) {
 	h := New(t)
 	r := h.RunWithTimeout(600*time.Second,
-		"scan", "-i", verifyTarget, "--mode", "quick", "--ai", "--timeout", "5",
+		"scan", "-i", verifyTarget, "--mode", "quick", "--verify=high", "--sniper", "--timeout", "5",
 	)
 	Verify(t, r).OK().Done()
 
@@ -80,8 +80,8 @@ func TestScanAINoPostAnalysis(t *testing.T) {
 	t.Logf("output (%d bytes):\n%s", len(r.Stdout), clip(r.Stdout, 3000))
 }
 
-// TestScanDefaultModeCompletes runs scan without any explicit --verify or --ai
-// flag. The default verify mode is "auto" (mapped to "high"), which enables the
+// TestScanDefaultModeCompletes runs scan without any explicit AI skill flags.
+// The default verify mode is "auto" (mapped to "high"), which enables the
 // provider optionally. If the provider initializes, AI verify can run; if not,
 // the scan still completes successfully.
 func TestScanDefaultModeCompletes(t *testing.T) {
@@ -98,7 +98,7 @@ func TestScanDefaultModeCompletes(t *testing.T) {
 }
 
 // TestVerifyOffDisablesAllAISkills confirms that --verify=off combined with
-// no --ai and no --sniper results in zero AI skill results in the summary.
+// no --sniper and no --deep results in zero AI skill results in the summary.
 func TestVerifyOffDisablesAllAISkills(t *testing.T) {
 	h := New(t)
 	r := h.RunWithTimeout(300*time.Second,
@@ -121,12 +121,13 @@ func TestVerifyOffDisablesAllAISkills(t *testing.T) {
 	t.Logf("verify=off summary: %s", summary)
 }
 
-// TestScanAIWithReportIncludesVerification runs scan with --ai --report and
-// verifies the report output includes AI verification metrics.
-func TestScanAIWithReportIncludesVerification(t *testing.T) {
+// TestScanVerifyWithReportIncludesVerification runs scan with explicit
+// verification and report output and verifies the report includes AI
+// verification metrics.
+func TestScanVerifyWithReportIncludesVerification(t *testing.T) {
 	h := New(t)
 	r := h.RunWithTimeout(600*time.Second,
-		"scan", "-i", verifyTarget, "--mode", "quick", "--ai", "--report", "--timeout", "5",
+		"scan", "-i", verifyTarget, "--mode", "quick", "--verify=high", "--sniper", "--report", "--timeout", "5",
 	)
 	Verify(t, r).OK().Done()
 
@@ -134,7 +135,7 @@ func TestScanAIWithReportIncludesVerification(t *testing.T) {
 		strings.Contains(r.Stdout, "AI skill") ||
 		strings.Contains(r.Stdout, "verified")
 	if !hasMetrics {
-		t.Fatal("--ai --report should include AI verification information in output")
+		t.Fatal("--verify=high --sniper --report should include AI verification information in output")
 	}
 	t.Logf("report output (%d bytes):\n%s", len(r.Stdout), clip(r.Stdout, 3000))
 }
@@ -144,7 +145,7 @@ func TestScanAIWithReportIncludesVerification(t *testing.T) {
 func TestAssetReportFileOutputFormats(t *testing.T) {
 	h := New(t)
 	r := h.RunWithTimeout(600*time.Second,
-		"scan", "-i", verifyTarget, "--mode", "quick", "--ai", "--timeout", "5",
+		"scan", "-i", verifyTarget, "--mode", "quick", "--verify=high", "--sniper", "--timeout", "5",
 		"-f", "output.txt", "-F", "asset_report.txt",
 	)
 	Verify(t, r).OK().Done()

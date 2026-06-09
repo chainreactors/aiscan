@@ -33,7 +33,6 @@ type flags struct {
 	ListFile        string   `short:"l" long:"list" description:"File containing input targets, one per line"`
 	Mode            string   `long:"mode" description:"Scan profile: quick or full" default:"quick"`
 	Thread          int      `long:"thread" description:"Total concurrency budget distributed across engines" default:"1000"`
-	AI              bool     `long:"ai" description:"Compatibility alias for --verify=high --sniper"`
 	Sniper          bool     `long:"sniper" description:"Use AI to search public vulnerabilities for discovered fingerprints"`
 	Deep            bool     `long:"deep" description:"Run deep AI testing for discovered websites and fingerprinted assets"`
 	Trace           bool     `long:"trace" description:"Show internal scanner source and pipeline trace"`
@@ -90,7 +89,6 @@ Options:
       --verify      Use AI to verify loots at threshold: auto, off, low, medium, high, critical
       --sniper      Use AI to search public vulnerabilities for discovered fingerprints
       --deep        Run deep AI testing for discovered websites and fingerprinted assets
-      --ai          Compatibility alias for --verify=high --sniper
       --report      Output a concise final markdown report
   -f, --file        Write output to file without ANSI colors
   -F, --format      Write aggregated asset report to file
@@ -118,7 +116,6 @@ AI Skills:
   --verify=<level>: validate loots with LLM-guided active checks
   --sniper: search public CVEs/exploits for each fingerprint via AI agent
   --deep: run dynamic testing for discovered websites and fingerprinted assets
-  --ai: compatibility alias for --verify=high --sniper
 Output:
   default: [web], [service], [fingerprint], [risk], [vuln], [sniper], [ai], [summary]
   --trace: also prints internal gogo/spray/zombie/neutron source and pipeline events

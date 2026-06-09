@@ -164,8 +164,8 @@ aiscan agent -i http://target.example
 ### AI 增强扫描
 
 ```bash
-# AI 验证 + 漏洞情报搜索（等效 --verify=high --sniper）
-aiscan scan -i http://target.example --ai
+# AI 验证 + 漏洞情报搜索
+aiscan scan -i http://target.example --verify=high --sniper
 
 # 仅搜索指纹对应的公开 CVE/Exploit
 aiscan scan -i http://target.example --sniper

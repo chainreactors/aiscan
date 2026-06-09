@@ -153,17 +153,18 @@ func TestParseCLIScanExtractsLLMFlags(t *testing.T) {
 		"--base-url", "https://api.deepseek.com",
 		"--api-key", "KEY",
 		"--model", "deepseek-v4-pro",
-		"--ai",
+		"--verify=high",
+		"--sniper",
 	})
 	if err != nil {
 		t.Fatalf("parseCLI() error = %v", err)
 	}
-	wantArgs := []string{"scan", "-i", "127.0.0.1"}
+	wantArgs := []string{"scan", "-i", "127.0.0.1", "--verify=high", "--sniper"}
 	if !reflect.DeepEqual(parsed.ScannerArgs, wantArgs) {
 		t.Fatalf("scanner args = %#v, want %#v", parsed.ScannerArgs, wantArgs)
 	}
 	opt := parsed.Option
-	if !opt.AI || opt.APIKey != "KEY" || opt.Model != "deepseek-v4-pro" || opt.BaseURL != "https://api.deepseek.com" {
+	if opt.AI || opt.APIKey != "KEY" || opt.Model != "deepseek-v4-pro" || opt.BaseURL != "https://api.deepseek.com" {
 		t.Fatalf("llm options = %#v", opt.LLMOptions)
 	}
 	pcfg := cfg.ProviderConfig(&opt)
@@ -184,18 +185,36 @@ func TestParseCLIScanAcceptsPromptShortFlagAfterCommand(t *testing.T) {
 		"scan",
 		"-i", "127.0.0.1",
 		"-p", "review focus fingerprints",
+		"--sniper",
+	})
+	if err != nil {
+		t.Fatalf("parseCLI() error = %v", err)
+	}
+	if parsed.Option.AI {
+		t.Fatal("scan --sniper should not enable global --ai")
+	}
+	if parsed.Option.Prompt != "review focus fingerprints" {
+		t.Fatalf("prompt = %q, want %q", parsed.Option.Prompt, "review focus fingerprints")
+	}
+	wantArgs := []string{"scan", "-i", "127.0.0.1", "--sniper"}
+	if !reflect.DeepEqual(parsed.ScannerArgs, wantArgs) {
+		t.Fatalf("scanner args = %#v, want %#v", parsed.ScannerArgs, wantArgs)
+	}
+}
+
+func TestParseCLIScanPostAIIsNotExtracted(t *testing.T) {
+	parsed, err := parseCLI([]string{
+		"scan",
+		"-i", "127.0.0.1",
 		"--ai",
 	})
 	if err != nil {
 		t.Fatalf("parseCLI() error = %v", err)
 	}
-	if !parsed.Option.AI {
-		t.Fatal("scan --ai should be enabled")
+	if parsed.Option.AI {
+		t.Fatal("scan-local --ai should not enable global --ai")
 	}
-	if parsed.Option.Prompt != "review focus fingerprints" {
-		t.Fatalf("prompt = %q, want %q", parsed.Option.Prompt, "review focus fingerprints")
-	}
-	wantArgs := []string{"scan", "-i", "127.0.0.1"}
+	wantArgs := []string{"scan", "-i", "127.0.0.1", "--ai"}
 	if !reflect.DeepEqual(parsed.ScannerArgs, wantArgs) {
 		t.Fatalf("scanner args = %#v, want %#v", parsed.ScannerArgs, wantArgs)
 	}
@@ -531,12 +550,15 @@ func TestDirectScannerRuntimeFeaturesForVerifyModes(t *testing.T) {
 			t.Fatalf("sniper features = %#v", features)
 		}
 
-		features, _, err = runner.DirectScannerRuntimeFeatures([]string{"scan", "-i", "127.0.0.1", "--ai"})
+		features, args, err = runner.DirectScannerRuntimeFeatures([]string{"scan", "-i", "127.0.0.1", "--ai"})
 		if err != nil {
 			t.Fatalf("DirectScannerRuntimeFeatures() error = %v", err)
 		}
-		if !features.ProviderEnabled || features.ProviderOptional || !features.AIEnabled || !features.ScannerAI {
-			t.Fatalf("ai features = %#v", features)
+		if features.ProviderEnabled || features.AIEnabled || features.ScannerAI {
+			t.Fatalf("scan-local --ai should not enable AI features: %#v", features)
+		}
+		if !reflect.DeepEqual(args, []string{"scan", "-i", "127.0.0.1", "--ai"}) {
+			t.Fatalf("args = %#v", args)
 		}
 	})
 }
