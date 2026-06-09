@@ -43,6 +43,7 @@ func AppConfig(option *Option, features RuntimeFeatures, logger telemetry.Logger
 			Enabled:     features.ToolsEnabled,
 			BashTimeout: 300,
 			TavilyKeys:  DefaultTavilyKeys,
+			SearchProxy: DefaultSearchProxy,
 		},
 		Logger:        logger,
 		CLISkillPaths: skillPathsFromOptions(option),

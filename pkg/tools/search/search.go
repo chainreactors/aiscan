@@ -18,6 +18,7 @@ type Command struct {
 type Opts struct {
 	TavilyKeys   string
 	ScannerProxy string
+	SearchProxy  string // search-specific proxy; overrides ScannerProxy when set
 	Resources    *resources.Set
 }
 
@@ -26,8 +27,12 @@ func New(opts Opts) *Command {
 		tavily: NewTavilySearch(opts.TavilyKeys),
 		fetch:  NewFetchCommand(),
 	}
-	if opts.ScannerProxy != "" {
-		cmd.tavily.SetProxy(opts.ScannerProxy)
+	proxy := opts.ScannerProxy
+	if opts.SearchProxy != "" {
+		proxy = opts.SearchProxy
+	}
+	if proxy != "" {
+		cmd.tavily.SetProxy(proxy)
 	}
 	if opts.Resources != nil {
 		cmd.cyberhub = NewCyberhubSearch(opts.Resources)

@@ -57,6 +57,7 @@ type ToolConfig struct {
 	Enabled     bool
 	BashTimeout int
 	TavilyKeys  string // comma-separated Tavily API keys (build-time fallback)
+	SearchProxy string // proxy for web search (tavily/DDG); falls back to scanner proxy if empty
 }
 
 type IOAConfig struct {
@@ -204,6 +205,7 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 		Logger:       logger,
 		Model:        model,
 		TavilyKeys:   toolCfg.TavilyKeys,
+		SearchProxy:  toolCfg.SearchProxy,
 	}
 	if engineSet != nil {
 		deps.Resources = engineSet.Resources

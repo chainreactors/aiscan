@@ -16,6 +16,7 @@ func init() {
 			cmd := New(Opts{
 				TavilyKeys:   deps.TavilyKeys,
 				ScannerProxy: deps.ScannerProxy,
+				SearchProxy:  deps.SearchProxy,
 				Resources:    res,
 			})
 			reg.Register(cmd, "tools")
