@@ -89,7 +89,11 @@ When moving data off a target, prefer in order:
 
 ## Post-Scan Analysis
 
-After `scan` or `spray --crawl`, review discovered web endpoints for parameters worth fuzzing. The scanner pipeline finds surfaces; the agent tests them for injection vulnerabilities that template-based scanning misses. See `aiscan://skills/scan/fuzz.md` for methodology.
+After `scan` or `spray --crawl`, these follow-up steps are **mandatory**, not optional:
+
+1. **Fuzz web endpoints** — review every discovered web endpoint for input parameters worth fuzzing. The scanner pipeline finds surfaces; the agent tests them for injection vulnerabilities that template-based scanning misses. Read `aiscan://skills/scan/fuzz.md` and apply its methodology to every discovered input parameter.
+2. **Hunt CVEs for fingerprints** — when 3+ fingerprints are identified, read `aiscan://skills/scan/sniper.md` and search public CVEs/exploits for each fingerprinted service or component.
+3. **Validate loots** — every loot the scanner flags must pass the `verify` skill's validation rules before reporting (see below).
 
 ## Verification
 
