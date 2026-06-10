@@ -497,7 +497,7 @@ aiscan> /continue
 agent 通过 bash 伪命令调用以下工具：
 
 - `scan` / `gogo` / `spray` / `zombie` / `neutron` — 扫描器
-- `search tavily <query>` — Web 搜索
+- `search web <query>` — Web 搜索
 - `search fetch <url>` — 抓取网页内容
 - `search cyberhub <args>` — 查询本地指纹库和 POC 模板
 - `proxy` — 代理节点管理

@@ -5,6 +5,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
@@ -16,7 +17,7 @@ import (
 
 func TestInitCommandRegistryRegistersSearchAlways(t *testing.T) {
 	logger := telemetry.NopLogger()
-	reg := initCommandRegistry(nil, ScannerConfig{}, ToolConfig{}, nil, "", nil, logger)
+	reg := initCommandRegistry(nil, ScannerConfig{}, ToolConfig{}, nil, agent.ProviderConfig{}, nil, logger)
 
 	if !reg.Has("search") {
 		t.Fatal("search command should always be registered")
@@ -30,7 +31,7 @@ func TestInitCommandRegistryRegistersScannerCommands(t *testing.T) {
 		Spray: spray.NewEngine(nil),
 	}
 
-	reg := initCommandRegistry(engines, ScannerConfig{}, ToolConfig{}, nil, "", nil, logger)
+	reg := initCommandRegistry(engines, ScannerConfig{}, ToolConfig{}, nil, agent.ProviderConfig{}, nil, logger)
 
 	for _, name := range []string{"scan", "gogo", "spray"} {
 		if !reg.Has(name) {
@@ -41,7 +42,7 @@ func TestInitCommandRegistryRegistersScannerCommands(t *testing.T) {
 
 func TestInitCommandRegistryRegistersCoreTools(t *testing.T) {
 	logger := telemetry.NopLogger()
-	reg := initCommandRegistry(nil, ScannerConfig{}, ToolConfig{BashTimeout: 30}, nil, "", nil, logger)
+	reg := initCommandRegistry(nil, ScannerConfig{}, ToolConfig{BashTimeout: 30}, nil, agent.ProviderConfig{}, nil, logger)
 
 	tools := reg.Tools()
 	expected := map[string]bool{"read": true, "write": true, "glob": true, "bash": true}
@@ -72,6 +73,33 @@ func TestCommandRegistryOnlyExposesCoreTrueTools(t *testing.T) {
 		default:
 			t.Fatalf("pseudo-command %q should NOT be registered as an agent tool", tool.Name())
 		}
+	}
+}
+
+func TestNewKeepsProviderConfigWhenProviderDisabled(t *testing.T) {
+	providerCfg := agent.ProviderConfig{
+		Provider: "deepseek",
+		APIKey:   "test-key",
+		BaseURL:  "https://api.deepseek.com/v1",
+		Model:    "deepseek-v4-pro",
+	}
+	app, err := New(t.Context(), Config{
+		Provider: ProviderConfig{Config: providerCfg},
+		Logger:   telemetry.NopLogger(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	if app.Provider != nil {
+		t.Fatal("provider should not be initialized when disabled")
+	}
+	if app.ProviderConfig.Provider != providerCfg.Provider ||
+		app.ProviderConfig.APIKey != providerCfg.APIKey ||
+		app.ProviderConfig.BaseURL != providerCfg.BaseURL ||
+		app.ProviderConfig.Model != providerCfg.Model {
+		t.Fatalf("provider config not preserved: %#v", app.ProviderConfig)
 	}
 }
 

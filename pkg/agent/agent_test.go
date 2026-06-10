@@ -590,6 +590,9 @@ type blockingProvider struct {
 }
 
 func (p *blockingProvider) Name() string { return "blocking" }
+func (p *blockingProvider) WebSearch(_ context.Context, _ string, _ int) (*WebSearchResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
 
 func (p *blockingProvider) ChatCompletion(ctx context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	p.mu.Lock()
@@ -605,6 +608,9 @@ func (p *blockingProvider) ChatCompletion(ctx context.Context, req *ChatCompleti
 }
 
 func (p *scriptedProvider) Name() string { return "scripted" }
+func (p *scriptedProvider) WebSearch(_ context.Context, _ string, _ int) (*WebSearchResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
 
 func (p *scriptedProvider) ChatCompletion(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	p.mu.Lock()
@@ -1029,6 +1035,9 @@ type callbackProvider struct {
 }
 
 func (p *callbackProvider) Name() string { return "callback" }
+func (p *callbackProvider) WebSearch(_ context.Context, _ string, _ int) (*WebSearchResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
 
 func (p *callbackProvider) ChatCompletion(ctx context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	return p.fn(ctx, req)

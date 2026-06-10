@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -87,6 +88,9 @@ type pushingProvider struct {
 }
 
 func (p *pushingProvider) Name() string { return "pushing" }
+func (p *pushingProvider) WebSearch(_ context.Context, _ string, _ int) (*WebSearchResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
 
 func (p *pushingProvider) ChatCompletion(ctx context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	if !p.pushed {

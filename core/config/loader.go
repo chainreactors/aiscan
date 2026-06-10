@@ -102,12 +102,6 @@ func loadRuntimeDefaults(filename string) error {
 	if v := c.Int("scan.verify_timeout"); v > 0 {
 		DefaultVerifyTimeout = strconv.Itoa(v)
 	}
-	if v := c.String("search.tavily_keys"); v != "" {
-		DefaultTavilyKeys = v
-	}
-	if v := c.String("search.proxy"); v != "" {
-		DefaultSearchProxy = v
-	}
 	return nil
 }
 
@@ -183,12 +177,9 @@ cyberhub:
   proxy: ""
 
 # 搜索
-search:
-  # Tavily API keys（逗号分隔，留空则 fallback 到 DuckDuckGo）
-  tavily_keys: ""
-  # web 搜索 (tavily/DDG) 专用代理，留空则复用 cyberhub.proxy (全局扫描器代理)
-  # 格式: http://user:pass@host:port 或 socks5://host:port
-  proxy: ""
+# web search 复用 llm 的 provider/api_key/base_url/model 配置
+# DeepSeek provider 走 Anthropic 兼容端点 (web_search_20250305)
+# OpenAI/GPT provider 走 Responses API (web_search)
 
 # IOA 协作
 ioa:

@@ -22,8 +22,6 @@ var (
 	DefaultIOANodeName = ""
 	DefaultSpace       = ""
 
-	DefaultTavilyKeys  = ""
-	DefaultSearchProxy = ""
 )
 
 func defaultProviderConfig() agent.ProviderConfig {

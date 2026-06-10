@@ -351,3 +351,136 @@ func parseOpenAIStreamChunk(data []byte) (ChatCompletionStreamEvent, error) {
 	event.FinishReason = chunk.Choices[0].FinishReason
 	return event, nil
 }
+
+func (p *OpenAIProvider) WebSearch(ctx context.Context, query string, maxUses int) (*WebSearchResponse, error) {
+	if shouldUseAnthropicWebSearch(p.config) {
+		return anthropicWebSearch(ctx, p.client, p.config, query, maxUses)
+	}
+	maxUses = normalizeWebSearchMaxUses(maxUses)
+
+	parentCtx := ctx
+	callTimeout := openAITimeout(p.config.Timeout)
+	var callTimedOut atomic.Bool
+	if callTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		timer := time.AfterFunc(callTimeout, func() {
+			callTimedOut.Store(true)
+			cancel()
+		})
+		defer func() {
+			timer.Stop()
+			cancel()
+		}()
+	}
+
+	base := strings.TrimSuffix(p.config.BaseURL, "/")
+	endpoint := webSearchEndpoint(base, "responses")
+
+	body, _ := json.Marshal(map[string]any{
+		"model": p.config.Model,
+		"input": "Search the web for: " + query,
+		"tools": []map[string]any{{
+			"type":                "web_search",
+			"search_context_size": "medium",
+		}},
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if p.config.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
+	}
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, wrapReadError(parentCtx, callTimedOut.Load(), callTimeout, "web search request", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
+	if err != nil {
+		return nil, wrapReadError(parentCtx, callTimedOut.Load(), callTimeout, "read web search response", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		msg := string(data)
+		if len(msg) > 500 {
+			msg = msg[:500]
+		}
+		return nil, fmt.Errorf("web search HTTP %d: %s", resp.StatusCode, msg)
+	}
+
+	return parseOpenAIWebSearchResponse(data, maxUses)
+}
+
+// webSearchEndpoint appends the Responses resource to the configured API base.
+func webSearchEndpoint(base, resource string) string {
+	if strings.HasSuffix(base, "/"+resource) {
+		return base
+	}
+	return base + "/" + resource
+}
+
+func parseOpenAIWebSearchResponse(data []byte, maxResults int) (*WebSearchResponse, error) {
+	var probe struct {
+		Error *APIError `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(data, &probe); err == nil && probe.Error != nil {
+		return nil, probe.Error
+	}
+
+	var raw struct {
+		Output []struct {
+			Type    string `json:"type"`
+			Content []struct {
+				Type        string `json:"type"`
+				Text        string `json:"text"`
+				Annotations []struct {
+					Type  string `json:"type"`
+					Title string `json:"title"`
+					URL   string `json:"url"`
+				} `json:"annotations,omitempty"`
+			} `json:"content,omitempty"`
+		} `json:"output"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parse web search response: %w", err)
+	}
+
+	out := &WebSearchResponse{}
+	seenURLs := make(map[string]struct{})
+	for _, block := range raw.Output {
+		if block.Type == "message" {
+			for _, c := range block.Content {
+				if c.Type == "output_text" && strings.TrimSpace(c.Text) != "" {
+					out.Summary += c.Text + "\n"
+				}
+				if len(out.Results) >= maxResults {
+					continue
+				}
+				for _, ann := range c.Annotations {
+					if ann.Type != "url_citation" || ann.URL == "" {
+						continue
+					}
+					if _, ok := seenURLs[ann.URL]; ok {
+						continue
+					}
+					title := ann.Title
+					if title == "" {
+						title = ann.URL
+					}
+					out.Results = append(out.Results, WebSearchResult{Title: title, URL: ann.URL})
+					seenURLs[ann.URL] = struct{}{}
+					if len(out.Results) >= maxResults {
+						break
+					}
+				}
+			}
+		}
+	}
+	out.Summary = strings.TrimSpace(out.Summary)
+	return out, nil
+}

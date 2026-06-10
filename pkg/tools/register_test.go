@@ -5,8 +5,8 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/resources"
-	_ "github.com/chainreactors/aiscan/pkg/tools/search"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
+	_ "github.com/chainreactors/aiscan/pkg/tools/search"
 	fingerslib "github.com/chainreactors/fingers/fingers"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
 	"github.com/chainreactors/sdk/gogo"
@@ -50,5 +50,8 @@ func TestRegisterAllRegistersSearchWithResources(t *testing.T) {
 
 	if !reg.Has("search") {
 		t.Fatal("expected search to be registered")
+	}
+	if !reg.Has("cyberhub") {
+		t.Fatal("expected cyberhub to be registered")
 	}
 }

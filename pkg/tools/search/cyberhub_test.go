@@ -1,8 +1,11 @@
 package search
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -73,6 +76,52 @@ func TestCyberhubSearchJSONLines(t *testing.T) {
 	}
 }
 
+func TestCyberhubLoadsRemoteFingerprintsAndPOCs(t *testing.T) {
+	server := newCyberhubFixtureServer(t)
+	defer server.Close()
+
+	set, err := resources.Init(context.Background(), resources.Options{
+		CyberhubURL: server.URL,
+		APIKey:      "test-key",
+		Mode:        resources.ModeOverride,
+	})
+	if err != nil {
+		t.Fatalf("resources.Init() error = %v", err)
+	}
+	if set.Fingers != nil {
+		t.Cleanup(func() { _ = set.Fingers.Close() })
+	}
+	if set.Neutron != nil {
+		t.Cleanup(func() { _ = set.Neutron.Close() })
+	}
+	if !set.RemoteEnabled {
+		t.Fatal("remote cyberhub should be enabled")
+	}
+	if set.RemoteFingers != 1 || set.RemoteNeutron != 1 {
+		t.Fatalf("remote counts fingers=%d neutron=%d errors fingers=%v neutron=%v",
+			set.RemoteFingers, set.RemoteNeutron, set.RemoteFingersErr, set.RemoteNeutronErr)
+	}
+
+	var buf strings.Builder
+	cyberhub := NewCyberhubCommand(set)
+	if err := cyberhub.Execute(context.Background(), []string{"search", "finger", "cyberhub-test-app"}, &buf); err != nil {
+		t.Fatalf("finger cyberhub.Execute() error = %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "[cyberhub] finger cyberhub-test-app http focus 1 acme hubapp cyberhub,web") {
+		t.Fatalf("finger output missing remote item: %q", out)
+	}
+
+	buf.Reset()
+	if err := cyberhub.Execute(context.Background(), []string{"list", "poc", "--finger", "cyberhub-test-app", "--severity", "critical", "--limit", "0"}, &buf); err != nil {
+		t.Fatalf("poc cyberhub.Execute() error = %v", err)
+	}
+	out = buf.String()
+	if !strings.Contains(out, "[cyberhub] poc \"Cyberhub Test POC\" cyberhub-test-poc critical cyberhub-test-app cyberhub,rce") {
+		t.Fatalf("poc output missing remote item: %q", out)
+	}
+}
+
 func newTestSearchCommand() *Command {
 	fingerCfg := sdkfingers.NewConfig().WithFingers(fingerslib.Fingers{
 		{
@@ -122,4 +171,103 @@ func newTestSearchCommand() *Command {
 			NeutronConfig: neutronCfg,
 		},
 	})
+}
+
+func newCyberhubFixtureServer(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-API-Key") != "test-key" {
+			t.Errorf("unexpected api key %q", r.Header.Get("X-API-Key"))
+			http.Error(w, "unexpected api key", http.StatusUnauthorized)
+			return
+		}
+
+		switch r.URL.Path {
+		case "/api/v1/fingerprints/export":
+			if r.URL.Query().Get("with_fingerprint") != "true" {
+				t.Errorf("missing with_fingerprint=true: %s", r.URL.RawQuery)
+				http.Error(w, "missing with_fingerprint", http.StatusBadRequest)
+				return
+			}
+			writeCyberhubResponse(t, w, false, map[string]any{
+				"fingerprints": []map[string]any{{
+					"name":     "cyberhub-test-app",
+					"protocol": "http",
+					"tag":      []string{"cyberhub", "web"},
+					"focus":    true,
+					"level":    1,
+					"attributes": map[string]string{
+						"vendor":  "acme",
+						"product": "hubapp",
+					},
+					"description": "fixture fingerprint from cyberhub",
+					"rule": []map[string]any{{
+						"regexps": map[string]any{
+							"body": []string{"CyberHubTestApp"},
+						},
+					}},
+				}},
+				"total":     1,
+				"page":      1,
+				"page_size": 1,
+			})
+		case "/api/v1/pocs/export":
+			if r.URL.Query().Get("status") != "active" {
+				t.Errorf("missing default active status: %s", r.URL.RawQuery)
+				http.Error(w, "missing status", http.StatusBadRequest)
+				return
+			}
+			writeCyberhubResponse(t, w, true, map[string]any{
+				"pocs": []map[string]any{{
+					"raw_content": cyberhubFixturePOC(),
+				}},
+				"total":    1,
+				"exported": 1,
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+}
+
+func writeCyberhubResponse(t *testing.T, w http.ResponseWriter, gzipBody bool, data any) {
+	t.Helper()
+	body := map[string]any{
+		"code":    0,
+		"message": "ok",
+		"data":    data,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if gzipBody {
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		if err := json.NewEncoder(gz).Encode(body); err != nil {
+			t.Fatalf("encode gzip response: %v", err)
+		}
+		return
+	}
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		t.Fatalf("encode response: %v", err)
+	}
+}
+
+func cyberhubFixturePOC() string {
+	return `id: cyberhub-test-poc
+info:
+  name: Cyberhub Test POC
+  severity: critical
+  tags: cyberhub,rce
+finger:
+  - cyberhub-test-app
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/cyberhub-poc"
+    matchers:
+      - type: word
+        words:
+          - cyberhub-ok
+`
 }

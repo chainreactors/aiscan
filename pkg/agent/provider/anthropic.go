@@ -794,3 +794,160 @@ func anthropicTimeout(seconds int) time.Duration {
 	}
 	return time.Duration(seconds) * time.Second
 }
+
+func (p *AnthropicProvider) WebSearch(ctx context.Context, query string, maxUses int) (*WebSearchResponse, error) {
+	return anthropicWebSearch(ctx, p.client, p.config, query, maxUses)
+}
+
+func anthropicWebSearch(ctx context.Context, client *http.Client, cfg *ProviderConfig, query string, maxUses int) (*WebSearchResponse, error) {
+	maxUses = normalizeWebSearchMaxUses(maxUses)
+
+	parentCtx := ctx
+	callTimeout := anthropicTimeout(cfg.Timeout)
+	var callTimedOut atomic.Bool
+	if callTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		timer := time.AfterFunc(callTimeout, func() {
+			callTimedOut.Store(true)
+			cancel()
+		})
+		defer func() {
+			timer.Stop()
+			cancel()
+		}()
+	}
+
+	base := anthropicWebSearchBaseURL(cfg)
+	endpoint := base + "/messages"
+	if strings.HasSuffix(base, "/messages") {
+		endpoint = base
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"model":      cfg.Model,
+		"max_tokens": 4096,
+		"tools": []map[string]any{{
+			"type":     "web_search_20250305",
+			"name":     "web_search",
+			"max_uses": maxUses,
+		}},
+		"messages": []map[string]string{{
+			"role":    "user",
+			"content": "Search the web for: " + query,
+		}},
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if cfg.APIKey != "" {
+		req.Header.Set("x-api-key", cfg.APIKey)
+	}
+	req.Header.Set("anthropic-version", anthropicVersion)
+	req.Header.Set("anthropic-beta", "web-search-2025-03-05")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, wrapReadError(parentCtx, callTimedOut.Load(), callTimeout, "web search request", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
+	if err != nil {
+		return nil, wrapReadError(parentCtx, callTimedOut.Load(), callTimeout, "read web search response", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		msg := string(data)
+		if len(msg) > 500 {
+			msg = msg[:500]
+		}
+		return nil, fmt.Errorf("web search HTTP %d: %s", resp.StatusCode, msg)
+	}
+
+	return parseAnthropicWebSearchResponse(data)
+}
+
+func anthropicWebSearchBaseURL(cfg *ProviderConfig) string {
+	base := strings.TrimSuffix(cfg.BaseURL, "/")
+	if shouldUseAnthropicWebSearch(cfg) && !baseURLPathContains(base, "/anthropic") {
+		base = strings.TrimSuffix(base, "/messages")
+		base = strings.TrimSuffix(base, "/v1")
+		base = strings.TrimSuffix(base, "/")
+		base += "/anthropic"
+	}
+	return base
+}
+
+func shouldUseAnthropicWebSearch(cfg *ProviderConfig) bool {
+	if cfg == nil {
+		return false
+	}
+	providerName := strings.ToLower(strings.TrimSpace(cfg.Provider))
+	baseURL := strings.ToLower(strings.TrimSpace(cfg.BaseURL))
+	return providerName == "deepseek" || strings.Contains(baseURL, "deepseek.com")
+}
+
+func baseURLPathContains(rawURL, fragment string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Path == "" {
+		return strings.Contains(strings.ToLower(rawURL), fragment)
+	}
+	return strings.Contains(strings.ToLower(u.Path), fragment)
+}
+
+func parseAnthropicWebSearchResponse(data []byte) (*WebSearchResponse, error) {
+	var probe struct {
+		Type  string    `json:"type"`
+		Error *APIError `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(data, &probe); err == nil && probe.Type == "error" && probe.Error != nil {
+		return nil, probe.Error
+	}
+
+	var raw struct {
+		Content []struct {
+			Type    string          `json:"type"`
+			Text    string          `json:"text,omitempty"`
+			Content json.RawMessage `json:"content,omitempty"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parse web search response: %w", err)
+	}
+
+	out := &WebSearchResponse{}
+	for _, block := range raw.Content {
+		switch block.Type {
+		case "web_search_tool_result":
+			// Check for error case first
+			var errObj struct {
+				Type      string `json:"type"`
+				ErrorCode string `json:"error_code"`
+			}
+			if json.Unmarshal(block.Content, &errObj) == nil && errObj.ErrorCode != "" {
+				return nil, fmt.Errorf("web search tool error: %s", errObj.ErrorCode)
+			}
+			var results []struct {
+				Title string `json:"title"`
+				URL   string `json:"url"`
+			}
+			if json.Unmarshal(block.Content, &results) == nil {
+				for _, r := range results {
+					if r.Title == "" && r.URL == "" {
+						continue
+					}
+					out.Results = append(out.Results, WebSearchResult{Title: r.Title, URL: r.URL})
+				}
+			}
+		case "text":
+			if t := strings.TrimSpace(block.Text); t != "" {
+				out.Summary += t + "\n"
+			}
+		}
+	}
+	out.Summary = strings.TrimSpace(out.Summary)
+	return out, nil
+}

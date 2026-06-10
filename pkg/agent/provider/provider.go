@@ -10,6 +10,27 @@ import (
 type Provider interface {
 	Name() string
 	ChatCompletion(ctx context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error)
+	WebSearch(ctx context.Context, query string, maxUses int) (*WebSearchResponse, error)
+}
+
+type WebSearchResult struct {
+	Title string
+	URL   string
+}
+
+type WebSearchResponse struct {
+	Results []WebSearchResult
+	Summary string
+}
+
+func normalizeWebSearchMaxUses(maxUses int) int {
+	if maxUses <= 0 {
+		return 5
+	}
+	if maxUses > 10 {
+		return 10
+	}
+	return maxUses
 }
 
 type StreamingProvider interface {

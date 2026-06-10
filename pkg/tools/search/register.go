@@ -1,6 +1,7 @@
 package search
 
 import (
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/resources"
 )
@@ -13,13 +14,18 @@ func init() {
 			if deps.Resources != nil {
 				res, _ = deps.Resources.(*resources.Set)
 			}
+			var p provider.Provider
+			if deps.Provider != nil {
+				p, _ = deps.Provider.(provider.Provider)
+			}
 			cmd := New(Opts{
-				TavilyKeys:   deps.TavilyKeys,
-				ScannerProxy: deps.ScannerProxy,
-				SearchProxy:  deps.SearchProxy,
-				Resources:    res,
+				Provider:  p,
+				Resources: res,
 			})
 			reg.Register(cmd, "tools")
+			if res != nil {
+				reg.Register(NewCyberhubCommand(res), "tools")
+			}
 		},
 	})
 }

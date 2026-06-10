@@ -282,11 +282,11 @@ llm:
 	})
 }
 
-func TestLoadConfigSearchOptions(t *testing.T) {
+func TestLoadConfigSearchNoExtraFields(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
-search:
-  tavily_keys: "K1,K2"
+llm:
+  provider: "deepseek"
 `)
 
 	withDefaults(t, func() {
@@ -295,8 +295,8 @@ search:
 		}
 
 		cfg := AppConfig(&Option{}, RuntimeFeatures{ToolsEnabled: true}, telemetry.NopLogger())
-		if cfg.Tools.TavilyKeys != "K1,K2" {
-			t.Fatalf("tool config = %#v", cfg.Tools)
+		if !cfg.Tools.Enabled {
+			t.Fatalf("tools should be enabled")
 		}
 	})
 }
@@ -550,6 +550,7 @@ llm:
 }
 
 func TestResolveRuntimeConfigSupportsOpenAIEnvAliases(t *testing.T) {
+	clearAiscanLLMEnv(t)
 	t.Setenv("OPENAI_BASE_URL", "https://openai-proxy.example/v1")
 	t.Setenv("OPENAI_MODEL", "gpt-env")
 	t.Setenv("OPENAI_API_KEY", "openai-key")
@@ -575,6 +576,7 @@ llm:
 }
 
 func TestResolveRuntimeConfigSupportsAnthropicEnvAliases(t *testing.T) {
+	clearAiscanLLMEnv(t)
 	t.Setenv("ANTHROPIC_BASE_URL", "https://anthropic-proxy.example/v1")
 	t.Setenv("ANTHROPIC_MODEL", "claude-env")
 	t.Setenv("ANTHROPIC_API_KEY", "anthropic-key")
@@ -599,13 +601,67 @@ llm:
 	})
 }
 
+func TestApplyLLMEnvironmentGenericAPIKeyWinsOverProviderAPIKey(t *testing.T) {
+	option := Option{LLMOptions: LLMOptions{Provider: "deepseek"}}
+	lookup := mapEnvLookup(map[string]string{
+		"AISCAN_API_KEY":   "generic-key",
+		"DEEPSEEK_API_KEY": "provider-key",
+	})
+
+	applyLLMEnvironment(&option, Option{}, lookup)
+
+	if option.APIKey != "generic-key" {
+		t.Fatalf("APIKey = %q, want generic-key", option.APIKey)
+	}
+}
+
+func TestProviderHintFromEnvChoosesMostCompleteProvider(t *testing.T) {
+	lookup := mapEnvLookup(map[string]string{
+		"ANTHROPIC_BASE_URL": "https://anthropic.example/v1",
+		"ANTHROPIC_API_KEY":  "anthropic-key",
+		"OPENAI_BASE_URL":    "https://openai.example/v1",
+		"OPENAI_MODEL":       "gpt-env",
+		"OPENAI_API_KEY":     "openai-key",
+	})
+
+	if got := providerHintFromEnv(lookup); got != "openai" {
+		t.Fatalf("providerHintFromEnv() = %q, want openai", got)
+	}
+}
+
+func mapEnvLookup(values map[string]string) envLookup {
+	return func(name string) (string, bool) {
+		v, ok := values[name]
+		return v, ok
+	}
+}
+
+func clearAiscanLLMEnv(t *testing.T) {
+	t.Helper()
+	for _, name := range []string{
+		"AISCAN_PROVIDER",
+		"AISCAN_LLM_PROVIDER",
+		"AISCAN_BASE_URL",
+		"AISCAN_BASEURL",
+		"AISCAN_LLM_BASE_URL",
+		"AISCAN_LLM_BASEURL",
+		"AISCAN_MODEL",
+		"AISCAN_LLM_MODEL",
+		"AISCAN_API_KEY",
+		"AISCAN_LLM_API_KEY",
+		"AISCAN_LLM_PROXY",
+	} {
+		t.Setenv(name, "")
+	}
+}
+
 func withDefaults(t *testing.T, fn func()) {
 	t.Helper()
 	saved := []*string{
 		&DefaultProvider, &DefaultBaseURL, &DefaultAPIKey, &DefaultModel,
 		&DefaultScannerProxy, &DefaultCyberhubURL, &DefaultCyberhubKey,
 		&DefaultCyberhubMode, &DefaultVerify, &DefaultVerifyTimeout,
-		&DefaultTavilyKeys, &DefaultIOAURL, &DefaultIOANodeID,
+		&DefaultIOAURL, &DefaultIOANodeID,
 		&DefaultIOANodeName, &DefaultSpace,
 	}
 	originals := make([]string, len(saved))

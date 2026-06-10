@@ -393,6 +393,72 @@ func TestOpenAIProviderChatCompletionBodyTimeout(t *testing.T) {
 	}
 }
 
+func TestOpenAIProviderWebSearchBodyTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"output":`)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	p, err := NewOpenAIProvider(&ProviderConfig{
+		Provider: "test",
+		BaseURL:  server.URL + "/v1",
+		Timeout:  1,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenAIProvider() error = %v", err)
+	}
+
+	start := time.Now()
+	_, err = p.WebSearch(context.Background(), "test query", 1)
+	if err == nil {
+		t.Fatal("WebSearch() error = nil, want timeout")
+	}
+	if !errors.Is(err, ErrCallTimeout) {
+		t.Fatalf("WebSearch() error = %v, want ErrCallTimeout", err)
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Fatalf("WebSearch() took %s, want timeout near 1s", elapsed)
+	}
+}
+
+func TestAnthropicProviderWebSearchBodyTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"content":`)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	p, err := NewAnthropicProvider(&ProviderConfig{
+		Provider: "anthropic",
+		BaseURL:  server.URL + "/v1",
+		Timeout:  1,
+	})
+	if err != nil {
+		t.Fatalf("NewAnthropicProvider() error = %v", err)
+	}
+
+	start := time.Now()
+	_, err = p.WebSearch(context.Background(), "test query", 1)
+	if err == nil {
+		t.Fatal("WebSearch() error = nil, want timeout")
+	}
+	if !errors.Is(err, ErrCallTimeout) {
+		t.Fatalf("WebSearch() error = %v, want ErrCallTimeout", err)
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Fatalf("WebSearch() took %s, want timeout near 1s", elapsed)
+	}
+}
+
 func TestOpenAIProviderChatCompletionStreamErrorBodyTimeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

@@ -163,9 +163,7 @@ type yamlConfig struct {
 		Verify        string `yaml:"verify" config:"verify"`
 		VerifyTimeout int    `yaml:"verify_timeout" config:"verify_timeout"`
 	} `yaml:"scan" config:"scan"`
-	Search struct {
-		TavilyKeys string `yaml:"tavily_keys" config:"tavily_keys"`
-	} `yaml:"search" config:"search"`
+	Search struct{} `yaml:"search" config:"search"`
 }
 
 type llmConfigFileStore struct {
@@ -406,10 +404,7 @@ func parseSimpleYAML(data []byte, cfg *yamlConfig) {
 				cfg.Scan.Verify = value
 			}
 		case "search":
-			switch key {
-			case "tavily_keys":
-				cfg.Search.TavilyKeys = value
-			}
+			_ = key
 		}
 	}
 }

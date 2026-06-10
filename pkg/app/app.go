@@ -56,8 +56,6 @@ type ScannerConfig struct {
 type ToolConfig struct {
 	Enabled     bool
 	BashTimeout int
-	TavilyKeys  string // comma-separated Tavily API keys (build-time fallback)
-	SearchProxy string // proxy for web search (tavily/DDG); falls back to scanner proxy if empty
 }
 
 type IOAConfig struct {
@@ -77,8 +75,8 @@ type App struct {
 	Engines          *engine.Set
 	Skills           *skills.Store
 	SkillDiagnostics []skills.Diagnostic
-	IOAClient          protocols.ClientAPI
-	IOAStreamClient    ioaclient.StreamAPI
+	IOAClient        protocols.ClientAPI
+	IOAStreamClient  ioaclient.StreamAPI
 }
 
 func New(ctx context.Context, cfg Config) (*App, error) {
@@ -91,6 +89,7 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 	store, diagnostics := skills.LoadAll(cfg.CLISkillPaths)
 	app.Skills = store
 	app.SkillDiagnostics = diagnostics
+	app.ProviderConfig = cfg.Provider.Config
 
 	if cfg.Provider.Enabled {
 		llmProvider, resolved, err := initProvider(cfg.Provider.Config, logger)
@@ -107,7 +106,7 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 
 	app.Engines = initEngines(ctx, cfg.Scanner, logger)
 
-	app.Commands = initCommandRegistry(app.Engines, cfg.Scanner, cfg.Tools, app.Provider, app.ProviderConfig.Model, app.Skills, logger)
+	app.Commands = initCommandRegistry(app.Engines, cfg.Scanner, cfg.Tools, app.Provider, app.ProviderConfig, app.Skills, logger)
 
 	if cfg.IOA != nil {
 		if err := app.InitIOA(ctx, *cfg.IOA); err != nil {
@@ -176,7 +175,7 @@ func initEngines(ctx context.Context, cfg ScannerConfig, logger telemetry.Logger
 	return engineSet
 }
 
-func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg ToolConfig, llmProvider agent.Provider, model string, skillStore *skills.Store, logger telemetry.Logger) *command.CommandRegistry {
+func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg ToolConfig, llmProvider agent.Provider, providerCfg agent.ProviderConfig, skillStore *skills.Store, logger telemetry.Logger) *command.CommandRegistry {
 	cmdReg := command.NewRegistry()
 
 	workDir, _ := os.Getwd()
@@ -186,7 +185,7 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 		scanOpts = append(scanOpts, scan.WithParent(agent.NewAgent(agent.Config{
 			Provider: llmProvider,
 			Tools:    cmdReg,
-			Model:    model,
+			Model:    providerCfg.Model,
 			Logger:   logger,
 		})))
 		scanOpts = append(scanOpts, scan.WithDeepBrowserFunc(func(ctx context.Context, targetURL string) (string, error) {
@@ -203,9 +202,8 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 		ScannerProxy: scanCfg.Proxy,
 		ScanOpts:     scanOpts,
 		Logger:       logger,
-		Model:        model,
-		TavilyKeys:   toolCfg.TavilyKeys,
-		SearchProxy:  toolCfg.SearchProxy,
+		Provider:     llmProvider,
+		Model:        providerCfg.Model,
 	}
 	if engineSet != nil {
 		deps.Resources = engineSet.Resources
@@ -216,7 +214,6 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 	logger.Infof("commands=%s", fmt.Sprintf("%v", cmdReg.Names()))
 	return cmdReg
 }
-
 
 func collectDeepBrowserArtifacts(ctx context.Context, reg *command.CommandRegistry, targetURL string, logger telemetry.Logger) (string, error) {
 	if reg == nil || !reg.Has("playwright") {
@@ -346,8 +343,6 @@ func truncateDeepBrowserArtifact(value string, max int) string {
 	}
 	return value[:max] + fmt.Sprintf("\n\n[truncated: showing %d of %d bytes]", max, len(value))
 }
-
-
 
 func (a *App) InitIOA(ctx context.Context, cfg IOAConfig) error {
 	client, err := newIOAClient(cfg)

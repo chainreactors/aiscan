@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"reflect"
@@ -23,6 +24,9 @@ type fakeConsoleProvider struct {
 }
 
 func (p *fakeConsoleProvider) Name() string { return "fake" }
+func (p *fakeConsoleProvider) WebSearch(_ context.Context, _ string, _ int) (*agent.WebSearchResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
 
 func (p *fakeConsoleProvider) ChatCompletion(_ context.Context, req *agent.ChatCompletionRequest) (*agent.ChatCompletionResponse, error) {
 	p.requests++
@@ -252,6 +256,31 @@ func TestParseCLICyberhubModeRootAndPassthrough(t *testing.T) {
 	}
 	if !reflect.DeepEqual(parsed.ScannerArgs, []string{"spray", "-u", "http://127.0.0.1:5000"}) {
 		t.Fatalf("scanner args = %#v", parsed.ScannerArgs)
+	}
+}
+
+func TestParseCLICyberhubCommandPassesResourceQueryArgs(t *testing.T) {
+	parsed, err := parseCLI([]string{
+		"--cyberhub-url", "http://hub:8080",
+		"--cyberhub-key", "HUBKEY",
+		"cyberhub",
+		"list",
+		"poc",
+		"--severity", "critical,high",
+		"--limit", "1",
+	})
+	if err != nil {
+		t.Fatalf("parseCLI() error = %v", err)
+	}
+	if parsed.Mode != cfg.RunModeScanner {
+		t.Fatalf("mode = %s, want %s", parsed.Mode, cfg.RunModeScanner)
+	}
+	if parsed.Option.CyberhubURL != "http://hub:8080" || parsed.Option.CyberhubKey != "HUBKEY" {
+		t.Fatalf("cyberhub options = %#v", parsed.Option.ScannerOptions)
+	}
+	wantArgs := []string{"cyberhub", "list", "poc", "--severity", "critical,high", "--limit", "1"}
+	if !reflect.DeepEqual(parsed.ScannerArgs, wantArgs) {
+		t.Fatalf("scanner args = %#v, want %#v", parsed.ScannerArgs, wantArgs)
 	}
 }
 
@@ -569,7 +598,6 @@ func TestAppConfigUsesCompiledDefaults(t *testing.T) {
 		cfg.DefaultCyberhubKey = "HUBKEY"
 		cfg.DefaultCyberhubMode = "override"
 		cfg.DefaultVerifyTimeout = "77"
-		cfg.DefaultTavilyKeys = "BUILTIN_TAVILY"
 		cfg.DefaultIOAURL = "http://ioa:8765"
 		cfg.DefaultIOANodeID = "node-1"
 		cfg.DefaultIOANodeName = "worker-1"
@@ -581,6 +609,7 @@ func TestAppConfigUsesCompiledDefaults(t *testing.T) {
 			ProviderEnabled:  true,
 			ProviderOptional: true,
 			AIEnabled:        true,
+			ToolsEnabled:     true,
 		}, telemetry.NopLogger())
 		if appCfg.Scanner.CyberhubURL != cfg.DefaultCyberhubURL || appCfg.Scanner.CyberhubKey != cfg.DefaultCyberhubKey || appCfg.Scanner.CyberhubMode != cfg.DefaultCyberhubMode {
 			t.Fatalf("scanner cyberhub config = %#v", appCfg.Scanner)
@@ -588,8 +617,8 @@ func TestAppConfigUsesCompiledDefaults(t *testing.T) {
 		if !appCfg.Scanner.AIEnabled || appCfg.Scanner.AITimeout != 77 {
 			t.Fatalf("scanner AI config = %#v", appCfg.Scanner)
 		}
-		if appCfg.Tools.TavilyKeys != cfg.DefaultTavilyKeys {
-			t.Fatalf("tool search config = %#v", appCfg.Tools)
+		if !appCfg.Tools.Enabled {
+			t.Fatal("tools should be enabled")
 		}
 		if !appCfg.Provider.Enabled || !appCfg.Provider.Optional {
 			t.Fatalf("provider config = %#v", appCfg.Provider)
@@ -616,7 +645,6 @@ func withDefaults(t *testing.T, fn func()) {
 		{&cfg.DefaultCyberhubMode, cfg.DefaultCyberhubMode},
 		{&cfg.DefaultVerify, cfg.DefaultVerify},
 		{&cfg.DefaultVerifyTimeout, cfg.DefaultVerifyTimeout},
-		{&cfg.DefaultTavilyKeys, cfg.DefaultTavilyKeys},
 		{&cfg.DefaultIOAURL, cfg.DefaultIOAURL},
 		{&cfg.DefaultIOANodeID, cfg.DefaultIOANodeID},
 		{&cfg.DefaultIOANodeName, cfg.DefaultIOANodeName},

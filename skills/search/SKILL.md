@@ -8,20 +8,20 @@ internal: true
 
 Unified search across web and local resources. Three subcommands:
 
-## search tavily
+## search web
 
-Search the web. Backend auto-selects: Tavily API when `TAVILY_API_KEY` is set, DuckDuckGo otherwise.
+Search the web via DeepSeek web_search (Anthropic-compatible endpoint).
 
 ```bash
-search tavily <query> [--num <N>]
+search web <query> [--num <N>]
 ```
 
 - `<query>`: positional, multi-word auto-concatenated.
-- `--num <N>`: results count, 1–10, default 5.
+- `--num <N>`: max search round-trips, 1–10, default 5.
 
 ```bash
-search tavily "CVE-2024-1234 exploit"
-search tavily nginx misconfiguration --num 10
+search web "CVE-2024-1234 exploit"
+search web nginx misconfiguration --num 10
 ```
 
 ## search fetch

@@ -54,9 +54,9 @@ func applyLLMEnvironment(option *Option, explicit Option, lookup envLookup) {
 	}
 
 	if strings.TrimSpace(explicit.APIKey) == "" {
-		if v := providerAPIKeyEnv(selectedProvider, lookup); v != "" {
+		if v := firstEnv(lookup, "AISCAN_API_KEY", "AISCAN_LLM_API_KEY"); v != "" {
 			option.APIKey = v
-		} else if v := firstEnv(lookup, "AISCAN_API_KEY", "AISCAN_LLM_API_KEY"); v != "" {
+		} else if v := providerAPIKeyEnv(selectedProvider, lookup); v != "" {
 			option.APIKey = v
 		}
 	}
@@ -130,15 +130,47 @@ func selectedEnvProvider(option *Option, lookup envLookup) string {
 }
 
 func providerHintFromEnv(lookup envLookup) string {
-	for _, name := range agent.KnownProviders() {
-		if firstEnv(lookup, providerEnvName(name, "BASE_URL"), providerEnvName(name, "BASEURL"), providerEnvName(name, "MODEL")) != "" {
-			return name
-		}
-		if envName := agent.APIKeyEnvName(name); envName != "" && firstEnv(lookup, envName) != "" {
-			return name
+	bestProvider := ""
+	bestScore := 0
+	for _, name := range providerHintOrder() {
+		score := providerEnvScore(name, lookup)
+		if score > bestScore {
+			bestScore = score
+			bestProvider = name
 		}
 	}
-	return ""
+	return bestProvider
+}
+
+func providerHintOrder() []string {
+	preferred := []string{"openai", "deepseek", "openrouter", "anthropic", "groq", "moonshot", "ollama"}
+	seen := make(map[string]struct{}, len(preferred))
+	out := make([]string, 0, len(preferred))
+	for _, name := range preferred {
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	for _, name := range agent.KnownProviders() {
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+func providerEnvScore(providerName string, lookup envLookup) int {
+	score := 0
+	if providerBaseURLEnv(providerName, lookup) != "" {
+		score += 4
+	}
+	if providerModelEnv(providerName, lookup) != "" {
+		score += 2
+	}
+	if providerAPIKeyEnv(providerName, lookup) != "" {
+		score++
+	}
+	return score
 }
 
 func providerBaseURLEnv(providerName string, lookup envLookup) string {

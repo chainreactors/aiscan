@@ -34,6 +34,8 @@ type ResponseFormat = provider.ResponseFormat
 type JSONSchemaSpec = provider.JSONSchemaSpec
 type CacheRetention = provider.CacheRetention
 type Provider = provider.Provider
+type WebSearchResult = provider.WebSearchResult
+type WebSearchResponse = provider.WebSearchResponse
 type StreamingProvider = provider.StreamingProvider
 type ProviderConfig = provider.ProviderConfig
 
