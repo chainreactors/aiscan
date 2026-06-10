@@ -21,6 +21,8 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 
 	transcript := newTranscript(cfg.Messages, 8)
 	turn := 0
+	emptyRuns := 0
+	const maxEmptyRuns = 3
 
 	bus := newEmitter(cfg.Bus, cfg.SessionID)
 	ib := cfg.Inbox
@@ -135,6 +137,19 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			return end(result, nil, StopReasonTerminated)
 		}
 		if len(assistantMsg.ToolCalls) == 0 {
+			content := messageContent(assistantMsg)
+			if usage != nil && usage.CompletionTokens <= 5 && len(strings.TrimSpace(content)) == 0 {
+				emptyRuns++
+				cfg.Logger.Warnf("[turn %d] empty LLM response (%d tokens, run %d/%d), retrying", turn, usage.CompletionTokens, emptyRuns, maxEmptyRuns)
+				if emptyRuns < maxEmptyRuns {
+					transcript.append(NewTextMessage("user", "Your last response was empty. Continue the assessment."))
+					continue
+				}
+				cfg.Logger.Warnf("[turn %d] max empty response retries reached, stopping", turn)
+			} else {
+				emptyRuns = 0
+			}
+
 			if ib != nil && ib.Len() > 0 {
 				cfg.Logger.Debugf("[turn %d] continuing for pending inbox message(s)", turn)
 				continue

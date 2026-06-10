@@ -91,7 +91,7 @@ When there's no more work:
 3. Last agent (or broadest-view agent) compiles a final summary:
 
 ```json
-{"kind": "summary", "total_loots": N, "critical": X, "high": Y, "agents": ["scanner-01", "scanner-02"], "note": "all scopes complete"}
+{"content": "All scopes complete. 2 agents covered full target range.", "kind": "summary", "total_loots": 15, "critical": 3, "high": 5, "agents": ["scanner-01", "scanner-02"]}
 ```
 
 Don't wait indefinitely for slow peers. If a peer hasn't responded in a reasonable time, compile what you have and note the gap.
@@ -115,6 +115,14 @@ One agent does primary scanning, the other independently verifies high-severity 
 ### Three or more agents
 The first to propose a plan naturally coordinates. The coordinator suggests splits, others acknowledge and start. The coordinator also does work.
 
+### Coordinator role
+When acting as coordinator (heartbeat mode), follow these rules:
+- **Workers are single-task**: each worker executes one task at a time (typically 5-10 minutes). They CANNOT respond to messages while busy.
+- **Do NOT send status checks**: workers automatically send a completion message when done. Wait for it.
+- **Do NOT scan targets yourself**: you are the coordinator, not a scanner. Only use `ioa_send` and `ioa_read`.
+- **Dispatch once, wait for completion**: send one task per worker, then wait for their DONE/result message before sending the next task.
+- **React to results, not silence**: when a worker reports findings, analyze them and dispatch follow-up tasks to other workers based on the new intelligence.
+
 ## 7. Anti-patterns
 
 - **Over-negotiating** — more than 2 messages before anyone starts working
@@ -123,3 +131,5 @@ The first to propose a plan naturally coordinates. The coordinator suggests spli
 - **Hoarding loots** - waiting until done to share everything at once
 - **Re-scanning claimed targets** — if a peer claimed it and is active, find something else
 - **Endless convergence** — one summary message is enough
+- **Status check spam** — workers are single-task and cannot respond while busy. Wait for their DONE message instead of sending repeated status checks
+- **Coordinator self-scanning** — if you are the coordinator, do NOT use scan tools. Dispatch tasks to workers and compile results

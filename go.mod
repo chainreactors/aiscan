@@ -3,7 +3,7 @@ module github.com/chainreactors/aiscan
 go 1.26.1
 
 require (
-	github.com/chainreactors/fingers v1.2.1-0.20260608084741-385e7d586d6f
+	github.com/chainreactors/fingers v1.2.1
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c
 	github.com/chainreactors/ioa v0.0.0-20260609170545-7ec2ed23664d
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
@@ -29,7 +29,7 @@ require (
 	github.com/reeflective/console v0.0.0-00010101000000-000000000000
 	github.com/spf13/cobra v1.10.2
 	github.com/ysmood/gson v0.7.3
-	golang.org/x/sys v0.45.0
+	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.40.1
@@ -211,7 +211,7 @@ require (
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/syndtr/goleveldb v1.0.0 // indirect
-	github.com/tetratelabs/wazero v1.11.0 // indirect
+	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/tidwall/btree v1.6.0 // indirect
 	github.com/tidwall/buntdb v1.3.0 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
@@ -269,6 +269,8 @@ require (
 )
 
 replace (
+	github.com/chainreactors/fingers => ./third_party/fingers
+	github.com/chainreactors/spray => ./third_party/spray
 	github.com/reeflective/console => github.com/chainreactors/malice-network/external/console v0.0.0-20260422184128-e856ed004d32
 	github.com/reeflective/readline => github.com/chainreactors/malice-network/external/readline v0.0.0-20260422184128-e856ed004d32
 )
