@@ -494,12 +494,12 @@ aiscan> /continue
 
 ### Agent 内置工具
 
-agent 通过 bash 伪命令调用以下工具：
+agent 可直接调用以下原生工具，并通过 bash 调用扫描器伪命令：
 
 - `scan` / `gogo` / `spray` / `zombie` / `neutron` — 扫描器
-- `search web <query>` — Web 搜索
-- `search fetch <url>` — 抓取网页内容
-- `search cyberhub <args>` — 查询本地指纹库和 POC 模板
+- `web_search {"query": "..."}` — Web 搜索
+- `fetch {"url": "..."}` — 抓取网页内容
+- `cyberhub <args>` 或 `search cyberhub <args>` — 查询本地指纹库和 POC 模板
 - `proxy` — 代理节点管理
 - `tmux` — 后台任务管理（长时间命令自动转入后台）
 - `subagent` — 子 agent（可创建同步/异步/分支子任务）
