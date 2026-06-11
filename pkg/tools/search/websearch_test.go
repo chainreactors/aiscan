@@ -11,47 +11,36 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
 )
 
-func TestParseWebSearchArgs(t *testing.T) {
-	q, n, err := parseWebSearchArgs([]string{"CVE-2024-1234", "exploit"})
-	if err != nil {
-		t.Fatal(err)
+func TestWebSearchToolRequiresQuery(t *testing.T) {
+	tool := NewWebSearchTool(nil)
+	_, err := tool.Execute(context.Background(), `{}`)
+	if err == nil || !strings.Contains(err.Error(), "query is required") {
+		t.Fatalf("expected query error, got %v", err)
 	}
-	if q != "CVE-2024-1234 exploit" {
-		t.Fatalf("query = %q", q)
-	}
-	if n != defaultMaxUses {
-		t.Fatalf("maxUses = %d", n)
+
+	_, err = tool.Execute(context.Background(), `{"query":"   "}`)
+	if err == nil || !strings.Contains(err.Error(), "query is required") {
+		t.Fatalf("expected blank query error, got %v", err)
 	}
 }
 
-func TestParseWebSearchArgsWithNum(t *testing.T) {
-	q, n, err := parseWebSearchArgs([]string{"nginx", "--num", "8"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if q != "nginx" || n != 8 {
-		t.Fatalf("got query=%q num=%d", q, n)
+func TestWebSearchToolRejectsUnknownArguments(t *testing.T) {
+	tool := NewWebSearchTool(nil)
+	_, err := tool.Execute(context.Background(), `{"query":"test","limit":5}`)
+	if err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("expected unknown field error, got %v", err)
 	}
 }
 
-func TestParseWebSearchArgsClampsNum(t *testing.T) {
-	_, n, err := parseWebSearchArgs([]string{"test", "--num", "99"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 10 {
-		t.Fatalf("expected clamped to 10, got %d", n)
+func TestWebSearchToolNilProvider(t *testing.T) {
+	tool := NewWebSearchTool(nil)
+	_, err := tool.Execute(context.Background(), `{"query":"test"}`)
+	if err == nil || !strings.Contains(err.Error(), "provider not configured") {
+		t.Fatalf("expected provider error, got %v", err)
 	}
 }
 
-func TestParseWebSearchArgsRequiresQuery(t *testing.T) {
-	_, _, err := parseWebSearchArgs(nil)
-	if err == nil {
-		t.Fatal("expected error for empty args")
-	}
-}
-
-func TestWebSearchViaAnthropicProvider(t *testing.T) {
+func TestWebSearchToolViaAnthropicProvider(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/messages") {
 			t.Errorf("path = %q, want */messages", r.URL.Path)
@@ -86,20 +75,21 @@ func TestWebSearchViaAnthropicProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ws := NewWebSearch(p)
-	result, err := ws.Execute(context.Background(), []string{"test query"})
+	tool := NewWebSearchTool(p)
+	result, err := tool.Execute(context.Background(), `{"query":"test query"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(result, "Result 1") || !strings.Contains(result, "example.com/1") {
-		t.Fatalf("unexpected result:\n%s", result)
+	text := result.Text()
+	if !strings.Contains(text, "Result 1") || !strings.Contains(text, "example.com/1") {
+		t.Fatalf("unexpected result:\n%s", text)
 	}
-	if !strings.Contains(result, "Summary of results") {
-		t.Fatalf("missing summary:\n%s", result)
+	if !strings.Contains(text, "Summary of results") {
+		t.Fatalf("missing summary:\n%s", text)
 	}
 }
 
-func TestWebSearchViaOpenAIProvider(t *testing.T) {
+func TestWebSearchToolViaOpenAIProvider(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/responses") {
 			t.Errorf("path = %q, want */responses", r.URL.Path)
@@ -140,20 +130,21 @@ func TestWebSearchViaOpenAIProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ws := NewWebSearch(p)
-	result, err := ws.Execute(context.Background(), []string{"test query"})
+	tool := NewWebSearchTool(p)
+	result, err := tool.Execute(context.Background(), `{"query":"test query"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(result, "CVE-2024-1234") || !strings.Contains(result, "XSS") {
-		t.Fatalf("unexpected result:\n%s", result)
+	text := result.Text()
+	if !strings.Contains(text, "CVE-2024-1234") || !strings.Contains(text, "XSS") {
+		t.Fatalf("unexpected result:\n%s", text)
 	}
-	if !strings.Contains(result, "NVD CVE-2024-1234") || !strings.Contains(result, "nvd.nist.gov") {
-		t.Fatalf("missing citation result:\n%s", result)
+	if !strings.Contains(text, "NVD CVE-2024-1234") || !strings.Contains(text, "nvd.nist.gov") {
+		t.Fatalf("missing citation result:\n%s", text)
 	}
 }
 
-func TestWebSearchViaDeepSeekProviderUsesAnthropicEndpoint(t *testing.T) {
+func TestWebSearchToolViaDeepSeekProvider(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/anthropic/messages" {
 			t.Errorf("path = %q, want /anthropic/messages", r.URL.Path)
@@ -208,20 +199,41 @@ func TestWebSearchViaDeepSeekProviderUsesAnthropicEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ws := NewWebSearch(p)
-	result, err := ws.Execute(context.Background(), []string{"test query", "--num", "3"})
+	tool := NewWebSearchTool(p)
+	result, err := tool.Execute(context.Background(), `{"query":"test query","num":3}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(result, "DeepSeek Result") || !strings.Contains(result, "DeepSeek summary") {
-		t.Fatalf("unexpected result:\n%s", result)
+	text := result.Text()
+	if !strings.Contains(text, "DeepSeek Result") || !strings.Contains(text, "DeepSeek summary") {
+		t.Fatalf("unexpected result:\n%s", text)
 	}
 }
 
-func TestWebSearchNilProvider(t *testing.T) {
-	ws := NewWebSearch(nil)
-	_, err := ws.Execute(context.Background(), []string{"test"})
-	if err == nil || !strings.Contains(err.Error(), "provider not configured") {
-		t.Fatalf("expected provider error, got %v", err)
+func TestWebSearchToolRejectsInvalidNum(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("provider should not be called for invalid num; got %s", r.URL.Path)
+	}))
+	defer srv.Close()
+
+	p, err := provider.NewAnthropicProvider(&provider.ProviderConfig{
+		Provider: "anthropic",
+		BaseURL:  srv.URL,
+		APIKey:   "test-key",
+		Model:    "test-model",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tool := NewWebSearchTool(p)
+	_, err = tool.Execute(context.Background(), `{"query":"test","num":99}`)
+	if err == nil || !strings.Contains(err.Error(), "num must be between 1 and 10") {
+		t.Fatalf("expected num range error, got %v", err)
+	}
+
+	_, err = tool.Execute(context.Background(), `{"query":"test","num":-1}`)
+	if err == nil || !strings.Contains(err.Error(), "num must be between 1 and 10") {
+		t.Fatalf("expected num range error, got %v", err)
 	}
 }

@@ -18,10 +18,13 @@ func init() {
 			if deps.Provider != nil {
 				p, _ = deps.Provider.(provider.Provider)
 			}
-			cmd := New(Opts{
-				Provider:  p,
-				Resources: res,
-			})
+
+			if p != nil {
+				reg.RegisterTool(NewWebSearchTool(p))
+			}
+			reg.RegisterTool(NewFetchTool())
+
+			cmd := New(Opts{Resources: res})
 			reg.Register(cmd, "tools")
 			if res != nil {
 				reg.Register(NewCyberhubCommand(res), "tools")

@@ -45,7 +45,7 @@ func TestInitCommandRegistryRegistersCoreTools(t *testing.T) {
 	reg := initCommandRegistry(nil, ScannerConfig{}, ToolConfig{BashTimeout: 30}, nil, agent.ProviderConfig{}, nil, logger)
 
 	tools := reg.Tools()
-	expected := map[string]bool{"read": true, "write": true, "glob": true, "bash": true}
+	expected := map[string]bool{"read": true, "write": true, "glob": true, "bash": true, "fetch": true}
 	for _, tool := range tools {
 		if !expected[tool.Name()] {
 			t.Fatalf("unexpected agent tool: %s", tool.Name())
@@ -60,7 +60,16 @@ func TestInitCommandRegistryRegistersCoreTools(t *testing.T) {
 	}
 }
 
-func TestCommandRegistryOnlyExposesCoreTrueTools(t *testing.T) {
+func TestInitCommandRegistryRegistersWebSearchWithProvider(t *testing.T) {
+	logger := telemetry.NopLogger()
+	reg := initCommandRegistry(nil, ScannerConfig{}, ToolConfig{BashTimeout: 30}, fakeProvider{}, agent.ProviderConfig{Model: "test"}, nil, logger)
+
+	if _, ok := reg.GetTool("web_search"); !ok {
+		t.Fatal("web_search tool should be registered when an LLM provider is configured")
+	}
+}
+
+func TestCommandRegistryOnlyExposesNativeAgentTools(t *testing.T) {
 	reg := command.NewRegistry()
 	command.BuildAll(&command.Deps{
 		WorkDir:     "/tmp",
@@ -69,7 +78,7 @@ func TestCommandRegistryOnlyExposesCoreTrueTools(t *testing.T) {
 
 	for _, tool := range reg.Tools() {
 		switch tool.Name() {
-		case "read", "write", "glob", "bash":
+		case "read", "write", "glob", "bash", "fetch":
 		default:
 			t.Fatalf("pseudo-command %q should NOT be registered as an agent tool", tool.Name())
 		}
@@ -130,4 +139,16 @@ func (c *closeRecordingCommand) Execute(_ context.Context, _ []string, _ io.Writ
 
 func (c *closeRecordingCommand) Close() {
 	*c.closed = true
+}
+
+type fakeProvider struct{}
+
+func (fakeProvider) Name() string { return "fake" }
+
+func (fakeProvider) ChatCompletion(context.Context, *agent.ChatCompletionRequest) (*agent.ChatCompletionResponse, error) {
+	return &agent.ChatCompletionResponse{}, nil
+}
+
+func (fakeProvider) WebSearch(context.Context, string, int) (*agent.WebSearchResponse, error) {
+	return &agent.WebSearchResponse{}, nil
 }

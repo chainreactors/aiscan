@@ -147,69 +147,6 @@ func NewFetchCommand() *FetchCommand {
 
 func (c *FetchCommand) ClearCache() { c.cache.Clear() }
 
-func (c *FetchCommand) Execute(ctx context.Context, args []string) (string, error) {
-	rawURL, extract, err := parseFetchArgs(args)
-	if err != nil {
-		return "", err
-	}
-
-	normalizedURL, err := normalizeURL(rawURL)
-	if err != nil {
-		return "", err
-	}
-	if err := validateURL(normalizedURL); err != nil {
-		return "", err
-	}
-
-	if cached, ok := c.cache.Get(normalizedURL); ok {
-		if cached.binary {
-			return formatBinaryCacheOutput(normalizedURL, cached), nil
-		}
-		return formatFetchOutput(normalizedURL, cached, extract), nil
-	}
-
-	result, redir, err := c.fetchWithRedirects(ctx, normalizedURL, 0)
-	if err != nil {
-		return "", err
-	}
-
-	if redir != nil {
-		return formatRedirectMessage(redir), nil
-	}
-
-	if isBinaryContentType(result.contentType) {
-		entry := &cacheEntry{
-			contentType: result.contentType,
-			binary:      true,
-			bytes:       result.bytes,
-			code:        result.code,
-			codeText:    result.codeText,
-			size:        binaryCacheEntrySize(result),
-			fetchedAt:   time.Now(),
-		}
-		c.cache.Set(normalizedURL, entry)
-		return formatBinaryCacheOutput(normalizedURL, entry), nil
-	}
-
-	content := result.body
-	if strings.Contains(result.contentType, "text/html") || strings.Contains(result.contentType, "application/xhtml") {
-		content = htmlToMarkdown(content)
-	}
-
-	entry := &cacheEntry{
-		content:     content,
-		contentType: result.contentType,
-		bytes:       result.bytes,
-		code:        result.code,
-		codeText:    result.codeText,
-		size:        len(content),
-		fetchedAt:   time.Now(),
-	}
-	c.cache.Set(normalizedURL, entry)
-
-	return formatFetchOutput(normalizedURL, entry, extract), nil
-}
-
 // ---------------------------------------------------------------------------
 // Redirect handling
 // ---------------------------------------------------------------------------
@@ -372,6 +309,12 @@ func validateURL(normalized string) error {
 // Binary content detection
 // ---------------------------------------------------------------------------
 
+func timeNow() time.Time { return time.Now() }
+
+func isHTMLContentType(ct string) bool {
+	return strings.Contains(ct, "text/html") || strings.Contains(ct, "application/xhtml")
+}
+
 func isBinaryContentType(ct string) bool {
 	ct = strings.ToLower(ct)
 	for _, prefix := range []string{
@@ -454,45 +397,13 @@ func formatRedirectMessage(redir *redirectInfo) string {
 	sb.WriteString(fmt.Sprintf("Original URL: %s\n", redir.originalURL))
 	sb.WriteString(fmt.Sprintf("Redirect URL: %s\n", redir.redirectURL))
 	sb.WriteString(fmt.Sprintf("Status: %d %s\n\n", redir.statusCode, statusText))
-	sb.WriteString(fmt.Sprintf("To fetch the redirected content, run:\n  search fetch %s", redir.redirectURL))
+	sb.WriteString(fmt.Sprintf("To fetch the redirected content, call the fetch tool with url: %s", redir.redirectURL))
 	return sb.String()
 }
 
 // ---------------------------------------------------------------------------
 // Argument parsing
 // ---------------------------------------------------------------------------
-
-func parseFetchArgs(args []string) (rawURL, extract string, err error) {
-	var extractParts []string
-
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--extract":
-			if i+1 >= len(args) {
-				return "", "", fmt.Errorf("search fetch: --extract requires a value")
-			}
-			i++
-			extract = args[i]
-		default:
-			if strings.HasPrefix(args[i], "-") {
-				return "", "", fmt.Errorf("search fetch: unknown flag: %s", args[i])
-			}
-			if rawURL == "" {
-				rawURL = args[i]
-			} else {
-				extractParts = append(extractParts, args[i])
-			}
-		}
-	}
-
-	if rawURL == "" {
-		return "", "", fmt.Errorf("search fetch: url is required\n\nUsage: search fetch <url> [--extract <hint>]")
-	}
-	if extract == "" && len(extractParts) > 0 {
-		extract = strings.Join(extractParts, " ")
-	}
-	return rawURL, extract, nil
-}
 
 // ---------------------------------------------------------------------------
 // HTML → Markdown conversion
