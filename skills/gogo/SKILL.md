@@ -19,13 +19,15 @@ Capabilities:
 Common usage:
 
 ```bash
-gogo -i <ip-or-cidr> -p top100
-gogo -i <ip-or-cidr> -p 80,443,8080
-gogo -i <target-file> -p all
+gogo -i 10.0.0.1 -p top100
+gogo -i 10.0.0.0/24 -p 80,443,8080
+gogo -i 10.0.0.1,10.0.0.2 -p all
+gogo -l /tmp/targets.txt -p top100
 ```
 
 Notes:
 
-- `-i` is gogo input, not aiscan agent input.
-- `-p` is gogo ports, not aiscan prompt.
+- `-i` accepts IP, CIDR, or comma-separated IPs. **NOT** `ip:port` — bare `10.0.0.1:8080` will fail with "Parse IP Failed". Use `-i 10.0.0.1 -p 8080` instead.
+- `-l` reads a target file (one IP/CIDR per line).
+- `-p` is gogo ports (`top100`, `top1000`, `all`, `-` for all 65535, or `80,443,8080`).
 - Fingerprints and vuln hints are evidence leads; user intent decides whether to summarize, analyze, verify, compare, or plan follow-up work.

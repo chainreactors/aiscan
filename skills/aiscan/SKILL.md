@@ -37,11 +37,17 @@ use `passive` first only in full builds. Otherwise start from user-provided doma
 
 Utility commands:
 
-- `search tavily`: search the web.
-- `search fetch`: fetch and read a URL.
-- `search cyberhub`: search loaded fingerprints and POC templates.
+- `web_search` tool: search the web for public CVEs, advisories, exploits, and product documentation.
+- `fetch` tool: fetch and read a specific URL.
+- `cyberhub search <query>`: search loaded fingerprints and POC templates.
+- `cyberhub list poc --severity critical,high`: list available POC templates by severity.
 
-Read the search skill for usage: `aiscan://skills/search/SKILL.md`.
+When you discover a fingerprint (e.g. JeecgBoot 3.8.2, Seeyon V9, Landray OA), **always search for known POC templates before attempting manual exploitation**:
+```bash
+cyberhub search poc seeyon
+cyberhub search poc jeecg
+cyberhub search poc shiro
+```
 
 ## Scan Output Consumption
 
@@ -55,10 +61,10 @@ Scanners (`scan`, `gogo`, `spray`, `neutron`) run as subprocesses inside a tmux 
 ## Asset Triage
 
 When scan discovers more than 20 web endpoints:
-1. Do NOT `web_fetch` every endpoint. Triage first by reviewing scan summary output.
+1. Do NOT call `fetch` for every endpoint. Triage first by reviewing scan summary output.
 2. Prioritize: endpoints with query parameters, non-standard ports, interesting fingerprints (admin panels, APIs, login pages).
 3. Select 3-8 high-value targets for deep analysis. Skip CDN domains, static asset servers, default pages, and known third-party services.
-4. If a `web_fetch` times out, skip that target immediately — do not retry.
+4. If `fetch` times out, skip that target immediately — do not retry.
 5. Group assets by fingerprint or technology stack and test one representative per group rather than every instance.
 
 ## Execution Environment
