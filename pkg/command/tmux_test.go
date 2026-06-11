@@ -190,11 +190,11 @@ func TestTmuxCapturePaneIncremental(t *testing.T) {
 
 	tmux.Execute(context.Background(), []string{"new-session", "-d", "-s", "inc", "echo part1; sleep 1; echo part2"}, io.Discard)
 
-	// Poll until part1 appears in output
+	// Poll until part1 appears in output (use --full to avoid advancing the incremental cursor)
 	deadline := time.After(3 * time.Second)
 	for {
 		var peekBuf strings.Builder
-		tmux.Execute(context.Background(), []string{"capture-pane", "-t", "inc"}, &peekBuf)
+		tmux.Execute(context.Background(), []string{"capture-pane", "-t", "inc", "--full"}, &peekBuf)
 		if strings.Contains(peekBuf.String(), "part1") {
 			break
 		}
@@ -206,9 +206,9 @@ func TestTmuxCapturePaneIncremental(t *testing.T) {
 		}
 	}
 
-	// First incremental read — should contain part1
+	// First incremental read — should contain part1 (default is now incremental)
 	var buf1 strings.Builder
-	err := tmux.Execute(context.Background(), []string{"capture-pane", "-t", "inc", "--new"}, &buf1)
+	err := tmux.Execute(context.Background(), []string{"capture-pane", "-t", "inc"}, &buf1)
 	if err != nil {
 		t.Fatalf("capture-pane --new first: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestTmuxCapturePaneIncremental(t *testing.T) {
 
 	// Second incremental read should have part2 but not part1
 	var buf2 strings.Builder
-	err = tmux.Execute(context.Background(), []string{"capture-pane", "-t", "inc", "--new"}, &buf2)
+	err = tmux.Execute(context.Background(), []string{"capture-pane", "-t", "inc"}, &buf2)
 	if err != nil {
 		t.Fatalf("capture-pane --new second: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestTmuxCapturePaneIncremental(t *testing.T) {
 
 	// Third read should be empty
 	var buf3 strings.Builder
-	tmux.Execute(context.Background(), []string{"capture-pane", "-t", "inc", "--new"}, &buf3)
+	tmux.Execute(context.Background(), []string{"capture-pane", "-t", "inc"}, &buf3)
 	out3 := buf3.String()
 	if !strings.Contains(out3, "no new output") {
 		t.Fatalf("third read should be empty, got: %q", out3)
