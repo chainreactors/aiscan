@@ -2,8 +2,8 @@ package agent
 
 const (
 	DefaultMaxResultSize         = 50 * 1024
-	DefaultMaxRetries            = 9
+	DefaultMaxRetries            = 10
 	DefaultTokenBudgetWarningPct = 80
 	DefaultInboxCapacity         = 64
-	SubInboxCapacity           = 16
+	SubInboxCapacity             = 16
 )
