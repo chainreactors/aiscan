@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -9,20 +10,41 @@ import (
 	"time"
 )
 
-func TestFetchExecutePreservesExplicitHTTPURL(t *testing.T) {
+func TestFetchToolRequiresURL(t *testing.T) {
+	tool := NewFetchTool()
+	_, err := tool.Execute(context.Background(), `{}`)
+	if err == nil || !strings.Contains(err.Error(), "url is required") {
+		t.Fatalf("expected url error, got %v", err)
+	}
+
+	_, err = tool.Execute(context.Background(), `{"url":"   "}`)
+	if err == nil || !strings.Contains(err.Error(), "url is required") {
+		t.Fatalf("expected blank url error, got %v", err)
+	}
+}
+
+func TestFetchToolRejectsUnknownArguments(t *testing.T) {
+	tool := NewFetchTool()
+	_, err := tool.Execute(context.Background(), `{"url":"https://example.com","method":"POST"}`)
+	if err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("expected unknown field error, got %v", err)
+	}
+}
+
+func TestFetchToolPreservesExplicitHTTPURL(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		_, _ = w.Write([]byte("<html><body><h1>HTTP target</h1><p>plain service</p></body></html>"))
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf)
+	tool := NewFetchTool()
+	args, _ := json.Marshal(fetchToolArgs{URL: server.URL})
+	result, err := tool.Execute(context.Background(), string(args))
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
+	out := result.Text()
 	if !strings.Contains(out, "Fetched: "+server.URL) {
 		t.Fatalf("output = %q, want explicit http URL", out)
 	}
@@ -31,7 +53,7 @@ func TestFetchExecutePreservesExplicitHTTPURL(t *testing.T) {
 	}
 }
 
-func TestFetchCacheHitReturnsCachedContent(t *testing.T) {
+func TestFetchToolCacheHit(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
@@ -40,31 +62,27 @@ func TestFetchCacheHitReturnsCachedContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
+	tool := NewFetchTool()
+	args, _ := json.Marshal(fetchToolArgs{URL: server.URL})
 
-	var buf1 strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf1)
+	result1, err := tool.Execute(context.Background(), string(args))
 	if err != nil {
 		t.Fatalf("first Execute() error = %v", err)
 	}
-	out1 := buf1.String()
-
-	var buf2 strings.Builder
-	err = cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf2)
+	result2, err := tool.Execute(context.Background(), string(args))
 	if err != nil {
 		t.Fatalf("second Execute() error = %v", err)
 	}
-	out2 := buf2.String()
 
 	if callCount != 1 {
 		t.Fatalf("expected 1 HTTP call, got %d (cache miss)", callCount)
 	}
-	if out1 != out2 {
+	if result1.Text() != result2.Text() {
 		t.Fatal("cached response differs from original")
 	}
 }
 
-func TestFetchClearCacheInvalidatesEntries(t *testing.T) {
+func TestFetchToolClearCache(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
@@ -73,14 +91,14 @@ func TestFetchClearCacheInvalidatesEntries(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	if err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf); err != nil {
+	tool := NewFetchTool()
+	args, _ := json.Marshal(fetchToolArgs{URL: server.URL})
+
+	if _, err := tool.Execute(context.Background(), string(args)); err != nil {
 		t.Fatal(err)
 	}
-	cmd.ClearFetchCache()
-	var buf2 strings.Builder
-	if err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf2); err != nil {
+	tool.ClearCache()
+	if _, err := tool.Execute(context.Background(), string(args)); err != nil {
 		t.Fatal(err)
 	}
 	if callCount != 2 {
@@ -106,7 +124,7 @@ func TestFetchCacheMarksRecentGetsAsMostRecent(t *testing.T) {
 	}
 }
 
-func TestFetchSameHostRedirectIsFollowed(t *testing.T) {
+func TestFetchToolSameHostRedirect(t *testing.T) {
 	mux := http.NewServeMux()
 	var serverURL string
 	mux.HandleFunc("/old", func(w http.ResponseWriter, r *http.Request) {
@@ -120,19 +138,18 @@ func TestFetchSameHostRedirectIsFollowed(t *testing.T) {
 	serverURL = server.URL
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL + "/old"}, &buf)
+	tool := NewFetchTool()
+	args, _ := json.Marshal(fetchToolArgs{URL: server.URL + "/old"})
+	result, err := tool.Execute(context.Background(), string(args))
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
-	if !strings.Contains(out, "landed") {
-		t.Fatalf("output = %q, expected content from /new", out)
+	if !strings.Contains(result.Text(), "landed") {
+		t.Fatalf("output = %q, expected content from /new", result.Text())
 	}
 }
 
-func TestFetchSeeOtherRedirectIsFollowed(t *testing.T) {
+func TestFetchToolSeeOtherRedirect(t *testing.T) {
 	mux := http.NewServeMux()
 	var serverURL string
 	mux.HandleFunc("/old", func(w http.ResponseWriter, r *http.Request) {
@@ -146,31 +163,30 @@ func TestFetchSeeOtherRedirectIsFollowed(t *testing.T) {
 	serverURL = server.URL
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL + "/old"}, &buf)
+	tool := NewFetchTool()
+	args, _ := json.Marshal(fetchToolArgs{URL: server.URL + "/old"})
+	result, err := tool.Execute(context.Background(), string(args))
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
-	if !strings.Contains(out, "see other landed") {
-		t.Fatalf("output = %q, expected content from /new", out)
+	if !strings.Contains(result.Text(), "see other landed") {
+		t.Fatalf("output = %q, expected content from /new", result.Text())
 	}
 }
 
-func TestFetchCrossHostRedirectReportsToAgent(t *testing.T) {
+func TestFetchToolCrossHostRedirect(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "https://other.example.com/page", http.StatusFound)
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf)
+	tool := NewFetchTool()
+	args, _ := json.Marshal(fetchToolArgs{URL: server.URL})
+	result, err := tool.Execute(context.Background(), string(args))
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
+	out := result.Text()
 	if !strings.Contains(out, "REDIRECT DETECTED") {
 		t.Fatalf("output = %q, want redirect message", out)
 	}
@@ -233,20 +249,20 @@ func TestFetchBinaryContentDetection(t *testing.T) {
 	}
 }
 
-func TestFetchBinaryContentReturnsDescription(t *testing.T) {
+func TestFetchToolBinaryContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")
 		_, _ = w.Write([]byte("%PDF-1.4 fake pdf content"))
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf)
+	tool := NewFetchTool()
+	args, _ := json.Marshal(fetchToolArgs{URL: server.URL})
+	result, err := tool.Execute(context.Background(), string(args))
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
+	out := result.Text()
 	if !strings.Contains(out, "Binary content") {
 		t.Fatalf("output = %q, want binary content notice", out)
 	}
@@ -255,7 +271,7 @@ func TestFetchBinaryContentReturnsDescription(t *testing.T) {
 	}
 }
 
-func TestFetchBinaryContentIsCached(t *testing.T) {
+func TestFetchToolBinaryContentCached(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
@@ -264,23 +280,21 @@ func TestFetchBinaryContentIsCached(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf1 strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf1)
+	tool := NewFetchTool()
+	args, _ := json.Marshal(fetchToolArgs{URL: server.URL})
+
+	result1, err := tool.Execute(context.Background(), string(args))
 	if err != nil {
 		t.Fatalf("first Execute() error = %v", err)
 	}
-	out1 := buf1.String()
-	var buf2 strings.Builder
-	err = cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf2)
+	result2, err := tool.Execute(context.Background(), string(args))
 	if err != nil {
 		t.Fatalf("second Execute() error = %v", err)
 	}
-	out2 := buf2.String()
 	if callCount != 1 {
 		t.Fatalf("expected 1 HTTP call, got %d", callCount)
 	}
-	if out1 != out2 {
+	if result1.Text() != result2.Text() {
 		t.Fatal("cached binary response differs from original")
 	}
 }
@@ -306,40 +320,38 @@ func TestFetchIsPermittedRedirect(t *testing.T) {
 	}
 }
 
-func TestFetchOutputIncludesContentType(t *testing.T) {
+func TestFetchToolContentType(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"key":"value"}`))
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf)
+	tool := NewFetchTool()
+	args, _ := json.Marshal(fetchToolArgs{URL: server.URL})
+	result, err := tool.Execute(context.Background(), string(args))
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
-	if !strings.Contains(out, "Content-Type: application/json") {
-		t.Fatalf("output = %q, want Content-Type header", out)
+	if !strings.Contains(result.Text(), "Content-Type: application/json") {
+		t.Fatalf("output = %q, want Content-Type header", result.Text())
 	}
 }
 
-func TestFetchExtractHintFiltersContent(t *testing.T) {
+func TestFetchToolExtractHint(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte("Section A: irrelevant\n\nSection B: CVSS 9.8 critical\n\nSection C: also irrelevant"))
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL, "--extract", "CVSS"}, &buf)
+	tool := NewFetchTool()
+	args, _ := json.Marshal(fetchToolArgs{URL: server.URL, Extract: "CVSS"})
+	result, err := tool.Execute(context.Background(), string(args))
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
-	if !strings.Contains(out, "CVSS 9.8") {
-		t.Fatalf("output = %q, want CVSS section", out)
+	if !strings.Contains(result.Text(), "CVSS 9.8") {
+		t.Fatalf("output = %q, want CVSS section", result.Text())
 	}
 }

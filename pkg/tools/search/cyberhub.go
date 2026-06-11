@@ -58,14 +58,19 @@ func NewCyberhubSearch(resources *resources.Set) *CyberhubSearch {
 }
 
 func cyberhubUsage() string {
-	return `search cyberhub - Search and list loaded fingerprints and POC templates
+	return `cyberhub - Search and list loaded fingerprints and POC templates
 Usage:
-  search cyberhub list [finger|poc|all] [options]
-  search cyberhub search [finger|poc|all] <query> [options]
+  cyberhub search [finger|poc|all] <query> [options]
+  cyberhub list [finger|poc|all] [options]
+
+Quick examples:
+  cyberhub search poc seeyon
+  cyberhub search poc shiro
+  cyberhub search poc spring --tag rce
+  cyberhub list poc --severity critical,high
+  cyberhub search finger nginx
 
 Options:
-  -t, --type       Resource type: finger, poc, or all.
-  -q, --query      Search query.
       --tag        Filter by tag. Can be comma-separated or repeated.
       --protocol   Filter fingerprints by protocol: http or tcp.
       --finger     Filter POCs by fingerprint name.
@@ -73,11 +78,7 @@ Options:
       --limit      Maximum rows to print (default: 50, 0 for all).
   -j, --json       Output JSON Lines.
 
-Examples:
-  search cyberhub list finger --limit 20
-  search cyberhub search finger nginx
-  search cyberhub list poc --severity critical,high
-  search cyberhub search poc spring --tag rce -j`
+Also available as: search cyberhub <same args>`
 }
 
 func (c *CyberhubSearch) Execute(_ context.Context, args []string) (string, error) {
