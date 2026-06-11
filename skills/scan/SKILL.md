@@ -19,14 +19,25 @@ Capabilities:
 Common usage:
 
 ```bash
-scan -i <target> --mode quick
-scan -i <target> --mode full
-scan -i <target> --verify=high
-scan -i <target> --sniper
-scan -i <target> --mode full --deep
-scan -i <target> --mode full --port top1000
-scan -i <target> -j
+scan -i 10.0.0.1 --mode quick
+scan -i 10.0.0.0/24 --mode full
+scan -i 10.0.0.1 --mode full --ports top1000
+scan -i 10.0.0.1,10.0.0.2,10.0.0.3 --mode quick
+scan -i http://10.0.0.1:8080 --mode quick
+scan -i /tmp/targets.txt --mode quick
+scan -i 10.0.0.1 --verify=high
+scan -i 10.0.0.1 --sniper
+scan -i 10.0.0.1 --mode full --deep
+scan -i 10.0.0.1 -j
 ```
+
+**Input format for `-i`**:
+- IP: `10.0.0.1`
+- CIDR: `10.0.0.0/24`
+- Comma-separated IPs: `10.0.0.1,10.0.0.2`
+- URL (with port): `http://10.0.0.1:8080`
+- File path: `/tmp/targets.txt`
+- **NOT** bare `ip:port` — `10.0.0.1:8080` without `http://` prefix will fail with "Parse IP Failed". Use `http://10.0.0.1:8080` or just `10.0.0.1` (scan discovers ports itself).
 
 Notes:
 
