@@ -44,7 +44,7 @@ func (c *Command) SetProxy(proxy string) { c.proxy = proxy }
 func (c *Command) Name() string { return "spray" }
 
 func (c *Command) Usage() string {
-	return spraycore.Help()
+	return "spray - Web probing, fingerprinting, directory brute-force, and crawling\n\n" + spraycore.Help()
 }
 
 func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error {

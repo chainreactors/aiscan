@@ -23,7 +23,7 @@ func New() *Command { return &Command{} }
 func (c *Command) Name() string { return "katana" }
 
 func (c *Command) Usage() string {
-	return `katana - deep web crawling with full parameter discovery
+	return `katana - Deep web crawling with full parameter discovery (query strings, form targets, JS endpoints, API routes)
 Usage: katana -u <url> [options]
 
 Input:

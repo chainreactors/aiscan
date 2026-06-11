@@ -47,7 +47,7 @@ func (c *Command) SetProxy(proxy string) { c.proxy = proxy }
 func (c *Command) Name() string { return "zombie" }
 
 func (c *Command) Usage() string {
-	return zombiecore.Help()
+	return "zombie - Weak credential testing for SSH, MySQL, Redis, FTP, RDP, SMB, Tomcat, Nacos, MinIO, RabbitMQ, and more\n\n" + zombiecore.Help()
 }
 
 func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error {
@@ -68,7 +68,6 @@ func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error
 	_, _ = io.WriteString(w, buf.String())
 	return nil
 }
-
 
 // resolveRelativePaths resolves relative file arguments against workDir.
 func (c *Command) resolveRelativePaths(args []string) []string {

@@ -69,7 +69,7 @@ func (c *Command) SetProxy(proxy string) { c.proxy = proxy }
 func (c *Command) Name() string { return "gogo" }
 
 func (c *Command) Usage() string {
-	return gogocore.Help()
+	return "gogo - Port scanning and service discovery (host, port, protocol, banner, fingerprint)\n\n" + gogocore.Help()
 }
 
 func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error {

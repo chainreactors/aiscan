@@ -79,7 +79,7 @@ func (c *Command) Usage() string {
 }
 
 func Usage() string {
-	return `scan - automatic security scan
+	return `scan - Multi-stage security scan: port discovery, web probing, fingerprinting, weak credentials, and POC testing in one command
 Usage: scan -i <target> [options]
 Inputs:
   -i, --input       URL, IP, IP:port, or CIDR. Can specify multiple.
