@@ -108,7 +108,7 @@ func (c *Command) SetProxy(proxy string) {
 func (c *Command) Name() string { return "neutron" }
 
 func (c *Command) Usage() string {
-	return `neutron - POC/vulnerability testing with nuclei-style options
+	return `neutron - Template-based vulnerability testing (CVE PoCs, default credentials, misconfigurations) against specific targets
 Usage: neutron -u <target> [options]
 
 Input:
