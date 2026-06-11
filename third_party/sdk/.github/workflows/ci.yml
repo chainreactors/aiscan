@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Go test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Verify dependency graph
+        run: |
+          go list -m all | tee modules.txt
+          ! grep -E '=>|00010101000000|000000000000' modules.txt
+
+      - name: Run CI tests
+        run: bash scripts/ci-test.sh
+
+  consumer-build:
+    name: External consumer build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build a clean consumer module
+        shell: bash
+        run: |
+          tmp="$(mktemp -d)"
+          cd "$tmp"
+          go mod init sdk-consumer
+          cat > main.go <<'EOF'
+          package main
+
+          import (
+              _ "github.com/chainreactors/sdk/fingers"
+              _ "github.com/chainreactors/sdk/gogo"
+              _ "github.com/chainreactors/sdk/neutron"
+              _ "github.com/chainreactors/sdk/spray"
+              _ "github.com/chainreactors/sdk/zombie"
+          )
+
+          func main() {}
+          EOF
+          go mod edit -require=github.com/chainreactors/sdk@v0.0.0
+          go mod edit -replace=github.com/chainreactors/sdk="$GITHUB_WORKSPACE"
+          go mod tidy
+          go build .

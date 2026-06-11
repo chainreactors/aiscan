@@ -269,6 +269,7 @@ require (
 )
 
 replace (
+	github.com/chainreactors/sdk => ./third_party/sdk
 	github.com/reeflective/console => github.com/chainreactors/malice-network/external/console v0.0.0-20260422184128-e856ed004d32
 	github.com/reeflective/readline => github.com/chainreactors/malice-network/external/readline v0.0.0-20260422184128-e856ed004d32
 )

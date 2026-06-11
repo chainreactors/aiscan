@@ -1,0 +1,57 @@
+name: Update Chainreactors Dependencies
+
+on:
+  schedule:
+    - cron: "0 21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Update internal modules
+        run: |
+          go get \
+            github.com/chainreactors/fingers@master \
+            github.com/chainreactors/gogo/v2@master \
+            github.com/chainreactors/logs@master \
+            github.com/chainreactors/neutron@codex/remove-files-dependency \
+            github.com/chainreactors/parsers@codex/remove-files-dependency \
+            github.com/chainreactors/proxyclient@master \
+            github.com/chainreactors/spray@master \
+            github.com/chainreactors/utils@master \
+            github.com/chainreactors/zombie@master
+          go mod tidy
+
+      - name: Verify dependency graph
+        run: |
+          go list -m all | tee modules.txt
+          ! grep -E '=>|00010101000000|000000000000' modules.txt
+
+      - name: Run CI tests
+        run: bash scripts/ci-test.sh
+
+      - name: Create update pull request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          branch: automation/update-chainreactors-deps
+          title: Update Chainreactors dependencies
+          commit-message: deps: update chainreactors dependencies
+          labels: dependencies,go
+          body: |
+            Automated update for internal Chainreactors Go module dependencies.
+
+            This workflow also verifies that the dependency graph has no local replace directives or invalid zero pseudo-versions.

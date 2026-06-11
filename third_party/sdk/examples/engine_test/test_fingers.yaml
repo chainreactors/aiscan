@@ -1,0 +1,14 @@
+- name: nginx
+  protocol: http
+  rule:
+    - regexps:
+        header:
+          - "Server: nginx"
+      level: 0
+- name: apache
+  protocol: http
+  rule:
+    - regexps:
+        header:
+          - "Server: Apache"
+      level: 0

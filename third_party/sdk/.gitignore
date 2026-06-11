@@ -1,0 +1,61 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# IDE directories
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Claude Code
+.claude/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Build artifacts
+/dist/
+/build/
+/bin/
+
+# Example executables
+examples/fingers/fingers.exe
+examples/neutron/neutron.exe
+examples/gogo/gogo.exe
+examples/spray/spray.exe
+
+# Test files
+examples/spray/test_urls.txt
+examples/spray/*.txt
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*.cache

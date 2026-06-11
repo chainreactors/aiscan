@@ -1,0 +1,22 @@
+{
+  "fingers": [
+    {
+      "name": "nginx",
+      "protocol": "http",
+      "rule": {
+        "regexps": {
+          "header": ["Server: nginx"]
+        }
+      }
+    },
+    {
+      "name": "apache",
+      "protocol": "http",
+      "rule": {
+        "regexps": {
+          "header": ["Server: Apache"]
+        }
+      }
+    }
+  ]
+}
