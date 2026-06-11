@@ -213,8 +213,9 @@ func newCyberhubFixtureServer(t *testing.T) *httptest.Server {
 				"page_size": 1,
 			})
 		case "/api/v1/pocs/export":
-			if r.URL.Query().Get("status") != "active" {
-				t.Errorf("missing default active status: %s", r.URL.RawQuery)
+			statuses := r.URL.Query()["statuses"]
+			if !containsString(statuses, "active") || !containsString(statuses, "pending") {
+				t.Errorf("missing default active,pending statuses: %s", r.URL.RawQuery)
 				http.Error(w, "missing status", http.StatusBadRequest)
 				return
 			}
@@ -229,6 +230,15 @@ func newCyberhubFixtureServer(t *testing.T) *httptest.Server {
 			http.NotFound(w, r)
 		}
 	}))
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func writeCyberhubResponse(t *testing.T, w http.ResponseWriter, gzipBody bool, data any) {
