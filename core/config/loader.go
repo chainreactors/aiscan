@@ -114,6 +114,7 @@ func mergeOption(dst, src *Option) {
 	dst.CyberhubURL = ResolveString(dst.CyberhubURL, src.CyberhubURL)
 	dst.CyberhubKey = ResolveString(dst.CyberhubKey, src.CyberhubKey)
 	dst.CyberhubMode = ResolveString(dst.CyberhubMode, src.CyberhubMode)
+	dst.CyberhubStatuses = ResolveString(dst.CyberhubStatuses, src.CyberhubStatuses)
 	dst.FofaEmail = ResolveString(dst.FofaEmail, src.FofaEmail)
 	dst.FofaKey = ResolveString(dst.FofaKey, src.FofaKey)
 	dst.HunterToken = ResolveString(dst.HunterToken, src.HunterToken)
@@ -170,6 +171,7 @@ cyberhub:
   key: ""
   # merge 或 override
   mode: ""
+  statuses: ""
   # 扫描器代理，支持以下格式:
   #   socks5://127.0.0.1:1080
   #   trojan://password@server:443?sni=example.com

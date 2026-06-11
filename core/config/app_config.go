@@ -27,6 +27,7 @@ func AppConfig(option *Option, features RuntimeFeatures, logger telemetry.Logger
 			CyberhubURL:       option.CyberhubURL,
 			CyberhubKey:       option.CyberhubKey,
 			CyberhubMode:      option.CyberhubMode,
+			CyberhubStatuses:  option.CyberhubStatuses,
 			AIEnabled:         features.AIEnabled,
 			EnableAllAISkills: option.AI,
 			AITimeout:         DefaultInt(DefaultVerifyTimeout, 120),

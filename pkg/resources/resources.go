@@ -25,10 +25,11 @@ const (
 
 // Options controls aiscan-owned scanner resource loading.
 type Options struct {
-	CyberhubURL string
-	APIKey      string
-	Mode        string
-	Proxy       string
+	CyberhubURL      string
+	APIKey           string
+	Mode             string
+	CyberhubStatuses string
+	Proxy            string
 }
 
 // Set owns the scanner resource bytes and compiled SDK engines used by aiscan.
@@ -88,7 +89,7 @@ func Init(ctx context.Context, opts Options) (*Set, error) {
 			}
 		}
 
-		remoteTemplates, err := loadRemoteTemplates(ctx, opts.CyberhubURL, opts.APIKey)
+		remoteTemplates, err := loadRemoteTemplates(ctx, opts.CyberhubURL, opts.APIKey, parseStatuses(opts.CyberhubStatuses))
 		if err != nil {
 			set.RemoteNeutronErr = err
 		} else if remoteTemplates.Len() > 0 {
@@ -124,6 +125,24 @@ func Init(ctx context.Context, opts Options) (*Set, error) {
 		return nil, err
 	}
 	return set, nil
+}
+
+func parseStatuses(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []string{"active", "pending"}
+	}
+	var out []string
+	for _, s := range strings.Split(raw, ",") {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		return []string{"active", "pending"}
+	}
+	return out
 }
 
 func NormalizeMode(mode string) (string, error) {
@@ -245,8 +264,12 @@ func loadRemoteFingers(ctx context.Context, cyberhubURL, apiKey string) (fingers
 	return config.FullFingers, nil
 }
 
-func loadRemoteTemplates(ctx context.Context, cyberhubURL, apiKey string) (neutron.Templates, error) {
-	config := neutron.NewConfig().WithProvider(cyberhub.NewProvider(cyberhubURL, apiKey))
+func loadRemoteTemplates(ctx context.Context, cyberhubURL, apiKey string, statuses []string) (neutron.Templates, error) {
+	provider := cyberhub.NewProvider(cyberhubURL, apiKey)
+	if len(statuses) > 0 {
+		provider.WithFilter(cyberhub.NewExportFilter().WithStatuses(statuses...))
+	}
+	config := neutron.NewConfig().WithProvider(provider)
 	if err := config.Load(ctx); err != nil {
 		return neutron.Templates{}, err
 	}

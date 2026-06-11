@@ -40,6 +40,7 @@ type ScannerConfig struct {
 	CyberhubURL       string
 	CyberhubKey       string
 	CyberhubMode      string
+	CyberhubStatuses  string
 	AIEnabled         bool
 	EnableAllAISkills bool
 	AITimeout         int
@@ -154,10 +155,11 @@ func initProvider(cfg agent.ProviderConfig, logger telemetry.Logger) (agent.Prov
 
 func initEngines(ctx context.Context, cfg ScannerConfig, logger telemetry.Logger) *engine.Set {
 	engineSet, err := engine.InitWithOptions(ctx, resources.Options{
-		CyberhubURL: cfg.CyberhubURL,
-		APIKey:      cfg.CyberhubKey,
-		Mode:        cfg.CyberhubMode,
-		Proxy:       cfg.Proxy,
+		CyberhubURL:      cfg.CyberhubURL,
+		APIKey:           cfg.CyberhubKey,
+		Mode:             cfg.CyberhubMode,
+		CyberhubStatuses: cfg.CyberhubStatuses,
+		Proxy:            cfg.Proxy,
 	}, logger)
 	if err != nil {
 		logger.Warnf("scanner engines init error=%q action=continue_without_scanners", err)
