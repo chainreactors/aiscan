@@ -121,6 +121,20 @@ func TestParseArgsInvalid(t *testing.T) {
 	}
 }
 
+func TestParseStrictArgsRejectsUnknownFields(t *testing.T) {
+	_, err := ParseStrictArgs[testReadArgs](`{"path": "/tmp/test.txt", "unknown": true}`)
+	if err == nil {
+		t.Fatal("expected error for unknown JSON field")
+	}
+}
+
+func TestParseStrictArgsRejectsTrailingData(t *testing.T) {
+	_, err := ParseStrictArgs[testReadArgs](`{"path": "/tmp/test.txt"} {"path": "/tmp/other.txt"}`)
+	if err == nil {
+		t.Fatal("expected error for trailing JSON data")
+	}
+}
+
 func TestToolResult(t *testing.T) {
 	r := TextResult("hello world")
 	if r.Text() != "hello world" {

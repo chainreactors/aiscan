@@ -1,8 +1,10 @@
 package command
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/invopop/jsonschema"
 )
@@ -54,6 +56,21 @@ func ParseArgs[T any](arguments string) (T, error) {
 	var args T
 	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
 		return args, fmt.Errorf("invalid arguments: %w", err)
+	}
+	return args, nil
+}
+
+// ParseStrictArgs unmarshals JSON arguments and rejects unknown fields.
+func ParseStrictArgs[T any](arguments string) (T, error) {
+	var args T
+	dec := json.NewDecoder(bytes.NewReader([]byte(arguments)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&args); err != nil {
+		return args, fmt.Errorf("invalid arguments: %w", err)
+	}
+	var extra struct{}
+	if err := dec.Decode(&extra); err != io.EOF {
+		return args, fmt.Errorf("invalid arguments: trailing data")
 	}
 	return args, nil
 }
