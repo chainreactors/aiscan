@@ -48,7 +48,7 @@ func DirectScannerRuntimeFeatures(rest []string) (config.RuntimeFeatures, []stri
 			features.ProviderOptional = !explicit
 		}
 		features.AIEnabled = true
-		features.ScannerAI = explicit || aiSkillRequested
+		features.ScannerAI = true
 		return features, rest, nil
 	default:
 		if explicit {

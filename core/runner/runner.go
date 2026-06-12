@@ -354,8 +354,15 @@ func RunDirectScannerMode(ctx context.Context, option *cfg.Option, rest []string
 		scannerArgs = append(scannerArgs, "--debug")
 	}
 
-	if option.AI && scannerArgs[0] != "scan" {
-		return RunScannerWithAgent(ctx, option, application, scannerArgs, logger)
+	if (option.AI && scannerArgs[0] != "scan") || features.ScannerAI {
+		if application.Provider == nil {
+			if !features.ProviderOptional {
+				return fmt.Errorf("--verify/--sniper/--deep requires a configured LLM provider")
+			}
+		} else {
+			injectScanSubSkills(option, rest, scannerArgs)
+			return RunScannerWithAgent(ctx, option, application, scannerArgs, logger)
+		}
 	}
 
 	if option.NoColor && scannerArgs[0] == "scan" && !HasScannerFlag(scannerArgs[1:], "--no-color") {
