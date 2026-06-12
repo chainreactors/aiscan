@@ -19,25 +19,38 @@ Capabilities:
 Common usage:
 
 ```bash
+# Single target (-i)
 scan -i 10.0.0.1 --mode quick
 scan -i 10.0.0.0/24 --mode full
 scan -i 10.0.0.1 --mode full --ports top1000
 scan -i 10.0.0.1,10.0.0.2,10.0.0.3 --mode quick
 scan -i http://10.0.0.1:8080 --mode quick
-scan -i /tmp/targets.txt --mode quick
+scan -i https://example.com --mode quick
+
+# Target list file (-l) — one target per line
+scan -l /tmp/targets.txt --mode quick
+scan -l /tmp/targets.txt --mode full --thread 4 --timeout 10
+
+# AI features
 scan -i 10.0.0.1 --verify=high
 scan -i 10.0.0.1 --sniper
 scan -i 10.0.0.1 --mode full --deep
 scan -i 10.0.0.1 -j
 ```
 
+**CRITICAL: `-i` vs `-l`**:
+- `-i` is for inline targets: IP, CIDR, URL, or comma-separated list. Does **NOT** accept file paths.
+- `-l` is for target list files (one target per line). **Always use `-l` when scanning from a file.**
+- `scan -i /tmp/targets.txt` will FAIL — use `scan -l /tmp/targets.txt` instead.
+
 **Input format for `-i`**:
 - IP: `10.0.0.1`
 - CIDR: `10.0.0.0/24`
-- Comma-separated IPs: `10.0.0.1,10.0.0.2`
+- Comma-separated: `10.0.0.1,10.0.0.2`
 - URL (with port): `http://10.0.0.1:8080`
-- File path: `/tmp/targets.txt`
-- **NOT** bare `ip:port` — `10.0.0.1:8080` without `http://` prefix will fail with "Parse IP Failed". Use `http://10.0.0.1:8080` or just `10.0.0.1` (scan discovers ports itself).
+- Domain: `example.com` (scan discovers ports itself)
+- **NOT** bare `ip:port` — `10.0.0.1:8080` without `http://` prefix will fail. Use `http://10.0.0.1:8080`.
+- **NOT** file paths — use `-l` for files.
 
 Notes:
 
