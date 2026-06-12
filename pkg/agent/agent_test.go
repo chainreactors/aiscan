@@ -77,7 +77,7 @@ func TestRunExecutesToolLoop(t *testing.T) {
 		Provider: llm,
 		Tools:    tools,
 		Model:    "test",
-		Bus: testBus(func(e Event) { events = append(events, e.Type) }),
+		Bus:      testBus(func(e Event) { events = append(events, e.Type) }),
 	})).Run(context.Background(), "use tool")
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -712,6 +712,60 @@ func lastEvent(events []Event) Event {
 
 func strPtr(s string) *string {
 	return &s
+}
+
+func TestEmptyAssistantResponseRetriesEvenWithReasoningTokens(t *testing.T) {
+	cases := []struct {
+		name  string
+		usage *Usage
+	}{
+		{
+			name:  "reasoning tokens only",
+			usage: &Usage{PromptTokens: 100, CompletionTokens: 165, TotalTokens: 265},
+		},
+		{
+			name:  "nil usage",
+			usage: nil,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tools := command.NewRegistry()
+			callCount := 0
+			reasoning := "I considered the task but produced no visible answer."
+			llm := &callbackProvider{
+				fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
+					callCount++
+					if callCount == 1 {
+						return &ChatCompletionResponse{
+							Choices: []Choice{{Message: ChatMessage{
+								Role:             "assistant",
+								ReasoningContent: &reasoning,
+							}}},
+							Usage: tc.usage,
+						}, nil
+					}
+					return chatResponse(NewTextMessage("assistant", "done")), nil
+				},
+			}
+
+			result, err := (NewAgent(Config{
+				Provider: llm,
+				Tools:    tools,
+				Model:    "test",
+			})).Run(context.Background(), "hello")
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if result.Output != "done" {
+				t.Fatalf("result.Output = %q, want done", result.Output)
+			}
+			if callCount != 2 {
+				t.Fatalf("call count = %d, want 2", callCount)
+			}
+		})
+	}
 }
 
 func TestRetryOnTransientError(t *testing.T) {
