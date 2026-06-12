@@ -66,6 +66,59 @@ When verifying web loots:
 - Compare suspicious endpoint response against a normal endpoint on the same host
 - For injection claims: compare response with payload vs response with benign input
 
+### Step 5: Triage Gate (Self-Adversarial Check)
+
+Technical reproduction (Steps 1-4) proves "it works." This step asks: "is it worth reporting?"
+
+Before marking ANY finding as `confirmed`, answer these five gates. One NO = downgrade or kill.
+
+**Gate 1 — Evidence**: Do you have a complete curl/PoC with request AND response proving the issue? A 200 status code alone is NOT evidence. Scanner output alone is NOT evidence.
+
+**Gate 2 — Real Impact**: Does the response contain actual sensitive data, authenticated content, or demonstrate real unauthorized action? "Technically possible" without demonstrated impact = `info` at best.
+
+**Gate 3 — Not on the Kill List**: Check against the NEVER REPORT list below. If the finding matches and has no exploitation chain = kill it.
+
+**Gate 4 — Correct Severity**: Does your severity label match the demonstrated (not theoretical) impact?
+- Information disclosure without sensitive data ≠ High
+- Version/banner exposure without working exploit ≠ Critical
+- Requires authentication to exploit → cannot be labeled "unauthenticated"
+- Single primitive in a multi-step chain → severity of the primitive, not the full chain
+
+**Gate 5 — Not a Feature**: Is this genuinely unintended behavior? API documentation pages, public status endpoints, intended CORS configurations, and design-documented behaviors are not vulnerabilities.
+
+#### NEVER REPORT (auto-kill without chain)
+
+- Missing security headers alone (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
+- Missing SPF/DKIM/DMARC records
+- SSL/TLS cipher weakness or certificate issues
+- Version/banner disclosure without a working exploit for that version
+- GraphQL introspection enabled without demonstrated auth bypass or data leak
+- Clickjacking on non-sensitive pages without action PoC
+- Open redirect alone without OAuth token theft or ATO chain
+- CORS header reflection without credentialed data exfiltration PoC
+- Self-XSS (only affects attacker's own session)
+- Logout CSRF
+- Rate limit absence on non-critical forms (search, contact)
+- Session not invalidated on logout / concurrent sessions allowed
+- Internal IP address in error messages or headers
+- HTTP 200 on admin/management path where response body is a login page or default page
+- Directory listing of static assets without sensitive file content
+- SSRF with DNS callback only — no internal service data returned
+
+#### CHAIN REQUIRED (conditional — build the chain or kill)
+
+| Standalone Finding | Required Chain | If Chain Works |
+|---|---|---|
+| Open redirect | + OAuth redirect_uri theft → token capture | Report as ATO chain |
+| CORS reflection | + credentialed request exfils user PII/session | Report with exfil PoC |
+| SSRF DNS-only | + internal service access with data returned | Report with data evidence |
+| Host header injection | + password reset email uses injected host | Report with email PoC |
+| Clickjacking | + sensitive action PoC (transfer, delete, change email) | Report with action PoC |
+| GraphQL introspection | + auth bypass mutation or IDOR via node() | Report with data PoC |
+| Prompt injection (LLM) | + reads other user data or executes unauth action | Report with impact PoC |
+
+If you cannot build the chain today, kill the finding. Do not report standalone primitives as confirmed vulnerabilities.
+
 ## Engine-Specific Interpretation
 
 - **neutron** template match = potential lead requiring independent verification. "no templates selected" = nothing matched, not a loot.
