@@ -22,7 +22,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 	transcript := newTranscript(cfg.Messages, 8)
 	turn := 0
 	emptyRuns := 0
-	const maxEmptyRuns = 3
+	const maxEmptyRuns = 5
 
 	bus := newEmitter(cfg.Bus, cfg.SessionID)
 	ib := cfg.Inbox
@@ -120,6 +120,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			toolResults = batch.messages
 			terminate = batch.terminate
 			transcript.append(toolResults...)
+			emptyRuns = 0
 		}
 
 		bus.Emit(Event{Type: EventTurnEnd, Turn: turn, Message: assistantMsg, ToolResults: toolResults, Usage: usage, ContextTokens: transcript.contextTokens})
@@ -138,9 +139,17 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		}
 		if len(assistantMsg.ToolCalls) == 0 {
 			content := messageContent(assistantMsg)
-			if usage != nil && usage.CompletionTokens <= 5 && len(strings.TrimSpace(content)) == 0 {
+			// Thinking tokens count as completion tokens, so an assistant
+			// message can spend tokens while producing no visible content
+			// and no tool calls. Treat that as empty instead of completed.
+			if len(strings.TrimSpace(content)) == 0 {
 				emptyRuns++
-				cfg.Logger.Warnf("[turn %d] empty LLM response (%d tokens, run %d/%d), retrying", turn, usage.CompletionTokens, emptyRuns, maxEmptyRuns)
+				completionTokens := 0
+				if usage != nil {
+					completionTokens = usage.CompletionTokens
+				}
+				cfg.Logger.Warnf("[turn %d] empty LLM response (%d tokens, reasoning=%v, run %d/%d), retrying",
+					turn, completionTokens, hasReasoningContent(assistantMsg), emptyRuns, maxEmptyRuns)
 				if emptyRuns < maxEmptyRuns {
 					transcript.append(NewTextMessage("user", "Your last response was empty. Continue the assessment."))
 					continue
@@ -233,7 +242,6 @@ func (t *transcript) result(output string, turns int, err error) *Result {
 		Err:           err,
 	}
 }
-
 
 type toolBatchResult struct {
 	messages  []ChatMessage
@@ -477,7 +485,6 @@ func requestMessages(systemPrompt string, messages []ChatMessage, transform Tran
 	return out
 }
 
-
 func messageContent(msg ChatMessage) string {
 	if msg.Content == nil {
 		return ""
@@ -485,8 +492,18 @@ func messageContent(msg ChatMessage) string {
 	return *msg.Content
 }
 
-func logAssistantAndUsage(logger telemetry.Logger, msg ChatMessage, usage *Usage) {
-	if content := messageContent(msg); content != "" {
+func logAssistantAndUsage(logger telemetry.Logger, msg ChatMessage, usage *Usage, finishReason string) {
+	content := messageContent(msg)
+	reasoning := messageReasoningContent(msg)
+	logger.Debugf("assistant message role=%s finish_reason=%s content_len=%d reasoning_len=%d tool_calls=%d content=%q reasoning=%q",
+		msg.Role,
+		finishReason,
+		len(content),
+		len(reasoning),
+		len(msg.ToolCalls),
+		preview(compactLogContent(content), 500),
+		preview(compactLogContent(reasoning), 500))
+	if content != "" {
 		logger.Infof("assistant output=%q", preview(compactLogContent(content), 500))
 	}
 	if usage != nil {
@@ -505,6 +522,16 @@ func compactLogContent(value string) string {
 	return strings.Join(strings.Fields(value), " ")
 }
 
+func messageReasoningContent(msg ChatMessage) string {
+	if msg.ReasoningContent == nil {
+		return ""
+	}
+	return *msg.ReasoningContent
+}
+
+func hasReasoningContent(msg ChatMessage) bool {
+	return len(strings.TrimSpace(messageReasoningContent(msg))) > 0
+}
 
 func schedulerActive(s *LoopScheduler) int {
 	if s == nil {
