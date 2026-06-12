@@ -77,11 +77,6 @@ func ParseRecordFile(path string) ([]Record, error) {
 }
 
 func RenderFile(path, format, outputPath string) error {
-	records, err := ParseRecordFile(path)
-	if err != nil {
-		return err
-	}
-
 	var w io.Writer = os.Stdout
 	if outputPath != "" {
 		outFile, err := os.Create(outputPath)
@@ -92,10 +87,15 @@ func RenderFile(path, format, outputPath string) error {
 		w = outFile
 	}
 
+	entries, err := ParseTimelineFile(path)
+	if err != nil {
+		return err
+	}
+
 	switch strings.ToLower(format) {
 	case "markdown", "md":
-		return RenderRecordsMarkdown(w, records)
+		return RenderTimelineMarkdown(w, entries)
 	default:
-		return RenderRecordsTerminal(w, records)
+		return RenderTimeline(w, entries)
 	}
 }

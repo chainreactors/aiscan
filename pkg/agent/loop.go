@@ -22,7 +22,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 	transcript := newTranscript(cfg.Messages, 8)
 	turn := 0
 
-	bus := newEmitter(cfg.Bus, cfg.SessionID)
+	bus := newEmitter(cfg.Bus, cfg.SessionID, cfg.ParentSessionID)
 	ib := cfg.Inbox
 	bus.Emit(Event{Type: EventAgentStart})
 	ended := false
@@ -231,7 +231,7 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 
 	// Phase 1: preflight all tool calls sequentially (emit start events, check beforeToolCall)
 	for i, tc := range toolCalls {
-		cfg.Logger.Infof("tool_call name=%s args=%q", tc.Function.Name, preview(tc.Function.Arguments, 200))
+		cfg.Logger.Infof("[turn %d] tool_call id=%s name=%s args=%q", turn, tc.ID, tc.Function.Name, preview(tc.Function.Arguments, 200))
 		bus.Emit(Event{
 			Type:       EventToolExecutionStart,
 			Turn:       turn,
@@ -266,19 +266,19 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 				wg.Add(1)
 				go func(idx int) {
 					defer wg.Done()
-					slots[idx].result = runToolCall(ctx, cfg, assistantMsg, slots[idx].tc)
+					slots[idx].result = runToolCall(ctx, cfg, assistantMsg, slots[idx].tc, turn)
 				}(i)
 			}
 		}
 		wg.Wait()
 		for i := range slots {
 			if slots[i].mode == command.ExecSequential {
-				slots[i].result = runToolCall(ctx, cfg, assistantMsg, slots[i].tc)
+				slots[i].result = runToolCall(ctx, cfg, assistantMsg, slots[i].tc, turn)
 			}
 		}
 	} else {
 		for i := range slots {
-			slots[i].result = runToolCall(ctx, cfg, assistantMsg, slots[i].tc)
+			slots[i].result = runToolCall(ctx, cfg, assistantMsg, slots[i].tc, turn)
 		}
 	}
 
@@ -291,12 +291,11 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 			Turn:       turn,
 			ToolCallID: s.tc.ID,
 			ToolName:   s.tc.Function.Name,
-			Arguments:  s.tc.Function.Arguments,
 			Result:     s.result.eventResult(),
 			IsError:    s.result.isError,
 			Err:        s.result.err,
 		})
-		cfg.Logger.Debugf("tool_result name=%s bytes=%d", s.tc.Function.Name, len(s.result.result))
+		cfg.Logger.Debugf("[turn %d] tool_result id=%s name=%s bytes=%d", turn, s.tc.ID, s.tc.Function.Name, len(s.result.result))
 		toolMsg := toolResultToMessage(s.tc.ID, s.result)
 		bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: toolMsg})
 		bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: toolMsg})
@@ -326,7 +325,7 @@ type toolExecution struct {
 	flow       ToolFlowDecision
 }
 
-func runToolCall(ctx context.Context, cfg Config, assistantMsg ChatMessage, tc ToolCall) toolExecution {
+func runToolCall(ctx context.Context, cfg Config, assistantMsg ChatMessage, tc ToolCall, turn int) toolExecution {
 	execution := beforeToolCall(ctx, cfg, assistantMsg, tc)
 	if execution.result == "" && !execution.isError {
 		toolResult, execErr := cfg.Tools.ExecuteTool(ctx, tc.Function.Name, tc.Function.Arguments)
@@ -335,7 +334,7 @@ func runToolCall(ctx context.Context, cfg Config, assistantMsg ChatMessage, tc T
 		execution.isError = execErr != nil || toolResult.IsError
 		if execErr != nil {
 			execution.result = fmt.Sprintf("error: %s", execErr.Error())
-			cfg.Logger.Warnf("tool_error name=%s error=%q", tc.Function.Name, execErr.Error())
+			cfg.Logger.Warnf("[turn %d] tool_error id=%s name=%s error=%q", turn, tc.ID, tc.Function.Name, execErr.Error())
 		}
 		if toolResult.Terminate {
 			execution.flow = ToolFlowTerminate

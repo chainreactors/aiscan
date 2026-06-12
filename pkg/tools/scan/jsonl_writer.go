@@ -1,10 +1,6 @@
 package scan
 
 import (
-	"encoding/json"
-	"os"
-	"sync"
-
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/output"
@@ -14,18 +10,17 @@ import (
 )
 
 type scanJSONLWriter struct {
-	mu         sync.Mutex
-	file       *os.File
+	w          *output.TimelineWriter
 	scanUnsub  func()
 	agentUnsub func()
 }
 
 func newScanJSONLWriter(path string, scanBus *eventbus.Bus[pipeline.Observation], agentBus *eventbus.Bus[agent.Event]) (*scanJSONLWriter, error) {
-	f, err := os.Create(path)
+	tw, err := output.NewTimelineWriter(path)
 	if err != nil {
 		return nil, err
 	}
-	w := &scanJSONLWriter{file: f}
+	w := &scanJSONLWriter{w: tw}
 	w.scanUnsub = scanBus.Subscribe(w.handleObservation)
 	if agentBus != nil {
 		w.agentUnsub = agentBus.Subscribe(w.handleAgentEvent)
@@ -42,26 +37,11 @@ func (w *scanJSONLWriter) Close() error {
 		w.agentUnsub()
 		w.agentUnsub = nil
 	}
-	if w.file == nil {
-		return nil
-	}
-	err := w.file.Close()
-	w.file = nil
-	return err
+	return w.w.Close()
 }
 
 func (w *scanJSONLWriter) WriteRecord(rec output.Record) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.file == nil {
-		return
-	}
-	line, err := json.Marshal(rec)
-	if err != nil {
-		return
-	}
-	_, _ = w.file.Write(line)
-	_, _ = w.file.Write([]byte("\n"))
+	w.w.WriteRecord(rec)
 }
 
 func (w *scanJSONLWriter) handleObservation(obs pipeline.Observation) {
@@ -73,26 +53,12 @@ func (w *scanJSONLWriter) handleObservation(obs pipeline.Observation) {
 		return
 	}
 	for _, rec := range observationToRecords(e) {
-		w.WriteRecord(rec)
+		w.w.WriteRecord(rec)
 	}
 }
 
 func (w *scanJSONLWriter) handleAgentEvent(event agent.Event) {
-	w.writeJSON(agent.SerializableEvent(event))
-}
-
-func (w *scanJSONLWriter) writeJSON(v any) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.file == nil {
-		return
-	}
-	line, err := json.Marshal(v)
-	if err != nil {
-		return
-	}
-	_, _ = w.file.Write(line)
-	_, _ = w.file.Write([]byte("\n"))
+	w.w.WriteJSON(event)
 }
 
 func observationToRecords(e event) []output.Record {

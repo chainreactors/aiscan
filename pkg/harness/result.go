@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/chainreactors/aiscan/pkg/agent"
 )
 
 type RunResult struct {
@@ -18,14 +20,23 @@ type RunResult struct {
 }
 
 type AgentEvent struct {
-	Type       string `json:"type"`
-	Turn       int    `json:"turn,omitempty"`
-	ToolName   string `json:"tool_name,omitempty"`
-	ToolCallID string `json:"tool_call_id,omitempty"`
-	Args       string `json:"arguments,omitempty"`
-	Result     string `json:"result,omitempty"`
-	IsError    bool   `json:"is_error,omitempty"`
-	Error      string `json:"error,omitempty"`
+	Type            string              `json:"type"`
+	Turn            int                 `json:"turn,omitempty"`
+	ToolName        string              `json:"tool_name,omitempty"`
+	ToolCallID      string              `json:"tool_call_id,omitempty"`
+	Args            string              `json:"arguments,omitempty"`
+	Result          string              `json:"result,omitempty"`
+	IsError         bool                `json:"is_error,omitempty"`
+	Error           string              `json:"error,omitempty"`
+	Stop            string              `json:"stop,omitempty"`
+	Message         *agent.MessageJSON  `json:"message,omitempty"`
+	ToolResults     []agent.MessageJSON `json:"tool_results,omitempty"`
+	Usage           *agent.Usage        `json:"usage,omitempty"`
+	ContextTokens   int                 `json:"context_tokens,omitempty"`
+	NewMessages     int                 `json:"new_messages,omitempty"`
+	RequestModel    string              `json:"request_model,omitempty"`
+	RequestMessages int                 `json:"request_messages,omitempty"`
+	RequestTools    int                 `json:"request_tools,omitempty"`
 }
 
 func (r *RunResult) OK() bool       { return r.ExitCode == 0 }
@@ -36,10 +47,21 @@ func (r *RunResult) ContainsOutput(substr string) bool {
 	return strings.Contains(r.Stdout, substr) || strings.Contains(r.Stderr, substr)
 }
 
+// ToolCalls returns merged tool call events: arguments come from
+// tool_execution_start, results from tool_execution_end, joined by tool_call_id.
 func (r *RunResult) ToolCalls() []AgentEvent {
+	argsByID := make(map[string]string)
+	for _, e := range r.Events {
+		if e.Type == "tool_execution_start" && e.ToolCallID != "" {
+			argsByID[e.ToolCallID] = e.Args
+		}
+	}
 	var calls []AgentEvent
 	for _, e := range r.Events {
 		if e.Type == "tool_execution_end" {
+			if e.Args == "" && e.ToolCallID != "" {
+				e.Args = argsByID[e.ToolCallID]
+			}
 			calls = append(calls, e)
 		}
 	}
@@ -118,6 +140,24 @@ func (r *RunResult) ErroredToolCalls() []AgentEvent {
 		}
 	}
 	return out
+}
+
+func (r *RunResult) StopReason() string {
+	for i := len(r.Events) - 1; i >= 0; i-- {
+		if r.Events[i].Type == "agent_end" {
+			return r.Events[i].Stop
+		}
+	}
+	return ""
+}
+
+func (r *RunResult) TotalTokens() int {
+	for i := len(r.Events) - 1; i >= 0; i-- {
+		if r.Events[i].Type == "turn_end" && r.Events[i].Usage != nil {
+			return r.Events[i].Usage.TotalTokens
+		}
+	}
+	return 0
 }
 
 // tool-specific accessors

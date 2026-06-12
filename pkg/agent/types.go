@@ -4,6 +4,7 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/hex"
+	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
@@ -92,9 +93,11 @@ const (
 )
 
 type Event struct {
-	Type          EventType
-	SessionID     string
-	Turn          int
+	Type            EventType
+	SessionID       string
+	ParentSessionID string
+	Turn            int
+	EmittedAt       time.Time
 	Request       *ChatCompletionRequest
 	Message       ChatMessage
 	Messages      []ChatMessage
@@ -176,6 +179,7 @@ type Config struct {
 	MaxResultSize    int
 	CacheRetention   CacheRetention
 	SessionID        string
+	ParentSessionID  string
 }
 
 // Builder methods — each returns a modified copy (Config is a value type).
@@ -237,16 +241,19 @@ func (c Config) init() Config {
 }
 
 type emitter struct {
-	bus       *eventbus.Bus[Event]
-	sessionID string
+	bus             *eventbus.Bus[Event]
+	sessionID       string
+	parentSessionID string
 }
 
-func newEmitter(bus *eventbus.Bus[Event], sessionID string) emitter {
-	return emitter{bus: bus, sessionID: sessionID}
+func newEmitter(bus *eventbus.Bus[Event], sessionID, parentSessionID string) emitter {
+	return emitter{bus: bus, sessionID: sessionID, parentSessionID: parentSessionID}
 }
 
 func (e emitter) Emit(ev Event) {
 	ev.SessionID = e.sessionID
+	ev.ParentSessionID = e.parentSessionID
+	ev.EmittedAt = time.Now()
 	e.bus.Emit(ev)
 }
 

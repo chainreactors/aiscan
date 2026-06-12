@@ -67,15 +67,16 @@ func (a *Agent) Continue(ctx context.Context) (*Result, error) {
 // model, logger) but clean state. Use for spawning independent agent tasks.
 func (a *Agent) Derive() *Agent {
 	return NewAgent(Config{
-		Provider:       a.Cfg.Provider,
-		Tools:          a.Cfg.Tools,
-		Model:          a.Cfg.Model,
-		Logger:         a.Cfg.Logger,
-		MaxRetries:     a.Cfg.MaxRetries,
-		Stream:         a.Cfg.Stream,
-		Temperature:    a.Cfg.Temperature,
-		CacheRetention: a.Cfg.CacheRetention,
-		Bus:            a.Cfg.Bus,
+		Provider:        a.Cfg.Provider,
+		Tools:           a.Cfg.Tools,
+		Model:           a.Cfg.Model,
+		Logger:          a.Cfg.Logger,
+		MaxRetries:      a.Cfg.MaxRetries,
+		Stream:          a.Cfg.Stream,
+		Temperature:     a.Cfg.Temperature,
+		CacheRetention:  a.Cfg.CacheRetention,
+		Bus:             a.Cfg.Bus,
+		ParentSessionID: a.Cfg.SessionID,
 	})
 }
 
