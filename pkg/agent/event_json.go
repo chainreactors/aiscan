@@ -3,7 +3,6 @@ package agent
 import (
 	"fmt"
 	"time"
-
 )
 
 const (
@@ -12,28 +11,29 @@ const (
 )
 
 type EventJSON struct {
-	Timestamp     string          `json:"ts"`
-	Type          EventType       `json:"type"`
-	SessionID     string          `json:"session_id,omitempty"`
-	Turn          int             `json:"turn,omitempty"`
-	Message       *MessageJSON    `json:"message,omitempty"`
-	ToolResults   []MessageJSON   `json:"tool_results,omitempty"`
-	ToolCallID    string          `json:"tool_call_id,omitempty"`
-	ToolName      string          `json:"tool_name,omitempty"`
-	Arguments     string          `json:"arguments,omitempty"`
-	Result        string          `json:"result,omitempty"`
-	IsError       bool            `json:"is_error,omitempty"`
-	Error         string          `json:"error,omitempty"`
-	NewMessages   int             `json:"new_messages,omitempty"`
-	Usage         *Usage `json:"usage,omitempty"`
-	ContextTokens int             `json:"context_tokens,omitempty"`
+	Timestamp     string        `json:"ts"`
+	Type          EventType     `json:"type"`
+	SessionID     string        `json:"session_id,omitempty"`
+	Turn          int           `json:"turn,omitempty"`
+	Message       *MessageJSON  `json:"message,omitempty"`
+	ToolResults   []MessageJSON `json:"tool_results,omitempty"`
+	ToolCallID    string        `json:"tool_call_id,omitempty"`
+	ToolName      string        `json:"tool_name,omitempty"`
+	Arguments     string        `json:"arguments,omitempty"`
+	Result        string        `json:"result,omitempty"`
+	IsError       bool          `json:"is_error,omitempty"`
+	Error         string        `json:"error,omitempty"`
+	NewMessages   int           `json:"new_messages,omitempty"`
+	Usage         *Usage        `json:"usage,omitempty"`
+	ContextTokens int           `json:"context_tokens,omitempty"`
 }
 
 type MessageJSON struct {
-	Role       string                `json:"role"`
-	Content    string                `json:"content,omitempty"`
-	ToolCalls  []MessageToolCallJSON `json:"tool_calls,omitempty"`
-	ToolCallID string                `json:"tool_call_id,omitempty"`
+	Role             string                `json:"role"`
+	Content          string                `json:"content,omitempty"`
+	ReasoningContent string                `json:"reasoning_content,omitempty"`
+	ToolCalls        []MessageToolCallJSON `json:"tool_calls,omitempty"`
+	ToolCallID       string                `json:"tool_call_id,omitempty"`
 }
 
 type MessageToolCallJSON struct {
@@ -82,6 +82,9 @@ func ToMessageJSON(msg ChatMessage) *MessageJSON {
 	out := &MessageJSON{
 		Role:       msg.Role,
 		ToolCallID: msg.ToolCallID,
+	}
+	if msg.ReasoningContent != nil {
+		out.ReasoningContent = TruncateField(*msg.ReasoningContent, EventPreviewLimit)
 	}
 	if len(msg.ContentParts) > 0 {
 		for _, part := range msg.ContentParts {
