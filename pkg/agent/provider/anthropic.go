@@ -495,11 +495,12 @@ type anthropicUsage struct {
 }
 
 type anthropicContentBlock struct {
-	Type  string          `json:"type"`
-	Text  string          `json:"text,omitempty"`
-	ID    string          `json:"id,omitempty"`
-	Name  string          `json:"name,omitempty"`
-	Input json.RawMessage `json:"input,omitempty"`
+	Type     string          `json:"type"`
+	Text     string          `json:"text,omitempty"`
+	Thinking string          `json:"thinking,omitempty"`
+	ID       string          `json:"id,omitempty"`
+	Name     string          `json:"name,omitempty"`
+	Input    json.RawMessage `json:"input,omitempty"`
 }
 
 type anthropicMessageResponse struct {
@@ -548,11 +549,14 @@ func anthropicBlocksToMessage(role string, blocks []anthropicContentBlock) ChatM
 		role = "assistant"
 	}
 	var text strings.Builder
+	var reasoning strings.Builder
 	toolCalls := make([]ToolCall, 0)
 	for _, block := range blocks {
 		switch block.Type {
 		case "text":
 			text.WriteString(block.Text)
+		case "thinking":
+			reasoning.WriteString(block.Thinking)
 		case "tool_use":
 			args := anthropicToolArguments(block.Input)
 			toolCalls = append(toolCalls, ToolCall{
@@ -569,6 +573,9 @@ func anthropicBlocksToMessage(role string, blocks []anthropicContentBlock) ChatM
 	msg := ChatMessage{Role: role}
 	if content := text.String(); content != "" {
 		msg.Content = &content
+	}
+	if r := reasoning.String(); r != "" {
+		msg.ReasoningContent = &r
 	}
 	if len(toolCalls) > 0 {
 		msg.ToolCalls = toolCalls
