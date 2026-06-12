@@ -135,7 +135,7 @@ func requestAssistantMessageWithUsage(ctx context.Context, cfg Config, bus emitt
 	msg := resp.Choices[0].Message
 	bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: msg})
 	bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: msg})
-	logAssistantAndUsage(cfg.Logger, msg, resp.Usage)
+	logAssistantAndUsage(cfg.Logger, msg, resp.Usage, resp.Choices[0].FinishReason)
 	return msg, resp.Usage, nil
 }
 
@@ -148,12 +148,16 @@ func streamAssistantMessageWithUsage(ctx context.Context, p StreamingProvider, r
 	builder := newMessageBuilder()
 	started := false
 	var usage *Usage
+	finishReason := ""
 	for event := range events {
 		if event.Err != nil {
 			return ChatMessage{}, nil, fmt.Errorf("LLM stream failed at turn %d: %w", turn, event.Err)
 		}
 		if event.Usage != nil {
 			usage = event.Usage
+		}
+		if event.FinishReason != "" {
+			finishReason = event.FinishReason
 		}
 		if event.Done {
 			break
@@ -174,6 +178,6 @@ func streamAssistantMessageWithUsage(ctx context.Context, p StreamingProvider, r
 		bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: msg})
 	}
 	bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: msg})
-	logAssistantAndUsage(logger, msg, usage)
+	logAssistantAndUsage(logger, msg, usage, finishReason)
 	return msg, usage, nil
 }
