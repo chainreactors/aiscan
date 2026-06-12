@@ -811,7 +811,7 @@ func TestStreamAssistantMessageReturnsContextErrorOnClosedCanceledStream(t *test
 	_, _, err := streamAssistantMessageWithUsage(ctx,
 		&scriptedProvider{},
 		&ChatCompletionRequest{Model: "test"},
-		newEmitter(eventbus.New[Event](), "test"),
+		newEmitter(eventbus.New[Event](), "test", ""),
 		telemetry.NopLogger(),
 		1,
 	)

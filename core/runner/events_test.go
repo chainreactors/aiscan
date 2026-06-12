@@ -3,6 +3,7 @@ package runner
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,7 +45,7 @@ func TestEventsFileSubscriberAppendsJSONL(t *testing.T) {
 				Content: &content,
 			},
 		},
-		{Type: agent.EventAgentEnd, Turn: 1, NewMessages: make([]agent.ChatMessage, 3)},
+		{Type: agent.EventAgentEnd, Turn: 1, Stop: agent.StopReasonCompleted, NewMessages: make([]agent.ChatMessage, 3)},
 	}
 	for _, e := range events {
 		w.HandleEvent(e)
@@ -83,6 +84,9 @@ func TestEventsFileSubscriberAppendsJSONL(t *testing.T) {
 	if v, _ := lines[5]["new_messages"].(float64); v != 3 {
 		t.Errorf("line[5].new_messages = %v, want 3", lines[5]["new_messages"])
 	}
+	if v, _ := lines[5]["stop"].(string); v != "completed" {
+		t.Errorf("line[5].stop = %v, want completed", lines[5]["stop"])
+	}
 }
 
 func TestEventsFileSubscriberTruncatesLargeFields(t *testing.T) {
@@ -109,5 +113,98 @@ func TestEventsFileSubscriberTruncatesLargeFields(t *testing.T) {
 	}
 	if len(data) > agent.EventResultLimit+2048 {
 		t.Fatalf("written line should be bounded; got %d bytes", len(data))
+	}
+}
+
+func TestEventsFileSubscriberLLMRequest(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events.jsonl")
+	w, err := newEventsFileSubscriber(path)
+	if err != nil {
+		t.Fatalf("newEventsFileSubscriber() error = %v", err)
+	}
+	defer w.Close()
+
+	w.HandleEvent(agent.Event{
+		Type: agent.EventLLMRequest,
+		Turn: 1,
+		Request: &agent.ChatCompletionRequest{
+			Model:    "deepseek-v4-pro",
+			Messages: make([]agent.ChatMessage, 5),
+			Tools:    make([]agent.ToolDefinition, 3),
+		},
+	})
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if v, _ := m["request_model"].(string); v != "deepseek-v4-pro" {
+		t.Errorf("request_model = %v, want deepseek-v4-pro", m["request_model"])
+	}
+	if v, _ := m["request_messages"].(float64); v != 5 {
+		t.Errorf("request_messages = %v, want 5", m["request_messages"])
+	}
+	if v, _ := m["request_tools"].(float64); v != 3 {
+		t.Errorf("request_tools = %v, want 3", m["request_tools"])
+	}
+}
+
+func TestEventsFileSubscriberToolEndNoArgs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events.jsonl")
+	w, err := newEventsFileSubscriber(path)
+	if err != nil {
+		t.Fatalf("newEventsFileSubscriber() error = %v", err)
+	}
+	defer w.Close()
+
+	w.HandleEvent(agent.Event{
+		Type:       agent.EventToolExecutionEnd,
+		Turn:       1,
+		ToolCallID: "call-1",
+		ToolName:   "bash",
+		Result:     "ok",
+	})
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	if strings.Contains(string(data), "arguments") {
+		t.Errorf("tool_execution_end should not contain arguments field, got: %s", data)
+	}
+}
+
+func TestEventsFileSubscriberErrorField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events.jsonl")
+	w, err := newEventsFileSubscriber(path)
+	if err != nil {
+		t.Fatalf("newEventsFileSubscriber() error = %v", err)
+	}
+	defer w.Close()
+
+	w.HandleEvent(agent.Event{
+		Type:    agent.EventToolExecutionEnd,
+		Turn:    1,
+		IsError: true,
+		Err:     fmt.Errorf("connection refused"),
+	})
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if v, _ := m["error"].(string); v != "connection refused" {
+		t.Errorf("error = %v, want connection refused", m["error"])
 	}
 }

@@ -2,58 +2,10 @@ package output
 
 import (
 	"fmt"
-	"io"
 	"strings"
 
 	sdktypes "github.com/chainreactors/sdk/pkg/types"
 )
-
-func RenderRecordsMarkdown(w io.Writer, records []Record) error {
-	fmt.Fprintln(w, "# Scan Record")
-	fmt.Fprintln(w)
-
-	var result Result
-	var scanEnd *ScanEnd
-
-	for _, r := range records {
-		switch r.Type {
-		case TypeLoot:
-			d, _ := ParseRecordData[Loot](r)
-			result.Loots = append(result.Loots, d)
-		case TypeScanEnd:
-			d, _ := ParseRecordData[ScanEnd](r)
-			scanEnd = &d
-		}
-	}
-
-	if scanEnd != nil {
-		fmt.Fprintf(w, "## Summary\n\n")
-		fmt.Fprintf(w, "| Metric | Value |\n|---|---:|\n")
-		fmt.Fprintf(w, "| Duration | %.1fs |\n", scanEnd.Duration)
-		fmt.Fprintf(w, "| Services | %d |\n", scanEnd.Services)
-		fmt.Fprintf(w, "| Web | %d |\n", scanEnd.Webs)
-		fmt.Fprintf(w, "| Loots | %d |\n", scanEnd.Loots)
-		fmt.Fprintln(w)
-	}
-
-	if len(result.Loots) > 0 {
-		fmt.Fprintf(w, "## Loots\n\n")
-		for _, d := range result.Loots {
-			fmt.Fprintf(w, "- **[%s]** `%s` %s\n", d.Kind, d.Target, d.Description)
-		}
-		fmt.Fprintln(w)
-	}
-
-	return nil
-}
-
-func writeMarkdownFence(w io.Writer, lang, body string) {
-	fence := "```"
-	if strings.Contains(body, "```") {
-		fence = "~~~"
-	}
-	fmt.Fprintf(w, "%s%s\n%s\n%s\n\n", fence, lang, body, fence)
-}
 
 // RecordsToResult converts parsed records into a Result for asset report rendering.
 func RecordsToResult(records []Record) *Result {
