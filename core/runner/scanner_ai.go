@@ -90,3 +90,47 @@ func resolveScannerIntent(option *cfg.Option, store *skills.Store, command strin
 	sections = append(sections, intent)
 	return strings.Join(sections, "\n\n"), nil
 }
+
+// injectScanSubSkills maps scan AI flags (--verify, --sniper, --deep) to their
+// corresponding skill names and appends them to option.Skills. It also injects
+// --verify=<level> into processedArgs when the level comes from config (not CLI)
+// so the agent can see the threshold.
+func injectScanSubSkills(option *cfg.Option, originalArgs []string, processedArgs []string) {
+	if len(processedArgs) == 0 || processedArgs[0] != "scan" {
+		return
+	}
+	origFlags := originalArgs
+	if len(origFlags) > 0 {
+		origFlags = origFlags[1:]
+	}
+	procFlags := processedArgs[1:]
+
+	verifyMode, explicit := scannerVerifyMode(origFlags)
+	needVerify := false
+	if explicit && verifyMode != "off" {
+		needVerify = true
+	} else {
+		switch verifyMode {
+		case "low", "medium", "high", "critical":
+			needVerify = true
+		}
+	}
+	if needVerify {
+		appendSkillIfMissing(&option.Skills, "scan/verify")
+	}
+	if HasScannerFlag(procFlags, "--sniper") {
+		appendSkillIfMissing(&option.Skills, "scan/sniper")
+	}
+	if HasScannerFlag(procFlags, "--deep") {
+		appendSkillIfMissing(&option.Skills, "scan/deep")
+	}
+}
+
+func appendSkillIfMissing(skills *[]string, name string) {
+	for _, s := range *skills {
+		if strings.TrimSpace(s) == name {
+			return
+		}
+	}
+	*skills = append(*skills, name)
+}
