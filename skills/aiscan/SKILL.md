@@ -99,11 +99,111 @@ After `scan` or `spray --crawl`, these follow-up steps are **mandatory**, not op
 
 1. **Fuzz web endpoints** — review every discovered web endpoint for input parameters worth fuzzing. The scanner pipeline finds surfaces; the agent tests them for injection vulnerabilities that template-based scanning misses. Read `aiscan://skills/scan/fuzz.md` and apply its methodology to every discovered input parameter.
 2. **Hunt CVEs for fingerprints** — when 3+ fingerprints are identified, read `aiscan://skills/scan/sniper.md` and search public CVEs/exploits for each fingerprinted service or component.
-3. **Validate loots** — every loot the scanner flags must pass the `verify` skill's validation rules before reporting (see below).
+3. **Validate every finding** — every risk/vuln/loot the scanner flags MUST go through the curl verification workflow below before reporting. Never report unverified findings.
 
-## Verification
+## Post-Scan Vulnerability Verification (MANDATORY)
 
-Scanner output is leads, not confirmed findings. Apply the `verify` skill's validation rules before reporting anything as confirmed.
+Scanner output is leads, not confirmed findings. Every finding MUST be independently verified with curl before reporting. No exceptions.
+
+### Verification Workflow
+
+For each risk/vuln/loot discovered by the scanner:
+
+**Step 1: Reproduce with curl**
+
+Build a self-contained curl command that demonstrates the vulnerability. Include all relevant headers, cookies, and POST data.
+
+```bash
+# CORS misconfiguration
+curl -s -D- -H "Origin: https://evil.com" "https://target.example.com/api/endpoint" | grep -i "access-control"
+
+# Actuator / Spring Boot info leak
+curl -s "https://target.example.com/actuator/env" | head -100
+
+# Unauthorized API access
+curl -s "https://target.example.com/api/admin/users" | head -100
+
+# SSRF
+curl -s "https://target.example.com/proxy?url=http://169.254.169.254/latest/meta-data/"
+
+# Information disclosure
+curl -s -D- "https://target.example.com/.git/config"
+curl -s -D- "https://target.example.com/swagger-ui.html"
+```
+
+**Step 2: Capture full evidence**
+
+Save both the request and response as evidence. Use `-v` to capture request headers:
+
+```bash
+curl -v "https://target.example.com/actuator/env" 2>&1 | tee /tmp/vuln_evidence_001.txt
+```
+
+**Step 3: Classify and confirm**
+
+A finding is **confirmed** only when:
+- The curl response proves the vulnerability exists (e.g. sensitive data returned, CORS header reflects attacker origin, admin endpoint accessible without auth)
+- The response is NOT a generic error page, WAF block, or CDN default page
+- The response contains actual sensitive content, not just a 200 status code
+
+A finding is **rejected** when:
+- curl returns connection timeout, 403, or WAF block page
+- The response is a default/empty page with no sensitive content
+- The endpoint requires authentication and properly returns 401/403
+
+**Step 4: Write vulnerability report**
+
+For each **confirmed** finding, output a structured report:
+
+```
+## [SEVERITY] Vulnerability Title
+
+**Target**: https://target.example.com/actuator/env
+**Type**: Spring Boot Actuator Unauthorized Access
+**Severity**: High
+
+### Reproduction
+
+​```bash
+curl -s "https://target.example.com/actuator/env"
+​```
+
+### Request
+​```http
+GET /actuator/env HTTP/1.1
+Host: target.example.com
+​```
+
+### Response (key evidence)
+​```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"activeProfiles":["prod"],"propertySources":[{"name":"server.ports",...}]}
+​```
+
+### Impact
+[Describe what an attacker can do with this]
+
+### Remediation
+[Specific fix recommendation]
+```
+
+### Verification Priority
+
+Process findings in this order:
+1. **Critical**: RCE, SQLi, SSRF with internal access, authentication bypass → verify immediately
+2. **High**: Actuator exposure, unauthorized API access, sensitive info disclosure, CORS with credentials → verify next
+3. **Medium**: Directory listing, version disclosure, debug endpoints → batch verify
+4. **Low/Info**: Missing headers, SSL issues → skip manual verification, note in report
+
+### Common False Positives to Filter
+
+- Spanner gateway returning generic 403/404 → not a finding
+- CDN default pages (Tengine, Nginx welcome) → not a finding
+- Domains resolving to shared IPs with generic responses → not a finding
+- CORS allowing `*.alipay.com` on a `*.alipay.com` endpoint → same-org, low severity unless credentials exposed
+- 302 redirect to login page → authentication is working, not a bypass
 
 ## Operating Rules
 
