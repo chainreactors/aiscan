@@ -39,12 +39,13 @@ type StreamingProvider interface {
 }
 
 type ProviderConfig struct {
-	Provider string `yaml:"provider" config:"provider"`
-	BaseURL  string `yaml:"base_url" config:"base_url"`
-	APIKey   string `yaml:"api_key"  config:"api_key"`
-	Model    string `yaml:"model"    config:"model"`
-	Proxy    string `yaml:"proxy"    config:"proxy"`
-	Timeout  int    `yaml:"timeout"  config:"timeout"`
+	Provider string   `yaml:"provider" config:"provider"`
+	BaseURL  string   `yaml:"base_url" config:"base_url"`
+	APIKey   string   `yaml:"api_key"  config:"api_key"`
+	APIKeys  []string `yaml:"api_keys" config:"api_keys"`
+	Model    string   `yaml:"model"    config:"model"`
+	Proxy    string   `yaml:"proxy"    config:"proxy"`
+	Timeout  int      `yaml:"timeout"  config:"timeout"`
 }
 
 type providerPreset struct {
@@ -99,13 +100,21 @@ func Resolve(cfg *ProviderConfig) (*ProviderConfig, error) {
 		}
 	}
 
-	if resolved.APIKey == "" {
-		if resolved.APIKey == "" && providerName != "ollama" {
+	keys := normalizeAPIKeys(resolved.APIKey, resolved.APIKeys)
+	if len(keys) > 0 {
+		resolved.APIKeys = keys
+		if resolved.APIKey == "" {
+			resolved.APIKey = keys[0]
+		}
+	}
+
+	if len(keys) == 0 {
+		if providerName != "ollama" {
 			if envName := APIKeyEnvName(providerName); envName != "" {
-				return nil, fmt.Errorf("no API key for provider %q: set --api-key, llm.api_key, %s, or AISCAN_API_KEY",
+				return nil, fmt.Errorf("no API key for provider %q: set --api-key/--api-keys, llm.api_key/llm.api_keys, %s, AISCAN_API_KEY, or AISCAN_API_KEYS",
 					resolved.Provider, envName)
 			}
-			return nil, fmt.Errorf("no API key for provider %q: set --api-key, llm.api_key, or AISCAN_API_KEY",
+			return nil, fmt.Errorf("no API key for provider %q: set --api-key/--api-keys, llm.api_key/llm.api_keys, AISCAN_API_KEY, or AISCAN_API_KEYS",
 				resolved.Provider)
 		}
 	}

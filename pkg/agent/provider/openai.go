@@ -22,8 +22,9 @@ const (
 )
 
 type OpenAIProvider struct {
-	config *ProviderConfig
-	client *http.Client
+	config  *ProviderConfig
+	client  *http.Client
+	apiKeys *apiKeyRing
 }
 
 func NewOpenAIProvider(cfg *ProviderConfig) (*OpenAIProvider, error) {
@@ -62,7 +63,7 @@ func NewOpenAIProvider(cfg *ProviderConfig) (*OpenAIProvider, error) {
 		Transport: transport,
 	}
 
-	return &OpenAIProvider{config: cfg, client: client}, nil
+	return &OpenAIProvider{config: cfg, client: client, apiKeys: newAPIKeyRing(cfg)}, nil
 }
 
 func (p *OpenAIProvider) Name() string {
@@ -235,7 +236,7 @@ func (p *OpenAIProvider) ChatCompletionStream(ctx context.Context, req *ChatComp
 				}
 				return
 			}
-			if event.Err != nil || event.Done || event.Delta.Role != "" || event.Delta.Content != nil || event.Delta.ReasoningContent != nil || len(event.Delta.ToolCalls) > 0 || event.FinishReason != "" || event.Usage != nil {
+			if event.Err != nil || event.Done || event.Delta.Role != "" || event.Delta.Content != nil || event.Delta.ReasoningContent != nil || event.Delta.ReasoningSignature != nil || len(event.Delta.ToolCalls) > 0 || event.FinishReason != "" || event.Usage != nil {
 				select {
 				case events <- event:
 				case <-ctx.Done():
@@ -276,8 +277,8 @@ func (p *OpenAIProvider) setRequestHeaders(req *http.Request, stream bool) {
 	if stream {
 		req.Header.Set("Accept", "text/event-stream")
 	}
-	if p.config.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
+	if key := p.apiKeys.Next(); key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
 	}
 }
 
@@ -354,7 +355,7 @@ func parseOpenAIStreamChunk(data []byte) (ChatCompletionStreamEvent, error) {
 
 func (p *OpenAIProvider) WebSearch(ctx context.Context, query string, maxUses int) (*WebSearchResponse, error) {
 	if shouldUseAnthropicWebSearch(p.config) {
-		return anthropicWebSearch(ctx, p.client, p.config, query, maxUses)
+		return anthropicWebSearch(ctx, p.client, p.config, p.apiKeys.Next(), query, maxUses)
 	}
 	maxUses = normalizeWebSearchMaxUses(maxUses)
 
@@ -391,8 +392,8 @@ func (p *OpenAIProvider) WebSearch(ctx context.Context, query string, maxUses in
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if p.config.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
+	if key := p.apiKeys.Next(); key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
 	}
 
 	resp, err := p.client.Do(req)

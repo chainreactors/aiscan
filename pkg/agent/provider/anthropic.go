@@ -24,8 +24,9 @@ const (
 )
 
 type AnthropicProvider struct {
-	config *ProviderConfig
-	client *http.Client
+	config  *ProviderConfig
+	client  *http.Client
+	apiKeys *apiKeyRing
 }
 
 func NewAnthropicProvider(cfg *ProviderConfig) (*AnthropicProvider, error) {
@@ -52,7 +53,7 @@ func NewAnthropicProvider(cfg *ProviderConfig) (*AnthropicProvider, error) {
 		Transport: transport,
 	}
 
-	return &AnthropicProvider{config: cfg, client: client}, nil
+	return &AnthropicProvider{config: cfg, client: client, apiKeys: newAPIKeyRing(cfg)}, nil
 }
 
 func (p *AnthropicProvider) Name() string {
@@ -225,7 +226,7 @@ func (p *AnthropicProvider) ChatCompletionStream(ctx context.Context, req *ChatC
 				}
 				return
 			}
-			if event.Err != nil || event.Delta.Role != "" || event.Delta.Content != nil || event.Delta.ReasoningContent != nil || len(event.Delta.ToolCalls) > 0 || event.FinishReason != "" || event.Usage != nil {
+			if event.Err != nil || event.Delta.Role != "" || event.Delta.Content != nil || event.Delta.ReasoningContent != nil || event.Delta.ReasoningSignature != nil || len(event.Delta.ToolCalls) > 0 || event.FinishReason != "" || event.Usage != nil {
 				select {
 				case events <- event:
 				case <-ctx.Done():
@@ -268,8 +269,8 @@ func (p *AnthropicProvider) setRequestHeaders(req *http.Request, stream bool) {
 	if stream {
 		req.Header.Set("Accept", "text/event-stream")
 	}
-	if p.config.APIKey != "" {
-		req.Header.Set("x-api-key", p.config.APIKey)
+	if key := p.apiKeys.Next(); key != "" {
+		req.Header.Set("x-api-key", key)
 	}
 	req.Header.Set("anthropic-version", anthropicVersion)
 }
@@ -324,6 +325,27 @@ func (p *AnthropicProvider) marshalRequest(req *ChatCompletionRequest) ([]byte, 
 
 		case "assistant":
 			var blocks []map[string]interface{}
+			for _, rb := range m.ReasoningBlocks {
+				switch rb.Type {
+				case "thinking":
+					if rb.Thinking == "" || rb.Signature == "" {
+						continue
+					}
+					blocks = append(blocks, map[string]interface{}{
+						"type":      "thinking",
+						"thinking":  rb.Thinking,
+						"signature": rb.Signature,
+					})
+				case "redacted_thinking":
+					if rb.Data == "" {
+						continue
+					}
+					blocks = append(blocks, map[string]interface{}{
+						"type": "redacted_thinking",
+						"data": rb.Data,
+					})
+				}
+			}
 			if m.Content != nil && *m.Content != "" {
 				blocks = append(blocks, map[string]interface{}{"type": "text", "text": *m.Content})
 			}
@@ -495,12 +517,14 @@ type anthropicUsage struct {
 }
 
 type anthropicContentBlock struct {
-	Type     string          `json:"type"`
-	Text     string          `json:"text,omitempty"`
-	Thinking string          `json:"thinking,omitempty"`
-	ID       string          `json:"id,omitempty"`
-	Name     string          `json:"name,omitempty"`
-	Input    json.RawMessage `json:"input,omitempty"`
+	Type      string          `json:"type"`
+	Text      string          `json:"text,omitempty"`
+	Thinking  string          `json:"thinking,omitempty"`
+	Signature string          `json:"signature,omitempty"`
+	Data      string          `json:"data,omitempty"`
+	ID        string          `json:"id,omitempty"`
+	Name      string          `json:"name,omitempty"`
+	Input     json.RawMessage `json:"input,omitempty"`
 }
 
 type anthropicMessageResponse struct {
@@ -550,6 +574,7 @@ func anthropicBlocksToMessage(role string, blocks []anthropicContentBlock) ChatM
 	}
 	var text strings.Builder
 	var reasoning strings.Builder
+	reasoningBlocks := make([]ReasoningBlock, 0)
 	toolCalls := make([]ToolCall, 0)
 	for _, block := range blocks {
 		switch block.Type {
@@ -557,6 +582,20 @@ func anthropicBlocksToMessage(role string, blocks []anthropicContentBlock) ChatM
 			text.WriteString(block.Text)
 		case "thinking":
 			reasoning.WriteString(block.Thinking)
+			if block.Thinking != "" && block.Signature != "" {
+				reasoningBlocks = append(reasoningBlocks, ReasoningBlock{
+					Type:      "thinking",
+					Thinking:  block.Thinking,
+					Signature: block.Signature,
+				})
+			}
+		case "redacted_thinking":
+			if block.Data != "" {
+				reasoningBlocks = append(reasoningBlocks, ReasoningBlock{
+					Type: "redacted_thinking",
+					Data: block.Data,
+				})
+			}
 		case "tool_use":
 			args := anthropicToolArguments(block.Input)
 			toolCalls = append(toolCalls, ToolCall{
@@ -576,6 +615,9 @@ func anthropicBlocksToMessage(role string, blocks []anthropicContentBlock) ChatM
 	}
 	if r := reasoning.String(); r != "" {
 		msg.ReasoningContent = &r
+	}
+	if len(reasoningBlocks) > 0 {
+		msg.ReasoningBlocks = reasoningBlocks
 	}
 	if len(toolCalls) > 0 {
 		msg.ToolCalls = toolCalls
@@ -677,6 +719,20 @@ func (p *anthropicStreamParser) parse(eventName string, data []byte) (ChatComple
 			}
 			text := event.ContentBlock.Text
 			return ChatCompletionStreamEvent{Delta: ChatMessageDelta{Content: &text}}, nil
+		case "thinking":
+			if event.ContentBlock.Thinking == "" && event.ContentBlock.Signature == "" {
+				return ChatCompletionStreamEvent{}, nil
+			}
+			delta := ChatMessageDelta{}
+			if event.ContentBlock.Thinking != "" {
+				thinking := event.ContentBlock.Thinking
+				delta.ReasoningContent = &thinking
+			}
+			if event.ContentBlock.Signature != "" {
+				signature := event.ContentBlock.Signature
+				delta.ReasoningSignature = &signature
+			}
+			return ChatCompletionStreamEvent{Delta: delta}, nil
 		case "tool_use":
 			args := anthropicToolArguments(event.ContentBlock.Input)
 			delta := ToolCallDelta{
@@ -707,6 +763,7 @@ func (p *anthropicStreamParser) parse(eventName string, data []byte) (ChatComple
 				Text        string `json:"text,omitempty"`
 				PartialJSON string `json:"partial_json,omitempty"`
 				Thinking    string `json:"thinking,omitempty"`
+				Signature   string `json:"signature,omitempty"`
 			} `json:"delta"`
 		}
 		if err := json.Unmarshal(data, &event); err != nil {
@@ -730,6 +787,9 @@ func (p *anthropicStreamParser) parse(eventName string, data []byte) (ChatComple
 		case "thinking_delta":
 			thinking := event.Delta.Thinking
 			return ChatCompletionStreamEvent{Delta: ChatMessageDelta{ReasoningContent: &thinking}}, nil
+		case "signature_delta":
+			signature := event.Delta.Signature
+			return ChatCompletionStreamEvent{Delta: ChatMessageDelta{ReasoningSignature: &signature}}, nil
 		default:
 			return ChatCompletionStreamEvent{}, nil
 		}
@@ -803,10 +863,10 @@ func anthropicTimeout(seconds int) time.Duration {
 }
 
 func (p *AnthropicProvider) WebSearch(ctx context.Context, query string, maxUses int) (*WebSearchResponse, error) {
-	return anthropicWebSearch(ctx, p.client, p.config, query, maxUses)
+	return anthropicWebSearch(ctx, p.client, p.config, p.apiKeys.Next(), query, maxUses)
 }
 
-func anthropicWebSearch(ctx context.Context, client *http.Client, cfg *ProviderConfig, query string, maxUses int) (*WebSearchResponse, error) {
+func anthropicWebSearch(ctx context.Context, client *http.Client, cfg *ProviderConfig, apiKey, query string, maxUses int) (*WebSearchResponse, error) {
 	maxUses = normalizeWebSearchMaxUses(maxUses)
 
 	parentCtx := ctx
@@ -850,8 +910,8 @@ func anthropicWebSearch(ctx context.Context, client *http.Client, cfg *ProviderC
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if cfg.APIKey != "" {
-		req.Header.Set("x-api-key", cfg.APIKey)
+	if apiKey != "" {
+		req.Header.Set("x-api-key", apiKey)
 	}
 	req.Header.Set("anthropic-version", anthropicVersion)
 	req.Header.Set("anthropic-beta", "web-search-2025-03-05")
