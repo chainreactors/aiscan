@@ -28,6 +28,13 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 	turn := 0
 	emptyRuns := 0
 	zeroTokenEmptyRuns := 0
+	var pendingInboxEvents []ChatMessage
+	// synthesized tracks whether the agent has produced at least one
+	// assistant response this run. The producer barrier below only batches
+	// inbox wakes AFTER the initial response, so the agent still answers the
+	// opening task promptly while withholding re-synthesis during subagent
+	// completion trickles.
+	synthesized := false
 
 	bus := newEmitter(cfg.Bus, cfg.SessionID)
 	ib := cfg.Inbox
@@ -54,13 +61,12 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		return result, err
 	}
 
-	for turn = 1; ; turn++ {
+	for {
 		if err := ctx.Err(); err != nil {
 			failure := NewTextMessage("assistant", "")
 			transcript.append(failure)
 			return end(nil, err, StopReasonCanceled)
 		}
-		bus.Emit(Event{Type: EventTurnStart, Turn: turn})
 
 		if ib != nil {
 			inboxMsgs := ib.Drain()
@@ -70,17 +76,40 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 				}
 				for _, cm := range inboxMsgs[i].ToChatMessages() {
 					transcript.append(cm)
-					bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: cm})
-					bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: cm})
+					pendingInboxEvents = append(pendingInboxEvents, cm)
 				}
 			}
 			if len(inboxMsgs) > 0 {
-				cfg.Logger.Debugf("[turn %d] drained %d inbox message(s)", turn, len(inboxMsgs))
+				cfg.Logger.Debugf("[turn %d] drained %d inbox message(s)", turn+1, len(inboxMsgs))
 			}
 			if ib.Closed() {
 				ib = nil
 			}
 		}
+
+		// BATCH: once the agent has answered the opening task, withhold
+		// re-synthesis while subagents (inbox producers) are still running.
+		// Their completion messages accumulate in the transcript and the loop
+		// waits for the rest, producing a single final synthesis once all
+		// subagents finish — instead of re-summarizing on every trickle.
+		// Deadlock-free: every Push wakes ib.Wait, and every producer.Done()
+		// -> removeProducer -> wakeLocked also wakes ib.Wait
+		// (pkg/agent/inbox/inbox.go), so the last subagent draining flips
+		// ActiveProducers() to 0 and releases the gate.
+		if synthesized && ib != nil && ib.ActiveProducers() > 0 {
+			if ib.Len() == 0 {
+				ib.Wait(ctx)
+			}
+			continue
+		}
+
+		turn++
+		bus.Emit(Event{Type: EventTurnStart, Turn: turn})
+		for _, cm := range pendingInboxEvents {
+			bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: cm})
+			bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: cm})
+		}
+		pendingInboxEvents = pendingInboxEvents[:0]
 
 		systemPrompt := cfg.SystemPrompt
 		if cfg.SystemPromptFn != nil {
@@ -101,6 +130,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			return end(nil, err, StopReasonError)
 		}
 		transcript.append(assistantMsg)
+		synthesized = true
 
 		if cfg.TokenBudget > 0 {
 			if transcript.totalUsage.TotalTokens >= cfg.TokenBudget {
@@ -116,6 +146,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 
 		var toolResults []ChatMessage
 		terminate := false
+		terminateOutput := ""
 		if len(assistantMsg.ToolCalls) > 0 {
 			cfg.Messages = append([]ChatMessage(nil), transcript.messages...)
 			batch, err := executeToolCalls(ctx, cfg, bus, assistantMsg, turn)
@@ -124,6 +155,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			}
 			toolResults = batch.messages
 			terminate = batch.terminate
+			terminateOutput = batch.terminateOutput
 			transcript.append(toolResults...)
 			emptyRuns = 0
 			zeroTokenEmptyRuns = 0
@@ -132,17 +164,18 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		bus.Emit(Event{Type: EventTurnEnd, Turn: turn, Message: assistantMsg, ToolResults: toolResults, Usage: usage, ContextTokens: transcript.contextTokens})
 		transcript.completedTurns = turn
 
+		if terminate {
+			cfg.Logger.Importantf("agent status=completed turns=%d tokens=%d", turn, transcript.totalUsage.TotalTokens)
+			result := transcript.result(terminalOutput(assistantMsg, terminateOutput, toolResults), turn, nil)
+			return end(result, nil, StopReasonTerminated)
+		}
+
 		if cfg.MaxTurns > 0 && turn >= cfg.MaxTurns {
 			cfg.Logger.Importantf("agent status=stopped turns=%d/%d tokens=%d", turn, cfg.MaxTurns, transcript.totalUsage.TotalTokens)
 			result := transcript.result(messageContent(assistantMsg), turn, nil)
 			return end(result, nil, StopReasonStopped)
 		}
 
-		if terminate {
-			cfg.Logger.Importantf("agent status=completed turns=%d tokens=%d", turn, transcript.totalUsage.TotalTokens)
-			result := transcript.result(messageContent(assistantMsg), turn, nil)
-			return end(result, nil, StopReasonTerminated)
-		}
 		if len(assistantMsg.ToolCalls) == 0 {
 			content := messageContent(assistantMsg)
 			// Thinking tokens count as completion tokens, so an assistant
@@ -268,8 +301,9 @@ func (t *transcript) result(output string, turns int, err error) *Result {
 }
 
 type toolBatchResult struct {
-	messages  []ChatMessage
-	terminate bool
+	messages        []ChatMessage
+	terminate       bool
+	terminateOutput string
 }
 
 func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg ChatMessage, turn int) (toolBatchResult, error) {
@@ -332,6 +366,7 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 	// Phase 3: emit results in original order
 	messages := make([]ChatMessage, 0, len(slots))
 	terminations := 0
+	terminateOutput := ""
 	for _, s := range slots {
 		bus.Emit(Event{
 			Type:       EventToolExecutionEnd,
@@ -350,11 +385,15 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 		messages = append(messages, toolMsg)
 		if s.result.flow == ToolFlowTerminate {
 			terminations++
+			if strings.TrimSpace(s.result.result) != "" {
+				terminateOutput = s.result.result
+			}
 		}
 	}
 	return toolBatchResult{
-		messages:  messages,
-		terminate: len(messages) > 0 && terminations == len(messages),
+		messages:        messages,
+		terminate:       terminations > 0,
+		terminateOutput: terminateOutput,
 	}, nil
 }
 
@@ -514,6 +553,21 @@ func messageContent(msg ChatMessage) string {
 		return ""
 	}
 	return *msg.Content
+}
+
+func terminalOutput(assistantMsg ChatMessage, terminateOutput string, toolResults []ChatMessage) string {
+	if content := messageContent(assistantMsg); strings.TrimSpace(content) != "" {
+		return content
+	}
+	if strings.TrimSpace(terminateOutput) != "" {
+		return terminateOutput
+	}
+	for i := len(toolResults) - 1; i >= 0; i-- {
+		if content := messageContent(toolResults[i]); strings.TrimSpace(content) != "" {
+			return content
+		}
+	}
+	return messageContent(assistantMsg)
 }
 
 func logAssistantAndUsage(logger telemetry.Logger, msg ChatMessage, usage *Usage, finishReason string) {

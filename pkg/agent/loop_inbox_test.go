@@ -211,6 +211,180 @@ func TestRunWaitsWhenKeepAliveIsTrue(t *testing.T) {
 	}
 }
 
+func TestProducerBarrierBatchesSubagentCompletions(t *testing.T) {
+	// Regression guard for the source fix: when several subagents (inbox
+	// producers) finish at staggered times, the parent must batch their
+	// completion messages and synthesize ONCE after all finish, instead of
+	// re-summarizing on every trickle. Before the fix the parent re-announced
+	// "complete" once per subagent, re-reading a huge context each time.
+	tools := command.NewRegistry()
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "ack")),
+			chatResponse(NewTextMessage("assistant", "final synthesis")),
+		},
+	}
+	ib := inbox.NewBuffered(8)
+	var turnStarts, turnEnds int
+
+	for i, name := range []string{"desk", "mall", "chat"} {
+		producer := ib.RegisterProducer("subagent:" + name)
+		i, name := i, name
+		go func() {
+			defer producer.Done()
+			time.Sleep(time.Duration(20+i*20) * time.Millisecond)
+			ib.Push(inbox.NewMessage(inbox.OriginSystem, "user",
+				fmt.Sprintf("<subagent_completion name=%q>found %d</subagent_completion>", name, i+1)))
+		}()
+	}
+
+	result, err := NewAgent(Config{
+		Provider:     llm,
+		Tools:        tools,
+		Model:        "test",
+		SystemPrompt: "system",
+		Inbox:        ib,
+		Bus: testBus(func(event Event) {
+			switch event.Type {
+			case EventTurnStart:
+				turnStarts++
+			case EventTurnEnd:
+				turnEnds++
+			}
+		}),
+	}).Run(context.Background(), "scan 3 subsystems")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Output != "final synthesis" {
+		t.Fatalf("result = %q, want final synthesis", result.Output)
+	}
+	if result.Turns != 2 {
+		t.Fatalf("turns = %d, want 2 (waiting for producers must not consume turns)", result.Turns)
+	}
+	if turnStarts != 2 || turnEnds != 2 {
+		t.Fatalf("turn events start/end = %d/%d, want 2/2", turnStarts, turnEnds)
+	}
+
+	requests := llm.requestsSnapshot()
+	// Exactly 2 LLM calls: opening ack + a single batched final synthesis.
+	// A broken barrier yields ~4 (ack + one re-synthesis per completion).
+	if len(requests) != 2 {
+		t.Fatalf("requests = %d, want 2 (ack + single batched synthesis)", len(requests))
+	}
+
+	// The single final synthesis must contain all three completions.
+	finalMsgs := requests[1].Messages
+	for _, name := range []string{"desk", "mall", "chat"} {
+		needle := fmt.Sprintf("name=%q", name)
+		found := false
+		for _, m := range finalMsgs {
+			if strings.Contains(contentOf(m), needle) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("final synthesis missing %s completion: %#v", needle, finalMsgs)
+		}
+	}
+}
+
+func TestFinishToolTerminatesLoop(t *testing.T) {
+	// Regression guard for Fix A: a tool whose Execute returns a terminating
+	// ToolResult (command.TerminateResult, used by FinishTool) must end the
+	// run via the ToolFlowTerminate path. Before this, that path was dead
+	// code — finite loop-mode tasks had no way to stop themselves.
+	tools := command.NewRegistry()
+	tools.RegisterTool(NewFinishTool())
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(ChatMessage{
+				Role: "assistant",
+				ToolCalls: []ToolCall{{
+					ID:       "call_1",
+					Type:     "function",
+					Function: FunctionCall{Name: "finish", Arguments: `{"reason":"all subsystems reported"}`},
+				}},
+			}),
+			// Must never be consumed: finish terminates before a 2nd LLM call.
+			chatResponse(NewTextMessage("assistant", "should-not-reach")),
+		},
+	}
+
+	result, err := NewAgent(Config{
+		Provider:     llm,
+		Tools:        tools,
+		Model:        "test",
+		SystemPrompt: "system",
+		MaxTurns:     1,
+	}).Run(context.Background(), "scan")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	requests := llm.requestsSnapshot()
+	if len(requests) != 1 {
+		t.Fatalf("requests = %d, want 1 (finish must terminate, no follow-up LLM call)", len(requests))
+	}
+	if result.Output != "task complete: all subsystems reported" {
+		t.Fatalf("result output = %q, want finish tool result", result.Output)
+	}
+	found := false
+	for _, m := range result.Messages {
+		if strings.Contains(contentOf(m), "task complete") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("transcript missing finish termination result: %#v", result.Messages)
+	}
+}
+
+func TestFinishToolTerminatesWhenMixedWithOtherToolCalls(t *testing.T) {
+	tools := command.NewRegistry()
+	tools.RegisterTool(&recordingTool{name: "echo", output: "ok"})
+	tools.RegisterTool(NewFinishTool())
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(ChatMessage{
+				Role: "assistant",
+				ToolCalls: []ToolCall{
+					{
+						ID:       "call_finish",
+						Type:     "function",
+						Function: FunctionCall{Name: "finish", Arguments: `{"reason":"done"}`},
+					},
+					{
+						ID:       "call_echo",
+						Type:     "function",
+						Function: FunctionCall{Name: "echo", Arguments: `{"value":"x"}`},
+					},
+				},
+			}),
+			chatResponse(NewTextMessage("assistant", "should-not-reach")),
+		},
+	}
+
+	result, err := NewAgent(Config{
+		Provider:     llm,
+		Tools:        tools,
+		Model:        "test",
+		SystemPrompt: "system",
+	}).Run(context.Background(), "scan")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if got := len(llm.requestsSnapshot()); got != 1 {
+		t.Fatalf("requests = %d, want 1 (any finish call must terminate the batch)", got)
+	}
+	if result.Output != "task complete: done" {
+		t.Fatalf("result output = %q, want finish tool result", result.Output)
+	}
+}
+
 func TestRunWaitsForLoopSchedulerInboxFire(t *testing.T) {
 	tools := command.NewRegistry()
 	ib := inbox.NewBuffered(4)
