@@ -36,6 +36,7 @@ func RunScannerWithAgent(ctx context.Context, option *cfg.Option, application *a
 	checkpoint := registerScannerCheckpointTool(application.Commands)
 	rt, err := NewAgentRuntime(ctx, option, logger, &RuntimeConfig{
 		ExistingApp: application,
+		AgentLogger: quietAgentStatusLogger(option, logger),
 		PromptConfig: &PromptConfig{
 			Tools:            application.Commands,
 			ScannerDocs:      application.Commands.UsageDocs(),
