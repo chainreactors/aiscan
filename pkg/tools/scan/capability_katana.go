@@ -29,9 +29,6 @@ func init() {
 		switch mode {
 		case scanModeQuick:
 			p.Capabilities[capKatanaCrawl] = struct{}{}
-			if p.CrawlDepth > 1 {
-				p.CrawlDepth = 1
-			}
 		case scanModeFull:
 			p.Capabilities[capKatanaCrawl] = struct{}{}
 			p.Capabilities[capKatanaDeep] = struct{}{}
@@ -87,17 +84,17 @@ func runKatanaCrawl(ctx context.Context, c *Command, e event, depth int, jsMode 
 	seen := make(map[string]struct{})
 
 	options := &katanatypes.Options{
-		MaxDepth:              depth,
-		FieldScope:            "rdn",
-		BodyReadSize:          math.MaxInt,
-		RateLimit:             150,
-		Strategy:              queue.DepthFirst.String(),
-		Silent:                true,
-		ScrapeJSResponses:     jsMode,
+		MaxDepth:               depth,
+		FieldScope:             "rdn",
+		BodyReadSize:           math.MaxInt,
+		RateLimit:              150,
+		Strategy:               queue.DepthFirst.String(),
+		Silent:                 true,
+		ScrapeJSResponses:      jsMode,
 		ScrapeJSLuiceResponses: jsMode,
-		Timeout:               10,
-		Concurrency:           10,
-		Parallelism:           10,
+		Timeout:                10,
+		Concurrency:            10,
+		Parallelism:            10,
 		OnResult: func(r katanaoutput.Result) {
 			if r.Request == nil || r.Request.URL == "" {
 				return
@@ -177,6 +174,6 @@ func sameRootDomain(rawURL, rdn string) bool {
 
 type silentWriter struct{}
 
-func (w *silentWriter) Close() error                      { return nil }
-func (w *silentWriter) Write(_ *katanaoutput.Result) error { return nil }
+func (w *silentWriter) Close() error                         { return nil }
+func (w *silentWriter) Write(_ *katanaoutput.Result) error   { return nil }
 func (w *silentWriter) WriteErr(_ *katanaoutput.Error) error { return nil }

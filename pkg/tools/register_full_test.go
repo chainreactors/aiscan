@@ -8,6 +8,9 @@ import (
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	"github.com/chainreactors/sdk/gogo"
 	"github.com/chainreactors/sdk/spray"
+
+	_ "github.com/chainreactors/aiscan/pkg/tools/katana"
+	_ "github.com/chainreactors/aiscan/pkg/tools/passive"
 )
 
 func TestRegisterAllRegistersKatanaInFullBuild(t *testing.T) {
