@@ -9,6 +9,7 @@ import (
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
+	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/pidlock"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
@@ -26,12 +27,13 @@ func RunScannerWithAgent(ctx context.Context, option *cfg.Option, application *a
 	}
 	defer pidLock.Release()
 
-	command := scannerArgs[0]
-	intent, err := resolveScannerIntent(option, application.Skills, command)
+	scannerCommand := scannerArgs[0]
+	intent, err := resolveScannerIntent(option, application.Skills, scannerCommand)
 	if err != nil {
 		return err
 	}
 
+	checkpoint := registerScannerCheckpointTool(application.Commands)
 	rt, err := NewAgentRuntime(ctx, option, logger, &RuntimeConfig{
 		ExistingApp: application,
 		PromptConfig: &PromptConfig{
@@ -39,7 +41,7 @@ func RunScannerWithAgent(ctx context.Context, option *cfg.Option, application *a
 			ScannerDocs:      application.Commands.UsageDocs(),
 			Skills:           application.Skills.Skills,
 			ScannerAgentMode: true,
-			ScannerName:      command,
+			ScannerName:      scannerCommand,
 		},
 	})
 	if err != nil {
@@ -57,10 +59,68 @@ func RunScannerWithAgent(ctx context.Context, option *cfg.Option, application *a
 	if err != nil {
 		return err
 	}
+	if checkpointResult := checkpoint.Result(); checkpointResult != nil {
+		rt.Output.Final(formatCheckpointMarkdown(checkpointResult))
+		return nil
+	}
 	if result != nil && strings.TrimSpace(result.Output) != "" {
 		rt.Output.Final(result.Output)
 	}
 	return nil
+}
+
+func registerScannerCheckpointTool(reg *command.CommandRegistry) *command.CheckpointTool {
+	checkpoint := command.NewCheckpointTool()
+	if reg != nil {
+		reg.RegisterTool(checkpoint)
+	}
+	return checkpoint
+}
+
+func formatCheckpointMarkdown(result *command.CheckpointResult) string {
+	if result == nil {
+		return ""
+	}
+	title := strings.TrimSpace(result.Title)
+	if title == "" {
+		title = "Checkpoint"
+	}
+	if kind := strings.TrimSpace(result.Kind); kind != "" {
+		title = "[" + kind + "] " + title
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## ")
+	sb.WriteString(title)
+	sb.WriteString("\n\n")
+
+	writeCheckpointField := func(label, value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		sb.WriteString("- ")
+		sb.WriteString(label)
+		sb.WriteString(": ")
+		sb.WriteString(value)
+		sb.WriteString("\n")
+	}
+	writeCheckpointField("target", result.Target)
+	writeCheckpointField("status", result.Status)
+	if len(result.Labels) > 0 {
+		writeCheckpointField("labels", strings.Join(result.Labels, ", "))
+	}
+	if len(result.Options) > 0 {
+		writeCheckpointField("options", strings.Join(result.Options, ", "))
+	}
+
+	content := strings.TrimSpace(result.Content)
+	if content != "" {
+		sb.WriteString("\n")
+		sb.WriteString(content)
+		sb.WriteString("\n")
+	}
+	return strings.TrimSpace(sb.String())
 }
 
 func resolveScannerIntent(option *cfg.Option, store *skills.Store, command string) (string, error) {
