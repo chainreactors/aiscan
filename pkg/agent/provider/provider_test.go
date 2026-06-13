@@ -85,6 +85,115 @@ func TestNewProviderUsesInferredAnthropicProvider(t *testing.T) {
 	}
 }
 
+func TestResolveNormalizesAPIKeyPool(t *testing.T) {
+	cfg, err := Resolve(&ProviderConfig{
+		Provider: "openai",
+		APIKey:   "key-a",
+		APIKeys:  []string{"key-b,key-c", "key-a", " key-d\nkey-b "},
+	})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	want := []string{"key-a", "key-b", "key-c", "key-d"}
+	if len(cfg.APIKeys) != len(want) {
+		t.Fatalf("APIKeys = %#v, want %#v", cfg.APIKeys, want)
+	}
+	for i := range want {
+		if cfg.APIKeys[i] != want[i] {
+			t.Fatalf("APIKeys = %#v, want %#v", cfg.APIKeys, want)
+		}
+	}
+	if cfg.APIKey != "key-a" {
+		t.Fatalf("APIKey = %q, want key-a", cfg.APIKey)
+	}
+}
+
+func TestOpenAIProviderRotatesAPIKeys(t *testing.T) {
+	var authHeaders []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("path = %q, want /v1/chat/completions", r.URL.Path)
+		}
+		authHeaders = append(authHeaders, r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`)
+	}))
+	defer server.Close()
+
+	p, err := NewOpenAIProvider(&ProviderConfig{
+		Provider: "openai",
+		BaseURL:  server.URL + "/v1",
+		APIKey:   "key-a",
+		APIKeys:  []string{"key-b"},
+		Model:    "test-model",
+		Timeout:  5,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenAIProvider() error = %v", err)
+	}
+
+	for i := 0; i < 3; i++ {
+		if _, err := p.ChatCompletion(context.Background(), &ChatCompletionRequest{Model: "test-model"}); err != nil {
+			t.Fatalf("ChatCompletion(%d) error = %v", i, err)
+		}
+	}
+
+	want := []string{"Bearer key-a", "Bearer key-b", "Bearer key-a"}
+	if len(authHeaders) != len(want) {
+		t.Fatalf("headers = %#v, want %#v", authHeaders, want)
+	}
+	for i := range want {
+		if authHeaders[i] != want[i] {
+			t.Fatalf("headers = %#v, want %#v", authHeaders, want)
+		}
+	}
+}
+
+func TestAnthropicProviderRotatesAPIKeys(t *testing.T) {
+	var keyHeaders []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages" {
+			t.Fatalf("path = %q, want /v1/messages", r.URL.Path)
+		}
+		keyHeaders = append(keyHeaders, r.Header.Get("x-api-key"))
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`)
+	}))
+	defer server.Close()
+
+	p, err := NewAnthropicProvider(&ProviderConfig{
+		Provider: "anthropic",
+		BaseURL:  server.URL + "/v1",
+		APIKey:   "key-a",
+		APIKeys:  []string{"key-b"},
+		Model:    "test-model",
+		Timeout:  5,
+	})
+	if err != nil {
+		t.Fatalf("NewAnthropicProvider() error = %v", err)
+	}
+
+	req := &ChatCompletionRequest{
+		Model:    "test-model",
+		Messages: []ChatMessage{NewTextMessage("user", "ping")},
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := p.ChatCompletion(context.Background(), req); err != nil {
+			t.Fatalf("ChatCompletion(%d) error = %v", i, err)
+		}
+	}
+
+	want := []string{"key-a", "key-b", "key-a"}
+	if len(keyHeaders) != len(want) {
+		t.Fatalf("headers = %#v, want %#v", keyHeaders, want)
+	}
+	for i := range want {
+		if keyHeaders[i] != want[i] {
+			t.Fatalf("headers = %#v, want %#v", keyHeaders, want)
+		}
+	}
+}
+
 func TestAnthropicProviderChatCompletion(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/messages" {
@@ -185,6 +294,60 @@ func TestAnthropicProviderChatCompletion(t *testing.T) {
 	}
 }
 
+func TestAnthropicThinkingBlocksRoundTrip(t *testing.T) {
+	msg := anthropicBlocksToMessage("assistant", []anthropicContentBlock{
+		{Type: "thinking", Thinking: "reasoned carefully", Signature: "sig_123"},
+		{Type: "text", Text: "scan ready"},
+		{Type: "tool_use", ID: "toolu_1", Name: "bash", Input: json.RawMessage(`{"command":"id"}`)},
+	})
+	if msg.ReasoningContent == nil || *msg.ReasoningContent != "reasoned carefully" {
+		t.Fatalf("ReasoningContent = %#v, want parsed thinking", msg.ReasoningContent)
+	}
+	if len(msg.ReasoningBlocks) != 1 {
+		t.Fatalf("ReasoningBlocks = %#v, want one block", msg.ReasoningBlocks)
+	}
+	if got := msg.ReasoningBlocks[0]; got.Type != "thinking" || got.Thinking != "reasoned carefully" || got.Signature != "sig_123" {
+		t.Fatalf("ReasoningBlocks[0] = %#v, want signed thinking block", got)
+	}
+
+	p, err := NewAnthropicProvider(&ProviderConfig{
+		Provider: "anthropic",
+		BaseURL:  "https://api.anthropic.com/v1",
+		APIKey:   "test-key",
+		Timeout:  5,
+	})
+	if err != nil {
+		t.Fatalf("NewAnthropicProvider() error = %v", err)
+	}
+	data, err := p.marshalRequest(&ChatCompletionRequest{
+		Model: "claude-test",
+		Messages: []ChatMessage{
+			NewTextMessage("user", "scan localhost"),
+			msg,
+			NewToolResultMessage("toolu_1", "ok"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshalRequest() error = %v", err)
+	}
+	var body struct {
+		Messages []struct {
+			Role    string                   `json:"role"`
+			Content []map[string]interface{} `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(data, &body); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	if len(body.Messages) < 2 || body.Messages[1].Role != "assistant" || len(body.Messages[1].Content) == 0 {
+		t.Fatalf("messages = %#v, want assistant message with content", body.Messages)
+	}
+	block := body.Messages[1].Content[0]
+	if block["type"] != "thinking" || block["thinking"] != "reasoned carefully" || block["signature"] != "sig_123" {
+		t.Fatalf("thinking block = %#v, want signed thinking block", block)
+	}
+}
+
 func TestOpenAIProviderChatCompletionStream(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
@@ -262,6 +425,10 @@ func TestAnthropicProviderChatCompletionStream(t *testing.T) {
 		fmt.Fprint(w, "event: message_start\n")
 		fmt.Fprint(w, "data: {\"type\":\"message_start\",\"message\":{\"role\":\"assistant\",\"usage\":{\"input_tokens\":7}}}\n\n")
 		fmt.Fprint(w, "event: content_block_delta\n")
+		fmt.Fprint(w, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"think\"}}\n\n")
+		fmt.Fprint(w, "event: content_block_delta\n")
+		fmt.Fprint(w, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"sig_stream\"}}\n\n")
+		fmt.Fprint(w, "event: content_block_delta\n")
 		fmt.Fprint(w, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"}}\n\n")
 		fmt.Fprint(w, "event: content_block_start\n")
 		fmt.Fprint(w, "data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"bash\",\"input\":{}}}\n\n")
@@ -296,6 +463,8 @@ func TestAnthropicProviderChatCompletionStream(t *testing.T) {
 
 	var role string
 	var text string
+	var reasoning string
+	var signature string
 	var done bool
 	var finishReason string
 	var usage *Usage
@@ -309,6 +478,12 @@ func TestAnthropicProviderChatCompletionStream(t *testing.T) {
 		}
 		if event.Delta.Content != nil {
 			text += *event.Delta.Content
+		}
+		if event.Delta.ReasoningContent != nil {
+			reasoning += *event.Delta.ReasoningContent
+		}
+		if event.Delta.ReasoningSignature != nil {
+			signature += *event.Delta.ReasoningSignature
 		}
 		for _, delta := range event.Delta.ToolCalls {
 			tc := toolCalls[delta.Index]
@@ -341,6 +516,12 @@ func TestAnthropicProviderChatCompletionStream(t *testing.T) {
 	}
 	if text != "hi" {
 		t.Fatalf("text = %q, want hi", text)
+	}
+	if reasoning != "think" {
+		t.Fatalf("reasoning = %q, want think", reasoning)
+	}
+	if signature != "sig_stream" {
+		t.Fatalf("signature = %q, want sig_stream", signature)
 	}
 	if finishReason != "tool_calls" {
 		t.Fatalf("finish reason = %q, want tool_calls", finishReason)

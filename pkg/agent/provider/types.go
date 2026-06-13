@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
 )
 
 // CacheRetention controls prompt caching behavior across providers.
@@ -39,12 +38,13 @@ func ImagePart(mimeType, base64Data, detail string) ContentPart {
 }
 
 type ChatMessage struct {
-	Role             string        `json:"role"`
-	Content          *string       `json:"content,omitempty"`
-	ContentParts     []ContentPart `json:"-"`
-	ReasoningContent *string       `json:"reasoning_content,omitempty"`
-	ToolCalls        []ToolCall    `json:"tool_calls,omitempty"`
-	ToolCallID       string        `json:"tool_call_id,omitempty"`
+	Role             string           `json:"role"`
+	Content          *string          `json:"content,omitempty"`
+	ContentParts     []ContentPart    `json:"-"`
+	ReasoningContent *string          `json:"reasoning_content,omitempty"`
+	ReasoningBlocks  []ReasoningBlock `json:"-"`
+	ToolCalls        []ToolCall       `json:"tool_calls,omitempty"`
+	ToolCallID       string           `json:"tool_call_id,omitempty"`
 }
 
 func (m ChatMessage) MarshalJSON() ([]byte, error) {
@@ -82,10 +82,18 @@ func ParseDataURI(dataURI string) (mediaType, base64Data string) {
 }
 
 type ChatMessageDelta struct {
-	Role             string          `json:"role,omitempty"`
-	Content          *string         `json:"content,omitempty"`
-	ReasoningContent *string         `json:"reasoning_content,omitempty"`
-	ToolCalls        []ToolCallDelta `json:"tool_calls,omitempty"`
+	Role               string          `json:"role,omitempty"`
+	Content            *string         `json:"content,omitempty"`
+	ReasoningContent   *string         `json:"reasoning_content,omitempty"`
+	ReasoningSignature *string         `json:"reasoning_signature,omitempty"`
+	ToolCalls          []ToolCallDelta `json:"tool_calls,omitempty"`
+}
+
+type ReasoningBlock struct {
+	Type      string `json:"type"`
+	Thinking  string `json:"thinking,omitempty"`
+	Signature string `json:"signature,omitempty"`
+	Data      string `json:"data,omitempty"`
 }
 
 type ToolCall struct {
@@ -124,7 +132,7 @@ type FunctionDefinition struct {
 
 type ResponseFormat struct {
 	Type       string          `json:"type"`
-	JSONSchema *JSONSchemaSpec  `json:"json_schema,omitempty"`
+	JSONSchema *JSONSchemaSpec `json:"json_schema,omitempty"`
 }
 
 type JSONSchemaSpec struct {
