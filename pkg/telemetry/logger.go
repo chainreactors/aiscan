@@ -127,6 +127,13 @@ func ErrorOnlyLogger(logger Logger) Logger {
 	return errorOnlyLogger{base: logger}
 }
 
+func SuppressImportantLogger(logger Logger) Logger {
+	if logger == nil {
+		return NopLogger()
+	}
+	return suppressImportantLogger{base: logger}
+}
+
 type nopLogger struct{}
 
 func (nopLogger) Debugf(string, ...any)     {}
@@ -146,6 +153,24 @@ func (l errorOnlyLogger) Errorf(format string, args ...any) {
 	l.base.Errorf(format, args...)
 }
 func (errorOnlyLogger) Importantf(string, ...any) {}
+
+type suppressImportantLogger struct {
+	base Logger
+}
+
+func (l suppressImportantLogger) Debugf(format string, args ...any) {
+	l.base.Debugf(format, args...)
+}
+func (l suppressImportantLogger) Infof(format string, args ...any) {
+	l.base.Infof(format, args...)
+}
+func (l suppressImportantLogger) Warnf(format string, args ...any) {
+	l.base.Warnf(format, args...)
+}
+func (l suppressImportantLogger) Errorf(format string, args ...any) {
+	l.base.Errorf(format, args...)
+}
+func (suppressImportantLogger) Importantf(string, ...any) {}
 
 func (l logsLogger) Debugf(format string, args ...any) {
 	l.base.Debugf(format, args...)
