@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
+	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
 func TestInboxDrainedBeforeFirstTurnLLMCall(t *testing.T) {
@@ -207,6 +208,94 @@ func TestRunWaitsWhenKeepAliveIsTrue(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("second request missing task completion: %#v", requests[1].Messages)
+	}
+}
+
+func TestRunWaitsForLoopSchedulerInboxFire(t *testing.T) {
+	tools := command.NewRegistry()
+	ib := inbox.NewBuffered(4)
+	scheduler := NewLoopScheduler(ib, telemetry.NopLogger())
+	scheduler.SetMinInterval(time.Millisecond)
+	defer scheduler.Stop()
+
+	var requestCount int
+	llm := &callbackProvider{
+		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
+			requestCount++
+			switch requestCount {
+			case 1:
+				return chatResponse(NewTextMessage("assistant", "waiting")), nil
+			case 2:
+				if err := scheduler.Remove("heartbeat"); err != nil {
+					t.Errorf("Remove heartbeat: %v", err)
+				}
+				return chatResponse(NewTextMessage("assistant", "final")), nil
+			default:
+				return nil, fmt.Errorf("unexpected request %d: %#v", requestCount, req.Messages)
+			}
+		},
+	}
+
+	if err := scheduler.Add(context.Background(), LoopEntry{
+		Name:     "heartbeat",
+		Interval: 20 * time.Millisecond,
+		Prompt:   "heartbeat check: read IOA context",
+		Mode:     ModeInbox,
+	}); err != nil {
+		t.Fatalf("scheduler.Add() error = %v", err)
+	}
+
+	result, err := NewAgent(Config{
+		Provider:      llm,
+		Tools:         tools,
+		Model:         "test",
+		SystemPrompt:  "system",
+		Inbox:         ib,
+		LoopScheduler: scheduler,
+	}).Run(context.Background(), "start loop")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Output != "final" {
+		t.Fatalf("result = %q, want final", result.Output)
+	}
+	if requestCount != 2 {
+		t.Fatalf("requests = %d, want 2", requestCount)
+	}
+
+	found := false
+	for _, msg := range result.Messages {
+		if strings.Contains(contentOf(msg), "heartbeat check: read IOA context") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("result messages missing heartbeat prompt: %#v", result.Messages)
+	}
+}
+
+func TestLoopSchedulerSkipsInboxWhenPromptFuncFails(t *testing.T) {
+	ib := inbox.NewBuffered(4)
+	scheduler := NewLoopScheduler(ib, telemetry.NopLogger())
+	scheduler.SetMinInterval(time.Millisecond)
+	defer scheduler.Stop()
+
+	if err := scheduler.Add(context.Background(), LoopEntry{
+		Name:     "heartbeat",
+		Interval: time.Millisecond,
+		Prompt:   "static prompt should not be injected",
+		PromptFunc: func(context.Context, LoopEntry) (string, error) {
+			return "", fmt.Errorf("ioa unavailable")
+		},
+		Mode:      ModeInbox,
+		Immediate: true,
+	}); err != nil {
+		t.Fatalf("scheduler.Add() error = %v", err)
+	}
+
+	if got := ib.Len(); got != 0 {
+		t.Fatalf("inbox messages = %d, want 0", got)
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 
 type ChatMessage = provider.ChatMessage
 type ChatMessageDelta = provider.ChatMessageDelta
+type ReasoningBlock = provider.ReasoningBlock
 type ToolCall = provider.ToolCall
 type ToolCallDelta = provider.ToolCallDelta
 type FunctionCall = provider.FunctionCall
@@ -182,26 +183,26 @@ type Config struct {
 
 // Builder methods — each returns a modified copy (Config is a value type).
 
-func (c Config) WithProvider(p Provider) Config                { c.Provider = p; return c }
-func (c Config) WithTools(t *command.CommandRegistry) Config   { c.Tools = t; return c }
-func (c Config) WithModel(m string) Config                     { c.Model = m; return c }
-func (c Config) WithSystemPrompt(s string) Config              { c.SystemPrompt = s; return c }
-func (c Config) WithMessages(msgs []ChatMessage) Config        { c.Messages = msgs; return c }
-func (c Config) WithStream(s bool) Config                      { c.Stream = s; return c }
-func (c Config) WithInbox(ib inbox.Inbox) Config               { c.Inbox = ib; return c }
-func (c Config) WithLogger(l telemetry.Logger) Config          { c.Logger = l; return c }
-func (c Config) WithBus(b *eventbus.Bus[Event]) Config         { c.Bus = b; return c }
-func (c Config) WithMaxTokens(n int) Config                    { c.MaxTokens = n; return c }
-func (c Config) WithTemperature(t float64) Config              { c.Temperature = &t; return c }
-func (c Config) WithMaxRetries(n int) Config                   { c.MaxRetries = n; return c }
-func (c Config) WithTokenBudget(n int) Config                  { c.TokenBudget = n; return c }
-func (c Config) WithExpander(e *inbox.Expander) Config         { c.Expander = e; return c }
+func (c Config) WithProvider(p Provider) Config              { c.Provider = p; return c }
+func (c Config) WithTools(t *command.CommandRegistry) Config { c.Tools = t; return c }
+func (c Config) WithModel(m string) Config                   { c.Model = m; return c }
+func (c Config) WithSystemPrompt(s string) Config            { c.SystemPrompt = s; return c }
+func (c Config) WithMessages(msgs []ChatMessage) Config      { c.Messages = msgs; return c }
+func (c Config) WithStream(s bool) Config                    { c.Stream = s; return c }
+func (c Config) WithInbox(ib inbox.Inbox) Config             { c.Inbox = ib; return c }
+func (c Config) WithLogger(l telemetry.Logger) Config        { c.Logger = l; return c }
+func (c Config) WithBus(b *eventbus.Bus[Event]) Config       { c.Bus = b; return c }
+func (c Config) WithMaxTokens(n int) Config                  { c.MaxTokens = n; return c }
+func (c Config) WithTemperature(t float64) Config            { c.Temperature = &t; return c }
+func (c Config) WithMaxRetries(n int) Config                 { c.MaxRetries = n; return c }
+func (c Config) WithTokenBudget(n int) Config                { c.TokenBudget = n; return c }
+func (c Config) WithExpander(e *inbox.Expander) Config       { c.Expander = e; return c }
 func (c Config) WithTransformContext(fn TransformContextFunc) Config {
 	c.TransformContext = fn
 	return c
 }
-func (c Config) WithCacheRetention(r CacheRetention) Config    { c.CacheRetention = r; return c }
-func (c Config) WithSessionID(id string) Config                { c.SessionID = id; return c }
+func (c Config) WithCacheRetention(r CacheRetention) Config { c.CacheRetention = r; return c }
+func (c Config) WithSessionID(id string) Config             { c.SessionID = id; return c }
 func (c Config) WithResponseFormat(rf *ResponseFormat) Config {
 	c.ResponseFormat = rf
 	return c
