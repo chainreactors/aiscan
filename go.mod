@@ -14,7 +14,7 @@ require (
 	github.com/chainreactors/sdk v0.2.4-0.20260608090513-9be651f748f0
 	github.com/chainreactors/spray v1.3.1-0.20260608085629-66dafe7eab4f
 	github.com/chainreactors/utils v0.0.0-20260529172343-6465cb8568b2
-	github.com/chainreactors/zombie v1.2.3-0.20260608085910-705f548f7da1
+	github.com/chainreactors/zombie v1.2.3-0.20260611172539-bdd2cdfd5a21
 	github.com/charmbracelet/glamour v0.8.0
 	github.com/go-rod/rod v0.116.2
 	github.com/go-rod/stealth v0.4.9

@@ -188,6 +188,8 @@ github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4 h1:lvnDYEkatmZ
 github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4/go.mod h1:zfz367PUmyaX6oAqV9SktVqyRXKlEh0sel9Wsq9dd2c=
 github.com/chainreactors/zombie v1.2.3-0.20260608085910-705f548f7da1 h1:LARs9ep9QDr3cMvSXgiGun8PgMyv+zOQVWnE/WGotco=
 github.com/chainreactors/zombie v1.2.3-0.20260608085910-705f548f7da1/go.mod h1:Wujeh8zRhINbM/COIjgOaX7V1IYvFJoIgkEq7nh19Lg=
+github.com/chainreactors/zombie v1.2.3-0.20260611172539-bdd2cdfd5a21 h1:d9gbGmog0VUqOgA+s0DrPmCWRXlZEFndpkS3nb0h0Yw=
+github.com/chainreactors/zombie v1.2.3-0.20260611172539-bdd2cdfd5a21/go.mod h1:Wujeh8zRhINbM/COIjgOaX7V1IYvFJoIgkEq7nh19Lg=
 github.com/charlievieth/fastwalk v1.0.14 h1:3Eh5uaFGwHZd8EGwTjJnSpBkfwfsak9h6ICgnWlhAyg=
 github.com/charlievieth/fastwalk v1.0.14/go.mod h1:diVcUreiU1aQ4/Wu3NbxxH4/KYdKpLDojrQ1Bb2KgNY=
 github.com/charmbracelet/colorprofile v0.4.3 h1:QPa1IWkYI+AOB+fE+mg/5/4HRMZcaXex9t5KX76i20Q=
