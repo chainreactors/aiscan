@@ -28,6 +28,30 @@ func TestRenderAgentMarkdownPlainFallback(t *testing.T) {
 	}
 }
 
+func TestTrimANSIVisibleRightKeepsResetAfterContent(t *testing.T) {
+	line := "\x1b[38;5;252m漏洞验证\x1b[0m\x1b[38;5;252m \x1b[0m\x1b[38;5;252m \x1b[0m"
+	want := "\x1b[38;5;252m漏洞验证\x1b[0m"
+	if got := trimANSIVisibleRight(line); got != want {
+		t.Fatalf("trimANSIVisibleRight() = %q, want %q", got, want)
+	}
+}
+
+func TestRenderAgentMarkdownPrettyTrimsPaddedLineEnds(t *testing.T) {
+	got := renderAgentMarkdown(`我是 aiscan，一个自主安全研究助手，主要能帮你做这些事：
+
+- 端口与服务发现 — 扫描目标开放端口、识别服务指纹（gogo/scan）
+- Web 探测与指纹识别 — 探测 Web 应用、目录爆破、爬虫（spray）
+- 漏洞验证（PoC） — 基于 CVE/默认配置/错误配置的模板化漏洞检测（neutron）
+- 漏洞情报搜索 — 查询 CVE、利用细节、产品文档（web_search/fetch）
+- 多阶段综合扫描 — 一条命令完成端口→Web→指纹→弱口令→PoC 全流程（scan）`, true)
+
+	for _, line := range strings.Split(stripANSI(got), "\n") {
+		if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
+			t.Fatalf("pretty markdown line has trailing whitespace: %q\nfull output:\n%q", line, got)
+		}
+	}
+}
+
 func TestAgentConsoleBannerHonorsNoColor(t *testing.T) {
 	repl := &AgentConsole{
 		application: &app.App{
