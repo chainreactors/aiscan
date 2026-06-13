@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"io"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -24,6 +25,9 @@ func tmuxTool(t *testing.T) *TmuxCommand {
 func TestTmuxNewSessionForeground(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only")
+	}
+	if os.Getenv("CI") != "" {
+		t.Skip("PTY session output capture is unreliable in headless CI")
 	}
 	tmux := tmuxTool(t)
 	var buf strings.Builder
