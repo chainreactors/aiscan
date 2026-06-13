@@ -64,3 +64,22 @@ func TestErrorOnlyLoggerSuppressesNonErrors(t *testing.T) {
 		t.Fatalf("error log missing: %q", got)
 	}
 }
+
+func TestSuppressImportantLoggerKeepsWarningsAndErrors(t *testing.T) {
+	var buf bytes.Buffer
+	logger := SuppressImportantLogger(NewLogger(LogConfig{Output: &buf}))
+	logger.Warnf("warn")
+	logger.Errorf("error")
+	logger.Importantf("important")
+
+	got := buf.String()
+	if strings.Contains(got, "important") {
+		t.Fatalf("important log was not suppressed: %q", got)
+	}
+	if !strings.Contains(got, "[warn] warn") {
+		t.Fatalf("warn log missing: %q", got)
+	}
+	if !strings.Contains(got, "[error] error") {
+		t.Fatalf("error log missing: %q", got)
+	}
+}
