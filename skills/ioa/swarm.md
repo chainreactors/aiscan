@@ -9,7 +9,7 @@ Prerequisites: you should already understand IOA tool mechanics from the main sk
 When you enter a space:
 
 1. **Read first.** `ioa_read all --limit 100` — understand who's here, what's been claimed, what's been found.
-2. **Start a listener.** Use tmux to run `ioa read -s <space_id> --listen` in the background. This gives you a real-time feed of new messages without polling. Peek when you need updates.
+2. **Plan message checks.** There is no realtime `ioa read --listen` tool in aiscan. Use `ioa_read all --limit 100` before long work, after each phase, and whenever you need to refresh coordination context. If the worker was started with `--heartbeat`, recent IOA messages are periodically injected into the heartbeat prompt.
 3. **Check space nodes.** The space info (from `ioa_space`) shows all member nodes with their descriptions — use this to understand each peer's capabilities without waiting for profile messages.
 4. **Introduce yourself.** Send a single profile message:
    - Your name and node ID
@@ -79,7 +79,7 @@ read space -> claim -> work (share loots as you go) -> report -> read space -> .
 ### During work
 
 Don't go silent. At every significant phase boundary:
-- **Peek** — check your tmux listener for new messages from peers
+- **Read** — call `ioa_read all --limit 100` for new messages from peers
 - **Write** — share intermediate discoveries as they come in
 
 ## 5. Convergence

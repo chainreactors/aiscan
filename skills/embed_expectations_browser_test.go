@@ -2,4 +2,7 @@
 
 package skills
 
-func init() { addExpectedSkill("katana", true) }
+func init() {
+	addExpectedSkill("katana", true)
+	addExpectedSkill("playwright", true)
+}

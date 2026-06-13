@@ -1,8 +1,9 @@
 package skills
 
 var blocked = map[string]bool{
-	"katana":  true,
-	"passive": true,
+	"katana":     true,
+	"passive":    true,
+	"playwright": true,
 }
 
 //nolint:unused // called from build-tagged files
