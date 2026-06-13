@@ -1,7 +1,9 @@
 package runner
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"text/template"
@@ -22,6 +24,7 @@ type PromptConfig struct {
 	ScannerName      string
 	NodeName         string
 	Space            string
+	FindingsPath     string
 }
 
 // LoadedSkill is a skill whose full body is embedded directly into the prompt.
@@ -46,12 +49,13 @@ type promptData struct {
 	ScannerName      string
 
 	// Environment
-	OS       string
-	Time     string
-	Hostname string
-	Node     string
-	Space    string
-	Windows  bool
+	OS           string
+	Time         string
+	Hostname     string
+	Node         string
+	Space        string
+	FindingsPath string
+	Windows      bool
 
 	// Tools
 	Tools []toolEntry
@@ -167,17 +171,30 @@ When a skill references relative paths, resolve them relative to the skill base 
 
 ## Key Principles
 
-- Scanner output is evidence, not proof. Never report "confirmed" without independent verification.
-- Before reporting any finding as "confirmed": (1) verify you have independent curl/PoC evidence beyond scanner output, (2) confirm the response contains real sensitive data — not just a 200 status or default page, (3) check that the finding is not on the never-report list (missing headers, banner disclosure, GraphQL introspection alone, open redirect without chain, CORS without exfil PoC, self-XSS). When verify skill is loaded, follow its full triage gate.
-- Progressive findings log: each time you confirm a vulnerability through active probing, IMMEDIATELY append a structured entry to /tmp/findings.md (target, vuln type, severity, one-line summary, the curl command that proved it). Do not wait until the report — findings discovered across 20+ turns WILL be forgotten if not written down. Before writing the final report, re-read /tmp/findings.md and ensure EVERY confirmed entry appears in the report.
-- Read aiscan://skills/aiscan/SKILL.md for execution rules, output consumption, and triage strategy.
+Use boundary standards and target traits, not fixed vulnerability checklists.
+
+Boundary standards:
+- Scanner output is evidence, not proof. Report "confirmed" only with independent, reproducible evidence that demonstrates security impact.
+- Confirmed reportable findings need executable proof: a self-contained curl/protocol command, saved browser replay, or equivalent PoC evidence. No PoC means not confirmed.
+- Suppress standalone P3/low/informational reports unless the user requested inventory or the issue chains into demonstrated impact.
+- Treat fingerprints, versions, open ports, CORS/security headers, template matches, generic 200 responses, login pages, default pages, self-XSS, open redirects, GraphQL introspection, and unchained primitives as leads unless impact is demonstrated.
+- For authorization and IDOR, one changed ID is a lead. Test 3-5 observed, adjacent, or cross-account identifiers when available before calling impact confirmed.
+- For JS discovery, aim to enumerate all reachable script sources and interfaces from crawlers, rendered pages, network traces, source maps, route manifests, and archived hints. Do not claim complete hidden-endpoint coverage unless the explored sources are stated and the remaining limits are clear.
+
+Decision routing:
+- Login/auth boundary -> authorization, IDOR, role or tenant boundary first.
+- API service -> unauthenticated access, method changes, role boundaries, and feeding response fields from one endpoint into related endpoints.
+- Upload/import/media -> upload validation, storage access, rendering behavior, metadata leakage, and post-upload authorization.
+- Search/filter/export/sort/orderBy/input -> injection-style validation and authorization-sensitive data slicing.
+- GraphQL -> protected query or mutation impact first; introspection alone is reconnaissance.
+- No clear surface -> JS, source maps, route manifests, robots/sitemap/archive data, browser network traces, and hidden endpoint discovery.
+- If a branch produces no useful evidence after about 20 minutes or several negative probes, checkpoint it and switch direction.
+
+- For long-running or broad assessments, keep a progressive findings log at {{.FindingsPath}} for confirmed findings: target, vuln type, severity, one-line summary, and reproducible command or PoC evidence. Re-read it before producing a final report.
+- Read aiscan://skills/aiscan/SKILL.md when you need aiscan execution rules, output consumption behavior, or scanner-specific tool usage.
 - Use conservative thread counts and timeouts for fragile targets.
-- Do not stop probing after finding one critical vulnerability — record it to /tmp/findings.md and continue testing the remaining attack surface. There are almost always additional independent vulnerabilities.
-- Before writing any final report or summary, you MUST output a section titled ` + "`<unexplored-leads>`" + ` listing at least 5 concrete items your own recon surfaced but you did NOT probe. Each item must include:
-    - the evidence (which tool call / output revealed it)
-    - the unexecuted action (specific endpoint, param, file, port, or capability)
-    - why you didn't pursue it
-  If you cannot list 5 items, you have not done enough recon — go back and expand coverage before reporting. If the leads exist, you must probe them before writing the report (probing changes the list, that's expected).
+- Let user intent define stopping criteria. For broad assessments, continue beyond the first serious finding when scope and time allow; for narrow validation tasks, answer the specific question directly.
+- For broad scan reports, mention material high-value leads that remain untested. Do not invent leads or expand scope solely to satisfy a count.
 {{- if .Constraints}}
 
 {{.Constraints}}
@@ -198,6 +215,13 @@ func BuildSystemPrompt(cfg *PromptConfig, agentCfg *agent.Config) string {
 	}
 
 	hostname, _ := os.Hostname()
+	findingsPath := cfg.FindingsPath
+	if findingsPath == "" && agentCfg != nil {
+		findingsPath = findingsLogPath(agentCfg.SessionID)
+	}
+	if findingsPath == "" {
+		findingsPath = findingsLogPath("")
+	}
 
 	data := promptData{
 		CustomPreamble:   cfg.CustomPreamble,
@@ -208,6 +232,7 @@ func BuildSystemPrompt(cfg *PromptConfig, agentCfg *agent.Config) string {
 		Hostname:         hostname,
 		Node:             cfg.NodeName,
 		Space:            cfg.Space,
+		FindingsPath:     findingsPath,
 		Windows:          runtime.GOOS == "windows",
 		ScannerDocs:      cfg.ScannerDocs,
 	}
@@ -246,4 +271,31 @@ func BuildSystemPrompt(cfg *PromptConfig, agentCfg *agent.Config) string {
 		return "You are a helpful assistant."
 	}
 	return sb.String()
+}
+
+func findingsLogPath(sessionID string) string {
+	safe := sanitizeFileToken(sessionID)
+	if safe == "" {
+		safe = fmt.Sprintf("pid-%d", os.Getpid())
+	}
+	return filepath.Join(os.TempDir(), "aiscan-findings-"+safe+".md")
+}
+
+func sanitizeFileToken(value string) string {
+	var sb strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+			sb.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			sb.WriteRune(r)
+		case r >= '0' && r <= '9':
+			sb.WriteRune(r)
+		case r == '-' || r == '_':
+			sb.WriteRune(r)
+		default:
+			sb.WriteByte('-')
+		}
+	}
+	return strings.Trim(sb.String(), "-")
 }

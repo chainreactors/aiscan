@@ -2,10 +2,12 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
@@ -17,6 +19,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
 	"github.com/chainreactors/aiscan/skills"
+	"github.com/chainreactors/ioa/protocols"
 )
 
 // ---------------------------------------------------------------------------
@@ -94,10 +97,9 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		}
 	}
 	if rc != nil && rc.PromptConfig != nil {
-		pc = rc.PromptConfig
+		pcCopy := *rc.PromptConfig
+		pc = &pcCopy
 	}
-	rt.SystemPrompt = BuildSystemPrompt(pc, nil)
-	logger.Debugf("system prompt length: %d chars", len(rt.SystemPrompt))
 
 	if rc == nil || !rc.NoOutput {
 		rt.Output = NewAgentOutput(option)
@@ -150,8 +152,19 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		CacheRetention: agent.CacheShort,
 		Bus:            agentBus,
 	}
+	rt.Config = agent.NewAgent(rt.Config).Cfg
 
 	rt.App.Commands.RegisterTool(agent.NewLoopTool(scheduler))
+
+	if pc.FindingsPath == "" {
+		pc.FindingsPath = findingsLogPath(rt.Config.SessionID)
+	}
+	if err := initFindingsLog(pc.FindingsPath); err != nil {
+		logger.Warnf("findings log %s: %s", pc.FindingsPath, err)
+	}
+	rt.SystemPrompt = BuildSystemPrompt(pc, &rt.Config)
+	rt.Config.SystemPrompt = rt.SystemPrompt
+	logger.Debugf("system prompt length: %d chars", len(rt.SystemPrompt))
 
 	parentAgent := agent.NewAgent(rt.Config)
 	subAgentTool := agent.NewSubAgentTool(parentAgent, ib, func(name string) (agent.AgentType, error) {
@@ -195,6 +208,12 @@ func (rt *AgentRuntime) Close() {
 	}
 }
 
+func initFindingsLog(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	return os.WriteFile(path, []byte("# aiscan findings\n\n"), 0600)
+}
 
 // ---------------------------------------------------------------------------
 // Mode dispatch
@@ -278,6 +297,14 @@ func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) e
 	if ioaURL == "" {
 		ioaURL = "http://127.0.0.1:8765"
 	}
+	if option.IOANodeName == "" {
+		option.IOANodeName = ResolveIOANodeName(option)
+	}
+
+	initialTask, err := cfg.ResolveOptionalTask(option)
+	if err != nil {
+		return err
+	}
 
 	rt, err := NewAgentRuntime(ctx, option, logger, &RuntimeConfig{
 		NoOutput: true,
@@ -295,14 +322,234 @@ func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) e
 	}
 	defer rt.Close()
 
-	prompt := strings.TrimSpace(option.Prompt)
-	if prompt != "" && len(option.Inputs) > 0 {
-		prompt = fmt.Sprintf("%s\n\nTargets:\n%s", prompt, cfg.FormatInputs(option.Inputs))
+	prompt := initialTask
+	if prompt != "" {
+		prompt = skills.ExpandCommand(prompt, rt.App.Skills)
+		prompt, err = cfg.ApplySelectedSkills(prompt, option.Skills, rt.App.Skills)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := scheduleHeartbeat(ctx, rt.Config.LoopScheduler, option, initialTask, rt.App.IOAClient); err != nil {
+		return err
 	}
 
 	loopCfg := rt.Config.WithSystemPrompt(rt.SystemPrompt).WithStream(true)
 	_, err = agent.NewAgent(loopCfg).Run(ctx, prompt)
 	return err
+}
+
+const heartbeatRecentMessageLimit = 50
+
+func scheduleHeartbeat(ctx context.Context, scheduler *agent.LoopScheduler, option *cfg.Option, initialTask string, ioaClient protocols.ClientAPI) error {
+	if option.Heartbeat < 0 {
+		return fmt.Errorf("--heartbeat must be greater than or equal to 0")
+	}
+	if option.Heartbeat == 0 {
+		return nil
+	}
+	if scheduler == nil {
+		return fmt.Errorf("--heartbeat requires a loop scheduler")
+	}
+	if ioaClient == nil {
+		return fmt.Errorf("--heartbeat requires an IOA client")
+	}
+
+	if err := scheduler.Add(ctx, agent.LoopEntry{
+		Name:       "heartbeat",
+		Interval:   time.Duration(option.Heartbeat) * time.Minute,
+		Prompt:     heartbeatPromptPreview(option, initialTask),
+		PromptFunc: heartbeatPromptFunc(option, initialTask, ioaClient),
+		Mode:       agent.ModeInbox,
+	}); err != nil {
+		return fmt.Errorf("schedule heartbeat: %w", err)
+	}
+	return nil
+}
+
+func heartbeatPromptFunc(option *cfg.Option, initialTask string, ioaClient protocols.ClientAPI) func(context.Context, agent.LoopEntry) (string, error) {
+	return func(ctx context.Context, _ agent.LoopEntry) (string, error) {
+		return heartbeatPrompt(ctx, option, initialTask, ioaClient)
+	}
+}
+
+func heartbeatPrompt(ctx context.Context, option *cfg.Option, initialTask string, ioaClient protocols.ClientAPI) (string, error) {
+	if ioaClient == nil {
+		return "", fmt.Errorf("IOA client is nil")
+	}
+
+	spaceName := heartbeatSpace(option)
+	info, err := ioaClient.Space(ctx, spaceName, "aiscan heartbeat")
+	if err != nil {
+		return "", fmt.Errorf("read IOA space %q: %w", spaceName, err)
+	}
+	messages, err := ioaClient.Read(ctx, info.ID, protocols.ReadOptions{
+		All:   true,
+		Limit: heartbeatRecentMessageLimit,
+	})
+	if err != nil {
+		return "", fmt.Errorf("read IOA messages for space %q: %w", info.Name, err)
+	}
+
+	return renderHeartbeatPrompt(option, initialTask, ioaClient.NodeID(), info, messages), nil
+}
+
+func heartbeatPromptPreview(option *cfg.Option, initialTask string) string {
+	return heartbeatPromptHeader(option, initialTask, "", protocols.SpaceInfo{}, nil) +
+		"\nRuntime reads IOA SpaceInfo and the latest messages before each heartbeat fire."
+}
+
+func renderHeartbeatPrompt(option *cfg.Option, initialTask, nodeID string, info protocols.SpaceInfo, messages []protocols.Message) string {
+	var sb strings.Builder
+	sb.WriteString(heartbeatPromptHeader(option, initialTask, nodeID, info, messages))
+	sb.WriteString("\nSpace nodes:\n")
+	if len(info.Nodes) == 0 {
+		sb.WriteString("- none\n")
+	} else {
+		for _, node := range info.Nodes {
+			sb.WriteString("- ")
+			sb.WriteString(node.Name)
+			if node.ID != "" {
+				sb.WriteString(" (")
+				sb.WriteString(node.ID)
+				sb.WriteString(")")
+			}
+			if node.Description != "" {
+				sb.WriteString(" desc=")
+				sb.WriteString(node.Description)
+			}
+			if len(node.Meta) > 0 {
+				sb.WriteString(" meta=")
+				sb.WriteString(compactJSON(node.Meta, 600))
+			}
+			sb.WriteByte('\n')
+		}
+	}
+
+	sb.WriteString("\nRecent messages (latest ")
+	sb.WriteString(fmt.Sprint(heartbeatRecentMessageLimit))
+	sb.WriteString("):\n")
+	if len(messages) == 0 {
+		sb.WriteString("- none\n")
+	} else {
+		for _, msg := range messages {
+			sb.WriteString("- id=")
+			sb.WriteString(msg.ID)
+			if msg.CreatedAt != "" {
+				sb.WriteString(" at=")
+				sb.WriteString(msg.CreatedAt)
+			}
+			if msg.Sender != "" {
+				sb.WriteString(" sender=")
+				sb.WriteString(msg.Sender)
+			}
+			if len(msg.Refs.Nodes) > 0 || len(msg.Refs.Messages) > 0 {
+				sb.WriteString(" refs=")
+				sb.WriteString(compactJSON(msg.Refs, 400))
+			}
+			if msg.ContentType != "" {
+				sb.WriteString(" content_type=")
+				sb.WriteString(msg.ContentType)
+			}
+			sb.WriteString(" content=")
+			sb.WriteString(compactJSON(msg.Content, 1200))
+			sb.WriteByte('\n')
+		}
+	}
+
+	sb.WriteString("\nDecide whether to dispatch work, reply, summarize, or stay idle. ")
+	sb.WriteString("Use IOA tools for coordination and avoid repeating completed work.")
+	return sb.String()
+}
+
+func heartbeatPromptHeader(option *cfg.Option, initialTask, nodeID string, info protocols.SpaceInfo, messages []protocols.Message) string {
+	space := strings.TrimSpace(option.Space)
+	if space == "" {
+		space = "default"
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Heartbeat wake-up for aiscan agent --loop.\n")
+	sb.WriteString("Space:\n")
+	sb.WriteString("- name: ")
+	if info.Name != "" {
+		sb.WriteString(info.Name)
+	} else {
+		sb.WriteString(space)
+	}
+	sb.WriteByte('\n')
+	if info.ID != "" {
+		sb.WriteString("- id: ")
+		sb.WriteString(info.ID)
+		sb.WriteByte('\n')
+	}
+	if len(info.Tags) > 0 {
+		sb.WriteString("- tags: ")
+		sb.WriteString(strings.Join(info.Tags, ", "))
+		sb.WriteByte('\n')
+	}
+	if info.MessageCount > 0 || messages != nil {
+		sb.WriteString("- message_count: ")
+		sb.WriteString(fmt.Sprint(info.MessageCount))
+		sb.WriteByte('\n')
+		sb.WriteString("- recent_messages_loaded: ")
+		sb.WriteString(fmt.Sprint(len(messages)))
+		sb.WriteByte('\n')
+	}
+
+	node := strings.TrimSpace(ResolveIOANodeName(option))
+	if node != "" || nodeID != "" || len(option.Skills) > 0 {
+		sb.WriteString("Current node:\n")
+		if node != "" {
+			sb.WriteString("- name: ")
+			sb.WriteString(node)
+			sb.WriteByte('\n')
+		}
+		if nodeID != "" {
+			sb.WriteString("- id: ")
+			sb.WriteString(nodeID)
+			sb.WriteByte('\n')
+		}
+		if len(option.Skills) > 0 {
+			sb.WriteString("- skills: ")
+			sb.WriteString(strings.Join(option.Skills, ", "))
+			sb.WriteByte('\n')
+		}
+	}
+
+	task := strings.TrimSpace(initialTask)
+	if task != "" {
+		sb.WriteString("Initial task:\n")
+		sb.WriteString(task)
+		sb.WriteByte('\n')
+	} else if len(option.Inputs) > 0 {
+		sb.WriteString("Targets:\n")
+		sb.WriteString(cfg.FormatInputs(option.Inputs))
+		sb.WriteByte('\n')
+	}
+
+	return sb.String()
+}
+
+func heartbeatSpace(option *cfg.Option) string {
+	space := strings.TrimSpace(option.Space)
+	if space == "" {
+		return "default"
+	}
+	return space
+}
+
+func compactJSON(v any, max int) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf("%v", v)
+	}
+	s := string(data)
+	if max > 0 && len(s) > max {
+		return s[:max] + "...[truncated]"
+	}
+	return s
 }
 
 // ---------------------------------------------------------------------------
