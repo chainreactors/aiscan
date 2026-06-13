@@ -10,7 +10,7 @@ IOA 是 aiscan 的多 agent 协作架构。它通过一个轻量 HTTP server 和
 - [架构总览](#架构总览)
 - [数据模型](#数据模型)
 - [Loop Worker 生命周期](#loop-worker-生命周期)
-- [消息路由](#消息路由)
+- [消息处理](#消息处理)
 - [Heartbeat 机制](#heartbeat-机制)
 - [Peer 消息](#peer-消息)
 - [IOA 工具](#ioa-工具)
@@ -28,7 +28,7 @@ IOA 是 aiscan 的多 agent 协作架构。它通过一个轻量 HTTP server 和
 | **Node** | 自治工作节点。每个 `aiscan agent --loop` 实例注册为一个 Node，拥有独立的 LLM agent 和工具集 |
 | **Message** | Space 中的消息。可以是任务分派、情报共享、结果汇报或协调指令 |
 | **Ref** | 消息引用。通过 `refs.nodes` 定向发送给特定节点，通过 `refs.messages` 建立会话线程 |
-| **Task** | 标记为任务的消息。Node 收到 Task 后自动启动 agent 执行 |
+| **Task** | 约定为可执行任务的消息。当前由 agent 通过 `ioa_read`/heartbeat 主动读取和判断，不由 IOA Server 自动推送执行 |
 
 ---
 
@@ -37,7 +37,7 @@ IOA 是 aiscan 的多 agent 协作架构。它通过一个轻量 HTTP server 和
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                      IOA Server                          │
-│              HTTP API + SSE + SQLite                     │
+│              HTTP API + in-memory store                  │
 │  ┌─────────────────────────────────────────────────────┐ │
 │  │                   Space: case-1                     │ │
 │  │                                                     │ │
@@ -50,7 +50,7 @@ IOA 是 aiscan 的多 agent 协作架构。它通过一个轻量 HTTP server 和
 │  │  msg7: [recon-1] result: 识别到 nginx, tomcat...    │ │
 │  └─────────────────────────────────────────────────────┘ │
 └──────────┬───────────────────┬───────────────────────────┘
-           │ SSE + Poll        │ SSE + Poll
+           │ ioa_* tools       │ ioa_* tools
      ┌─────▼──────┐      ┌────▼───────┐
      │  scanner-1 │      │  recon-1   │
      │  (Node)    │      │  (Node)    │
@@ -88,7 +88,7 @@ Node 是注册到 IOA Server 的工作节点。注册时携带元数据：
 }
 ```
 
-每个 Node 同一时间只执行一个 Task，其余排队等待。
+Node 的执行策略由本地 agent 决定。常见做法是通过 `ioa_read` 查看定向消息或全局消息，认领自己要处理的任务，再用 `ioa_send` 回报结果。
 
 ### Message
 
@@ -114,66 +114,65 @@ Ref 是消息路由和线程化的核心：
 
 ## Loop Worker 生命周期
 
-`aiscan agent --loop` 启动一个持久运行的 Loop Worker：
+`aiscan agent --loop` 启动一个持久运行的 agent，并接入 IOA 工具：
 
 ### 1. 启动
 
 ```
-注册 Node → 加入 Space → 发布 Profile → SSE 订阅
+注册 Node → 加入 Space → 注册 ioa_* 工具 → 执行初始 prompt/等待 heartbeat
 ```
 
-Node 启动时向 Space 发布自己的 Profile（名称、意图、技能、主机名），让其他 Node 了解自己的能力。
+Node 启动时会向 IOA Server 注册身份，并在配置了 `--space` 时默认加入该 Space。加入后 `ioa_send`/`ioa_read` 会默认操作这个 Space。
 
-### 2. 消息监听
+### 2. 消息读取
 
-Loop Worker 通过两个通道获取消息：
+Loop Worker 不再内置 SSE/Poll 自动路由器。当前模型是让 LLM agent 主动使用 IOA 工具读取消息：
 
-- **SSE（Server-Sent Events）**：实时推送，低延迟
-- **定期轮询（Poll）**：每 2 秒补偿 SSE 可能的消息丢失
-
-使用 watermark（`lastSeenID`）+ dispatched set 双重去重，保证消息不丢失也不重复处理。
+- `ioa_read`：读取定向给当前 Node 的消息
+- `ioa_read all --limit N`：读取 Space 最近消息，用于全局判断
+- `ioa_read thread --id <message_id>`：读取某条消息的上下文线程
 
 ### 3. 任务执行
 
-收到 Task 后：
+收到任务消息后，agent 应主动判断是否处理、是否认领以及如何回报：
 
 ```
-routeIncoming() → startTask() → 发送 Accept 确认 → 启动 Agent 执行 → completeTask() → 发布结果
+ioa_read → 判断任务归属 → ioa_send claim/ack → 执行工具 → ioa_send result/loot
 ```
 
 - Agent 执行期间拥有完整的 LLM 工具链（扫描器、文件操作、IOA 工具等）
-- 执行结果通过 `refs.messages` 引用原始 Task 消息，形成线程
-- 同一时间只执行一个 Task，新 Task 自动排队
+- 执行结果可以通过 `ioa_send reply --to <message_id>` 引用原始 Task 消息，形成线程
+- 多个任务的排队、去重和抢占由 agent prompt/协调协议控制
 
 ### 4. 关闭
 
-- 第一次 Ctrl+C：等待当前 Task 完成后退出
-- 第二次 Ctrl+C：立即退出
+- Ctrl+C 会取消当前 agent 运行
+- 如果没有初始任务、heartbeat 或其他 inbox producer，agent 会在完成当前轮后退出
 
 ---
 
-## 消息路由
+## 消息处理
 
-Node 收到消息后，按以下规则路由：
+当前 aiscan 不再把 IOA 消息自动推入 agent inbox。推荐处理规则如下：
 
 ```
-消息到达
+读取 IOA 消息
   │
   ├─ 是自己发的？ → 跳过
   │
-  ├─ refs.nodes 指定了其他节点？ → 跳过
+  ├─ refs.nodes 指定了其他节点？ → 跳过或仅作为上下文参考
   │
-  ├─ 是历史消息（启动前已存在）？ → 跳过
+  ├─ 已处理过的历史消息？ → 跳过
   │
   ├─ task=true 或 refs.nodes 包含自己？
-  │   ├─ 当前空闲 → 立即执行
-  │   └─ 当前忙碌 → 加入待办队列
+  │   ├─ 发送 claim/ack
+  │   └─ 执行并 reply/result
   │
-  └─ 普通消息 + 当前正在执行 Task？
-      → 转为 Peer 消息注入 Agent 上下文
+  └─ 普通消息
+      → 作为情报、进度或协调上下文
 ```
 
-**定向消息**通过 `refs.nodes` 只发给指定 Node。**广播消息**（无 `refs.nodes`）所有空闲 Node 都可以接收。
+**定向消息**通过 `refs.nodes` 表示目标 Node。**广播消息**（无 `refs.nodes`）需要各 Node 根据 claim、scope 和上下文自行避免重复工作。
 
 ---
 
@@ -190,9 +189,9 @@ aiscan agent --loop --heartbeat 5 --space case-1 \
 
 每隔 N 分钟：
 
-1. 读取 Space 中最近的消息（默认最近 50 条）
-2. 构造结构化 prompt，包含：Space 信息、Node 自身能力、近期消息上下文
-3. 交给 Agent 判断下一步行动
+1. Runtime 读取当前 SpaceInfo（节点列表、消息计数等）和 Space 中最近 50 条消息
+2. 构造结构化 prompt，包含：Space 信息、当前 Node、初始任务/targets、节点状态、近期消息上下文
+3. 将 prompt 注入 agent inbox，由 Agent 判断下一步行动
 4. Agent 可以：执行本地工具、发送 IOA 消息协调其他 Node、或决定无需行动
 
 ### 适用场景
@@ -205,15 +204,7 @@ aiscan agent --loop --heartbeat 5 --space case-1 \
 
 ## Peer 消息
 
-当 Worker 正在执行 Task 时，其他 Node 发来的非 Task 消息会作为 Peer 消息注入当前 Agent 的上下文：
-
-```xml
-<swarm_peer sender="recon-1" message_id="msg-007">
-发现 10.0.0.5 运行 Apache Tomcat 9.0.50，建议优先检查 CVE-2021-42013
-</swarm_peer>
-```
-
-这意味着 Agent 在执行任务过程中可以实时接收来自其他 Node 的情报，并据此调整自己的行为。
+Peer 消息不会逐条自动推入当前 Agent 上下文。启用 heartbeat 时，runtime 会把最近 IOA 消息批量带入 heartbeat prompt；未启用 heartbeat 的 worker 仍需要在初始 prompt 中主动调用 `ioa_read` 拉取其他 Node 的情报、结果和 blocker。
 
 ---
 
@@ -226,7 +217,6 @@ aiscan agent --loop --heartbeat 5 --space case-1 \
 | `ioa_send` | 向 Space 发送消息（任务分派、情报共享、结果汇报） |
 | `ioa_read` | 读取 Space 中的消息（支持过滤） |
 | `ioa_space` | 获取或创建 Space |
-| `ioa_node` | 注册 Node 或查询 Node 信息 |
 
 ### ioa_send 示例
 
@@ -313,12 +303,14 @@ aiscan agent --ioa-url http://127.0.0.1:8765 \
 ### 启动 IOA Server
 
 ```bash
-# 默认 http://127.0.0.1:8765，数据库 ./ioa.db
+# 默认 http://127.0.0.1:8765，使用内存 store
 aiscan ioa serve
 
-# 自定义
-aiscan ioa serve --ioa-url http://0.0.0.0:8765 --ioa-db /data/ioa.db
+# 自定义监听地址
+aiscan ioa serve --ioa-url http://0.0.0.0:8765
 ```
+
+当前 aiscan CLI 不暴露 IOA 数据库路径配置；`ioa serve` 默认使用内存 store，进程重启后消息和节点状态不会保留。
 
 ### 启动 Loop Worker
 
@@ -381,7 +373,6 @@ aiscan> /nodes pentest-001
 | `--ioa-url` | IOA Server URL |
 | `--ioa-node-id` | 已有节点 ID |
 | `--ioa-node-name` | 注册节点名 |
-| `--ioa-db` | SQLite 数据库路径（仅 `ioa serve`） |
 | `--space` | Space 名称 |
 | `--json` | IOA 查询 JSON 输出 |
 | `--loop` | 启用 Loop Worker 模式 |
@@ -392,7 +383,6 @@ aiscan> /nodes pentest-001
 ```yaml
 ioa:
   url: "http://127.0.0.1:8765"
-  db: "./ioa.db"
   node_name: "my-scanner"
   space: "default"
 ```
