@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
@@ -507,11 +509,116 @@ func renderAgentMarkdown(content string, enabled bool) string {
 	if err != nil {
 		return content
 	}
+	rendered = trimRenderedMarkdownLineEnds(rendered)
 	rendered = strings.TrimSpace(rendered)
 	if rendered == "" {
 		return content
 	}
-	return rendered
+	return trimRenderedMarkdownLineEnds(rendered)
+}
+
+func trimRenderedMarkdownLineEnds(s string) string {
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	start := 0
+	for start < len(s) {
+		rel := strings.IndexByte(s[start:], '\n')
+		if rel < 0 {
+			b.WriteString(trimANSIVisibleRight(s[start:]))
+			break
+		}
+		end := start + rel
+		b.WriteString(trimANSIVisibleRight(s[start:end]))
+		b.WriteByte('\n')
+		start = end + 1
+	}
+	return b.String()
+}
+
+func trimANSIVisibleRight(line string) string {
+	cut := 0
+	extendCutWithANSI := false
+	for i := 0; i < len(line); {
+		if end, ok := ansiEscapeEnd(line, i); ok {
+			if extendCutWithANSI && ansiClosesStyle(line[i:end]) {
+				cut = end
+			}
+			i = end
+			continue
+		}
+
+		r, size := utf8.DecodeRuneInString(line[i:])
+		if r == utf8.RuneError && size == 1 {
+			cut = i + size
+			extendCutWithANSI = true
+			i += size
+			continue
+		}
+
+		end := i + size
+		if unicode.IsSpace(r) {
+			extendCutWithANSI = false
+		} else {
+			cut = end
+			extendCutWithANSI = true
+		}
+		i = end
+	}
+	return line[:cut]
+}
+
+func ansiClosesStyle(seq string) bool {
+	if strings.HasPrefix(seq, "\x1b]8;;") {
+		return true
+	}
+	if len(seq) < 3 || seq[0] != '\x1b' || seq[1] != '[' || seq[len(seq)-1] != 'm' {
+		return false
+	}
+	params := seq[2 : len(seq)-1]
+	if params == "" {
+		return true
+	}
+	for _, param := range strings.FieldsFunc(params, func(r rune) bool { return r == ';' || r == ':' }) {
+		switch param {
+		case "0", "22", "23", "24", "25", "27", "28", "29", "39", "49", "59":
+			return true
+		}
+	}
+	return false
+}
+
+func ansiEscapeEnd(s string, start int) (int, bool) {
+	if start >= len(s) || s[start] != '\x1b' {
+		return 0, false
+	}
+	if start+1 >= len(s) {
+		return start + 1, true
+	}
+
+	switch s[start+1] {
+	case '[':
+		for i := start + 2; i < len(s); i++ {
+			if s[i] >= 0x40 && s[i] <= 0x7e {
+				return i + 1, true
+			}
+		}
+		return len(s), true
+	case ']':
+		for i := start + 2; i < len(s); i++ {
+			switch {
+			case s[i] == '\a':
+				return i + 1, true
+			case s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '\\':
+				return i + 2, true
+			}
+		}
+		return len(s), true
+	default:
+		return start + 2, true
+	}
 }
 
 var (
