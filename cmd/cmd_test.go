@@ -490,6 +490,8 @@ func TestAgentConsoleArgsForLine(t *testing.T) {
 		{name: "continue", input: "/continue", wantArgs: []string{"/continue"}},
 		{name: "exit", input: "/exit", wantArgs: []string{"/exit"}},
 		{name: "quit", input: "/quit", wantArgs: []string{"/quit"}},
+		{name: "bare exit stays prompt", input: "exit", wantArgs: []string{"__prompt", "exit"}},
+		{name: "bare quit stays prompt", input: "quit", wantArgs: []string{"__prompt", "quit"}},
 		{name: "skill slash command preserves prompt", input: `/scan explain "scan result"`, wantArgs: []string{"/scan", `explain "scan result"`}},
 		{name: "unknown slash command", input: "/unknown", wantArgs: []string{"/unknown"}},
 		{name: "legacy skill command", input: "/skill:scan check target", wantArgs: []string{"__prompt", "/skill:scan check target"}},
@@ -513,7 +515,7 @@ func TestAgentConsoleRegistersSkillsAsSlashCommands(t *testing.T) {
 	if len(diagnostics) != 0 {
 		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
-	repl := runner.NewAgentConsole(context.Background(), &cfg.Option{}, &app.App{Skills: store}, nil)
+	repl := runner.NewAgentConsole(context.Background(), &cfg.Option{}, &app.App{Skills: store}, nil, nil)
 	_ = repl // console created successfully
 }
 
@@ -524,7 +526,7 @@ func TestAgentConsolePromptCommandRunsAgent(t *testing.T) {
 	}
 	llm := &fakeConsoleProvider{}
 	session := agent.NewAgent(agent.Config{Provider: llm, Tools: command.NewRegistry()})
-	repl := runner.NewAgentConsole(context.Background(), &cfg.Option{}, &app.App{Skills: store}, session)
+	repl := runner.NewAgentConsole(context.Background(), &cfg.Option{}, &app.App{Skills: store}, session, nil)
 	_ = repl // console created successfully — full REPL test requires readline
 }
 
