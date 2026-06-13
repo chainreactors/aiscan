@@ -32,8 +32,13 @@ type AgentRuntime struct {
 	Config       agent.Config
 	Bus          *eventbus.Bus[agent.Event]
 	Output       *AgentOutput
-	ownsApp      bool
-	cleanup      func()
+	// IOAInitErr holds a non-fatal IOA init failure when the runtime was
+	// constructed in standalone-tolerant mode (AllowStandaloneIOA). Callers
+	// that want to surface it (e.g. the interactive REPL banner) can read it;
+	// nil means IOA came up cleanly.
+	IOAInitErr error
+	ownsApp    bool
+	cleanup    func()
 }
 
 type RuntimeConfig struct {
@@ -41,6 +46,15 @@ type RuntimeConfig struct {
 	IOA          *app.IOAConfig
 	PromptConfig *PromptConfig
 	NoOutput     bool
+	// AgentLogger overrides the logger used inside the agent loop/scheduler.
+	// Runtime/application initialization still uses the top-level logger so
+	// warnings remain visible, while UI modes can silence internal status lines.
+	AgentLogger telemetry.Logger
+	// AllowStandaloneIOA makes an IOA init failure non-fatal: the runtime is
+	// returned without IOA tools instead of erroring out. Intended for the
+	// interactive REPL, where a dead remote IOA server must not kill the local
+	// agent. The failure is exposed via AgentRuntime.IOAInitErr.
+	AllowStandaloneIOA bool
 }
 
 func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.Logger, rc *RuntimeConfig) (*AgentRuntime, error) {
@@ -71,8 +85,17 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 
 		if rc == nil || rc.IOA == nil {
 			if err := registerIOATools(ctx, application, option); err != nil {
-				application.Close()
-				return nil, fmt.Errorf("init ioa tools: %w", err)
+				if rc != nil && rc.AllowStandaloneIOA {
+					// Degrade gracefully: keep going without IOA (swarm/collab)
+					// tools instead of tearing down the whole runtime. The
+					// interactive REPL surfaces this via IOAInitErr; a dead
+					// remote server must not kill the local agent.
+					rt.IOAInitErr = err
+					logger.Warnf("ioa unavailable, running standalone: %s", err)
+				} else {
+					application.Close()
+					return nil, fmt.Errorf("init ioa tools: %w", err)
+				}
 			}
 		}
 	}
@@ -103,6 +126,10 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 
 	if rc == nil || !rc.NoOutput {
 		rt.Output = NewAgentOutput(option)
+	}
+	agentLogger := logger
+	if rc != nil && rc.AgentLogger != nil {
+		agentLogger = rc.AgentLogger
 	}
 
 	agentBus := eventbus.New[agent.Event]()
@@ -140,13 +167,13 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		})
 	}
 
-	scheduler := agent.NewLoopScheduler(ib, logger)
+	scheduler := agent.NewLoopScheduler(ib, agentLogger)
 
 	rt.Config = agent.Config{
 		Provider:       rt.App.Provider,
 		Tools:          rt.App.Commands,
 		Model:          option.Model,
-		Logger:         logger,
+		Logger:         agentLogger,
 		Inbox:          ib,
 		LoopScheduler:  scheduler,
 		CacheRetention: agent.CacheShort,
@@ -155,6 +182,9 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 	rt.Config = agent.NewAgent(rt.Config).Cfg
 
 	rt.App.Commands.RegisterTool(agent.NewLoopTool(scheduler))
+	if !pc.ScannerAgentMode {
+		rt.App.Commands.RegisterTool(agent.NewFinishTool())
+	}
 
 	if pc.FindingsPath == "" {
 		pc.FindingsPath = findingsLogPath(rt.Config.SessionID)
@@ -239,7 +269,9 @@ func runOneShotMode(ctx context.Context, option *cfg.Option, logger telemetry.Lo
 		return err
 	}
 
-	rt, err := NewAgentRuntime(ctx, option, logger, nil)
+	rt, err := NewAgentRuntime(ctx, option, logger, &RuntimeConfig{
+		AgentLogger: quietAgentStatusLogger(option, logger),
+	})
 	if err != nil {
 		return err
 	}
@@ -270,7 +302,19 @@ func runOneShotMode(ctx context.Context, option *cfg.Option, logger telemetry.Lo
 // ---------------------------------------------------------------------------
 
 func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetry.Logger) error {
-	rt, err := NewAgentRuntime(ctx, option, logger, nil)
+	// Interactive REPL: let the welcome banner be the first thing on screen.
+	// The shared global logger defaults to a verbose level — chainreactors/logs
+	// numbers WarnLevel=20 below InfoLevel=30, so WarnLevel surfaces Info too,
+	// which dumps provider/engine "ready" lines over the banner. Drop to
+	// error-only so only real failures surface; --debug keeps the full trace.
+	if !option.Debug {
+		restoreLogs := telemetry.SuppressGlobalNonErrors()
+		defer restoreLogs()
+	}
+	rt, err := NewAgentRuntime(ctx, option, logger, &RuntimeConfig{
+		AgentLogger:        quietAgentStatusLogger(option, logger),
+		AllowStandaloneIOA: true,
+	})
 	if err != nil {
 		return err
 	}
@@ -282,9 +326,15 @@ func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetr
 
 	session := agent.NewAgent(rt.Config.
 		WithSystemPrompt(rt.SystemPrompt).
-		WithStream(false))
+		WithStream(interactiveStreamingEnabled(option)))
 
-	repl := NewAgentConsole(ctx, option, rt.App, session)
+	// Reuse the runtime's bus-subscribed output so streaming deltas, tool
+	// events, and the final render share one set of state (avoids a second
+	// AgentOutput that would duplicate or fight the live stream).
+	repl := NewAgentConsole(ctx, option, rt.App, session, rt.Output)
+	if rt.IOAInitErr != nil {
+		repl.startupNotice = fmt.Sprintf("ioa 不可用，已切换独立模式（无 swarm/协作工具）· %s", rt.IOAInitErr)
+	}
 	return repl.Start()
 }
 
@@ -650,6 +700,14 @@ func scannerCommandSupportsDebug(name string) bool {
 // Helpers
 // ---------------------------------------------------------------------------
 
+// ioaInitTimeout caps the synchronous IOA registration dial. InitIOA only does
+// a couple of request/response round trips (register + optional space join) —
+// not a long-lived stream — so a tight bound is safe. Without it the ioa client
+// (http.DefaultClient, no Timeout) blocks on the OS TCP connect timeout, which
+// is ~127s for a black-holing host and stalls the REPL banner the whole while.
+// A healthy IOA registers in well under a second.
+const ioaInitTimeout = 5 * time.Second
+
 func registerIOATools(ctx context.Context, application *app.App, option *cfg.Option) error {
 	ioaURL := option.IOAURL
 	if ioaURL == "" {
@@ -667,7 +725,16 @@ func registerIOATools(ctx context.Context, application *app.App, option *cfg.Opt
 	if ioaCfg.NodeName == "" {
 		ioaCfg.NodeName = ResolveIOANodeName(option)
 	}
-	return application.InitIOA(ctx, ioaCfg)
+	ioaCtx, cancel := context.WithTimeout(ctx, ioaInitTimeout)
+	defer cancel()
+	return application.InitIOA(ioaCtx, ioaCfg)
+}
+
+func quietAgentStatusLogger(option *cfg.Option, logger telemetry.Logger) telemetry.Logger {
+	if option != nil && option.Debug {
+		return logger
+	}
+	return telemetry.SuppressImportantLogger(logger)
 }
 
 func bashSessionManager(reg interface {

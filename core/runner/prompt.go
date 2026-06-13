@@ -70,7 +70,8 @@ type promptData struct {
 	LoadedSkills []loadedSkillEntry
 
 	// Constraints
-	Constraints string
+	Constraints   string
+	UseFinishTool bool
 }
 
 type toolEntry struct {
@@ -110,6 +111,13 @@ aiscan operates as part of a commercial security testing platform (similar to Ha
 
 Target intake, scope validation, and legal authorization are handled by the platform before targets reach you. Your role is to help the security researcher discover vulnerabilities, validate findings with evidence, and produce actionable reports.
 {{- end}}
+
+## Interactive CLI Response Style
+
+- Match the user's language unless they ask otherwise.
+- For greetings, thanks, small talk, or brief meta questions, reply directly in one or two short sentences. Do not print capability lists, tutorials, example prompts, or long onboarding text unless the user asks for them.
+- For ordinary questions, answer the question first; only add commands, tables, or detailed workflows when they clearly help the user's immediate task.
+- Keep Markdown compact in the REPL. Prefer plain paragraphs for simple answers and short bullets for operational results.
 
 ## Environment
 
@@ -195,6 +203,9 @@ Decision routing:
 - Use conservative thread counts and timeouts for fragile targets.
 - Let user intent define stopping criteria. For broad assessments, continue beyond the first serious finding when scope and time allow; for narrow validation tasks, answer the specific question directly.
 - For broad scan reports, mention material high-value leads that remain untested. Do not invent leads or expand scope solely to satisfy a count.
+{{- if .UseFinishTool}}
+- Termination: when the task objective is fully achieved and every spawned subagent has reported its result, call the ` + "`finish`" + ` tool exactly once to end the run cleanly. Do not call it while subagents are still running. The loop already waits for all subagents to finish before the final synthesis, so do not re-emit the full report on each interim subagent completion — record the partial result and wait.
+{{- end}}
 {{- if .Constraints}}
 
 {{.Constraints}}
@@ -223,6 +234,7 @@ func BuildSystemPrompt(cfg *PromptConfig, agentCfg *agent.Config) string {
 		findingsPath = findingsLogPath("")
 	}
 
+	_, hasFinishTool := tools.GetTool("finish")
 	data := promptData{
 		CustomPreamble:   cfg.CustomPreamble,
 		ScannerAgentMode: cfg.ScannerAgentMode,
@@ -235,6 +247,7 @@ func BuildSystemPrompt(cfg *PromptConfig, agentCfg *agent.Config) string {
 		FindingsPath:     findingsPath,
 		Windows:          runtime.GOOS == "windows",
 		ScannerDocs:      cfg.ScannerDocs,
+		UseFinishTool:    hasFinishTool && !cfg.ScannerAgentMode,
 	}
 
 	for _, t := range tools.Tools() {
@@ -261,6 +274,10 @@ func BuildSystemPrompt(cfg *PromptConfig, agentCfg *agent.Config) string {
 		data.Constraints = "## Scanner Agent Constraints\n\n" +
 			"- Execute the scanner command provided in the task via the bash tool.\n" +
 			"- For structured data processing, re-run the scanner with `-j` flag to get JSON output."
+		if _, ok := tools.GetTool("checkpoint"); ok {
+			data.Constraints += "\n" +
+				"- When scanner analysis is complete, call the `checkpoint` tool exactly once with the final conclusion."
+		}
 	}
 
 	var sb strings.Builder
