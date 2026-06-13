@@ -64,8 +64,9 @@ When scan discovers more than 20 web endpoints:
 1. Do NOT call `fetch` for every endpoint. Triage first by reviewing scan summary output.
 2. Prioritize: endpoints with query parameters, non-standard ports, interesting fingerprints (admin panels, APIs, login pages).
 3. Select 3-8 high-value targets for deep analysis. Skip CDN domains, static asset servers, default pages, and known third-party services.
-4. If `fetch` times out, skip that target immediately — do not retry.
-5. Group assets by fingerprint or technology stack and test one representative per group rather than every instance.
+4. For selected targets whose route or parameter layer is still thin, enumerate it before manual testing with the deepest crawler in your runtime command list. If `katana` is in the list, run a bounded batch crawl such as `katana -u <target> -d 2 -jc -timeout 60`; add `-f qurl` only when you specifically need parameterized URLs for fuzzing. Otherwise rely on `spray -u <target> --crawl` and targeted JS bundle or source-map review. Consume crawler output as a batch: group by host/path/parameter shape, do not feed every URL back to the model one by one.
+5. If `fetch` times out, skip that target immediately — do not retry.
+6. Group assets by fingerprint or technology stack and test one representative per group rather than every instance.
 
 ## Execution Environment
 
@@ -99,7 +100,7 @@ Default ROI routing:
 - upload/import/media -> upload controls and post-upload access first
 - search/filter/export/sort/orderBy -> injection and data-boundary validation first
 - GraphQL -> unauthorized query or mutation impact first; introspection alone is not a finding
-- thin visible surface -> JS, source maps, routes, and hidden endpoints
+- thin visible surface -> enumerate JS endpoints, source maps, routes, and hidden parameters with the deepest crawler in your runtime command list: prefer bounded `katana -u <target> -d 2 -jc -timeout 60` when `katana` is present, add `-f qurl` for parameter-only review, otherwise use `spray -u <target> --crawl` and targeted JS bundle review
 
 If a route produces no material evidence after sustained effort, switch routes. Keep the loop exploratory: direction and standards matter more than following a fixed step list.
 
