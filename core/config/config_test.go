@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/chainreactors/aiscan/pkg/telemetry"
@@ -75,6 +77,9 @@ llm:
   provider: deepseek
   model: deepseek-chat
   base_url: https://api.deepseek.com/v1
+  api_keys:
+    - config-key-a
+    - config-key-b
 cyberhub:
   url: http://hub:9000
   key: testkey
@@ -105,6 +110,9 @@ ioa:
 			t.Errorf("%s: got %q, want %q", c.field, c.got, c.want)
 		}
 	}
+	if !reflect.DeepEqual(opt.APIKeys, []string{"config-key-a", "config-key-b"}) {
+		t.Fatalf("APIKeys = %#v, want config key pool", opt.APIKeys)
+	}
 }
 
 func TestLoadConfigReconNumericZeroIsExplicit(t *testing.T) {
@@ -120,6 +128,41 @@ recon:
 	}
 	if opt.ReconLimit == nil || *opt.ReconLimit != 0 {
 		t.Fatalf("ReconLimit = %#v, want explicit 0", opt.ReconLimit)
+	}
+}
+
+func TestResolveOptionalTaskForLoopMode(t *testing.T) {
+	if got, err := ResolveOptionalTask(&Option{}); err != nil || got != "" {
+		t.Fatalf("empty optional task = %q, %v; want empty nil", got, err)
+	}
+
+	got, err := ResolveOptionalTask(&Option{AgentOptions: AgentOptions{
+		Inputs: []string{"10.0.0.1", "https://example.test"},
+	}})
+	if err != nil {
+		t.Fatalf("ResolveOptionalTask(inputs) error = %v", err)
+	}
+	for _, want := range []string{"Scan the provided targets", "10.0.0.1", "https://example.test"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("optional task missing %q:\n%s", want, got)
+		}
+	}
+
+	taskFile := filepath.Join(t.TempDir(), "task.md")
+	if err := os.WriteFile(taskFile, []byte("coordinate workers\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err = ResolveOptionalTask(&Option{AgentOptions: AgentOptions{
+		TaskFile: taskFile,
+		Inputs:   []string{"10.0.0.2"},
+	}})
+	if err != nil {
+		t.Fatalf("ResolveOptionalTask(task-file) error = %v", err)
+	}
+	for _, want := range []string{"coordinate workers", "Targets:", "10.0.0.2"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("task-file optional task missing %q:\n%s", want, got)
+		}
 	}
 }
 
@@ -179,6 +222,7 @@ cyberhub:
 	option := Option{}
 	option.Provider = "cli-provider"
 	option.APIKey = "cli-key"
+	option.APIKeys = []string{"cli-key-a", "cli-key-b"}
 
 	var loaded Option
 	if err := LoadConfig(filepath.Join(dir, "config.yaml"), &loaded); err != nil {
@@ -191,6 +235,9 @@ cyberhub:
 	}
 	if option.APIKey != "cli-key" {
 		t.Errorf("APIKey: got %q, want %q (CLI wins)", option.APIKey, "cli-key")
+	}
+	if !reflect.DeepEqual(option.APIKeys, []string{"cli-key-a", "cli-key-b"}) {
+		t.Errorf("APIKeys: got %#v, want CLI key pool", option.APIKeys)
 	}
 	if option.Model != "config-model" {
 		t.Errorf("Model: got %q, want %q (config fills empty)", option.Model, "config-model")
@@ -263,6 +310,7 @@ llm:
 
 	withDefaults(t, func() {
 		DefaultModel = "build-model"
+		DefaultAPIKeys = "build-key-a,build-key-b"
 
 		option := Option{}
 		var loaded Option
@@ -278,6 +326,10 @@ llm:
 		ApplyDefaults(&option)
 		if option.Model != "build-model" {
 			t.Errorf("Model after ApplyDefaults: got %q, want %q (build fills remaining)", option.Model, "build-model")
+		}
+		pcfg := ProviderConfig(&option)
+		if !reflect.DeepEqual(pcfg.APIKeys, []string{"build-key-a", "build-key-b"}) {
+			t.Errorf("ProviderConfig APIKeys = %#v, want compiled key pool", pcfg.APIKeys)
 		}
 	})
 }
@@ -478,6 +530,7 @@ cyberhub:
 }
 
 func TestResolveRuntimeConfigEnvOverridesConfig(t *testing.T) {
+	clearAiscanLLMEnv(t)
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
 llm:
@@ -492,6 +545,7 @@ cyberhub:
 	t.Setenv("AISCAN_MODEL", "env-model")
 	t.Setenv("AISCAN_BASE_URL", "https://env.example/v1")
 	t.Setenv("AISCAN_API_KEY", "env-key")
+	t.Setenv("AISCAN_API_KEYS", "env-key-a, env-key-b")
 	t.Setenv("AISCAN_LLM_PROXY", "http://env-proxy:7890")
 	t.Setenv("CYBERHUB_URL", "http://env-hub:9000")
 
@@ -518,10 +572,14 @@ cyberhub:
 				t.Errorf("%s: got %q, want %q", c.field, c.got, c.want)
 			}
 		}
+		if !reflect.DeepEqual(option.APIKeys, []string{"env-key-a", "env-key-b"}) {
+			t.Fatalf("APIKeys = %#v, want env key pool", option.APIKeys)
+		}
 	})
 }
 
 func TestResolveRuntimeConfigCLIWinsOverEnv(t *testing.T) {
+	clearAiscanLLMEnv(t)
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
 llm:
@@ -615,6 +673,38 @@ func TestApplyLLMEnvironmentGenericAPIKeyWinsOverProviderAPIKey(t *testing.T) {
 	}
 }
 
+func TestApplyLLMEnvironmentGenericAPIKeysWinsOverProviderAPIKeys(t *testing.T) {
+	option := Option{LLMOptions: LLMOptions{Provider: "anthropic"}}
+	lookup := mapEnvLookup(map[string]string{
+		"AISCAN_API_KEYS":    "generic-a,generic-b",
+		"ANTHROPIC_API_KEYS": "provider-a,provider-b",
+	})
+
+	applyLLMEnvironment(&option, Option{}, lookup)
+
+	if !reflect.DeepEqual(option.APIKeys, []string{"generic-a", "generic-b"}) {
+		t.Fatalf("APIKeys = %#v, want generic key pool", option.APIKeys)
+	}
+}
+
+func TestProviderConfigKeepsAPIKeyPool(t *testing.T) {
+	option := Option{LLMOptions: LLMOptions{
+		Provider: "anthropic",
+		APIKey:   "primary-key",
+		APIKeys:  []string{"pool-key-a", "pool-key-b"},
+		Model:    "glm-test",
+	}}
+
+	pcfg := ProviderConfig(&option)
+
+	if pcfg.APIKey != "primary-key" {
+		t.Fatalf("APIKey = %q, want primary-key", pcfg.APIKey)
+	}
+	if !reflect.DeepEqual(pcfg.APIKeys, []string{"pool-key-a", "pool-key-b"}) {
+		t.Fatalf("APIKeys = %#v, want option key pool", pcfg.APIKeys)
+	}
+}
+
 func TestProviderHintFromEnvChoosesMostCompleteProvider(t *testing.T) {
 	lookup := mapEnvLookup(map[string]string{
 		"ANTHROPIC_BASE_URL": "https://anthropic.example/v1",
@@ -649,6 +739,8 @@ func clearAiscanLLMEnv(t *testing.T) {
 		"AISCAN_LLM_MODEL",
 		"AISCAN_API_KEY",
 		"AISCAN_LLM_API_KEY",
+		"AISCAN_API_KEYS",
+		"AISCAN_LLM_API_KEYS",
 		"AISCAN_LLM_PROXY",
 	} {
 		t.Setenv(name, "")
@@ -658,7 +750,7 @@ func clearAiscanLLMEnv(t *testing.T) {
 func withDefaults(t *testing.T, fn func()) {
 	t.Helper()
 	saved := []*string{
-		&DefaultProvider, &DefaultBaseURL, &DefaultAPIKey, &DefaultModel,
+		&DefaultProvider, &DefaultBaseURL, &DefaultAPIKey, &DefaultAPIKeys, &DefaultModel,
 		&DefaultScannerProxy, &DefaultCyberhubURL, &DefaultCyberhubKey,
 		&DefaultCyberhubMode, &DefaultVerify, &DefaultVerifyTimeout,
 		&DefaultIOAURL, &DefaultIOANodeID,

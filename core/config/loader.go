@@ -109,6 +109,9 @@ func mergeOption(dst, src *Option) {
 	dst.Provider = ResolveString(dst.Provider, src.Provider)
 	dst.BaseURL = ResolveString(dst.BaseURL, src.BaseURL)
 	dst.APIKey = ResolveString(dst.APIKey, src.APIKey)
+	if len(dst.APIKeys) == 0 {
+		dst.APIKeys = ResolveStringSlice(dst.APIKeys, src.APIKeys)
+	}
 	dst.Model = ResolveString(dst.Model, src.Model)
 	dst.LLMProxy = ResolveString(dst.LLMProxy, src.LLMProxy)
 	dst.CyberhubURL = ResolveString(dst.CyberhubURL, src.CyberhubURL)
@@ -156,6 +159,9 @@ llm:
   # API key（建议使用环境变量而非写入文件）
   # 环境变量: AISCAN_API_KEY / Provider 对应 API key 变量（如 OPENAI_API_KEY）
   api_key: ""
+  # API key 轮询池（可选; 会与 api_key 去重后按请求轮询）
+  # 环境变量: AISCAN_API_KEYS / AISCAN_LLM_API_KEYS / Provider_API_KEYS
+  api_keys: []
   # 模型名称
   # 环境变量: AISCAN_MODEL / AISCAN_LLM_MODEL
   # OpenAI/Codex 风格: OPENAI_MODEL
@@ -186,7 +192,6 @@ cyberhub:
 # IOA 协作
 ioa:
   url: ""
-  db: ""
   node_name: ""
   space: ""
 
