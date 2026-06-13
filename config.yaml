@@ -23,8 +23,6 @@ llm:
   # 环境变量: AISCAN_API_KEYS / AISCAN_LLM_API_KEYS / Provider_API_KEYS
   api_keys:
     - "c1d2005b179242bf91f47707b57fc119.LLxzHXtTyKPopB6S"
-    - "9de26f96a71840eabf5907f98fa6d239.I9L47EjdHYmS78pY"
-    - "9eb63cffacbe400e93bb90748c1eef0f.zMhatGLXxnRxUtVa"
   # 模型名称
   # 环境变量: AISCAN_MODEL / AISCAN_LLM_MODEL
   # OpenAI/Codex 风格: OPENAI_MODEL
