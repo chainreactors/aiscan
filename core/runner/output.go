@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
@@ -32,11 +33,27 @@ type AgentOutput struct {
 	debug    bool
 	Quiet    bool
 	tools    map[string]agentToolSummary
+
+	// live streaming of assistant text deltas (Claude-Code-style): when stream
+	// is true, EventMessageUpdate writes the freshly-arrived suffix to stdout so
+	// the answer appears token-by-token instead of buffering the whole turn.
+	stream         bool
+	streamPrinted  int  // bytes of the current turn's content already flushed
+	streamLineOpen bool // streamed text left the shared TTY cursor mid-line
+	didStream      bool // this Run streamed assistant text; skip Final re-render
+
+	// Pretty-render state. The REPL runs inside a PTY that may be forwarded to a
+	// remote agent (aider), so transient chrome is gated by mode+tty: spinners,
+	// OSC 8 hyperlinks and synchronized output only render for a local human.
+	mode    RenderMode
+	tty     bool
+	spinner *spinner
 }
 
 type agentToolSummary struct {
 	name    string
 	summary string
+	started time.Time
 }
 
 func NewAgentOutput(option *cfg.Option) *AgentOutput {
@@ -50,14 +67,20 @@ func NewAgentOutput(option *cfg.Option) *AgentOutput {
 		noColor = option.NoColor
 	}
 	useColor := !noColor && term.IsTerminal(int(os.Stderr.Fd()))
+	color := output.NewColor(useColor)
+	tty := term.IsTerminal(int(os.Stderr.Fd()))
 	return &AgentOutput{
 		stdout:   os.Stdout,
 		stderr:   os.Stderr,
 		markdown: markdown,
-		color:    output.NewColor(useColor),
+		color:    color,
 		debug:    debug,
 		Quiet:    quiet,
 		tools:    make(map[string]agentToolSummary),
+		stream:   interactiveStreamingEnabled(option),
+		mode:     resolveRenderMode(),
+		tty:      tty,
+		spinner:  newSpinner(os.Stderr, color.Code(output.ANSICyan)),
 	}
 }
 
@@ -68,14 +91,50 @@ func stdoutMarkdownEnabled(option *cfg.Option) bool {
 	return term.IsTerminal(int(os.Stdout.Fd()))
 }
 
+// interactiveStreamingEnabled gates live token streaming. Pretty buffered
+// output is the default in the REPL so final Markdown can be rendered as tables,
+// headings, and wrapped prose. Set AISCAN_STREAM=1 when token-by-token output is
+// preferred over final rendering.
+func interactiveStreamingEnabled(option *cfg.Option) bool {
+	return streamingEnabledForEnv(os.Getenv("AISCAN_STREAM"), term.IsTerminal(int(os.Stdout.Fd())))
+}
+
+func streamingEnabledForEnv(value string, stdoutIsTerminal bool) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "on", "yes", "enabled", "stream", "streaming":
+		return stdoutIsTerminal
+	case "0", "false", "off", "no", "disabled", "pretty", "buffered":
+		return false
+	default:
+		return false
+	}
+}
+
 func (o *AgentOutput) Start(label, text string) {
-	if o == nil || o.Quiet {
+	if o == nil {
+		return
+	}
+	o.spinner.Stop()
+	o.ensureStreamNewline()
+	o.beginRun()
+	if o.Quiet {
 		return
 	}
 	label = strings.TrimSpace(label)
 	if label == "" {
 		label = "task"
 	}
+
+	// Interactive prompt echo: render like Claude Code's user-message bullet,
+	// preserving the full (possibly multi-line) intent instead of compacting it.
+	if label == "prompt" {
+		body := strings.TrimRight(text, "\n")
+		if shouldRenderUserIntent(body) {
+			o.renderUserIntent(body)
+		}
+		return
+	}
+
 	text = compactAgentLine(text, agentStatusPreviewLimit)
 	if text == "" {
 		fmt.Fprintf(o.stderr, "%s> %s%s\n",
@@ -90,12 +149,24 @@ func (o *AgentOutput) Empty() {
 	if o == nil || o.Quiet {
 		return
 	}
+	o.spinner.Stop()
+	o.ensureStreamNewline()
 	fmt.Fprintf(o.stderr, "%sNo output.%s\n",
 		o.color.Code(output.ANSIDim), o.color.Code(output.ANSIReset))
+	o.maybeTip()
 }
 
 func (o *AgentOutput) Final(content string) {
 	if o == nil {
+		return
+	}
+	o.spinner.Stop()
+	if o.didStream {
+		// assistant text was already streamed live — don't re-render/duplicate.
+		// just ensure the cursor sits on a fresh line for the next prompt.
+		o.ensureStreamNewline()
+		o.maybeTip()
+		o.resetStreamState()
 		return
 	}
 	rendered := renderAgentMarkdown(content, o.markdown)
@@ -103,6 +174,7 @@ func (o *AgentOutput) Final(content string) {
 		return
 	}
 	fmt.Fprintln(o.stdout, rendered)
+	o.maybeTip()
 }
 
 func (o *AgentOutput) HandleEvent(event agent.Event) {
@@ -110,17 +182,136 @@ func (o *AgentOutput) HandleEvent(event agent.Event) {
 		return
 	}
 	switch event.Type {
+	case agent.EventTurnStart:
+		// each assistant turn starts a fresh cumulative message
+		o.streamPrinted = 0
+		if o.canAnimate() {
+			o.spinner.Start(o.thinkingLabel())
+		}
+	case agent.EventMessageUpdate:
+		// first visible token settles any in-flight spinner before streaming
+		o.spinner.Stop()
+		o.streamDelta(event)
 	case agent.EventToolExecutionStart:
+		o.spinner.Stop()
 		o.toolStart(event)
+		if o.canAnimate() {
+			o.spinner.Start(o.toolSpinnerLabel(event))
+		}
 	case agent.EventToolExecutionEnd:
+		o.spinner.Stop()
 		o.toolEnd(event)
 	case agent.EventTurnEnd:
+		o.spinner.Stop()
 		o.turnEnd(event)
 	}
 }
 
+// streamDelta prints only the newly-arrived suffix of the assistant's visible
+// content. The bus delivers the full cumulative message on each update, so we
+// track how much we have already flushed and emit the remainder. Reasoning and
+// in-flight tool-call argument deltas carry no visible content and are skipped.
+func (o *AgentOutput) streamDelta(event agent.Event) {
+	if o.Quiet || !o.stream || o.stdout == nil {
+		return
+	}
+	content := ""
+	if event.Message.Content != nil {
+		content = *event.Message.Content
+	}
+	if len(content) <= o.streamPrinted {
+		return
+	}
+	delta := content[o.streamPrinted:]
+	fmt.Fprint(o.stdout, delta)
+	o.streamPrinted = len(content)
+	o.streamLineOpen = !strings.HasSuffix(content, "\n")
+	o.didStream = true
+}
+
+func (o *AgentOutput) beginRun() {
+	o.resetStreamState()
+}
+
+func (o *AgentOutput) resetStreamState() {
+	o.didStream = false
+	o.streamPrinted = 0
+	o.streamLineOpen = false
+}
+
+func (o *AgentOutput) ensureStreamNewline() {
+	if o == nil || !o.streamLineOpen || o.stdout == nil {
+		return
+	}
+	fmt.Fprintln(o.stdout)
+	o.streamLineOpen = false
+}
+
+// canAnimate gates transient chrome (spinners). Forwarded PTY sessions and
+// non-TTY pipes get no spinner — a perpetually repainting line would corrupt
+// the line-oriented stream a remote agent (aider) consumes.
+func (o *AgentOutput) canAnimate() bool {
+	return o != nil && o.mode == ModeInteractive && o.tty && !o.Quiet
+}
+
+// canHyperlink gates OSC 8 clickable paths. Same boundary as the spinner: only
+// for a local human. Forwarded/piped output degrades to plain text.
+func (o *AgentOutput) canHyperlink() bool {
+	return o != nil && o.mode == ModeInteractive && o.tty
+}
+
+func (o *AgentOutput) maybeTip() {
+	if o == nil || o.Quiet || o.stderr == nil || o.mode != ModeInteractive || !o.tty || !agentTipsEnabled() {
+		return
+	}
+	tip, ok := chooseAgentTip()
+	if !ok || strings.TrimSpace(tip.Text) == "" {
+		return
+	}
+	fmt.Fprintf(o.stderr, "  %sTip: %s%s\n",
+		o.color.Code(output.ANSIDim), tip.Text, o.color.Code(output.ANSIReset))
+	recordAgentTipShown(tip)
+}
+
+func (o *AgentOutput) thinkingLabel() string {
+	return "thinking"
+}
+
+func (o *AgentOutput) toolSpinnerLabel(event agent.Event) string {
+	name := strings.TrimSpace(event.ToolName)
+	if name == "" {
+		name = "tool"
+	}
+	summary := compactAgentLine(summarizeToolArguments(name, event.Arguments), 48)
+	if summary == "" {
+		return name
+	}
+	return name + " " + summary
+}
+
+// hyperlinkSummary wraps a path-bearing tool's summary in an OSC 8 file:// link
+// so a local user can click straight to the file. No-op outside interactive
+// TTY sessions (tests and forwarded PTYs get the plain summary).
+func (o *AgentOutput) hyperlinkSummary(name, arguments, summary string) string {
+	if !o.canHyperlink() || summary == "" {
+		return summary
+	}
+	var path string
+	if args := decodeToolArguments(arguments); args != nil {
+		switch name {
+		case "read", "write", "glob":
+			path = stringArg(args, "path")
+		}
+	}
+	if path == "" {
+		return summary
+	}
+	return pathHyperlink(path, summary)
+}
+
 func (o *AgentOutput) turnEnd(event agent.Event) {
-	if o.Quiet || event.Usage == nil {
+	o.ensureStreamNewline()
+	if o.Quiet || !o.debug || event.Usage == nil {
 		return
 	}
 	cache := ""
@@ -146,17 +337,19 @@ func (o *AgentOutput) toolStart(event agent.Event) {
 		o.tools = make(map[string]agentToolSummary)
 	}
 	if event.ToolCallID != "" {
-		o.tools[event.ToolCallID] = agentToolSummary{name: name, summary: summary}
+		o.tools[event.ToolCallID] = agentToolSummary{name: name, summary: summary, started: time.Now()}
 	}
 	if o.Quiet {
 		return
 	}
+	o.ensureStreamNewline()
 
-	header := fmt.Sprintf("%s⎿ %s%s%s",
+	display := o.hyperlinkSummary(name, event.Arguments, summary)
+	header := fmt.Sprintf("  %s⎿ %s%s%s",
 		o.color.Code(output.ANSIDim), o.color.Code(output.ANSICyan), name, o.color.Code(output.ANSIReset))
-	if summary != "" {
-		header += fmt.Sprintf("%s: %s%s",
-			o.color.Code(output.ANSIDim), o.color.Code(output.ANSIReset), summary)
+	if display != "" {
+		header += fmt.Sprintf("%s  %s%s",
+			o.color.Code(output.ANSIDim), o.color.Code(output.ANSIReset), display)
 	}
 	fmt.Fprintln(o.stderr, header)
 
@@ -173,7 +366,9 @@ func (o *AgentOutput) toolEnd(event agent.Event) {
 		return
 	}
 
+	summary := o.toolSummaryForEvent(event)
 	if event.IsError || event.Err != nil {
+		o.ensureStreamNewline()
 		errText := strings.TrimSpace(event.Result)
 		if event.Err != nil {
 			errText = event.Err.Error()
@@ -181,18 +376,30 @@ func (o *AgentOutput) toolEnd(event agent.Event) {
 		if errText == "" {
 			errText = "tool execution failed"
 		}
+		if summary.summary != "" {
+			errText = summary.summary + ": " + errText
+		}
 		fmt.Fprintf(o.stderr, "  %s⎿ %s%s%s\n",
 			o.color.Code(output.ANSIDim), o.color.Code(output.ANSIRed),
 			compactAgentLine(errText, agentStatusPreviewLimit), o.color.Code(output.ANSIReset))
+		o.forgetTool(event.ToolCallID)
 		return
 	}
 
 	result := strings.TrimSpace(event.Result)
 	if result == "" {
+		o.ensureStreamNewline()
+		if elapsed := elapsedToolText(summary.started); elapsed != "" {
+			fmt.Fprintf(o.stderr, "  %s⎿ done %s%s\n",
+				o.color.Code(output.ANSIDim), elapsed, o.color.Code(output.ANSIReset))
+		}
+		o.forgetTool(event.ToolCallID)
 		return
 	}
 
+	o.ensureStreamNewline()
 	o.renderToolResult(event.ToolName, result)
+	o.forgetTool(event.ToolCallID)
 }
 
 func (o *AgentOutput) renderToolResult(toolName, result string) {
@@ -233,6 +440,57 @@ func (o *AgentOutput) renderToolResult(toolName, result string) {
 	}
 }
 
+func (o *AgentOutput) renderUserIntent(body string) {
+	if o == nil || o.stderr == nil {
+		return
+	}
+	title := "user"
+	top := o.color.Code(output.ANSIDim) + "╭─ " + o.color.Code(output.ANSIReset) +
+		o.color.Code(output.ANSIBold) + title + o.color.Code(output.ANSIReset)
+	fmt.Fprintln(o.stderr, top)
+	if strings.TrimSpace(body) == "" {
+		fmt.Fprintf(o.stderr, "%s│%s\n", o.color.Code(output.ANSIDim), o.color.Code(output.ANSIReset))
+	} else {
+		for _, line := range strings.Split(body, "\n") {
+			fmt.Fprintf(o.stderr, "%s│%s %s\n",
+				o.color.Code(output.ANSIDim), o.color.Code(output.ANSIReset), line)
+		}
+	}
+	fmt.Fprintf(o.stderr, "%s╰─%s\n", o.color.Code(output.ANSIDim), o.color.Code(output.ANSIReset))
+}
+
+func shouldRenderUserIntent(body string) bool {
+	return strings.Contains(strings.TrimRight(body, "\n"), "\n")
+}
+
+func (o *AgentOutput) toolSummaryForEvent(event agent.Event) agentToolSummary {
+	if o == nil || event.ToolCallID == "" || o.tools == nil {
+		return agentToolSummary{name: event.ToolName, summary: summarizeToolArguments(event.ToolName, event.Arguments)}
+	}
+	if summary, ok := o.tools[event.ToolCallID]; ok {
+		return summary
+	}
+	return agentToolSummary{name: event.ToolName, summary: summarizeToolArguments(event.ToolName, event.Arguments)}
+}
+
+func (o *AgentOutput) forgetTool(id string) {
+	if o == nil || id == "" || o.tools == nil {
+		return
+	}
+	delete(o.tools, id)
+}
+
+func elapsedToolText(started time.Time) string {
+	if started.IsZero() {
+		return ""
+	}
+	elapsed := time.Since(started)
+	if elapsed < time.Second {
+		return fmt.Sprintf("· %dms", elapsed.Milliseconds())
+	}
+	return fmt.Sprintf("· %.1fs", elapsed.Seconds())
+}
+
 func renderAgentMarkdown(content string, enabled bool) string {
 	content = strings.TrimSpace(content)
 	if content == "" {
@@ -264,13 +522,29 @@ var (
 
 func getAgentMarkdownRenderer() (*glamour.TermRenderer, error) {
 	agentMarkdownRendererOnce.Do(func() {
-		agentMarkdownRenderer, agentMarkdownRendererErr = glamour.NewTermRenderer(
+		opts := []glamour.TermRendererOption{
 			glamour.WithAutoStyle(),
-			glamour.WithColorProfile(termenv.ANSI),
+			// Auto-detect the richest profile the terminal advertises (truecolor
+			// → 256 → ANSI) instead of pinning 16-color ANSI, so markdown answers
+			// render with real depth on modern terminals.
+			glamour.WithColorProfile(termenv.ColorProfile()),
 			glamour.WithEmoji(),
-		)
+		}
+		if w := terminalWidth(); w > 0 {
+			opts = append(opts, glamour.WithWordWrap(w))
+		}
+		agentMarkdownRenderer, agentMarkdownRendererErr = glamour.NewTermRenderer(opts...)
 	})
 	return agentMarkdownRenderer, agentMarkdownRendererErr
+}
+
+// terminalWidth returns the stdout column count, or 0 when unknown (piped /
+// forwarded sessions) so the markdown renderer skips width-bounded wrapping.
+func terminalWidth() int {
+	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
+		return w
+	}
+	return 0
 }
 
 func summarizeToolArguments(name, arguments string) string {

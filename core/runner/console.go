@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -12,10 +13,12 @@ import (
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
+	outputpkg "github.com/chainreactors/aiscan/pkg/output"
 	skillpkg "github.com/chainreactors/aiscan/skills"
 	ioaclient "github.com/chainreactors/ioa/client"
 	"github.com/reeflective/console"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 const agentPromptCommandName = "__prompt"
@@ -30,15 +33,29 @@ type AgentConsole struct {
 	console     *console.Console
 	menu        *console.Menu
 	output      *AgentOutput
+	// startupNotice, when set, is rendered once below the welcome banner (e.g.
+	// an IOA-unavailable degradation warning). Set by the caller before Start.
+	startupNotice string
 }
 
-func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.App, session *agent.Agent) *AgentConsole {
+func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.App, session *agent.Agent, output *AgentOutput) *AgentConsole {
 	c := console.New("aiscan")
 	c.NewlineAfter = true
-	output := NewAgentOutput(option)
+	configureAgentReadline(c)
+	if output == nil {
+		output = NewAgentOutput(option)
+	}
 
 	menu := c.NewMenu("agent")
-	menu.Prompt().Primary = func() string { return "aiscan> " }
+	menu.Prompt().Primary = func() string {
+		// Colored prompt for a local TTY; plain fallback when color is off (e.g.
+		// a forwarded PTY consumed by a remote agent that strips styling).
+		if output != nil && output.color.Enabled {
+			return output.color.Code(outputpkg.ANSIBold+outputpkg.ANSICyan) + "aiscan" +
+				output.color.Code(outputpkg.ANSIReset) + " " + output.color.Dim("❯") + " "
+		}
+		return "aiscan> "
+	}
 	menu.AddHistorySourceFile("history", agentConsoleHistoryPath())
 	menu.ErrorHandler = func(err error) error {
 		if errors.Is(err, errAgentConsoleExit) {
@@ -63,13 +80,92 @@ func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.A
 	return repl
 }
 
-func (r *AgentConsole) Start() error {
-	if r.output == nil || !r.output.Quiet {
-		fmt.Fprintln(os.Stderr, "aiscan interactive agent. Type /help for commands, /exit to quit.")
+func configureAgentReadline(c *console.Console) {
+	if c == nil {
+		return
 	}
+	cfg := c.Shell().Config
+	// Keep readline history and Tab completion, but avoid expensive/noisy
+	// as-you-type panels that recalculate and redraw on every keystroke.
+	_ = cfg.Set("autocomplete", false)
+	_ = cfg.Set("usage-hint-always", false)
+	_ = cfg.Set("history-autosuggest", false)
+	_ = cfg.Set("show-all-if-ambiguous", false)
+	_ = cfg.Set("show-all-if-unmodified", false)
+	_ = cfg.Set("menu-complete-display-prefix", false)
+	_ = cfg.Set("page-completions", false)
+	_ = cfg.Set("completion-query-items", 1000)
+	_ = cfg.Set("bell-style", "none")
+	_ = cfg.Set("enable-bracketed-paste", false)
+}
+
+func (r *AgentConsole) Start() error {
+	r.renderBanner()
+	if r.fastInputEnabled() {
+		return r.startFastInput()
+	}
+	return r.startReadline()
+}
+
+func (r *AgentConsole) startFastInput() error {
+	reader := bufio.NewReader(os.Stdin)
 	for {
 		if err := r.ctx.Err(); err != nil {
-			return err
+			return nil
+		}
+
+		fmt.Fprint(os.Stderr, r.promptString())
+		line, err := readFastInputLine(r.ctx, reader)
+		if err != nil && !errors.Is(err, io.EOF) {
+			if errors.Is(err, context.Canceled) {
+				fmt.Fprintln(os.Stdout)
+				return nil
+			}
+			fmt.Fprintf(os.Stderr, "error: read interactive input: %s\n", err)
+			continue
+		}
+		if errors.Is(err, io.EOF) && strings.TrimSpace(line) == "" {
+			fmt.Fprintln(os.Stdout)
+			return nil
+		}
+
+		done, execErr := r.handleInputLine(line)
+		if execErr != nil {
+			if errors.Is(execErr, context.Canceled) && r.ctx.Err() != nil {
+				fmt.Fprintln(os.Stdout)
+				return nil
+			}
+			fmt.Fprintf(os.Stderr, "error: %s\n", execErr)
+		}
+		if done || errors.Is(err, io.EOF) {
+			return nil
+		}
+	}
+}
+
+type fastInputResult struct {
+	line string
+	err  error
+}
+
+func readFastInputLine(ctx context.Context, reader *bufio.Reader) (string, error) {
+	resultCh := make(chan fastInputResult, 1)
+	go func() {
+		line, err := reader.ReadString('\n')
+		resultCh <- fastInputResult{line: line, err: err}
+	}()
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case result := <-resultCh:
+		return result.line, result.err
+	}
+}
+
+func (r *AgentConsole) startReadline() error {
+	for {
+		if err := r.ctx.Err(); err != nil {
+			return nil
 		}
 
 		line, err := r.console.Shell().Readline()
@@ -80,29 +176,67 @@ func (r *AgentConsole) Start() error {
 				return nil
 			case err.Error() == os.Interrupt.String():
 				fmt.Fprintln(os.Stdout)
-				continue
+				return nil
 			default:
 				fmt.Fprintf(os.Stderr, "error: read interactive input: %s\n", err)
 				continue
 			}
 		}
 
-		args, err := AgentConsoleArgsForLine(line)
+		done, err := r.handleInputLine(line)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %s\n", err)
-			continue
-		}
-		if len(args) == 0 {
-			continue
-		}
-
-		if err := r.executeArgs(r.ctx, args); err != nil {
-			if errors.Is(err, errAgentConsoleExit) {
+			if errors.Is(err, context.Canceled) && r.ctx.Err() != nil {
+				fmt.Fprintln(os.Stdout)
 				return nil
 			}
 			fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		}
+		if done {
+			return nil
+		}
 	}
+}
+
+func (r *AgentConsole) handleInputLine(line string) (bool, error) {
+	args, err := AgentConsoleArgsForLine(line)
+	if err != nil {
+		return false, err
+	}
+	if len(args) == 0 {
+		return false, nil
+	}
+
+	if err := r.executeArgs(r.ctx, args); err != nil {
+		if errors.Is(err, errAgentConsoleExit) {
+			return true, nil
+		}
+		return false, err
+	}
+	return false, nil
+}
+
+func (r *AgentConsole) promptString() string {
+	output := r.ensureOutput()
+	if output != nil && output.color.Enabled {
+		return output.color.Code(outputpkg.ANSIBold+outputpkg.ANSICyan) + "aiscan" +
+			output.color.Code(outputpkg.ANSIReset) + " " + output.color.Dim("❯") + " "
+	}
+	return "aiscan> "
+}
+
+func (r *AgentConsole) fastInputEnabled() bool {
+	return fastInputEnabledForMode(os.Getenv("AISCAN_REPL"), term.IsTerminal(int(os.Stdin.Fd())))
+}
+
+func fastInputEnabledForMode(mode string, stdinIsTerminal bool) bool {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch mode {
+	case "rich", "readline", "console":
+		return false
+	case "fast", "plain", "simple":
+		return true
+	}
+	return !stdinIsTerminal
 }
 
 func (r *AgentConsole) executeArgs(ctx context.Context, args []string) error {
@@ -110,6 +244,242 @@ func (r *AgentConsole) executeArgs(ctx context.Context, args []string) error {
 	root.SetArgs(args)
 	root.SetContext(ctx)
 	return root.Execute()
+}
+
+// renderBanner prints a compact welcome block to stderr: title/version,
+// resolved model, the session mode, and a short next-step hint. It uses fixed
+// ANSI tokens so redirected or recorded sessions do not receive terminal
+// background probes. stderr-TTY-only and skipped in quiet mode so redirected
+// logs stay clean. Printed once into the scrollback (PTY-forward safe).
+func (r *AgentConsole) renderBanner() {
+	if r.output == nil || r.output.Quiet || r.output.stderr == nil {
+		return
+	}
+	if !writerIsTerminal(r.output.stderr) {
+		return
+	}
+	fmt.Fprint(r.output.stderr, r.bannerOutput())
+}
+
+func writerIsTerminal(w io.Writer) bool {
+	file, ok := w.(*os.File)
+	return ok && term.IsTerminal(int(file.Fd()))
+}
+
+func (r *AgentConsole) bannerOutput() string {
+	colorEnabled := r.output != nil && r.output.color.Enabled
+	provider, model := r.providerModel()
+	modelText := "not configured - run `aiscan --init`"
+	modelStyle := ansiWarn
+	switch {
+	case provider != "" && model != "":
+		modelText = provider + " / " + model
+		modelStyle = ansiAccent
+	case provider != "":
+		modelText = provider
+		modelStyle = ansiAccent
+	}
+
+	width := r.bannerWidth()
+	header := ansiTitle("aiscan", colorEnabled) + " " + ansiDim("v"+cfg.Version, colorEnabled)
+
+	var lines []string
+	lines = append(lines, header)
+	lines = append(lines, bannerKV("model", modelStyle(modelText, colorEnabled), colorEnabled))
+	lines = append(lines, bannerKV("mode", ansiDim(r.sessionSummary(), colorEnabled), colorEnabled))
+	lines = append(lines, bannerKV("help", renderInlineCommands([]string{"/help", "/status", "/exit"}, colorEnabled), colorEnabled))
+
+	box := renderFixedBox(strings.Join(lines, "\n"), width, colorEnabled)
+	intent := ansiDim("输入目标或任务即可；例如：扫描 192.168.1.10 的 Web 风险", colorEnabled)
+
+	var b strings.Builder
+	fmt.Fprintln(&b)
+	fmt.Fprintln(&b, box)
+	fmt.Fprintln(&b, "  "+intent)
+	if notice := strings.TrimSpace(r.startupNotice); notice != "" {
+		fmt.Fprintln(&b, "  "+ansiWarn("⚠ "+notice, colorEnabled))
+	}
+	fmt.Fprintln(&b)
+	return b.String()
+}
+
+func (r *AgentConsole) bannerWidth() int {
+	const (
+		minWidth     = 44
+		defaultWidth = 64
+		maxWidth     = 78
+	)
+	width := defaultWidth
+	if r != nil && r.output != nil && r.output.stderr != nil {
+		if columns := writerTerminalWidth(r.output.stderr); columns > 0 {
+			width = columns - 4
+		}
+	}
+	if width < minWidth {
+		return minWidth
+	}
+	if width > maxWidth {
+		return maxWidth
+	}
+	return width
+}
+
+func writerTerminalWidth(w io.Writer) int {
+	file, ok := w.(*os.File)
+	if !ok {
+		return 0
+	}
+	width, _, err := term.GetSize(int(file.Fd()))
+	if err != nil || width <= 0 {
+		return 0
+	}
+	return width
+}
+
+func bannerKV(label, value string, colorEnabled bool) string {
+	return bannerTag(fmt.Sprintf("%-9s", label), colorEnabled) + value
+}
+
+func renderFixedBox(body string, width int, colorEnabled bool) string {
+	const minInnerWidth = 16
+	innerWidth := width - 4
+	if innerWidth < minInnerWidth {
+		innerWidth = minInnerWidth
+	}
+	lines := strings.Split(body, "\n")
+	for _, line := range lines {
+		if n := visibleRuneLen(line); n > innerWidth {
+			innerWidth = n
+		}
+	}
+
+	border := func(s string) string { return ansiDim(s, colorEnabled) }
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n", border("╭"+strings.Repeat("─", innerWidth+2)+"╮"))
+	for _, line := range lines {
+		padding := innerWidth - visibleRuneLen(line)
+		if padding < 0 {
+			padding = 0
+		}
+		fmt.Fprintf(&b, "%s %s%s %s\n",
+			border("│"),
+			line,
+			strings.Repeat(" ", padding),
+			border("│"))
+	}
+	fmt.Fprint(&b, border("╰"+strings.Repeat("─", innerWidth+2)+"╯"))
+	return b.String()
+}
+
+func visibleRuneLen(s string) int {
+	return len([]rune(outputpkg.StripANSI(s)))
+}
+
+func ansiTitle(s string, enabled bool) string {
+	if !enabled {
+		return s
+	}
+	return outputpkg.ANSIBold + outputpkg.ANSICyan + s + outputpkg.ANSIReset
+}
+
+func ansiAccent(s string, enabled bool) string {
+	if !enabled {
+		return s
+	}
+	return outputpkg.ANSICyan + s + outputpkg.ANSIReset
+}
+
+func ansiOK(s string, enabled bool) string {
+	if !enabled {
+		return s
+	}
+	return outputpkg.ANSIGreen + s + outputpkg.ANSIReset
+}
+
+func ansiWarn(s string, enabled bool) string {
+	if !enabled {
+		return s
+	}
+	return outputpkg.ANSIYellow + s + outputpkg.ANSIReset
+}
+
+func ansiDim(s string, enabled bool) string {
+	if !enabled {
+		return s
+	}
+	return "\033[90m" + s + outputpkg.ANSIReset
+}
+
+// bannerTag renders a dim left-aligned label inside the banner box.
+func bannerTag(s string, colorEnabled bool) string {
+	return ansiDim(s, colorEnabled)
+}
+
+func renderInlineCommands(commands []string, colorEnabled bool) string {
+	parts := make([]string, 0, len(commands))
+	for _, command := range commands {
+		parts = append(parts, ansiAccent(command, colorEnabled))
+	}
+	return strings.Join(parts, ansiDim("  ", colorEnabled))
+}
+
+func (r *AgentConsole) sessionSummary() string {
+	var parts []string
+	if r != nil && r.output != nil {
+		switch r.output.mode {
+		case ModeForwarded:
+			parts = append(parts, "forwarded")
+		default:
+			parts = append(parts, "pty")
+		}
+		if r.output.stream {
+			parts = append(parts, "stream")
+		} else if r.output.markdown {
+			parts = append(parts, "pretty")
+		} else {
+			parts = append(parts, "plain")
+		}
+	}
+	if r != nil && r.option != nil {
+		if space := strings.TrimSpace(r.option.Space); space != "" {
+			parts = append(parts, "space "+space)
+		}
+	}
+	if len(parts) == 0 {
+		return "pty"
+	}
+	return strings.Join(parts, " · ")
+}
+
+func (r *AgentConsole) providerModel() (string, string) {
+	if r.application == nil {
+		return "", ""
+	}
+	pc := r.application.ProviderConfig
+	return pc.Provider, pc.Model
+}
+
+// skillSlashNames lists user-facing skills as slash commands, capped so the
+// banner stays tidy when many skills are loaded.
+func (r *AgentConsole) skillSlashNames() string {
+	if r.application == nil || r.application.Skills == nil {
+		return ""
+	}
+	names := make([]string, 0, len(r.application.Skills.Skills))
+	for _, s := range r.application.Skills.Skills {
+		if strings.TrimSpace(s.Name) == "" || s.Internal {
+			continue
+		}
+		names = append(names, "/"+s.Name)
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	const max = 6
+	if len(names) > max {
+		return strings.Join(names[:max], "  ") + fmt.Sprintf("  +%d", len(names)-max)
+	}
+	return strings.Join(names, "  ")
 }
 
 func (r *AgentConsole) rootCommand() *cobra.Command {
@@ -126,7 +496,8 @@ func (r *AgentConsole) rootCommand() *cobra.Command {
 
 	root.AddCommand(
 		r.promptCommand(),
-		r.helpCommand(root),
+		r.helpCommand(),
+		r.statusCommand(),
 		r.resetCommand(),
 		r.continueCommand(),
 		r.exitCommand(),
@@ -147,15 +518,101 @@ func (r *AgentConsole) promptCommand() *cobra.Command {
 	}
 }
 
-func (r *AgentConsole) helpCommand(root *cobra.Command) *cobra.Command {
+func (r *AgentConsole) helpCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "/help",
 		Short: "Show interactive commands",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return root.Help()
+			fmt.Fprint(os.Stdout, r.helpOutput())
+			return nil
 		},
 	}
+}
+
+func (r *AgentConsole) statusCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "/status",
+		Short: "Show current agent status",
+		Args:  cobra.NoArgs,
+		Run: func(_ *cobra.Command, _ []string) {
+			fmt.Fprint(os.Stdout, r.statusOutput())
+		},
+	}
+}
+
+func (r *AgentConsole) helpOutput() string {
+	colorEnabled := r.output != nil && r.output.color.Enabled
+	rows := []helpRow{
+		{Command: "/help", Detail: "查看这份命令面板"},
+		{Command: "/status", Detail: "查看模型、渲染模式、IOA 和 skills"},
+		{Command: "/reset", Detail: "清空当前会话上下文"},
+		{Command: "/continue", Detail: "不追加输入，继续上一轮任务"},
+		{Command: "/exit", Detail: "退出交互模式"},
+	}
+	rows = append(rows, helpRow{Command: "", Detail: ""})
+	rows = append(rows, helpRow{Command: "普通文本", Detail: "直接发送自然语言任务"})
+	rows = append(rows, helpRow{Command: "/<skill> 任务", Detail: "用指定 skill 处理后面的任务"})
+	rows = append(rows, helpRow{Command: "/spaces /nodes", Detail: "配置 IOA 时查看协作状态"})
+	return r.renderPanel("commands", renderHelpRows(rows, colorEnabled), colorEnabled)
+}
+
+func (r *AgentConsole) statusOutput() string {
+	colorEnabled := r.output != nil && r.output.color.Enabled
+	provider, model := r.providerModel()
+	if provider == "" {
+		provider = "not configured"
+	}
+	if model == "" {
+		model = "-"
+	}
+
+	ioa := "disabled"
+	if r != nil && r.option != nil && strings.TrimSpace(r.option.IOAURL) != "" {
+		ioa = strings.TrimSpace(r.option.IOAURL)
+		if r.option.Space != "" {
+			ioa += " · space " + r.option.Space
+		}
+	}
+
+	rows := []helpRow{
+		{Command: "model", Detail: provider + " / " + model},
+		{Command: "render", Detail: r.sessionSummary()},
+		{Command: "ioa", Detail: ioa},
+		{Command: "history", Detail: agentConsoleHistoryPath()},
+	}
+	if skills := r.skillSlashNames(); skills != "" {
+		rows = append(rows, helpRow{Command: "skills", Detail: skills})
+	}
+	return r.renderPanel("status", renderHelpRows(rows, colorEnabled), colorEnabled)
+}
+
+type helpRow struct {
+	Command string
+	Detail  string
+}
+
+func renderHelpRows(rows []helpRow, colorEnabled bool) string {
+	var b strings.Builder
+	for _, row := range rows {
+		if row.Command == "" && row.Detail == "" {
+			b.WriteByte('\n')
+			continue
+		}
+		command := ansiAccent(fmt.Sprintf("%-18s", row.Command), colorEnabled)
+		detail := ansiDim(row.Detail, colorEnabled)
+		fmt.Fprintf(&b, "%s%s\n", command, detail)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func (r *AgentConsole) renderPanel(title, body string, colorEnabled bool) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = "aiscan"
+	}
+	header := ansiTitle(title, colorEnabled)
+	return "\n" + renderFixedBox(header+"\n"+body, r.bannerWidth(), colorEnabled) + "\n\n"
 }
 
 func (r *AgentConsole) resetCommand() *cobra.Command {
@@ -179,6 +636,7 @@ func (r *AgentConsole) continueCommand() *cobra.Command {
 			r.ensureOutput().Start("continue", "")
 			result, err := r.session.Continue(cmd.Context())
 			if err != nil {
+				r.ensureOutput().ensureStreamNewline()
 				return err
 			}
 			r.printResult(result)
@@ -234,6 +692,7 @@ func (r *AgentConsole) runPrompt(ctx context.Context, input string) error {
 	r.ensureOutput().Start("prompt", input)
 	result, err := r.session.Run(ctx, prompt)
 	if err != nil {
+		r.ensureOutput().ensureStreamNewline()
 		return err
 	}
 	r.printResult(result)
@@ -249,6 +708,7 @@ func (r *AgentConsole) runSkill(ctx context.Context, skill skillpkg.Skill, input
 	r.ensureOutput().Start("skill "+skill.Name, input)
 	result, err := r.session.Run(ctx, prompt)
 	if err != nil {
+		r.ensureOutput().ensureStreamNewline()
 		return err
 	}
 	r.printResult(result)
