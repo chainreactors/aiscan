@@ -28,3 +28,10 @@ scan_results.jsonl
 pw_driver_bin
 node_modules/
 community.yaml
+
+# Scratch logs / archives / caches (do not commit)
+*.log
+*.tar.gz
+__pycache__/
+*.pyc
+/jn
