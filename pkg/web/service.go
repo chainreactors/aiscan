@@ -513,22 +513,6 @@ func sameMarkdownText(left, right string) bool {
 	return strings.TrimSpace(left) == strings.TrimSpace(right)
 }
 
-func writeIndentedMarkdown(sb *strings.Builder, value, indent string) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return
-	}
-	for _, line := range strings.Split(value, "\n") {
-		if strings.TrimSpace(line) == "" {
-			sb.WriteByte('\n')
-			continue
-		}
-		sb.WriteString(indent)
-		sb.WriteString(line)
-		sb.WriteByte('\n')
-	}
-}
-
 func writeMarkdownBlock(sb *strings.Builder, value string) {
 	value = strings.TrimSpace(value)
 	if value == "" {

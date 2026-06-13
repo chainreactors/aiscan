@@ -252,28 +252,6 @@ func writeMarkdownStatusLine(sb *strings.Builder, line, status string) {
 	sb.WriteString("\n")
 }
 
-func sameMarkdownText(left, right string) bool {
-	return strings.TrimSpace(left) == strings.TrimSpace(right)
-}
-
-func writeMarkdownBlock(sb *strings.Builder, value string) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return
-	}
-	sb.WriteString(value)
-	sb.WriteString("\n\n")
-}
-
-func markdownCode(value string) string {
-	value = strings.TrimSpace(value)
-	return "`" + strings.ReplaceAll(value, "`", "\\`") + "`"
-}
-
-func markdownHeading(value string) string {
-	return strings.ReplaceAll(strings.TrimSpace(value), "\n", " ")
-}
-
 func sortedMapKeys(values map[string]int) []string {
 	keys := make([]string, 0, len(values))
 	for key := range values {

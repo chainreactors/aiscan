@@ -47,14 +47,6 @@ func RenderRecordsMarkdown(w io.Writer, records []Record) error {
 	return nil
 }
 
-func writeMarkdownFence(w io.Writer, lang, body string) {
-	fence := "```"
-	if strings.Contains(body, "```") {
-		fence = "~~~"
-	}
-	fmt.Fprintf(w, "%s%s\n%s\n%s\n\n", fence, lang, body, fence)
-}
-
 // RecordsToResult converts parsed records into a Result for asset report rendering.
 func RecordsToResult(records []Record) *Result {
 	result := &Result{}
