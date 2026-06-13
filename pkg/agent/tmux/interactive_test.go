@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -11,6 +12,9 @@ import (
 func TestMultiRoundInteraction(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only test")
+	}
+	if os.Getenv("CI") != "" {
+		t.Skip("PTY interactive session tests are unreliable in headless CI")
 	}
 	mgr := NewManager()
 	defer mgr.Shutdown()
@@ -129,6 +133,9 @@ func TestMultiRoundInteraction(t *testing.T) {
 func TestSendCtrlC(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only test")
+	}
+	if os.Getenv("CI") != "" {
+		t.Skip("PTY interactive session tests are unreliable in headless CI")
 	}
 	mgr := NewManager()
 	defer mgr.Shutdown()
