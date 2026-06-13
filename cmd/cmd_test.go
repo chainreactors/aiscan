@@ -67,6 +67,26 @@ func TestParseCLIScanExtractsLLMAndPassesScannerArgs(t *testing.T) {
 	}
 }
 
+func TestParseCLIScanExtractsAPIKeys(t *testing.T) {
+	parsed, err := parseCLI([]string{
+		"scan",
+		"-i", "127.0.0.1",
+		"--api-keys", "KEY1,KEY2",
+		"--api-keys=KEY3",
+		"--verify=high",
+	})
+	if err != nil {
+		t.Fatalf("parseCLI() error = %v", err)
+	}
+	wantArgs := []string{"scan", "-i", "127.0.0.1", "--verify=high"}
+	if !reflect.DeepEqual(parsed.ScannerArgs, wantArgs) {
+		t.Fatalf("scanner args = %#v, want %#v", parsed.ScannerArgs, wantArgs)
+	}
+	if !reflect.DeepEqual(parsed.Option.APIKeys, []string{"KEY1", "KEY2", "KEY3"}) {
+		t.Fatalf("APIKeys = %#v, want parsed key pool", parsed.Option.APIKeys)
+	}
+}
+
 func TestParseCLIScannerDebugEnablesGlobalDebugAndPreservesArg(t *testing.T) {
 	parsed, err := parseCLI([]string{"scan", "-i", "127.0.0.1", "--debug"})
 	if err != nil {
@@ -638,6 +658,7 @@ func withDefaults(t *testing.T, fn func()) {
 		{&cfg.DefaultProvider, cfg.DefaultProvider},
 		{&cfg.DefaultBaseURL, cfg.DefaultBaseURL},
 		{&cfg.DefaultAPIKey, cfg.DefaultAPIKey},
+		{&cfg.DefaultAPIKeys, cfg.DefaultAPIKeys},
 		{&cfg.DefaultModel, cfg.DefaultModel},
 		{&cfg.DefaultScannerProxy, cfg.DefaultScannerProxy},
 		{&cfg.DefaultCyberhubURL, cfg.DefaultCyberhubURL},

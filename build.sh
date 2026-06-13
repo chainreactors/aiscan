@@ -30,6 +30,7 @@ AISCAN_BIN="aiscan"
 OPT_PROVIDER=""
 OPT_BASE_URL=""
 OPT_API_KEY=""
+OPT_API_KEYS=""
 OPT_MODEL=""
 OPT_PROXY=""
 OPT_CYBERHUB_URL=""
@@ -64,6 +65,67 @@ yaml_val() {
     }" "$file" 2>/dev/null | head -1
 }
 
+yaml_list_val() {
+    local file="$1" section="$2" key="$3"
+    [ -f "$file" ] || return 0
+    awk -v section="$section" -v key="$key" '
+        function clean(v) {
+            sub(/[[:space:]]#.*/, "", v)
+            sub(/\r$/, "", v)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+            if (v ~ /^".*"$/ || v ~ /^\047.*\047$/) {
+                v = substr(v, 2, length(v)-2)
+            }
+            return v
+        }
+        function emit(v) {
+            v = clean(v)
+            if (v == "" || v == "[]") {
+                return
+            }
+            if (out != "") {
+                out = out ","
+            }
+            out = out v
+        }
+        /^[a-zA-Z_][a-zA-Z0-9_]*:/ {
+            in_section = ($0 ~ "^" section ":")
+            in_list = 0
+            next
+        }
+        in_section {
+            if ($0 ~ "^  " key ":[[:space:]]*") {
+                v = $0
+                sub("^  " key ":[[:space:]]*", "", v)
+                v = clean(v)
+                if (v != "" && v != "[]") {
+                    emit(v)
+                    exit
+                }
+                in_list = 1
+                next
+			}
+			if (in_list) {
+				if ($0 ~ "^    -[[:space:]]*") {
+					v = $0
+					sub("^    -[[:space:]]*", "", v)
+					emit(v)
+					next
+				}
+                if ($0 ~ "^  [a-zA-Z_][a-zA-Z0-9_]*:") {
+                    in_list = 0
+                    next
+                }
+            }
+        }
+        END {
+            if (out != "") {
+                print out
+            }
+        }
+    ' "$file" 2>/dev/null
+}
+
 # ─── 参数解析 ────────────────────────────────────────────────────
 
 while [[ $# -gt 0 ]]; do
@@ -79,6 +141,7 @@ while [[ $# -gt 0 ]]; do
         --llm-provider)     OPT_PROVIDER="$2"; shift 2 ;;
         --llm-base-url)     OPT_BASE_URL="$2"; shift 2 ;;
         --llm-api-key)      OPT_API_KEY="$2"; shift 2 ;;
+        --llm-api-keys)     OPT_API_KEYS="$2"; shift 2 ;;
         --llm-model)        OPT_MODEL="$2"; shift 2 ;;
         --llm-proxy)        OPT_PROXY="$2"; shift 2 ;;
         --cyberhub-url)     OPT_CYBERHUB_URL="$2"; shift 2 ;;
@@ -105,12 +168,13 @@ aiscan 构建脚本
   --output DIR          输出目录 (默认: dist)
   --embed               嵌入扫描资源（不加 emptytemplates/noembed tag）
   --ioa                 同时编译 ioa server 二进制
-  --profile PROFILE     构建配置: mini (默认, 核心工具) 或 full (browser+recon+ioa)
+  --profile PROFILE     构建配置: mini (默认, 核心工具) 或 full (启用 full tag + browser/recon/ioa)
 
 LLM 覆盖（优先级高于 config.yaml）:
   --llm-provider NAME
   --llm-base-url URL
   --llm-api-key KEY
+  --llm-api-keys KEYS     逗号分隔的 API key 轮询池
   --llm-model NAME
   --llm-proxy URL
 
@@ -137,7 +201,7 @@ IOA 覆盖:
   ./build.sh --embed                            # 嵌入资源的完整构建
   ./build.sh -g                                 # 打印 ldflags（用于自定义构建命令）
   ./build.sh --ioa -o linux/amd64               # 同时编译 ioa server
-  ./build.sh --profile full -o linux/amd64      # full 构建 (browser+recon+ioa)
+  ./build.sh --profile full -o linux/amd64      # full 构建 (启用 full tag + browser/recon/ioa)
 HELP
             exit 0
             ;;
@@ -159,6 +223,7 @@ resolve() {
 CFG_PROVIDER=$(resolve "$OPT_PROVIDER" "$(yaml_val "$CONFIG_FILE" llm provider)")
 CFG_BASE_URL=$(resolve "$OPT_BASE_URL" "$(yaml_val "$CONFIG_FILE" llm base_url)")
 CFG_API_KEY=$(resolve "$OPT_API_KEY" "$(yaml_val "$CONFIG_FILE" llm api_key)")
+CFG_API_KEYS=$(resolve "$OPT_API_KEYS" "$(yaml_list_val "$CONFIG_FILE" llm api_keys)")
 CFG_MODEL=$(resolve "$OPT_MODEL" "$(yaml_val "$CONFIG_FILE" llm model)")
 CFG_SCANNER_PROXY=$(resolve "$OPT_PROXY" "$(yaml_val "$CONFIG_FILE" cyberhub proxy)")
 
@@ -199,6 +264,7 @@ add_ldflag() {
 add_ldflag DefaultProvider     "$CFG_PROVIDER"
 add_ldflag DefaultBaseURL      "$CFG_BASE_URL"
 add_ldflag DefaultAPIKey       "$CFG_API_KEY"
+add_ldflag DefaultAPIKeys      "$CFG_API_KEYS"
 add_ldflag DefaultModel        "$CFG_MODEL"
 add_ldflag DefaultScannerProxy  "$CFG_SCANNER_PROXY"
 add_ldflag DefaultCyberhubURL  "$CFG_CYBERHUB_URL"
@@ -234,7 +300,7 @@ echo "profile:  $PROFILE"
 case "$PROFILE" in
     mini) ;;
     full)
-        EXTRA_TAGS="browser,recon${EXTRA_TAGS:+,$EXTRA_TAGS}"
+        EXTRA_TAGS="full,browser,recon${EXTRA_TAGS:+,$EXTRA_TAGS}"
         BUILD_IOA=true
         AISCAN_BIN="aiscan-full"
         ;;
