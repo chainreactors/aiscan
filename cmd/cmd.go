@@ -170,6 +170,9 @@ func parseCLI(args []string) (parsedCLI, error) {
 
 	mode := selectedMode(parser)
 	if mode == cfg.RunModeNoCommand {
+		if name := firstCommandName(args, rootFlagValueArity); name != "" && !isKnownRootCommandName(name) {
+			return parsedCLI{}, fmt.Errorf("unknown command %q: use %s", name, cfg.CLICommandSummary())
+		}
 		return parsedCLI{Option: option, Mode: cfg.RunModeNoCommand}, nil
 	}
 
@@ -235,6 +238,9 @@ func mergeManualScannerOptions(option *cfg.Option, manual cfg.Option) {
 	option.Provider = cfg.ResolveString(manual.Provider, option.Provider)
 	option.BaseURL = cfg.ResolveString(manual.BaseURL, option.BaseURL)
 	option.APIKey = cfg.ResolveString(manual.APIKey, option.APIKey)
+	if len(manual.APIKeys) > 0 {
+		option.APIKeys = append([]string(nil), manual.APIKeys...)
+	}
 	option.Model = cfg.ResolveString(manual.Model, option.Model)
 	option.LLMProxy = cfg.ResolveString(manual.LLMProxy, option.LLMProxy)
 	if manual.AI {
@@ -286,7 +292,7 @@ Infrastructure:
 
 Examples:
   aiscan scan -i 127.0.0.1
-  aiscan scan -i http://target.com --verify=high --sniper --model gpt-4o
+  aiscan scan -i http://target.com --verify=high --sniper --provider openai --model gpt-4o
   aiscan scan -i http://target.com --sniper
   aiscan scan -i http://target.com --mode full --deep
   aiscan scan -i 192.168.1.0/24 --mode full
@@ -375,6 +381,7 @@ var scannerKnownFlags = []knownFlag{
 	{names: []string{"--provider"}, arity: 1, apply: func(o *cfg.Option, v string) { o.Provider = v }},
 	{names: []string{"--base-url"}, arity: 1, apply: func(o *cfg.Option, v string) { o.BaseURL = v }},
 	{names: []string{"--api-key"}, arity: 1, apply: func(o *cfg.Option, v string) { o.APIKey = v }},
+	{names: []string{"--api-keys"}, arity: 1, apply: func(o *cfg.Option, v string) { o.APIKeys = append(o.APIKeys, cfg.ParseStringList(v)...) }},
 	{names: []string{"--model"}, arity: 1, apply: func(o *cfg.Option, v string) { o.Model = v }},
 	{names: []string{"--proxy"}, arity: 1, apply: func(o *cfg.Option, v string) { o.Proxy = v }},
 	{names: []string{"--llm-proxy"}, arity: 1, apply: func(o *cfg.Option, v string) { o.LLMProxy = v }},
@@ -432,6 +439,15 @@ func argsAfterCommand(args []string, command string) []string {
 
 func isScannerCommandName(name string) bool {
 	return cfg.ScannerCommandAvailable(name)
+}
+
+func isKnownRootCommandName(name string) bool {
+	switch name {
+	case "agent", "ioa":
+		return true
+	default:
+		return cfg.ScannerCommandAvailable(name)
+	}
 }
 
 func selectedMode(parser *goflags.Parser) cfg.RunMode {
