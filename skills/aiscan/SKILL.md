@@ -51,11 +51,11 @@ cyberhub search poc shiro
 
 ## Scan Output Consumption
 
-Scanners (`scan`, `gogo`, `spray`, `neutron`) run as subprocesses inside a tmux session and stream results to that session's pane — **stdout/tmux is the only result channel; nothing is written to disk for you to read back.**
+Scanners (`scan`, `gogo`, `spray`, `neutron`) run through the `bash` tool's tmux-backed pseudo-command path and stream results to that session's pane. Prefer consuming stdout/tmux output directly.
 
 - If the scan finishes quickly, its output is returned **inline in the same bash result** — consume it right there.
-- If it exceeds the auto-background threshold, the call returns a `session id`. Read results from the pane with `tmux peek -t <id>` or `tmux capture-pane -t <id> --new` — **do NOT** try to `cat` an output file. The pane updates live; a re-run command that immediately looks for a "result file" will find nothing and loop.
-- Do **not** pass `-f`/`-o json -f` to make the scanner "write a file then read it" — that file is never produced on this code path. Get JSON by adding `-j` and reading it from the same inline/tmux channel.
+- If it exceeds the auto-background threshold, the call returns a `session id`. Read results from the pane with `tmux peek -t <id>` or `tmux capture-pane -t <id> --new`. The pane updates live; do not assume a result file exists unless you explicitly requested one.
+- `scan -f/--file` is supported when the user asks for a saved artifact, but do not add it merely to work around output handling. Get machine-readable scan output with `-j` and read it from the same inline/tmux channel.
 - When reading pane output, prefer `tmux capture-pane --new` over piping through `head`/`tail`/`grep`, which truncates results.
 
 ## Asset Triage
@@ -69,141 +69,52 @@ When scan discovers more than 20 web endpoints:
 
 ## Execution Environment
 
-The `bash` tool is **stateless** — every command runs in a fresh `sh -c` process with a hard timeout. No persistent session or environment variables between calls.
+The `bash` tool accepts a single `command` argument. It does not support `background`, `task_name`, or per-call timeout fields.
 
-For long-running services (listeners, tunnels, servers), pass `background: true` — the command starts in its own process group and returns a PID immediately. Foreground commands that block without output will hang until timeout.
+Every `bash` command is wrapped in a tmux-backed session. If the first token is a registered pseudo-command (`scan`, `gogo`, `tmux`, etc.), it runs in-process inside that session; otherwise it runs as a shell command in a PTY. Keep each invocation self-contained and do not rely on shell state from prior calls.
 
-Interactive shells, `su`, interactive `python`/`mysql` prompts, and `expect`-style dialogs do not work. Remote execution must follow a "one command in → stdout out" pattern; each invocation must be self-contained.
+Interactive shells, `su`, interactive `python`/`mysql` prompts, and `expect`-style dialogs do not work reliably. Remote execution must follow a "one command in -> stdout out" pattern.
 
-### Long-running commands → background tasks
+### Long-running commands
 
-Any scanner invocation that targets multiple hosts/domains, runs neutron, or otherwise takes more than ~2 minutes MUST be launched in the background. Call bash with `background:true` (optionally `task_name` and `task_timeout_seconds`) — you get back a task_id immediately and the agent loop stays free.
+Do not pass a background flag to `bash`. Commands that run longer than the auto-background threshold return a `session id` automatically.
 
-- A follow-up message is injected automatically when the task completes; you do not need to poll.
-- Use the tmux pseudo-command via bash to interact: `tmux ls` (overview), `tmux capture-pane -t <id> --new` (last output), `tmux wait -t <id>` (block), `tmux kill -t <id>` (terminate).
-- Foreground bash (`background:false`) is still appropriate for short shell utilities and read-only checks (<2 min).
-- Never run scan/gogo/spray/neutron foreground against >1 target at once — that blocks the LLM for tens of minutes and starves peer chatter.
+- Read live output with `tmux peek -t <id>` or `tmux capture-pane -t <id> --new`.
+- Wait for completion with `tmux wait-for -t <id>` or stop it with `tmux kill -t <id>`.
+- The runtime may inject a follow-up inbox message when a tmux-backed command completes; still inspect the session output before reporting results.
+- Never assume a scanner wrote a result file unless you explicitly passed an output file flag.
 
-## Data Exfiltration
+## Evidence Handling
 
-When moving data off a target, prefer in order:
-1. `curl`/`wget` POST to your listener as a single fire-and-forget command
-2. `scp`/`sftp` with available credentials
-3. Write to file, retrieve separately
-4. Base64-encode small payloads into command output
-5. Start a listener with `background: true` as last resort
+Collect the minimum evidence needed to support the security conclusion. Prefer short response excerpts, hashes, counts, screenshots, or scanner output references over bulk data. Do not retrieve secrets, personal data, database dumps, or large files unless the user explicitly asked for authorized reproduction and the evidence cannot be proven safely another way.
 
 ## Post-Scan Analysis
 
-After `scan` or `spray --crawl`, these follow-up steps are **mandatory**, not optional:
+Use scan output as a map of leads, not as a fixed checklist. Prioritize follow-up by demonstrated impact, exposed authentication boundary, reachable attack surface, unusual fingerprints, parameterized endpoints, and the user's stated goal. For large surfaces, sample representative assets by technology or behavior instead of exhaustively probing every endpoint.
 
-1. **Fuzz web endpoints** — review every discovered web endpoint for input parameters worth fuzzing. The scanner pipeline finds surfaces; the agent tests them for injection vulnerabilities that template-based scanning misses. Read `aiscan://skills/scan/fuzz.md` and apply its methodology to every discovered input parameter.
-2. **Hunt CVEs for fingerprints** — when 3+ fingerprints are identified, read `aiscan://skills/scan/sniper.md` and search public CVEs/exploits for each fingerprinted service or component.
-3. **Validate every finding** — every risk/vuln/loot the scanner flags MUST go through the curl verification workflow below before reporting. Never report unverified findings.
+Default ROI routing:
 
-## Post-Scan Vulnerability Verification (MANDATORY)
+- login or account boundary -> authorization and IDOR first
+- API or Swagger/OpenAPI -> unauthenticated access and role boundary first
+- upload/import/media -> upload controls and post-upload access first
+- search/filter/export/sort/orderBy -> injection and data-boundary validation first
+- GraphQL -> unauthorized query or mutation impact first; introspection alone is not a finding
+- thin visible surface -> JS, source maps, routes, and hidden endpoints
 
-Scanner output is leads, not confirmed findings. Every finding MUST be independently verified with curl before reporting. No exceptions.
+If a route produces no material evidence after sustained effort, switch routes. Keep the loop exploratory: direction and standards matter more than following a fixed step list.
 
-### Verification Workflow
+## Verification Standard
 
-For each risk/vuln/loot discovered by the scanner:
+Scanner output is a lead, not a confirmed finding. Report a vulnerability as confirmed only when independent evidence demonstrates both the behavior and its security impact. A status code, banner, fingerprint, default page, template match, or version string is not enough by itself.
 
-**Step 1: Reproduce with curl**
+When judging a lead:
 
-Build a self-contained curl command that demonstrates the vulnerability. Include all relevant headers, cookies, and POST data.
-
-```bash
-# CORS misconfiguration
-curl -s -D- -H "Origin: https://evil.com" "https://target.example.com/api/endpoint" | grep -i "access-control"
-
-# Actuator / Spring Boot info leak
-curl -s "https://target.example.com/actuator/env" | head -100
-
-# Unauthorized API access
-curl -s "https://target.example.com/api/admin/users" | head -100
-
-# SSRF
-curl -s "https://target.example.com/proxy?url=http://169.254.169.254/latest/meta-data/"
-
-# Information disclosure
-curl -s -D- "https://target.example.com/.git/config"
-curl -s -D- "https://target.example.com/swagger-ui.html"
-```
-
-**Step 2: Capture full evidence**
-
-Save both the request and response as evidence. Use `-v` to capture request headers:
-
-```bash
-curl -v "https://target.example.com/actuator/env" 2>&1 | tee /tmp/vuln_evidence_001.txt
-```
-
-**Step 3: Classify and confirm**
-
-A finding is **confirmed** only when:
-- The curl response proves the vulnerability exists (e.g. sensitive data returned, CORS header reflects attacker origin, admin endpoint accessible without auth)
-- The response is NOT a generic error page, WAF block, or CDN default page
-- The response contains actual sensitive content, not just a 200 status code
-
-A finding is **rejected** when:
-- curl returns connection timeout, 403, or WAF block page
-- The response is a default/empty page with no sensitive content
-- The endpoint requires authentication and properly returns 401/403
-
-**Step 4: Write vulnerability report**
-
-For each **confirmed** finding, output a structured report:
-
-```
-## [SEVERITY] Vulnerability Title
-
-**Target**: https://target.example.com/actuator/env
-**Type**: Spring Boot Actuator Unauthorized Access
-**Severity**: High
-
-### Reproduction
-
-​```bash
-curl -s "https://target.example.com/actuator/env"
-​```
-
-### Request
-​```http
-GET /actuator/env HTTP/1.1
-Host: target.example.com
-​```
-
-### Response (key evidence)
-​```http
-HTTP/1.1 200 OK
-Content-Type: application/json
-
-{"activeProfiles":["prod"],"propertySources":[{"name":"server.ports",...}]}
-​```
-
-### Impact
-[Describe what an attacker can do with this]
-
-### Remediation
-[Specific fix recommendation]
-```
-
-### Verification Priority
-
-Process findings in this order:
-1. **Critical**: RCE, SQLi, SSRF with internal access, authentication bypass → verify immediately
-2. **High**: Actuator exposure, unauthorized API access, sensitive info disclosure, CORS with credentials → verify next
-3. **Medium**: Directory listing, version disclosure, debug endpoints → batch verify
-4. **Low/Info**: Missing headers, SSL issues → skip manual verification, note in report
-
-### Common False Positives to Filter
-
-- Spanner gateway returning generic 403/404 → not a finding
-- CDN default pages (Tengine, Nginx welcome) → not a finding
-- Domains resolving to shared IPs with generic responses → not a finding
-- CORS allowing `*.alipay.com` on a `*.alipay.com` endpoint → same-org, low severity unless credentials exposed
-- 302 redirect to login page → authentication is working, not a bypass
+- prefer direct, reproducible evidence over tool labels
+- compare against a baseline when the claim depends on behavioral difference
+- verify that the response is not a WAF block, login page, CDN default page, intended public endpoint, or documented feature
+- classify unverified scanner matches as potential risks or informational findings
+- keep severity tied to demonstrated impact, not theoretical exploit chains
+- use `scan --verify=high` when the user asks for active validation of risky findings
 
 ## Operating Rules
 

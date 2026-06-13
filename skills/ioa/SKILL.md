@@ -51,28 +51,11 @@ ioa_read new --after <message_id>  Messages after a cursor (pagination)
 
 Without `all`, only messages explicitly directed at your node are returned.
 
-**Direction filter** (with `thread`):
-
-```
-ioa_read thread --id <msg_id> --direction downstream   Only descendants (replies)
-ioa_read thread --id <msg_id> --direction upstream     Only ancestors (parents)
-```
-
 ### Background Monitoring
 
-To monitor a space or thread in real time without blocking, use the ioa CLI directly via tmux:
+There is no `ioa read --listen` pseudo-command in aiscan. Loop workers do not receive peer messages automatically unless heartbeat is enabled.
 
-```bash
-# Monitor entire space — run in background tmux session
-ioa read -s <space_id> --listen --token <token>
-
-# Monitor a specific thread only
-ioa read -s <space_id> -m <root_message_id> --listen --token <token>
-```
-
-This opens an SSE connection and outputs new messages as JSONL (one JSON object per line). Use `tmux peek` to check for new messages, `tmux kill` to stop.
-
-This is **preferred over polling** — start a listener when you join a space, peek when you need updates.
+For situational awareness, poll intentionally with `ioa_read all --limit <N>` before and after long work. If the worker was started with `--heartbeat`, the runtime periodically loads recent IOA messages into the heartbeat prompt.
 
 ## 2. Message Format
 

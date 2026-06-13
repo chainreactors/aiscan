@@ -1,172 +1,64 @@
 # Verify
 
-Verify is aiscan's active loot validation skill. Scanner output is a **lead**, not proof. This skill probes the target to determine whether the evidence actually supports a confirmed security issue.
+Verify is aiscan's active loot validation skill. Scanner output is a lead, not proof. Use this skill to decide whether available evidence supports `confirmed`, `info`, `not_confirmed`, or `inconclusive`.
 
 ## Core Rule
 
-NEVER report a vulnerability as "confirmed" based solely on scanner tool output. You MUST actively probe the target.
+Never report a vulnerability as `confirmed` from scanner output alone. A confirmed finding needs independent, reproducible evidence that demonstrates both the behavior and the security impact.
 
-## Active Verification Protocol
+## Evidence Standard
 
-You have access to bash tools. Use them to verify loots against live targets.
+Use the tools that fit the target and claim. Simple HTTP or TCP checks usually need curl, nc, or protocol-specific clients. Rendered pages, dialogs, client-side routing, or multi-step interactions may need the `playwright` pseudo-command when it is present in the runtime pseudo-command list. If browser automation is unavailable, use HTTP/manual evidence and mark browser-only claims `inconclusive` when they cannot be evaluated.
 
-### Step 1: Reachability Check
+A finding can be `confirmed` only when the evidence shows:
 
-Before anything else, confirm the target is reachable:
-- TCP: `nc -zw3 <host> <port>` or `timeout 5 bash -c 'echo > /dev/tcp/<host>/<port>'`
-- HTTP: `curl -sk --connect-timeout 5 -o /dev/null -w '%{http_code}' <url>`
+- the target is reachable and the observed service matches the claim
+- the request or interaction is reproducible with a self-contained curl/protocol command, saved browser replay, or equivalent executable PoC
+- the response demonstrates real impact, such as sensitive data exposure, unauthorized access, valid authentication, or an unauthorized state change
+- the result is not explained by a default page, login redirect, WAF block, CDN/shared-host response, intended public endpoint, or documented behavior
+- severity matches the demonstrated impact rather than a theoretical chain
 
-If the target is unreachable, return `not_confirmed` with evidence "target unreachable - port closed or filtered".
+For claims based on behavior differences, compare against a baseline. For injection-style claims, use a unique canary or otherwise measurable signal; do not rely on generic payload strings, status code alone, or one-off anomalies.
 
-### Step 2: Service Identity
+For authorization and IDOR claims, one changed ID is a lead. Test 3-5 observed, adjacent, or cross-account identifiers when available, and compare owner, non-owner, anonymous, and baseline responses before marking impact.
 
-Confirm the actual service matches the scanner's claim:
-- Banner grab: `echo | nc -w3 <host> <port>` or `curl -sI <url>`
-- Compare response against the claimed service (e.g., scanner says "Nacos" but response is Spring Boot)
+If a verification branch produces no useful evidence after about 20 minutes or several negative probes, stop that branch and classify it as `not_confirmed` or `inconclusive` instead of continuing mechanically.
 
-If service identity doesn't match, return `not_confirmed`.
+## Common Non-Findings
 
-### Step 3: Claim-Specific Tests
+Do not report these as confirmed vulnerabilities unless there is an impact chain with direct evidence:
 
-Test the specific vulnerability claim:
+- missing security headers, SPF/DKIM/DMARC gaps, weak TLS settings, or certificate hygiene issues
+- version or banner disclosure without a working exploit for the observed version
+- fingerprints, open ports, template matches, or CVE intelligence without exploit evidence
+- GraphQL introspection, open redirect, CORS reflection, clickjacking, host header behavior, or DNS-only SSRF without demonstrated data access, account impact, or sensitive action impact
+- self-XSS, logout CSRF, rate-limit absence on low-value forms, or static directory listing without sensitive content
+- HTTP 200 responses that are login pages, default pages, empty pages, or generic error pages
 
-| Claim Type | How to Verify |
-|-----------|---------------|
-| Unauthorized access (Redis/MongoDB/etc.) | Connect and check for auth requirement: `redis-cli -h <host> -p <port> ping` — look for `-NOAUTH` vs `PONG` |
-| Default credentials | Test claimed credentials against actual login |
-| Information disclosure | Fetch the specific endpoint, confirm sensitive data is present |
-| Known CVE | Check version string against the affected range and attempt a safe PoC if possible |
-| Web vulnerability (XSS/SQLi) | Send unique canary, compare against baseline |
-| Open management console | Fetch URL, confirm it returns admin/management interface content |
-| **XSS (reflected/stored)** | Use playwright session: `open --record` → `discover` → `dialog --arm` → `fill` payload → `click` submit → `dialog --check` for alert → if confirmed, `record --save` |
-| **SQLi via login** | Use playwright session: `open --record` → `autofill --data "username=admin' OR 1=1--"` → `click` submit → check `url`/`goto` for admin content → if confirmed, `record --save` |
-| **Weak creds + CAPTCHA** | Use playwright session: `open --record` → `discover` → `screenshot --selector` captcha → LLM vision to solve → `autofill --data` with creds + captcha → `click` submit → if confirmed, `record --save` |
-| **Auth bypass via cookies** | Use playwright session: `open --record` → `cookies --set role=admin` → `eval` navigate to admin → check `goto` text → if confirmed, `record --save` |
+## Engine Interpretation
 
-### Tool Selection Decision Tree
+- **gogo** port/service output is exposure evidence, not a vulnerability.
+- **spray** fingerprints and paths are attack-surface intelligence, not proof.
+- **neutron** template matches are leads requiring independent validation.
+- **zombie** success requires evidence of valid authentication or authenticated content; HTTP 200 alone is not enough.
+- **sniper** CVE intelligence narrows research, but does not confirm exploitability.
 
-```
-Is the target a simple HTTP endpoint?
-├── YES → use curl/nc (faster, lighter)
-└── NO (JS-rendered, SPA, form submission needed)
-    ├── Just need rendered content? → playwright goto/content
-    ├── Have a nuclei headless template for this vuln?
-    │   └── playwright template <poc.yaml> <target-url>
-    └── Need multi-step interaction?
-        └── playwright open --record → discover → fill/autofill → click → check results
-            ├── Page has CAPTCHA? → playwright screenshot --selector + LLM vision
-            ├── Need XSS dialog detection? → playwright dialog --arm before payload
-            ├── Need to track requests? → playwright network --start before action
-            └── Confirmed? → playwright record --save <poc.yaml> to persist the POC
-```
+## Status
 
-### Step 4: Baseline Comparison
-
-When verifying web loots:
-- Compare suspicious endpoint response against a normal endpoint on the same host
-- For injection claims: compare response with payload vs response with benign input
-
-### Step 5: Triage Gate (Self-Adversarial Check)
-
-Technical reproduction (Steps 1-4) proves "it works." This step asks: "is it worth reporting?"
-
-Before marking ANY finding as `confirmed`, answer these five gates. One NO = downgrade or kill.
-
-**Gate 1 — Evidence**: Do you have a complete curl/PoC with request AND response proving the issue? A 200 status code alone is NOT evidence. Scanner output alone is NOT evidence.
-
-**Gate 2 — Real Impact**: Does the response contain actual sensitive data, authenticated content, or demonstrate real unauthorized action? "Technically possible" without demonstrated impact = `info` at best.
-
-**Gate 3 — Not on the Kill List**: Check against the NEVER REPORT list below. If the finding matches and has no exploitation chain = kill it.
-
-**Gate 4 — Correct Severity**: Does your severity label match the demonstrated (not theoretical) impact?
-- Information disclosure without sensitive data ≠ High
-- Version/banner exposure without working exploit ≠ Critical
-- Requires authentication to exploit → cannot be labeled "unauthenticated"
-- Single primitive in a multi-step chain → severity of the primitive, not the full chain
-
-**Gate 5 — Not a Feature**: Is this genuinely unintended behavior? API documentation pages, public status endpoints, intended CORS configurations, and design-documented behaviors are not vulnerabilities.
-
-#### NEVER REPORT (auto-kill without chain)
-
-- Missing security headers alone (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
-- Missing SPF/DKIM/DMARC records
-- SSL/TLS cipher weakness or certificate issues
-- Version/banner disclosure without a working exploit for that version
-- GraphQL introspection enabled without demonstrated auth bypass or data leak
-- Clickjacking on non-sensitive pages without action PoC
-- Open redirect alone without OAuth token theft or ATO chain
-- CORS header reflection without credentialed data exfiltration PoC
-- Self-XSS (only affects attacker's own session)
-- Logout CSRF
-- Rate limit absence on non-critical forms (search, contact)
-- Session not invalidated on logout / concurrent sessions allowed
-- Internal IP address in error messages or headers
-- HTTP 200 on admin/management path where response body is a login page or default page
-- Directory listing of static assets without sensitive file content
-- SSRF with DNS callback only — no internal service data returned
-
-#### CHAIN REQUIRED (conditional — build the chain or kill)
-
-| Standalone Finding | Required Chain | If Chain Works |
-|---|---|---|
-| Open redirect | + OAuth redirect_uri theft → token capture | Report as ATO chain |
-| CORS reflection | + credentialed request exfils user PII/session | Report with exfil PoC |
-| SSRF DNS-only | + internal service access with data returned | Report with data evidence |
-| Host header injection | + password reset email uses injected host | Report with email PoC |
-| Clickjacking | + sensitive action PoC (transfer, delete, change email) | Report with action PoC |
-| GraphQL introspection | + auth bypass mutation or IDOR via node() | Report with data PoC |
-| Prompt injection (LLM) | + reads other user data or executes unauth action | Report with impact PoC |
-
-If you cannot build the chain today, kill the finding. Do not report standalone primitives as confirmed vulnerabilities.
-
-## Engine-Specific Interpretation
-
-- **neutron** template match = potential lead requiring independent verification. "no templates selected" = nothing matched, not a loot.
-- **zombie** HTTP 200 = check response BODY for authenticated content. A login page returns 200 normally — that is NOT a successful login.
-- **spray** fingerprint = informational asset intelligence, not a vulnerability.
-- **gogo** port open = service exposure, confirm what's actually running.
-- **POC/exploit** output can be confirmed only when the evidence shows successful exploitation, not just that a template matched.
-- **weak credential** output can be confirmed only when evidence shows valid authentication or authenticated content.
-
-## Verifying Injection Loots
-
-When verifying XSS/SQLi/injection-type scanner output:
-
-- Grep for a unique random canary string (e.g. `aiscan_xss_a7f3b2`), not generic payloads like `alert(1)`.
-- Compare the injected response against a baseline (same endpoint, normal parameter value).
-- A loot requires a measurable difference.
-
-## Status Determination
-
-- **confirmed**: evidence directly supports the security risk with reproducible proof from your active probing
-- **info**: lead is real but informational (fingerprint, version disclosure, non-exploitable exposure)
-- **not_confirmed**: probing completed but did not support the claim; use this for target unreachable, service mismatch, auth required, 401/403/WAF denial without protected data, unaffected version, or insufficient evidence
-- **inconclusive**: rare; probing could not be completed or evaluated because of tool failure, unstable connectivity, or contradictory responses
-
-## POC Persistence
-
-When a browser-based vulnerability is **confirmed** via playwright session, save the POC as a nuclei headless template for reproducibility:
-
-```bash
-# Always use --record when opening sessions for verification
-playwright open http://target.com/vuln --session s1 --record
-# ... verification steps ...
-# On confirmed loot:
-playwright record s1 --save <vuln-type>-poc.yaml --id <vuln-id>
-playwright close s1
-```
-
-The saved template can be replayed against other targets with `playwright template <poc.yaml> <url>`, enabling batch verification without repeating manual steps.
+- `confirmed`: active probing directly supports a security issue with reproducible impact evidence
+- `info`: useful exposure or fingerprint is real, but exploitability or impact was not demonstrated
+- `not_confirmed`: probing completed and did not support the claim
+- `inconclusive`: probing could not complete or evidence is contradictory, unstable, or tool-limited
 
 ## Output Format
 
-When you have completed verification, call the `checkpoint` tool:
+When verification is complete, call the `checkpoint` tool:
 
 - **kind**: "verify"
-- **target**: the host:port or URL you verified
+- **target**: host:port or URL verified
 - **status**: confirmed, not_confirmed, info, or inconclusive
-- **title**: one-sentence loot summary
-- **content**: markdown body with exact command output as evidence
-- **labels**: severity and classification tags (e.g. "high", "critical")
+- **title**: one-sentence result
+- **content**: concise markdown with the exact evidence used for the decision
+- **labels**: severity and classification tags when applicable
 
 Do not output raw JSON. Always use the checkpoint tool to report your results.

