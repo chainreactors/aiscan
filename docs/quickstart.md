@@ -89,8 +89,8 @@ aiscan scan -l targets.txt
 
 | 模式 | 说明 |
 | --- | --- |
-| `quick`（默认） | 端口扫描、Web 探测/指纹、常见插件探测、爬取（depth 1）、弱口令、POC |
-| `full` | quick 基础上增加路径爆破和更深爬取（depth 2） |
+| `quick`（默认） | 端口扫描、Web 探测/指纹、爬取（depth 2）、弱口令、POC |
+| `full` | quick 基础上增加常见插件探测和路径爆破，爬取 depth 保持 2 |
 
 ```bash
 # 默认 quick 模式
@@ -140,10 +140,10 @@ export AISCAN_API_KEY="..."
 也可以通过 CLI 参数（aiscan 会从 `--base-url` 自动推断 provider）：
 
 ```bash
-aiscan agent --api-key "sk-..." --model gpt-4o -p "检查目标" -i http://target.example
+aiscan agent --provider openai --api-key "sk-..." --model gpt-4o -p "检查目标" -i http://target.example
 
 # DeepSeek
-aiscan agent --base-url "https://api.deepseek.com" --api-key "..." --model deepseek-chat -p "扫描目标" -i 10.0.0.0/24
+aiscan agent --base-url "https://api.deepseek.com" --api-key "..." --model deepseek-v4-pro -p "扫描目标" -i 10.0.0.0/24
 ```
 
 详细配置参考 [配置指南](configuration.md)。
@@ -191,7 +191,7 @@ aiscan gogo -i 192.168.1.0/24 -p top100
 aiscan spray -u http://target.example --finger
 
 # 弱口令检测
-aiscan zombie -i ssh://127.0.0.1:22 --top 3
+aiscan zombie -i ssh://127.0.0.1:22 --top 3 --concurrency 8
 
 # POC 检测
 aiscan neutron -u http://target.example -s critical,high

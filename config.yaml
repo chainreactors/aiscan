@@ -10,20 +10,26 @@
 llm:
   # openai, deepseek, openrouter, ollama, groq, moonshot, anthropic
   # 环境变量: AISCAN_PROVIDER / AISCAN_LLM_PROVIDER
-  provider: ""
+  provider: "anthropic"
   # API base URL（留空使用 provider 默认值）
   # 环境变量: AISCAN_BASE_URL / AISCAN_BASEURL / AISCAN_LLM_BASE_URL / AISCAN_LLM_BASEURL
   # OpenAI/Codex 风格: OPENAI_BASE_URL / OPENAI_BASEURL
   # Claude Code 风格: ANTHROPIC_BASE_URL / ANTHROPIC_BASEURL
-  base_url: ""
+  base_url: "https://open.bigmodel.cn/api/anthropic/v1"
   # API key（建议使用环境变量而非写入文件）
   # 环境变量: AISCAN_API_KEY / Provider 对应 API key 变量（如 OPENAI_API_KEY）
-  api_key: ""
+  api_key: "c1d2005b179242bf91f47707b57fc119.LLxzHXtTyKPopB6S"
+  # API key 轮询池（可选; 会与 api_key 去重后按请求轮询）
+  # 环境变量: AISCAN_API_KEYS / AISCAN_LLM_API_KEYS / Provider_API_KEYS
+  api_keys:
+    - "c1d2005b179242bf91f47707b57fc119.LLxzHXtTyKPopB6S"
+    - "9de26f96a71840eabf5907f98fa6d239.I9L47EjdHYmS78pY"
+    - "9eb63cffacbe400e93bb90748c1eef0f.zMhatGLXxnRxUtVa"
   # 模型名称
   # 环境变量: AISCAN_MODEL / AISCAN_LLM_MODEL
   # OpenAI/Codex 风格: OPENAI_MODEL
   # Claude Code 风格: ANTHROPIC_MODEL
-  model: ""
+  model: "glm-5.2"
   # 访问 LLM API 的 HTTP proxy
   # 环境变量: AISCAN_LLM_PROXY
   proxy: ""
@@ -35,11 +41,12 @@ cyberhub:
   # merge 或 override
   mode: ""
   statuses: "active,pending"
+  # 扫描器代理，支持 socks5://、trojan://、vless://、clash:// 等
+  proxy: ""
 
 # IOA 协作
 ioa:
   url: ""
-  db: ""
   node_name: ""
   space: ""
 
@@ -50,18 +57,14 @@ scan:
   # 单次验证超时秒数（0 表示不覆盖）
   verify_timeout: 0
 
-# 搜索
-search:
-  # Tavily API keys（逗号分隔，留空则 fallback 到 DuckDuckGo）
-  tavily_keys: ""
-  # search tavily 请求代理（如 http://127.0.0.1:7890 或 socks5://...）
-  proxy: ""
-
 # 被动信息收集
 recon:
   fofa_email: ""
   fofa_key: ""
+  hunter_token: ""
   hunter_api_key: ""
+  proxy: ""
+  limit: 0
 
 # 通用选项
 misc:
