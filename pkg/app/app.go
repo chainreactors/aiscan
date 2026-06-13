@@ -19,6 +19,9 @@ import (
 
 	// Register scanner command factories with the unified command registry.
 	_ "github.com/chainreactors/aiscan/pkg/tools"
+	// Register IOA pseudo-commands for library callers that do not use the root
+	// main package side-effect imports.
+	_ "github.com/chainreactors/aiscan/pkg/tools/ioa"
 )
 
 type Config struct {
@@ -351,17 +354,9 @@ func (a *App) InitIOA(ctx context.Context, cfg IOAConfig) error {
 	if err != nil {
 		return err
 	}
-	a.IOAClient = client
-	if streamClient, ok := client.(ioaclient.StreamAPI); ok {
-		a.IOAStreamClient = streamClient
-	}
-	if cfg.RegisterTools && a.Commands != nil {
-		deps := &command.Deps{
-			IOAClient: client,
-			NodeName:  cfg.NodeName,
-			NodeMeta:  cfg.NodeMeta,
-		}
-		command.BuildGroup("ioa", deps, a.Commands)
+	var streamClient ioaclient.StreamAPI
+	if sc, ok := client.(ioaclient.StreamAPI); ok {
+		streamClient = sc
 	}
 	if cfg.AutoRegister && client != nil && client.NodeID() == "" {
 		_, err := client.RegisterNode(ctx, cfg.NodeName, "", cfg.NodeMeta)
@@ -370,10 +365,24 @@ func (a *App) InitIOA(ctx context.Context, cfg IOAConfig) error {
 		}
 	}
 	// Auto-join the configured space so ioa_send/ioa_read work immediately.
+	joinedSpaceID := ""
 	if cfg.Space != "" && client != nil && client.NodeID() != "" {
 		info, err := client.Space(ctx, cfg.Space, "aiscan agent")
 		if err == nil {
-			a.setIOASpace(info.ID)
+			joinedSpaceID = info.ID
+		}
+	}
+	a.IOAClient = client
+	a.IOAStreamClient = streamClient
+	if cfg.RegisterTools && a.Commands != nil {
+		deps := &command.Deps{
+			IOAClient: client,
+			NodeName:  cfg.NodeName,
+			NodeMeta:  cfg.NodeMeta,
+		}
+		command.BuildGroup("ioa", deps, a.Commands)
+		if joinedSpaceID != "" {
+			a.setIOASpace(joinedSpaceID)
 		}
 	}
 	return nil

@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
@@ -122,6 +124,70 @@ func TestAppCloseClosesPseudoCommands(t *testing.T) {
 
 	if !closed {
 		t.Fatal("pseudo-command Close() was not called")
+	}
+}
+
+func TestInitIOAFailureDoesNotExposePartialState(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "ioa unavailable", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	reg := command.NewRegistry()
+	app := &App{Commands: reg}
+
+	err := app.InitIOA(context.Background(), IOAConfig{
+		URL:           srv.URL,
+		NodeName:      "tester",
+		RegisterTools: true,
+		AutoRegister:  true,
+	})
+	if err == nil {
+		t.Fatal("InitIOA() error = nil, want failure")
+	}
+	if app.IOAClient != nil {
+		t.Fatal("IOAClient should not be committed after init failure")
+	}
+	if app.IOAStreamClient != nil {
+		t.Fatal("IOAStreamClient should not be committed after init failure")
+	}
+	for _, name := range []string{"ioa_space", "ioa_send", "ioa_read"} {
+		if reg.Has(name) {
+			t.Fatalf("%s should not be registered after init failure", name)
+		}
+	}
+}
+
+func TestInitIOASuccessCommitsClientAndCommands(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/nodes" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"id":"node-1","name":"tester"}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	reg := command.NewRegistry()
+	app := &App{Commands: reg}
+
+	err := app.InitIOA(context.Background(), IOAConfig{
+		URL:           srv.URL,
+		NodeName:      "tester",
+		RegisterTools: true,
+		AutoRegister:  true,
+	})
+	if err != nil {
+		t.Fatalf("InitIOA() error = %v", err)
+	}
+	if app.IOAClient == nil {
+		t.Fatal("IOAClient should be committed after successful init")
+	}
+	for _, name := range []string{"ioa_space", "ioa_send", "ioa_read"} {
+		if !reg.Has(name) {
+			t.Fatalf("%s should be registered after successful init", name)
+		}
 	}
 }
 
