@@ -126,25 +126,6 @@ func parsePriority(value string) (priority, error) {
 	}
 }
 
-func (p priority) atLeast(min priority) bool {
-	return p.rank() >= min.rank()
-}
-
-func (p priority) rank() int {
-	switch p {
-	case priorityLow:
-		return 1
-	case priorityMedium:
-		return 2
-	case priorityHigh:
-		return 3
-	case priorityCritical:
-		return 4
-	default:
-		return 0
-	}
-}
-
 func reportableSprayResult(result *parsers.SprayResult) bool {
 	if result == nil || !result.IsValid || result.IsFuzzy || strings.TrimSpace(result.ErrString) != "" {
 		return false

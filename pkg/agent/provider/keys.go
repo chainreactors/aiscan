@@ -19,7 +19,7 @@ func (r *apiKeyRing) Next() string {
 		return ""
 	}
 	idx := r.next.Add(1) - 1
-	return r.keys[int(idx%uint64(len(r.keys)))]
+	return r.keys[idx%uint64(len(r.keys))]
 }
 
 func normalizeAPIKeys(primary string, extra []string) []string {
