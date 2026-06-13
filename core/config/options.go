@@ -27,12 +27,13 @@ type ScanConfigOptions struct {
 }
 
 type LLMOptions struct {
-	Provider string `long:"provider" config:"provider" description:"LLM provider name (openai, deepseek, openrouter, ollama, etc.)"`
-	BaseURL  string `long:"base-url" config:"base_url" description:"LLM API base URL"`
-	APIKey   string `long:"api-key" config:"api_key" description:"LLM API key (or set env: OPENAI_API_KEY, AISCAN_API_KEY)"`
-	Model    string `long:"model" config:"model" description:"LLM model name"`
-	LLMProxy string `long:"llm-proxy" config:"proxy" description:"Proxy for LLM API requests"`
-	AI       bool   `long:"ai" description:"Analyze direct scanner output with an LLM"`
+	Provider string   `long:"provider" config:"provider" description:"LLM provider name (openai, deepseek, openrouter, ollama, etc.)"`
+	BaseURL  string   `long:"base-url" config:"base_url" description:"LLM API base URL"`
+	APIKey   string   `long:"api-key" config:"api_key" description:"LLM API key (or set env: OPENAI_API_KEY, AISCAN_API_KEY)"`
+	APIKeys  []string `long:"api-keys" config:"api_keys" description:"Comma-separated or repeatable LLM API key pool (or set env: AISCAN_API_KEYS)"`
+	Model    string   `long:"model" config:"model" description:"LLM model name"`
+	LLMProxy string   `long:"llm-proxy" config:"proxy" description:"Proxy for LLM API requests"`
+	AI       bool     `long:"ai" description:"Analyze direct scanner output with an LLM"`
 }
 
 type ScannerOptions struct {
@@ -107,6 +108,14 @@ func StdinIsTerminal() bool {
 }
 
 func ResolveTask(opt *Option) (string, error) {
+	return resolveTask(opt, true)
+}
+
+func ResolveOptionalTask(opt *Option) (string, error) {
+	return resolveTask(opt, false)
+}
+
+func resolveTask(opt *Option, require bool) (string, error) {
 	prompt := strings.TrimSpace(opt.Prompt)
 	if prompt != "" {
 		if len(opt.Inputs) > 0 {
@@ -145,6 +154,9 @@ func ResolveTask(opt *Option) (string, error) {
 		return fmt.Sprintf("Scan the provided targets using scan and summarize results.\n\nTargets:\n%s", FormatInputs(opt.Inputs)), nil
 	}
 
+	if !require {
+		return "", nil
+	}
 	return "", fmt.Errorf("no prompt specified: use -p, --prompt, --task-file, or pipe via stdin")
 }
 

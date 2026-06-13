@@ -60,6 +60,13 @@ func applyLLMEnvironment(option *Option, explicit Option, lookup envLookup) {
 			option.APIKey = v
 		}
 	}
+	if len(explicit.APIKeys) == 0 {
+		if v := firstEnv(lookup, "AISCAN_API_KEYS", "AISCAN_LLM_API_KEYS"); v != "" {
+			option.APIKeys = ParseStringList(v)
+		} else if v := providerAPIKeysEnv(selectedProvider, lookup); v != "" {
+			option.APIKeys = ParseStringList(v)
+		}
+	}
 
 	if strings.TrimSpace(explicit.LLMProxy) == "" {
 		if v := firstEnv(lookup, "AISCAN_LLM_PROXY"); v != "" {
@@ -170,6 +177,9 @@ func providerEnvScore(providerName string, lookup envLookup) int {
 	if providerAPIKeyEnv(providerName, lookup) != "" {
 		score++
 	}
+	if providerAPIKeysEnv(providerName, lookup) != "" {
+		score++
+	}
 	return score
 }
 
@@ -200,6 +210,14 @@ func providerAPIKeyEnv(providerName string, lookup envLookup) string {
 		return ""
 	}
 	return firstEnv(lookup, envName)
+}
+
+func providerAPIKeysEnv(providerName string, lookup envLookup) string {
+	providerName = strings.ToLower(strings.TrimSpace(providerName))
+	if providerName == "" {
+		return ""
+	}
+	return firstEnv(lookup, providerEnvName(providerName, "API_KEYS"))
 }
 
 func providerEnvName(providerName, suffix string) string {

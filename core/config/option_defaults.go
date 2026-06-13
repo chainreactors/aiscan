@@ -12,6 +12,38 @@ func ResolveString(value, fallback string) string {
 	return fallback
 }
 
+func ResolveStringSlice(value, fallback []string) []string {
+	if len(value) > 0 {
+		return append([]string(nil), value...)
+	}
+	return append([]string(nil), fallback...)
+}
+
+func ParseStringList(raw string) []string {
+	fields := strings.FieldsFunc(raw, func(r rune) bool {
+		switch r {
+		case ',', '\n', '\r', '\t', ' ':
+			return true
+		default:
+			return false
+		}
+	})
+	out := make([]string, 0, len(fields))
+	seen := make(map[string]struct{}, len(fields))
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		if _, ok := seen[field]; ok {
+			continue
+		}
+		seen[field] = struct{}{}
+		out = append(out, field)
+	}
+	return out
+}
+
 func DefaultInt(value string, fallback int) int {
 	value = strings.TrimSpace(value)
 	if value == "" {

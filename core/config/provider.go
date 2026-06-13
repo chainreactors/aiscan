@@ -6,6 +6,7 @@ var (
 	DefaultProvider = "deepseek"
 	DefaultBaseURL  = ""
 	DefaultAPIKey   = ""
+	DefaultAPIKeys  = ""
 	DefaultModel    = "deepseek-v4-pro"
 
 	DefaultScannerProxy = ""
@@ -21,7 +22,6 @@ var (
 	DefaultIOANodeID   = ""
 	DefaultIOANodeName = ""
 	DefaultSpace       = ""
-
 )
 
 func defaultProviderConfig() agent.ProviderConfig {
@@ -29,6 +29,7 @@ func defaultProviderConfig() agent.ProviderConfig {
 		Provider: DefaultProvider,
 		BaseURL:  DefaultBaseURL,
 		APIKey:   DefaultAPIKey,
+		APIKeys:  ParseStringList(DefaultAPIKeys),
 		Model:    DefaultModel,
 	}
 }
@@ -47,6 +48,9 @@ func ProviderConfig(option *Option) agent.ProviderConfig {
 	if option.APIKey != "" {
 		cfg.APIKey = option.APIKey
 	}
+	if len(option.APIKeys) > 0 {
+		cfg.APIKeys = option.APIKeys
+	}
 	if option.Model != "" {
 		cfg.Model = option.Model
 	}
@@ -61,5 +65,6 @@ func ApplyResolvedProviderOptions(option *Option, cfg agent.ProviderConfig) {
 	option.Provider = cfg.Provider
 	option.BaseURL = cfg.BaseURL
 	option.APIKey = cfg.APIKey
+	option.APIKeys = cfg.APIKeys
 	option.Model = cfg.Model
 }
