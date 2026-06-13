@@ -464,7 +464,7 @@ echo "检查这个网段的暴露面" | aiscan agent -i 192.168.1.0/24
 
 ### 交互式 CLI
 
-直接运行 `aiscan agent` 且不提供任何输入时，进入交互式 REPL。支持命令历史和补全，会话上下文保留，适合连续追问。
+直接运行 `aiscan agent` 且不提供任何输入时，进入交互式 REPL。默认使用 readline，支持命令历史和 Tab 补全；为减少卡顿，自动逐键补全、usage hint 和历史 ghost suggestion 默认关闭。远端 PTY 很慢时，可用 `AISCAN_REPL=fast aiscan agent` 切到轻量输入模式。`Ctrl+C` 和 `/exit` 都会退出。会话上下文保留，适合连续追问。
 
 ```bash
 aiscan agent --provider openai --model gpt-4o
@@ -917,5 +917,6 @@ aiscan cyberhub list finger --cyberhub-url http://127.0.0.1:9000 --cyberhub-key 
 
 ### 信号处理
 
-- 第一次 Ctrl+C：优雅关闭，完成当前工作后退出
+- 交互式 REPL：Ctrl+C 直接退出
+- 执行任务或服务时第一次 Ctrl+C：优雅关闭，完成当前工作后退出
 - 第二次 Ctrl+C：强制退出

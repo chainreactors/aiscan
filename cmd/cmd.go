@@ -90,8 +90,10 @@ func AiScan() {
 		return
 	}
 	if parsed.Mode == cfg.RunModeNoCommand {
-		fmt.Fprintf(os.Stderr, "error: missing subcommand: use %s\n", cfg.CLICommandSummary())
-		os.Exit(1)
+		// Bare `aiscan` (no recognized subcommand) drops straight into the
+		// interactive agent REPL. parseCLI is unchanged, so unknown commands
+		// (e.g. the removed `loop`) still error, and -h/--help already returned.
+		parsed.Mode = cfg.RunModeAgent
 	}
 
 	cfgPath, err := cfg.ResolveRuntimeConfig(&option)
@@ -108,14 +110,19 @@ func AiScan() {
 		ctx    context.Context
 		cancel context.CancelFunc
 	)
-	if parsed.Mode == cfg.RunModeIOAServe {
+	switch {
+	case parsed.Mode == cfg.RunModeIOAServe:
+		// long-running server
 		ctx, cancel = context.WithCancel(context.Background())
-	} else {
+	case parsed.Mode == cfg.RunModeAgent && !cfg.HasAgentOneShotInput(&option):
+		// interactive REPL must not be killed by the default per-run timeout
+		ctx, cancel = context.WithCancel(context.Background())
+	default:
 		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(option.Timeout)*time.Second)
 	}
 	defer cancel()
 
-	setupSignalHandler(cancel, logger)
+	setupSignalHandler(cancel, logger, parsed.Mode == cfg.RunModeAgent && !cfg.HasAgentOneShotInput(&option))
 
 	switch parsed.Mode {
 	case cfg.RunModeAgent:
@@ -590,7 +597,7 @@ func boolFlagEnabled(args []string, flag string) bool {
 	return false
 }
 
-func setupSignalHandler(cancel context.CancelFunc, logger telemetry.Logger) {
+func setupSignalHandler(cancel context.CancelFunc, logger telemetry.Logger, quietFirst bool) {
 	if logger == nil {
 		logger = telemetry.NopLogger()
 	}
@@ -602,7 +609,11 @@ func setupSignalHandler(cancel context.CancelFunc, logger telemetry.Logger) {
 		for range sigChan {
 			sigCount++
 			if sigCount == 1 {
-				logger.Warnf("signal=shutdown action=finish_current_turn")
+				if quietFirst {
+					fmt.Fprintln(os.Stdout)
+				} else {
+					logger.Warnf("signal=shutdown action=finish_current_turn")
+				}
 				cancel()
 			} else {
 				logger.Warnf("signal=shutdown action=force_exit")
