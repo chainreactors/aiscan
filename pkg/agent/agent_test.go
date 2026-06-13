@@ -375,6 +375,39 @@ func TestStreamingProviderEmitsMessageUpdates(t *testing.T) {
 	}
 }
 
+func TestStreamingReasoningSignatureBuildsReasoningBlock(t *testing.T) {
+	tools := command.NewRegistry()
+	llm := &scriptedProvider{
+		streamEvents: []ChatCompletionStreamEvent{
+			{Delta: ChatMessageDelta{Role: "assistant"}},
+			{Delta: ChatMessageDelta{ReasoningContent: strPtr("think")}},
+			{Delta: ChatMessageDelta{ReasoningSignature: strPtr("sig_stream")}},
+			{Delta: ChatMessageDelta{Content: strPtr("done")}},
+			{Done: true},
+		},
+	}
+
+	result, err := (NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+		Stream:   true,
+	})).Run(context.Background(), "stream")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("result has no messages")
+	}
+	msg := result.Messages[len(result.Messages)-1]
+	if len(msg.ReasoningBlocks) != 1 {
+		t.Fatalf("ReasoningBlocks = %#v, want one signed block", msg.ReasoningBlocks)
+	}
+	if got := msg.ReasoningBlocks[0]; got.Type != "thinking" || got.Thinking != "think" || got.Signature != "sig_stream" {
+		t.Fatalf("ReasoningBlocks[0] = %#v, want signed thinking block", got)
+	}
+}
+
 func TestStatefulAgentTracksStreamingMessage(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{
@@ -765,6 +798,35 @@ func TestEmptyAssistantResponseRetriesEvenWithReasoningTokens(t *testing.T) {
 				t.Fatalf("call count = %d, want 2", callCount)
 			}
 		})
+	}
+}
+
+func TestZeroTokenEmptyAssistantResponseHasRetryCap(t *testing.T) {
+	tools := command.NewRegistry()
+	callCount := 0
+	llm := &callbackProvider{
+		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
+			callCount++
+			return &ChatCompletionResponse{
+				Choices: []Choice{{Message: ChatMessage{Role: "assistant"}}},
+				Usage:   &Usage{},
+			}, nil
+		},
+	}
+
+	result, err := (NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+	})).Run(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if callCount != defaultMaxZeroTokenEmptyRuns {
+		t.Fatalf("call count = %d, want %d", callCount, defaultMaxZeroTokenEmptyRuns)
+	}
+	if result.Turns != defaultMaxZeroTokenEmptyRuns {
+		t.Fatalf("turns = %d, want %d", result.Turns, defaultMaxZeroTokenEmptyRuns)
 	}
 }
 

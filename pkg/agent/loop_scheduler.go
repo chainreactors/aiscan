@@ -25,16 +25,17 @@ const (
 
 // LoopEntry defines a single recurring task.
 //
-//   - ModeInbox requires Prompt (static content injected into inbox).
+//   - ModeInbox requires Prompt or PromptFunc (content injected into inbox).
 //   - ModeIndependent requires OnFire (called each interval in a goroutine).
 type LoopEntry struct {
-	Name      string
-	Interval  time.Duration
-	Prompt    string
-	Mode      LoopMode
-	Immediate bool
-	OnFire    func(ctx context.Context, entry LoopEntry) (string, error)
-	CreatedAt time.Time
+	Name       string
+	Interval   time.Duration
+	Prompt     string
+	PromptFunc func(ctx context.Context, entry LoopEntry) (string, error)
+	Mode       LoopMode
+	Immediate  bool
+	OnFire     func(ctx context.Context, entry LoopEntry) (string, error)
+	CreatedAt  time.Time
 }
 
 type LoopInfo struct {
@@ -85,8 +86,8 @@ func (s *LoopScheduler) Add(ctx context.Context, entry LoopEntry) error {
 	if entry.Mode == ModeIndependent && entry.OnFire == nil {
 		return fmt.Errorf("OnFire callback is required for ModeIndependent")
 	}
-	if entry.Mode == ModeInbox && strings.TrimSpace(entry.Prompt) == "" {
-		return fmt.Errorf("prompt is required for ModeInbox")
+	if entry.Mode == ModeInbox && strings.TrimSpace(entry.Prompt) == "" && entry.PromptFunc == nil {
+		return fmt.Errorf("prompt or PromptFunc is required for ModeInbox")
 	}
 	if entry.CreatedAt.IsZero() {
 		entry.CreatedAt = time.Now()
@@ -138,8 +139,21 @@ func (s *LoopScheduler) fire(ctx context.Context, state *loopState) {
 
 	switch entry.Mode {
 	case ModeInbox:
+		prompt := entry.Prompt
+		if entry.PromptFunc != nil {
+			generated, err := entry.PromptFunc(ctx, entry)
+			if err != nil {
+				s.log.Warnf("loop=%s fire=%d prompt failed: %s", entry.Name, count, err)
+				return
+			}
+			prompt = generated
+		}
+		if strings.TrimSpace(prompt) == "" {
+			s.log.Warnf("loop=%s fire=%d empty prompt, skipping", entry.Name, count)
+			return
+		}
 		content := fmt.Sprintf("<loop_fire name=%q interval=%q fire_count=%d>\n%s\n</loop_fire>",
-			entry.Name, entry.Interval, count, entry.Prompt)
+			entry.Name, entry.Interval, count, prompt)
 		msg := inbox.NewMessage(inbox.OriginSystem, "user", content)
 		msg.Priority = inbox.PriorityLow
 		msg.Meta = map[string]any{

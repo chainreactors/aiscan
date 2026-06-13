@@ -11,6 +11,11 @@ import (
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
+const (
+	defaultMaxEmptyRuns          = 5
+	defaultMaxZeroTokenEmptyRuns = 3
+)
+
 func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 	if cfg.Provider == nil {
 		return nil, fmt.Errorf("agent provider is nil")
@@ -22,7 +27,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 	transcript := newTranscript(cfg.Messages, 8)
 	turn := 0
 	emptyRuns := 0
-	const maxEmptyRuns = 5
+	zeroTokenEmptyRuns := 0
 
 	bus := newEmitter(cfg.Bus, cfg.SessionID)
 	ib := cfg.Inbox
@@ -121,6 +126,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			terminate = batch.terminate
 			transcript.append(toolResults...)
 			emptyRuns = 0
+			zeroTokenEmptyRuns = 0
 		}
 
 		bus.Emit(Event{Type: EventTurnEnd, Turn: turn, Message: assistantMsg, ToolResults: toolResults, Usage: usage, ContextTokens: transcript.contextTokens})
@@ -143,20 +149,38 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			// message can spend tokens while producing no visible content
 			// and no tool calls. Treat that as empty instead of completed.
 			if len(strings.TrimSpace(content)) == 0 {
-				emptyRuns++
 				completionTokens := 0
 				if usage != nil {
 					completionTokens = usage.CompletionTokens
 				}
-				cfg.Logger.Warnf("[turn %d] empty LLM response (%d tokens, reasoning=%v, run %d/%d), retrying",
-					turn, completionTokens, hasReasoningContent(assistantMsg), emptyRuns, maxEmptyRuns)
-				if emptyRuns < maxEmptyRuns {
-					transcript.append(NewTextMessage("user", "Your last response was empty. Continue the assessment."))
-					continue
+				// Zero completion tokens = upstream transient issue (proxy
+				// cache creation, load-balancer hiccup, etc.). Retry silently
+				// without counting against emptyRuns — this is not the model
+				// deciding it has nothing to say. Keep this bounded so a
+				// persistently broken upstream cannot loop forever.
+				if usage != nil && completionTokens == 0 {
+					zeroTokenEmptyRuns++
+					cfg.Logger.Debugf("[turn %d] zero-token empty response (upstream transient, run %d/%d), silent retry",
+						turn, zeroTokenEmptyRuns, defaultMaxZeroTokenEmptyRuns)
+					if zeroTokenEmptyRuns < defaultMaxZeroTokenEmptyRuns {
+						transcript.append(NewTextMessage("user", "Continue."))
+						continue
+					}
+					cfg.Logger.Warnf("[turn %d] max zero-token empty response retries reached, stopping", turn)
+				} else {
+					zeroTokenEmptyRuns = 0
+					emptyRuns++
+					cfg.Logger.Warnf("[turn %d] empty LLM response (%d tokens, reasoning=%v, run %d/%d), retrying",
+						turn, completionTokens, hasReasoningContent(assistantMsg), emptyRuns, defaultMaxEmptyRuns)
+					if emptyRuns < defaultMaxEmptyRuns {
+						transcript.append(NewTextMessage("user", "Your last response was empty. Continue the assessment."))
+						continue
+					}
+					cfg.Logger.Warnf("[turn %d] max empty response retries reached, stopping", turn)
 				}
-				cfg.Logger.Warnf("[turn %d] max empty response retries reached, stopping", turn)
 			} else {
 				emptyRuns = 0
+				zeroTokenEmptyRuns = 0
 			}
 
 			if ib != nil && ib.Len() > 0 {
@@ -495,14 +519,13 @@ func messageContent(msg ChatMessage) string {
 func logAssistantAndUsage(logger telemetry.Logger, msg ChatMessage, usage *Usage, finishReason string) {
 	content := messageContent(msg)
 	reasoning := messageReasoningContent(msg)
-	logger.Debugf("assistant message role=%s finish_reason=%s content_len=%d reasoning_len=%d tool_calls=%d content=%q reasoning=%q",
+	logger.Debugf("assistant message role=%s finish_reason=%s content_len=%d reasoning_len=%d tool_calls=%d content=%q",
 		msg.Role,
 		finishReason,
 		len(content),
 		len(reasoning),
 		len(msg.ToolCalls),
-		preview(compactLogContent(content), 500),
-		preview(compactLogContent(reasoning), 500))
+		preview(compactLogContent(content), 500))
 	if content != "" {
 		logger.Infof("assistant output=%q", preview(compactLogContent(content), 500))
 	}
@@ -541,10 +564,11 @@ func schedulerActive(s *LoopScheduler) int {
 }
 
 type messageBuilder struct {
-	role             string
-	content          strings.Builder
-	reasoningContent strings.Builder
-	toolCalls        map[int]*ToolCall
+	role               string
+	content            strings.Builder
+	reasoningContent   strings.Builder
+	reasoningSignature strings.Builder
+	toolCalls          map[int]*ToolCall
 }
 
 func newMessageBuilder() *messageBuilder {
@@ -563,6 +587,9 @@ func (b *messageBuilder) Apply(delta ChatMessageDelta) ChatMessage {
 	}
 	if delta.ReasoningContent != nil {
 		b.reasoningContent.WriteString(*delta.ReasoningContent)
+	}
+	if delta.ReasoningSignature != nil {
+		b.reasoningSignature.WriteString(*delta.ReasoningSignature)
 	}
 	for _, tcDelta := range delta.ToolCalls {
 		tc := b.toolCalls[tcDelta.Index]
@@ -594,6 +621,13 @@ func (b *messageBuilder) Message() ChatMessage {
 	}
 	if reasoningContent := b.reasoningContent.String(); reasoningContent != "" {
 		msg.ReasoningContent = &reasoningContent
+		if signature := b.reasoningSignature.String(); signature != "" {
+			msg.ReasoningBlocks = []ReasoningBlock{{
+				Type:      "thinking",
+				Thinking:  reasoningContent,
+				Signature: signature,
+			}}
+		}
 	}
 	if len(b.toolCalls) > 0 {
 		indexes := make([]int, 0, len(b.toolCalls))
