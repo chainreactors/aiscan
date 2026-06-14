@@ -303,14 +303,10 @@ func runOneShotMode(ctx context.Context, option *cfg.Option, logger telemetry.Lo
 
 func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetry.Logger) error {
 	// Interactive REPL: let the welcome banner be the first thing on screen.
-	// The shared global logger defaults to a verbose level — chainreactors/logs
-	// numbers WarnLevel=20 below InfoLevel=30, so WarnLevel surfaces Info too,
-	// which dumps provider/engine "ready" lines over the banner. Drop to
-	// error-only so only real failures surface; --debug keeps the full trace.
-	if !option.Debug {
-		restoreLogs := telemetry.SuppressGlobalNonErrors()
-		defer restoreLogs()
-	}
+	// Keep global library logs error-only; agent status/debug rendering is
+	// handled by AgentOutput and should not enable scanner/library traces.
+	restoreLogs := telemetry.SuppressGlobalNonErrors()
+	defer restoreLogs()
 	rt, err := NewAgentRuntime(ctx, option, logger, &RuntimeConfig{
 		AgentLogger:        quietAgentStatusLogger(option, logger),
 		AllowStandaloneIOA: true,
@@ -647,10 +643,6 @@ func RunDirectScannerMode(ctx context.Context, option *cfg.Option, rest []string
 	if !application.Commands.Has(scannerArgs[0]) {
 		return fmt.Errorf("unknown subcommand: %s", scannerArgs[0])
 	}
-	if option.Debug && scannerCommandSupportsDebug(scannerArgs[0]) && !toolargs.BoolFlagEnabled(scannerArgs[1:], "--debug") {
-		scannerArgs = append(scannerArgs, "--debug")
-	}
-
 	if (option.AI && scannerArgs[0] != "scan") || features.ScannerAI {
 		if application.Provider == nil {
 			if !features.ProviderOptional {
@@ -678,9 +670,6 @@ func RunDirectScannerMode(ctx context.Context, option *cfg.Option, rest []string
 }
 
 func directScannerDebugEnabled(option *cfg.Option, scannerArgs []string) bool {
-	if option != nil && option.Debug {
-		return true
-	}
 	if len(scannerArgs) == 0 || !scannerCommandSupportsDebug(scannerArgs[0]) {
 		return false
 	}
