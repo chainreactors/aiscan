@@ -110,6 +110,7 @@ type Event struct {
 	IsError       bool
 	Err           error
 	Stop          StopReason
+	Detail        string
 	Usage         *Usage
 	ContextTokens int
 }
@@ -283,6 +284,8 @@ type Result struct {
 	TurnUsages    []TurnUsage
 	ContextTokens int
 	Err           error
+	Stop          StopReason
+	StopDetail    string
 }
 
 type State struct {
@@ -291,4 +294,24 @@ type State struct {
 	Tools        *command.CommandRegistry
 	ErrorMessage string
 	LastError    error
+	LastStop     StopReason
+	LastDetail   string
+	LastTurns    int
+	LastUsage    Usage
+	LastContext  int
+}
+
+type DebugSnapshot struct {
+	SessionID       string
+	Running         bool
+	MessageCount    int
+	LastStop        StopReason
+	LastDetail      string
+	LastError       string
+	LastTurns       int
+	LastUsage       Usage
+	LastContext     int
+	InboxLen        int
+	ActiveProducers int
+	ActiveLoops     int
 }

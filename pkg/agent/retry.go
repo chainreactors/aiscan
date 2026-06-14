@@ -11,11 +11,13 @@ import (
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
+var errEmptyLLMResponse = errors.New("empty response from LLM")
+
 func isRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, ErrCallTimeout) || errors.Is(err, ErrStreamStalled) {
+	if errors.Is(err, ErrCallTimeout) || errors.Is(err, ErrStreamStalled) || errors.Is(err, errEmptyLLMResponse) {
 		return true
 	}
 	if errors.Is(err, context.Canceled) {
@@ -103,6 +105,9 @@ func requestWithRetry(ctx context.Context, cfg Config, bus emitter, messages []C
 		if !isRetryableError(err) {
 			return ChatMessage{}, nil, err
 		}
+		if errors.Is(err, errEmptyLLMResponse) && attempt+1 >= defaultMaxZeroTokenEmptyRuns {
+			return ChatMessage{}, nil, err
+		}
 	}
 	return ChatMessage{}, nil, lastErr
 }
@@ -114,6 +119,7 @@ func requestAssistantMessageWithUsage(ctx context.Context, cfg Config, bus emitt
 		Tools:          tools,
 		MaxTokens:      cfg.MaxTokens,
 		Temperature:    cfg.Temperature,
+		Stream:         cfg.Stream,
 		ResponseFormat: cfg.ResponseFormat,
 		CacheRetention: cfg.CacheRetention,
 		SessionID:      cfg.SessionID,
@@ -130,9 +136,13 @@ func requestAssistantMessageWithUsage(ctx context.Context, cfg Config, bus emitt
 		return ChatMessage{}, nil, fmt.Errorf("LLM call failed at turn %d: %w", turn, err)
 	}
 	if len(resp.Choices) == 0 {
-		return ChatMessage{}, nil, fmt.Errorf("empty response from LLM at turn %d", turn)
+		return ChatMessage{}, nil, fmt.Errorf("%w at turn %d: no choices", errEmptyLLMResponse, turn)
 	}
 	msg := resp.Choices[0].Message
+	if isZeroTokenEmptyAssistantMessage(msg, resp.Usage) {
+		return ChatMessage{}, nil, fmt.Errorf("%w at turn %d: completion_tokens=0 prompt_tokens=%d total_tokens=%d finish_reason=%q",
+			errEmptyLLMResponse, turn, resp.Usage.PromptTokens, resp.Usage.TotalTokens, resp.Choices[0].FinishReason)
+	}
 	bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: msg})
 	bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: msg})
 	logAssistantAndUsage(cfg.Logger, msg, resp.Usage, resp.Choices[0].FinishReason)
@@ -147,6 +157,7 @@ func streamAssistantMessageWithUsage(ctx context.Context, p StreamingProvider, r
 
 	builder := newMessageBuilder()
 	started := false
+	sawDone := false
 	var usage *Usage
 	finishReason := ""
 	for event := range events {
@@ -160,24 +171,52 @@ func streamAssistantMessageWithUsage(ctx context.Context, p StreamingProvider, r
 			finishReason = event.FinishReason
 		}
 		if event.Done {
+			sawDone = true
 			break
 		}
 		updated := builder.Apply(event.Delta)
-		if !started {
-			started = true
-			bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: updated})
+		if hasSubstantiveStreamDelta(event.Delta) {
+			if !started {
+				started = true
+				bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: updated})
+			}
+			bus.Emit(Event{Type: EventMessageUpdate, Turn: turn, Message: updated})
 		}
-		bus.Emit(Event{Type: EventMessageUpdate, Turn: turn, Message: updated})
 	}
 	if err := ctx.Err(); err != nil {
 		return ChatMessage{}, nil, err
 	}
+	if !sawDone {
+		return ChatMessage{}, nil, fmt.Errorf("%w at turn %d: stream ended before done", ErrStreamStalled, turn)
+	}
 
 	msg := builder.Message()
+	if isZeroTokenEmptyAssistantMessage(msg, usage) {
+		return ChatMessage{}, nil, fmt.Errorf("%w at turn %d: completion_tokens=0 prompt_tokens=%d total_tokens=%d finish_reason=%q",
+			errEmptyLLMResponse, turn, usage.PromptTokens, usage.TotalTokens, finishReason)
+	}
 	if !started {
 		bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: msg})
 	}
 	bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: msg})
 	logAssistantAndUsage(logger, msg, usage, finishReason)
 	return msg, usage, nil
+}
+
+func isZeroTokenEmptyAssistantMessage(msg ChatMessage, usage *Usage) bool {
+	return usage != nil &&
+		usage.CompletionTokens == 0 &&
+		strings.TrimSpace(messageContent(msg)) == "" &&
+		!hasReasoningContent(msg) &&
+		len(msg.ToolCalls) == 0
+}
+
+func hasSubstantiveStreamDelta(delta ChatMessageDelta) bool {
+	if delta.Content != nil && *delta.Content != "" {
+		return true
+	}
+	if delta.ReasoningContent != nil && *delta.ReasoningContent != "" {
+		return true
+	}
+	return len(delta.ToolCalls) > 0
 }
