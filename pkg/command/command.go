@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
-
+	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
 type ToolDefinition = provider.ToolDefinition
@@ -34,11 +34,11 @@ type WorkDirAware interface {
 }
 
 type CommandRegistry struct {
-	mu        sync.RWMutex
-	items     map[string]Command
-	order     []string
-	groups    map[string][]string
-	workDir   string
+	mu      sync.RWMutex
+	items   map[string]Command
+	order   []string
+	groups  map[string][]string
+	workDir string
 
 	tools     map[string]AgentTool
 	toolOrder []string
@@ -46,7 +46,7 @@ type CommandRegistry struct {
 
 func NewRegistry() *CommandRegistry {
 	return &CommandRegistry{
-		items: make(map[string]Command),
+		items:  make(map[string]Command),
 		groups: make(map[string][]string),
 		tools:  make(map[string]AgentTool),
 	}
@@ -213,10 +213,37 @@ func (r *CommandRegistry) ExecuteArgsStreaming(ctx context.Context, tokens []str
 	if stream != nil {
 		w = io.MultiWriter(&buf, stream)
 	}
+	if !commandDebugEnabled(args) {
+		restoreLogs := telemetry.SuppressGlobalNonErrors()
+		defer restoreLogs()
+	}
 	if execErr := cmd.Execute(ctx, args, w); execErr != nil {
 		return buf.String(), execErr
 	}
 	return buf.String(), nil
+}
+
+func commandDebugEnabled(args []string) bool {
+	for _, arg := range args {
+		switch {
+		case arg == "--debug", arg == "-debug":
+			return true
+		case strings.HasPrefix(arg, "--debug="):
+			return truthyDebugValue(strings.TrimPrefix(arg, "--debug="))
+		case strings.HasPrefix(arg, "-debug="):
+			return truthyDebugValue(strings.TrimPrefix(arg, "-debug="))
+		}
+	}
+	return false
+}
+
+func truthyDebugValue(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "1", "t", "true", "y", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 // stripShellSyntax processes shell-style tokens that LLMs frequently append
