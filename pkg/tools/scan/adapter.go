@@ -78,10 +78,6 @@ func (c *Command) runSprayCapability(ctx context.Context, flags flags, web webOp
 		if !reportableSprayResultForCapability(result, source) {
 			continue
 		}
-		result = sanitizeSprayResultScope(target.URL, result)
-		if result == nil {
-			continue
-		}
 		emit(targetEvent(source, target.Raw, newWebProbeTarget(target.Raw, source, target.HostHeader, result)))
 	}
 }
@@ -237,50 +233,6 @@ func webTargetScope(target webTarget) []string {
 		}
 	}
 	return uniqueStrings(scope)
-}
-
-func sanitizeSprayResultScope(baseURL string, result *parsers.SprayResult) *parsers.SprayResult {
-	if result == nil {
-		return nil
-	}
-	if !sameAssetURL(baseURL, result.UrlString) {
-		return nil
-	}
-	if result.RedirectURL == "" || sameAssetURL(baseURL, result.RedirectURL) {
-		return result
-	}
-	clone := *result
-	clone.RedirectURL = ""
-	return &clone
-}
-
-func sameAssetURL(baseURL, candidate string) bool {
-	base, err := url.Parse(strings.TrimSpace(baseURL))
-	if err != nil || base.Host == "" {
-		return true
-	}
-	ref, err := url.Parse(strings.TrimSpace(candidate))
-	if err != nil || ref.Host == "" {
-		return true
-	}
-	return strings.EqualFold(base.Hostname(), ref.Hostname()) && effectivePort(base) == effectivePort(ref)
-}
-
-func effectivePort(u *url.URL) string {
-	if u == nil {
-		return ""
-	}
-	if port := u.Port(); port != "" {
-		return port
-	}
-	switch strings.ToLower(u.Scheme) {
-	case "http":
-		return "80"
-	case "https":
-		return "443"
-	default:
-		return ""
-	}
 }
 
 func uniqueStrings(values []string) []string {
