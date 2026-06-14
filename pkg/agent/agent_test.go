@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
@@ -100,6 +101,58 @@ func TestRunExecutesToolLoop(t *testing.T) {
 	}
 }
 
+func TestRunNudgesPromissoryNoToolResponse(t *testing.T) {
+	tools := command.NewRegistry()
+	echo := &recordingTool{name: "echo", output: "tool output"}
+	tools.RegisterTool(echo)
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "现在测试支付流程：加购、结算、伪造支付回调。我走一遍完整下单流程。")),
+			chatResponse(ChatMessage{
+				Role: "assistant",
+				ToolCalls: []ToolCall{{
+					ID:   "call-1",
+					Type: "function",
+					Function: FunctionCall{
+						Name:      "echo",
+						Arguments: `{"step":"checkout"}`,
+					},
+				}},
+			}),
+			chatResponse(NewTextMessage("assistant", "final")),
+		},
+	}
+
+	result, err := (NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+	})).Run(context.Background(), "test mall payment")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Output != "final" {
+		t.Fatalf("output = %q, want final", result.Output)
+	}
+	if got := echo.callsSnapshot(); !reflect.DeepEqual(got, []string{`{"step":"checkout"}`}) {
+		t.Fatalf("tool calls = %#v", got)
+	}
+	requests := llm.requestsSnapshot()
+	if len(requests) != 3 {
+		t.Fatalf("requests = %d, want 3", len(requests))
+	}
+	foundNudge := false
+	for _, msg := range requests[1].Messages {
+		if strings.Contains(contentOf(msg), "did not call any tools") {
+			foundNudge = true
+			break
+		}
+	}
+	if !foundNudge {
+		t.Fatalf("second request missing no-tool continuation nudge: %#v", requests[1].Messages)
+	}
+}
+
 func TestRunEmitsTurnEndAfterToolResults(t *testing.T) {
 	tools := command.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
@@ -161,7 +214,7 @@ func TestRunEmitsTurnEndAfterToolResults(t *testing.T) {
 	}
 }
 
-func TestContinueRequiresNonAssistantLastMessage(t *testing.T) {
+func TestContinueRequiresExistingMessages(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{}
 	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test"})
@@ -169,10 +222,38 @@ func TestContinueRequiresNonAssistantLastMessage(t *testing.T) {
 	if _, err := a.Continue(context.Background()); err == nil || !strings.Contains(err.Error(), "no messages") {
 		t.Fatalf("Continue() error = %v, want no messages", err)
 	}
+}
 
+func TestContinueAfterAssistantAddsNudge(t *testing.T) {
+	tools := command.NewRegistry()
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "next")),
+		},
+	}
+	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test"})
 	a.state.Messages = []ChatMessage{NewTextMessage("assistant", "done")}
-	if _, err := a.Continue(context.Background()); err == nil || !strings.Contains(err.Error(), "assistant") {
-		t.Fatalf("Continue() error = %v, want assistant", err)
+
+	result, err := a.Continue(context.Background())
+	if err != nil {
+		t.Fatalf("Continue() error = %v", err)
+	}
+	if result.Output != "next" {
+		t.Fatalf("output = %q, want next", result.Output)
+	}
+	requests := llm.requestsSnapshot()
+	if len(requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(requests))
+	}
+	msgs := requests[0].Messages
+	if len(msgs) != 2 {
+		t.Fatalf("request messages = %d, want 2: %#v", len(msgs), msgs)
+	}
+	if msgs[0].Role != "assistant" || *msgs[0].Content != "done" {
+		t.Fatalf("request missing existing assistant message: %#v", msgs)
+	}
+	if msgs[1].Role != "user" || *msgs[1].Content != continueNudgePrompt {
+		t.Fatalf("request missing continue nudge: %#v", msgs)
 	}
 }
 
@@ -200,6 +281,137 @@ func TestAgentReusesConversationAcrossPrompts(t *testing.T) {
 	}
 	if *requests[1].Messages[0].Content != "one" || *requests[1].Messages[1].Content != "first" || *requests[1].Messages[2].Content != "two" {
 		t.Fatalf("unexpected reused context: %#v", requests[1].Messages)
+	}
+}
+
+func TestResetClearsConversationAcrossPrompts(t *testing.T) {
+	tools := command.NewRegistry()
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "first")),
+			chatResponse(NewTextMessage("assistant", "second")),
+		},
+	}
+	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test"})
+	if _, err := a.Run(context.Background(), "one"); err != nil {
+		t.Fatalf("first prompt error = %v", err)
+	}
+	a.Reset()
+	if _, err := a.Run(context.Background(), "two"); err != nil {
+		t.Fatalf("second prompt error = %v", err)
+	}
+	requests := llm.requestsSnapshot()
+	if len(requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(requests))
+	}
+	if len(requests[1].Messages) != 1 || *requests[1].Messages[0].Content != "two" {
+		t.Fatalf("reset did not clear transcript: %#v", requests[1].Messages)
+	}
+}
+
+func TestResetDrainsPendingInbox(t *testing.T) {
+	tools := command.NewRegistry()
+	ib := inbox.NewBuffered(4)
+	if err := ib.Push(inbox.NewMessage(inbox.OriginSystem, "user", "old background message")); err != nil {
+		t.Fatalf("push inbox: %v", err)
+	}
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "done")),
+		},
+	}
+	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test", Inbox: ib})
+	a.Reset()
+	if _, err := a.Run(context.Background(), "new prompt"); err != nil {
+		t.Fatalf("prompt error = %v", err)
+	}
+	requests := llm.requestsSnapshot()
+	if len(requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(requests))
+	}
+	if len(requests[0].Messages) != 1 || *requests[0].Messages[0].Content != "new prompt" {
+		t.Fatalf("reset did not drain pending inbox: %#v", requests[0].Messages)
+	}
+}
+
+func TestResetClearsInboxProducers(t *testing.T) {
+	tools := command.NewRegistry()
+	ib := inbox.NewBuffered(4)
+	producer := ib.RegisterProducer("old")
+	a := NewAgent(Config{Provider: &scriptedProvider{}, Tools: tools, Model: "test", Inbox: ib})
+
+	a.Reset()
+	producer.Done()
+
+	if got := ib.ActiveProducers(); got != 0 {
+		t.Fatalf("active producers after reset = %d, want 0", got)
+	}
+}
+
+func TestResetDrainsBackgroundToolShutdownMessages(t *testing.T) {
+	tools := command.NewRegistry()
+	ib := inbox.NewBuffered(4)
+	bash := &closingTool{
+		recordingTool: recordingTool{name: "bash", output: "ok"},
+		inbox:         ib,
+	}
+	tools.RegisterTool(bash)
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "done")),
+		},
+	}
+	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test", Inbox: ib})
+	a.Reset()
+	if !bash.closed {
+		t.Fatal("reset should close background-capable bash tool")
+	}
+	if _, err := a.Run(context.Background(), "new prompt"); err != nil {
+		t.Fatalf("prompt error = %v", err)
+	}
+	requests := llm.requestsSnapshot()
+	if len(requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(requests))
+	}
+	if len(requests[0].Messages) != 1 || *requests[0].Messages[0].Content != "new prompt" {
+		t.Fatalf("reset did not drain shutdown inbox message: %#v", requests[0].Messages)
+	}
+}
+
+func TestResetStopsLoopScheduler(t *testing.T) {
+	tools := command.NewRegistry()
+	ib := inbox.NewBuffered(4)
+	scheduler := NewLoopScheduler(ib, telemetry.NopLogger())
+	defer scheduler.Stop()
+	if err := scheduler.Add(context.Background(), LoopEntry{
+		Name:     "old",
+		Interval: time.Hour,
+		Prompt:   "old loop",
+		Mode:     ModeInbox,
+	}); err != nil {
+		t.Fatalf("add loop: %v", err)
+	}
+	a := NewAgent(Config{Provider: &scriptedProvider{}, Tools: tools, Model: "test", Inbox: ib, LoopScheduler: scheduler})
+	a.Reset()
+	if got := scheduler.Active(); got != 0 {
+		t.Fatalf("active loops after reset = %d, want 0", got)
+	}
+}
+
+func TestSubAgentResetDropsStaleCompletion(t *testing.T) {
+	parentInbox := inbox.NewBuffered(4)
+	childInbox := inbox.NewBuffered(1)
+	subagents := NewSubAgentTool(NewAgent(Config{Tools: command.NewRegistry()}), parentInbox, nil)
+	runID := subagents.track("old", "", "async", func() {}, childInbox)
+
+	subagents.Reset()
+	subagents.pushCompletion("old", "", runID, &Result{Output: "old result"}, nil)
+
+	if got := parentInbox.Len(); got != 0 {
+		t.Fatalf("parent inbox len after stale completion = %d, want 0", got)
+	}
+	if got := subagents.RunningCount(); got != 0 {
+		t.Fatalf("running subagents after reset = %d, want 0", got)
 	}
 }
 
@@ -372,6 +584,39 @@ func TestStreamingProviderEmitsMessageUpdates(t *testing.T) {
 	}
 	if updates == 0 {
 		t.Fatal("expected message_update events")
+	}
+}
+
+func TestStreamingRequestCarriesStreamFlag(t *testing.T) {
+	tools := command.NewRegistry()
+	llm := &scriptedProvider{
+		streamEvents: []ChatCompletionStreamEvent{
+			{Delta: ChatMessageDelta{Role: "assistant"}},
+			{Delta: ChatMessageDelta{Content: strPtr("ok")}},
+			{Done: true},
+		},
+	}
+	var eventReq *ChatCompletionRequest
+	_, err := (NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+		Stream:   true,
+		Bus: testBus(func(event Event) {
+			if event.Type == EventLLMRequest {
+				eventReq = cloneRequest(event.Request)
+			}
+		}),
+	})).Run(context.Background(), "stream")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if eventReq == nil || !eventReq.Stream {
+		t.Fatalf("EventLLMRequest.Stream = %v, want true", eventReq != nil && eventReq.Stream)
+	}
+	requests := llm.requestsSnapshot()
+	if len(requests) != 1 || !requests[0].Stream {
+		t.Fatalf("provider request stream flag = %#v, want true", requests)
 	}
 }
 
@@ -694,6 +939,19 @@ func (p *scriptedProvider) requestsSnapshot() []*ChatCompletionRequest {
 	return out
 }
 
+type closingTool struct {
+	recordingTool
+	inbox  inbox.Inbox
+	closed bool
+}
+
+func (t *closingTool) Close() {
+	t.closed = true
+	if t.inbox != nil {
+		_ = t.inbox.Push(inbox.NewMessage(inbox.OriginSession, "user", "shutdown message"))
+	}
+}
+
 func chatResponse(msg ChatMessage) *ChatCompletionResponse {
 	return &ChatCompletionResponse{
 		Choices: []Choice{{Message: msg}},
@@ -801,7 +1059,7 @@ func TestEmptyAssistantResponseRetriesEvenWithReasoningTokens(t *testing.T) {
 	}
 }
 
-func TestZeroTokenEmptyAssistantResponseHasRetryCap(t *testing.T) {
+func TestZeroTokenEmptyAssistantResponseReturnsErrorAfterRetryCap(t *testing.T) {
 	tools := command.NewRegistry()
 	callCount := 0
 	llm := &callbackProvider{
@@ -815,18 +1073,66 @@ func TestZeroTokenEmptyAssistantResponseHasRetryCap(t *testing.T) {
 	}
 
 	result, err := (NewAgent(Config{
-		Provider: llm,
-		Tools:    tools,
-		Model:    "test",
+		Provider:   llm,
+		Tools:      tools,
+		Model:      "test",
+		MaxRetries: defaultMaxZeroTokenEmptyRuns - 1,
 	})).Run(context.Background(), "hello")
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
+	if err == nil {
+		t.Fatal("Run() error = nil, want empty response error")
+	}
+	if !strings.Contains(err.Error(), "empty response from LLM") {
+		t.Fatalf("Run() error = %v, want empty response", err)
 	}
 	if callCount != defaultMaxZeroTokenEmptyRuns {
 		t.Fatalf("call count = %d, want %d", callCount, defaultMaxZeroTokenEmptyRuns)
 	}
-	if result.Turns != defaultMaxZeroTokenEmptyRuns {
-		t.Fatalf("turns = %d, want %d", result.Turns, defaultMaxZeroTokenEmptyRuns)
+	if result == nil || result.Stop != StopReasonError {
+		t.Fatalf("result stop = %v, want %s", result, StopReasonError)
+	}
+	if result.Turns != 1 {
+		t.Fatalf("turns = %d, want 1", result.Turns)
+	}
+}
+
+func TestStreamingZeroTokenEmptyResponseRetriesSameRequest(t *testing.T) {
+	tools := command.NewRegistry()
+	llm := &scriptedProvider{
+		streamEventBatches: [][]ChatCompletionStreamEvent{
+			{
+				{Usage: &Usage{PromptTokens: 100, CompletionTokens: 0, TotalTokens: 100}},
+				{Done: true},
+			},
+			{
+				{Delta: ChatMessageDelta{Role: "assistant"}},
+				{Delta: ChatMessageDelta{Content: strPtr("ok")}},
+				{Usage: &Usage{PromptTokens: 100, CompletionTokens: 2, TotalTokens: 102}},
+				{Done: true},
+			},
+		},
+	}
+
+	result, err := (NewAgent(Config{
+		Provider:   llm,
+		Tools:      tools,
+		Model:      "test",
+		Stream:     true,
+		MaxRetries: 1,
+	})).Run(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Output != "ok" {
+		t.Fatalf("output = %q, want ok", result.Output)
+	}
+	requests := llm.requestsSnapshot()
+	if len(requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(requests))
+	}
+	for i, req := range requests {
+		if got := req.Messages[len(req.Messages)-1].Content; got == nil || *got != "hello" {
+			t.Fatalf("request %d last message = %#v, want original prompt without Continue", i, req.Messages[len(req.Messages)-1])
+		}
 	}
 }
 

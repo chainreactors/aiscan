@@ -14,6 +14,7 @@ import (
 const (
 	defaultMaxEmptyRuns          = 5
 	defaultMaxZeroTokenEmptyRuns = 3
+	defaultMaxNoToolNudgeRuns    = 2
 )
 
 func runLoop(ctx context.Context, cfg Config) (*Result, error) {
@@ -28,6 +29,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 	turn := 0
 	emptyRuns := 0
 	zeroTokenEmptyRuns := 0
+	noToolNudgeRuns := 0
 	var pendingInboxEvents []ChatMessage
 	// synthesized tracks whether the agent has produced at least one
 	// assistant response this run. The producer barrier below only batches
@@ -40,13 +42,15 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 	ib := cfg.Inbox
 	bus.Emit(Event{Type: EventAgentStart})
 	ended := false
-	end := func(result *Result, err error, stop StopReason) (*Result, error) {
+	end := func(result *Result, err error, stop StopReason, detail string) (*Result, error) {
 		if result == nil {
 			result = transcript.result("", transcript.completedTurns, err)
 		}
 		if err != nil && result.Err == nil {
 			result.Err = err
 		}
+		result.Stop = stop
+		result.StopDetail = detail
 		if !ended {
 			ended = true
 			bus.Emit(Event{
@@ -56,6 +60,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 				NewMessages: append([]ChatMessage(nil), result.NewMessages...),
 				Err:         result.Err,
 				Stop:        stop,
+				Detail:      detail,
 			})
 		}
 		return result, err
@@ -65,7 +70,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		if err := ctx.Err(); err != nil {
 			failure := NewTextMessage("assistant", "")
 			transcript.append(failure)
-			return end(nil, err, StopReasonCanceled)
+			return end(nil, err, StopReasonCanceled, fmt.Sprintf("context canceled before turn: %v", err))
 		}
 
 		if ib != nil {
@@ -127,7 +132,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: failure})
 			bus.Emit(Event{Type: EventTurnEnd, Turn: turn, Message: failure, Err: err})
 			transcript.completedTurns = turn
-			return end(nil, err, StopReasonError)
+			return end(nil, err, StopReasonError, fmt.Sprintf("LLM request failed at turn %d: %v", turn, err))
 		}
 		transcript.append(assistantMsg)
 		synthesized = true
@@ -136,7 +141,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			if transcript.totalUsage.TotalTokens >= cfg.TokenBudget {
 				cfg.Logger.Warnf("token budget exhausted: %d/%d", transcript.totalUsage.TotalTokens, cfg.TokenBudget)
 				result := transcript.result(messageContent(assistantMsg), turn, fmt.Errorf("token budget exhausted: %d/%d", transcript.totalUsage.TotalTokens, cfg.TokenBudget))
-				return end(result, result.Err, StopReasonBudget)
+				return end(result, result.Err, StopReasonBudget, fmt.Sprintf("token budget exhausted: %d/%d", transcript.totalUsage.TotalTokens, cfg.TokenBudget))
 			}
 			if transcript.totalUsage.TotalTokens >= cfg.TokenBudget*DefaultTokenBudgetWarningPct/100 {
 				bus.Emit(Event{Type: EventTokenBudgetWarning, Turn: turn})
@@ -151,7 +156,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			cfg.Messages = append([]ChatMessage(nil), transcript.messages...)
 			batch, err := executeToolCalls(ctx, cfg, bus, assistantMsg, turn)
 			if err != nil {
-				return end(nil, err, StopReasonError)
+				return end(nil, err, StopReasonError, fmt.Sprintf("tool execution failed at turn %d: %v", turn, err))
 			}
 			toolResults = batch.messages
 			terminate = batch.terminate
@@ -159,6 +164,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			transcript.append(toolResults...)
 			emptyRuns = 0
 			zeroTokenEmptyRuns = 0
+			noToolNudgeRuns = 0
 		}
 
 		bus.Emit(Event{Type: EventTurnEnd, Turn: turn, Message: assistantMsg, ToolResults: toolResults, Usage: usage, ContextTokens: transcript.contextTokens})
@@ -167,17 +173,18 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		if terminate {
 			cfg.Logger.Importantf("agent status=completed turns=%d tokens=%d", turn, transcript.totalUsage.TotalTokens)
 			result := transcript.result(terminalOutput(assistantMsg, terminateOutput, toolResults), turn, nil)
-			return end(result, nil, StopReasonTerminated)
+			return end(result, nil, StopReasonTerminated, "finish tool requested termination")
 		}
 
 		if cfg.MaxTurns > 0 && turn >= cfg.MaxTurns {
 			cfg.Logger.Importantf("agent status=stopped turns=%d/%d tokens=%d", turn, cfg.MaxTurns, transcript.totalUsage.TotalTokens)
 			result := transcript.result(messageContent(assistantMsg), turn, nil)
-			return end(result, nil, StopReasonStopped)
+			return end(result, nil, StopReasonStopped, fmt.Sprintf("max turns reached: %d/%d", turn, cfg.MaxTurns))
 		}
 
 		if len(assistantMsg.ToolCalls) == 0 {
 			content := messageContent(assistantMsg)
+			completionDetail := ""
 			// Thinking tokens count as completion tokens, so an assistant
 			// message can spend tokens while producing no visible content
 			// and no tool calls. Treat that as empty instead of completed.
@@ -200,6 +207,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 						continue
 					}
 					cfg.Logger.Warnf("[turn %d] max zero-token empty response retries reached, stopping", turn)
+					completionDetail = fmt.Sprintf("max zero-token empty response retries reached at turn %d", turn)
 				} else {
 					zeroTokenEmptyRuns = 0
 					emptyRuns++
@@ -210,6 +218,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 						continue
 					}
 					cfg.Logger.Warnf("[turn %d] max empty response retries reached, stopping", turn)
+					completionDetail = fmt.Sprintf("max empty response retries reached at turn %d", turn)
 				}
 			} else {
 				emptyRuns = 0
@@ -231,11 +240,37 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 				if hasMessage {
 					continue
 				}
+				if err := ctx.Err(); err != nil {
+					failure := NewTextMessage("assistant", "")
+					transcript.append(failure)
+					transcript.completedTurns = turn
+					return end(nil, err, StopReasonCanceled, fmt.Sprintf("context canceled while waiting for background inbox: %v", err))
+				}
+				completionDetail = fmt.Sprintf("background inbox wait ended without new messages (loops=%d producers=%d)",
+					schedulerActive(cfg.LoopScheduler), activeInboxProducers(ib))
+			}
+
+			if completionDetail == "" && shouldNudgeNoToolContinuation(content) {
+				noToolNudgeRuns++
+				if noToolNudgeRuns <= defaultMaxNoToolNudgeRuns {
+					cfg.Logger.Warnf("[turn %d] assistant promised follow-up but emitted no tool calls, nudging continuation (%d/%d)",
+						turn, noToolNudgeRuns, defaultMaxNoToolNudgeRuns)
+					transcript.append(NewTextMessage("user",
+						"Your last response said you would continue with concrete testing, but it did not call any tools. Execute the next concrete step now. If there is nothing left to run, say that explicitly and summarize final findings."))
+					continue
+				}
+				completionDetail = fmt.Sprintf("assistant promised follow-up but emitted no tool calls %d time(s); stopping to avoid a loop", noToolNudgeRuns)
+			} else if strings.TrimSpace(content) != "" {
+				noToolNudgeRuns = 0
 			}
 
 			cfg.Logger.Importantf("agent status=completed turns=%d tokens=%d", turn, transcript.totalUsage.TotalTokens)
 			result := transcript.result(messageContent(assistantMsg), turn, nil)
-			return end(result, nil, StopReasonCompleted)
+			if completionDetail == "" {
+				completionDetail = fmt.Sprintf("assistant response had no tool calls and no pending work (inbox=%d loops=%d producers=%d)",
+					inboxLen(ib), schedulerActive(cfg.LoopScheduler), activeInboxProducers(ib))
+			}
+			return end(result, nil, StopReasonCompleted, completionDetail)
 		}
 	}
 
@@ -615,6 +650,53 @@ func schedulerActive(s *LoopScheduler) int {
 		return 0
 	}
 	return s.Active()
+}
+
+func shouldNudgeNoToolContinuation(content string) bool {
+	compact := strings.ToLower(strings.Join(strings.Fields(content), " "))
+	if compact == "" {
+		return false
+	}
+	promises := []string{
+		"让我", "我先", "我会", "我继续", "继续", "接着", "下一步", "现在测试", "现在验证",
+		"先看", "再测", "走一遍",
+		"let me", "i will", "i'll", "i am going to", "i'm going to", "next i", "now i",
+	}
+	matched := false
+	for _, phrase := range promises {
+		if strings.Contains(compact, phrase) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return false
+	}
+	actions := []string{
+		"测试", "验证", "读取", "注册", "登录", "扫描", "请求", "查看", "下单", "伪造", "支付",
+		"测", "看", "curl",
+		"test", "verify", "read", "register", "login", "scan", "request", "fetch", "run", "execute", "try", "check",
+	}
+	for _, action := range actions {
+		if strings.Contains(compact, action) {
+			return true
+		}
+	}
+	return false
+}
+
+func inboxLen(ib interface{ Len() int }) int {
+	if ib == nil {
+		return 0
+	}
+	return ib.Len()
+}
+
+func activeInboxProducers(ib interface{ ActiveProducers() int }) int {
+	if ib == nil {
+		return 0
+	}
+	return ib.ActiveProducers()
 }
 
 type messageBuilder struct {

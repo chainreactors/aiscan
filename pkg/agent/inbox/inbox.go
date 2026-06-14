@@ -108,6 +108,14 @@ func (b *Buffered) Drain() []Message {
 	return out
 }
 
+func (b *Buffered) Reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.buf = make([]Message, 0, b.capacity)
+	b.producers = make(map[string]struct{})
+	b.wakeLocked()
+}
+
 func needsSort(msgs []Message) bool {
 	for i := 1; i < len(msgs); i++ {
 		if msgs[i].Priority > msgs[i-1].Priority {

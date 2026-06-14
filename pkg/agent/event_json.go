@@ -23,6 +23,8 @@ type EventJSON struct {
 	Result        string        `json:"result,omitempty"`
 	IsError       bool          `json:"is_error,omitempty"`
 	Error         string        `json:"error,omitempty"`
+	Stop          StopReason    `json:"stop,omitempty"`
+	Detail        string        `json:"detail,omitempty"`
 	NewMessages   int           `json:"new_messages,omitempty"`
 	Usage         *Usage        `json:"usage,omitempty"`
 	ContextTokens int           `json:"context_tokens,omitempty"`
@@ -53,6 +55,8 @@ func SerializableEvent(e Event) EventJSON {
 		Arguments:  TruncateField(e.Arguments, EventPreviewLimit),
 		Result:     TruncateField(e.Result, EventResultLimit),
 		IsError:    e.IsError,
+		Stop:       e.Stop,
+		Detail:     TruncateField(e.Detail, EventPreviewLimit),
 	}
 	if e.Err != nil {
 		out.Error = e.Err.Error()

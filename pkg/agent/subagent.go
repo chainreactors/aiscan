@@ -23,6 +23,7 @@ type AgentType struct {
 type AgentTypeResolver func(name string) (AgentType, error)
 
 type subAgentInfo struct {
+	ID        string
 	Name      string
 	Type      string
 	Mode      string
@@ -32,12 +33,12 @@ type subAgentInfo struct {
 }
 
 type SubAgentTool struct {
-	agent      *Agent
-	inbox      inbox.Inbox
-	messages   func() []ChatMessage
-	resolve    AgentTypeResolver
-	mu         sync.Mutex
-	running    map[string]*subAgentInfo
+	agent    *Agent
+	inbox    inbox.Inbox
+	messages func() []ChatMessage
+	resolve  AgentTypeResolver
+	mu       sync.Mutex
+	running  map[string]*subAgentInfo
 }
 
 func NewSubAgentTool(agent *Agent, parentInbox inbox.Inbox, resolve AgentTypeResolver) *SubAgentTool {
@@ -51,6 +52,23 @@ func NewSubAgentTool(agent *Agent, parentInbox inbox.Inbox, resolve AgentTypeRes
 
 func (t *SubAgentTool) SetMessages(fn func() []ChatMessage) {
 	t.messages = fn
+}
+
+func (t *SubAgentTool) Reset() {
+	t.mu.Lock()
+	running := make([]*subAgentInfo, 0, len(t.running))
+	for _, info := range t.running {
+		running = append(running, info)
+	}
+	t.running = make(map[string]*subAgentInfo)
+	t.mu.Unlock()
+
+	for _, info := range running {
+		info.Cancel()
+		if info.Inbox != nil {
+			info.Inbox.Close()
+		}
+	}
 }
 
 func (t *SubAgentTool) Name() string { return "subagent" }
@@ -185,15 +203,15 @@ func (t *SubAgentTool) runSync(ctx context.Context, sub *Agent, prompt, name, ty
 func (t *SubAgentTool) runAsync(ctx context.Context, sub *Agent, prompt, name, typeName string) (string, error) {
 	subCtx, cancel := context.WithCancel(ctx)
 	sub.Cfg.Inbox = inbox.NewBuffered(SubInboxCapacity)
-	t.track(name, typeName, "async", cancel, sub.Cfg.Inbox)
+	runID := t.track(name, typeName, "async", cancel, sub.Cfg.Inbox)
 	producer := t.inbox.RegisterProducer("subagent:" + name)
 
 	go func() {
 		defer producer.Done()
-		defer t.untrack(name)
+		defer t.untrack(name, runID)
 		defer cancel()
 		r, err := sub.Run(subCtx, prompt)
-		t.pushCompletion(name, typeName, r, err)
+		t.pushCompletion(name, typeName, runID, r, err)
 	}()
 
 	return fmt.Sprintf("Started subagent %q (mode=async, type=%s). Will notify on completion.", name, typeName), nil
@@ -209,21 +227,21 @@ func (t *SubAgentTool) runFork(ctx context.Context, sub *Agent, directive, name,
 
 	subCtx, cancel := context.WithCancel(ctx)
 	sub.Cfg.Inbox = inbox.NewBuffered(SubInboxCapacity)
-	t.track(name, typeName, "fork", cancel, sub.Cfg.Inbox)
+	runID := t.track(name, typeName, "fork", cancel, sub.Cfg.Inbox)
 	producer := t.inbox.RegisterProducer("subagent:" + name)
 
 	go func() {
 		defer producer.Done()
-		defer t.untrack(name)
+		defer t.untrack(name, runID)
 		defer cancel()
 		r, err := sub.Run(subCtx, directive)
-		t.pushCompletion(name, typeName, r, err)
+		t.pushCompletion(name, typeName, runID, r, err)
 	}()
 
 	return fmt.Sprintf("Started subagent %q (mode=fork, type=%s). Inherits parent context. Will notify on completion.", name, typeName), nil
 }
 
-func (t *SubAgentTool) pushCompletion(name, typeName string, r *Result, err error) {
+func (t *SubAgentTool) pushCompletion(name, typeName, runID string, r *Result, err error) {
 	result := ""
 	if r != nil {
 		result = r.Output
@@ -242,8 +260,18 @@ func (t *SubAgentTool) pushCompletion(name, typeName string, r *Result, err erro
 	msg := inbox.NewMessage(inbox.OriginSystem, "user",
 		fmt.Sprintf("<subagent_completion name=%q type=%q status=%q>\n%s\n</subagent_completion>", name, typeName, status, content))
 	msg.Meta = map[string]any{"subagent": name, "type": typeName, "status": status}
-	if err := t.inbox.Push(msg); err != nil {
-		t.agent.Cfg.Logger.Warnf("inbox push subagent completion %s: %s", name, err)
+
+	t.mu.Lock()
+	info, active := t.running[name]
+	if !active || info.ID != runID {
+		t.mu.Unlock()
+		return
+	}
+	pushErr := t.inbox.Push(msg)
+	t.mu.Unlock()
+
+	if pushErr != nil {
+		t.agent.Cfg.Logger.Warnf("inbox push subagent completion %s: %s", name, pushErr)
 	}
 }
 
@@ -299,10 +327,12 @@ func (t *SubAgentTool) kill(name string) (string, error) {
 	return fmt.Sprintf("Subagent %q canceled.", name), nil
 }
 
-func (t *SubAgentTool) track(name, typeName, mode string, cancel context.CancelFunc, ib inbox.Inbox) {
+func (t *SubAgentTool) track(name, typeName, mode string, cancel context.CancelFunc, ib inbox.Inbox) string {
+	runID := newSubAgentRunID()
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.running[name] = &subAgentInfo{
+		ID:        runID,
 		Name:      name,
 		Type:      typeName,
 		Mode:      mode,
@@ -310,12 +340,15 @@ func (t *SubAgentTool) track(name, typeName, mode string, cancel context.CancelF
 		Cancel:    cancel,
 		Inbox:     ib,
 	}
+	return runID
 }
 
-func (t *SubAgentTool) untrack(name string) {
+func (t *SubAgentTool) untrack(name, runID string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	delete(t.running, name)
+	if info, ok := t.running[name]; ok && info.ID == runID {
+		delete(t.running, name)
+	}
 }
 
 func (t *SubAgentTool) uniqueName(base string) string {
@@ -327,6 +360,12 @@ func (t *SubAgentTool) uniqueName(base string) string {
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
 	return base + "-" + hex.EncodeToString(b)
+}
+
+func newSubAgentRunID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 func truncateToLastCompleteBoundary(messages []ChatMessage) []ChatMessage {
