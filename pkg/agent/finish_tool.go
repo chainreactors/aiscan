@@ -9,9 +9,8 @@ import (
 )
 
 // FinishTool gives a finite agent run an explicit, deterministic way to
-// terminate. Its Execute returns a terminating ToolResult, which flows through
-// the existing ToolFlowTerminate path in runLoop (loop.go:387 -> 357 -> 141)
-// and returns StopReasonTerminated.
+// terminate. Its Execute returns a terminating ToolResult via ToolFlowTerminate,
+// causing runLoop to return StopReasonTerminated.
 //
 // Without it, finite tasks running in loop mode have no "done" signal: the
 // parent re-summarizes on every subagent completion trickle and, with

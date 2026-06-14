@@ -8,8 +8,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 // This file owns everything that makes the agent renderer pretty while staying
@@ -57,11 +55,11 @@ const (
 	carriage  = "\r"          // move to column 0 of the current row
 )
 
-// writeAtomic wraps a burst of volatile writes in synchronized-output escape
+// writeSynced wraps a burst of volatile writes in synchronized-output escape
 // sequences so capable terminals paint them as a single frame (no flicker on
 // spinner repaints). Forwarders/terminals that don't understand DCS 2026 ignore
 // the unknown passthrough — graceful degradation, never corruption.
-func writeAtomic(w io.Writer, fn func()) {
+func writeSynced(w io.Writer, fn func()) {
 	if w == nil {
 		return
 	}
@@ -92,19 +90,9 @@ func pathHyperlink(path, display string) string {
 	return display
 }
 
-// --- theme ------------------------------------------------------------------
-
-// Fixed color tokens keep the renderer PTY-forwardable. lipgloss.AdaptiveColor
-// probes the terminal background with OSC/DSR queries; those are fine for local
-// humans but leak as raw escape bytes in recorded/forwarded PTYs.
-var (
-	themeAccent lipgloss.TerminalColor = lipgloss.Color("#3b82f6") // blue
-	themeOK     lipgloss.TerminalColor = lipgloss.Color("#16a34a") // green
-	themeWarn   lipgloss.TerminalColor = lipgloss.Color("#d97706") // amber
-	themeDim    lipgloss.TerminalColor = lipgloss.Color("#6b7280") // grey
-)
-
 // --- spinner ----------------------------------------------------------------
+
+const spinnerFrameInterval = 90 * time.Millisecond
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
@@ -150,7 +138,7 @@ func (s *spinner) Start(label string) {
 
 func (s *spinner) tick() {
 	defer close(s.done)
-	t := time.NewTicker(90 * time.Millisecond)
+	t := time.NewTicker(spinnerFrameInterval)
 	defer t.Stop()
 	frame := 0
 	for {
@@ -175,7 +163,7 @@ func (s *spinner) render(frame int) {
 		elapsed = fmt.Sprintf(" · %.0fs", e.Seconds())
 	}
 	s.mu.Unlock()
-	writeAtomic(s.w, func() {
+	writeSynced(s.w, func() {
 		fmt.Fprintf(s.w, "%s%s%s%s %s%s\x1b[0m", carriage, eraseLine, s.accent, spinnerFrames[frame], label, elapsed)
 	})
 }
@@ -196,7 +184,7 @@ func (s *spinner) Stop() {
 	done := s.done
 	s.mu.Unlock()
 	<-done
-	writeAtomic(s.w, func() {
+	writeSynced(s.w, func() {
 		fmt.Fprint(s.w, carriage+eraseLine)
 	})
 }

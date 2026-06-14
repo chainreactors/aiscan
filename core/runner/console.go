@@ -48,13 +48,7 @@ func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.A
 
 	menu := c.NewMenu("agent")
 	menu.Prompt().Primary = func() string {
-		// Colored prompt for a local TTY; plain fallback when color is off (e.g.
-		// a forwarded PTY consumed by a remote agent that strips styling).
-		if output != nil && output.color.Enabled {
-			return output.color.Code(outputpkg.ANSIBold+outputpkg.ANSICyan) + "aiscan" +
-				output.color.Code(outputpkg.ANSIReset) + " " + output.color.Dim("❯") + " "
-		}
-		return "aiscan> "
+		return agentPromptString(output)
 	}
 	menu.AddHistorySourceFile("history", agentConsoleHistoryPath())
 	menu.ErrorHandler = func(err error) error {
@@ -148,6 +142,9 @@ type fastInputResult struct {
 	err  error
 }
 
+// readFastInputLine reads one line from reader, cancellable via ctx.
+// NOTE: on context cancellation the blocked ReadString goroutine leaks
+// until stdin is closed — Go blocking I/O has no cancellation mechanism.
 func readFastInputLine(ctx context.Context, reader *bufio.Reader) (string, error) {
 	resultCh := make(chan fastInputResult, 1)
 	go func() {
@@ -216,7 +213,10 @@ func (r *AgentConsole) handleInputLine(line string) (bool, error) {
 }
 
 func (r *AgentConsole) promptString() string {
-	output := r.ensureOutput()
+	return agentPromptString(r.ensureOutput())
+}
+
+func agentPromptString(output *AgentOutput) string {
 	if output != nil && output.color.Enabled {
 		return output.color.Code(outputpkg.ANSIBold+outputpkg.ANSICyan) + "aiscan" +
 			output.color.Code(outputpkg.ANSIReset) + " " + output.color.Dim("❯") + " "
@@ -337,7 +337,7 @@ func writerTerminalWidth(w io.Writer) int {
 }
 
 func bannerKV(label, value string, colorEnabled bool) string {
-	return bannerTag(fmt.Sprintf("%-9s", label), colorEnabled) + value
+	return ansiDim(fmt.Sprintf("%-9s", label), colorEnabled) + value
 }
 
 func renderFixedBox(body string, width int, colorEnabled bool) string {
@@ -375,44 +375,31 @@ func visibleRuneLen(s string) int {
 	return len([]rune(outputpkg.StripANSI(s)))
 }
 
-func ansiTitle(s string, enabled bool) string {
+func ansiWrap(s, code string, enabled bool) string {
 	if !enabled {
 		return s
 	}
-	return outputpkg.ANSIBold + outputpkg.ANSICyan + s + outputpkg.ANSIReset
+	return code + s + outputpkg.ANSIReset
+}
+
+func ansiTitle(s string, enabled bool) string {
+	return ansiWrap(s, outputpkg.ANSIBold+outputpkg.ANSICyan, enabled)
 }
 
 func ansiAccent(s string, enabled bool) string {
-	if !enabled {
-		return s
-	}
-	return outputpkg.ANSICyan + s + outputpkg.ANSIReset
+	return ansiWrap(s, outputpkg.ANSICyan, enabled)
 }
 
 func ansiOK(s string, enabled bool) string {
-	if !enabled {
-		return s
-	}
-	return outputpkg.ANSIGreen + s + outputpkg.ANSIReset
+	return ansiWrap(s, outputpkg.ANSIGreen, enabled)
 }
 
 func ansiWarn(s string, enabled bool) string {
-	if !enabled {
-		return s
-	}
-	return outputpkg.ANSIYellow + s + outputpkg.ANSIReset
+	return ansiWrap(s, outputpkg.ANSIYellow, enabled)
 }
 
 func ansiDim(s string, enabled bool) string {
-	if !enabled {
-		return s
-	}
-	return "\033[90m" + s + outputpkg.ANSIReset
-}
-
-// bannerTag renders a dim left-aligned label inside the banner box.
-func bannerTag(s string, colorEnabled bool) string {
-	return ansiDim(s, colorEnabled)
+	return ansiWrap(s, outputpkg.ANSIGrey, enabled)
 }
 
 func renderInlineCommands(commands []string, colorEnabled bool) string {
@@ -592,6 +579,8 @@ type helpRow struct {
 	Detail  string
 }
 
+const helpRowCommandWidth = 18
+
 func renderHelpRows(rows []helpRow, colorEnabled bool) string {
 	var b strings.Builder
 	for _, row := range rows {
@@ -599,7 +588,7 @@ func renderHelpRows(rows []helpRow, colorEnabled bool) string {
 			b.WriteByte('\n')
 			continue
 		}
-		command := ansiAccent(fmt.Sprintf("%-18s", row.Command), colorEnabled)
+		command := ansiAccent(fmt.Sprintf("%-*s", helpRowCommandWidth, row.Command), colorEnabled)
 		detail := ansiDim(row.Detail, colorEnabled)
 		fmt.Fprintf(&b, "%s%s\n", command, detail)
 	}

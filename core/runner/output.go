@@ -509,12 +509,11 @@ func renderAgentMarkdown(content string, enabled bool) string {
 	if err != nil {
 		return content
 	}
-	rendered = trimRenderedMarkdownLineEnds(rendered)
-	rendered = strings.TrimSpace(rendered)
+	rendered = strings.TrimSpace(trimRenderedMarkdownLineEnds(rendered))
 	if rendered == "" {
 		return content
 	}
-	return trimRenderedMarkdownLineEnds(rendered)
+	return rendered
 }
 
 func trimRenderedMarkdownLineEnds(s string) string {

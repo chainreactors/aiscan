@@ -309,7 +309,7 @@ func validateURL(normalized string) error {
 // Binary content detection
 // ---------------------------------------------------------------------------
 
-func timeNow() time.Time { return time.Now() }
+var timeNow = time.Now
 
 func isHTMLContentType(ct string) bool {
 	return strings.Contains(ct, "text/html") || strings.Contains(ct, "application/xhtml")

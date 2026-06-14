@@ -23,12 +23,17 @@ type WebSearchResponse struct {
 	Summary string
 }
 
+const (
+	defaultWebSearchMaxUses = 5
+	maxWebSearchMaxUses     = 10
+)
+
 func normalizeWebSearchMaxUses(maxUses int) int {
 	if maxUses <= 0 {
-		return 5
+		return defaultWebSearchMaxUses
 	}
-	if maxUses > 10 {
-		return 10
+	if maxUses > maxWebSearchMaxUses {
+		return maxWebSearchMaxUses
 	}
 	return maxUses
 }

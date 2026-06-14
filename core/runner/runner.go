@@ -471,7 +471,7 @@ func renderHeartbeatPrompt(option *cfg.Option, initialTask, nodeID string, info 
 			}
 			if len(node.Meta) > 0 {
 				sb.WriteString(" meta=")
-				sb.WriteString(compactJSON(node.Meta, 600))
+				sb.WriteString(marshalJSON(node.Meta))
 			}
 			sb.WriteByte('\n')
 		}
@@ -496,14 +496,14 @@ func renderHeartbeatPrompt(option *cfg.Option, initialTask, nodeID string, info 
 			}
 			if len(msg.Refs.Nodes) > 0 || len(msg.Refs.Messages) > 0 {
 				sb.WriteString(" refs=")
-				sb.WriteString(compactJSON(msg.Refs, 400))
+				sb.WriteString(marshalJSON(msg.Refs))
 			}
 			if msg.ContentType != "" {
 				sb.WriteString(" content_type=")
 				sb.WriteString(msg.ContentType)
 			}
 			sb.WriteString(" content=")
-			sb.WriteString(compactJSON(msg.Content, 1200))
+			sb.WriteString(marshalJSON(truncateMapValues(msg.Content, heartbeatFieldMaxLen)))
 			sb.WriteByte('\n')
 		}
 	}
@@ -590,16 +590,26 @@ func heartbeatSpace(option *cfg.Option) string {
 	return space
 }
 
-func compactJSON(v any, max int) string {
+const heartbeatFieldMaxLen = 2000
+
+func marshalJSON(v any) string {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Sprintf("%v", v)
 	}
-	s := string(data)
-	if max > 0 && len(s) > max {
-		return s[:max] + "...[truncated]"
+	return string(data)
+}
+
+func truncateMapValues(m map[string]any, max int) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		if s, ok := v.(string); ok && len(s) > max {
+			out[k] = s[:max] + "...[truncated]"
+		} else {
+			out[k] = v
+		}
 	}
-	return s
+	return out
 }
 
 // ---------------------------------------------------------------------------

@@ -378,7 +378,7 @@ func (p *OpenAIProvider) WebSearch(ctx context.Context, query string, maxUses in
 	base := strings.TrimSuffix(p.config.BaseURL, "/")
 	endpoint := webSearchEndpoint(base, "responses")
 
-	body, _ := json.Marshal(map[string]any{
+	body, err := json.Marshal(map[string]any{
 		"model": p.config.Model,
 		"input": "Search the web for: " + query,
 		"tools": []map[string]any{{
@@ -386,6 +386,9 @@ func (p *OpenAIProvider) WebSearch(ctx context.Context, query string, maxUses in
 			"search_context_size": "medium",
 		}},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal web search request: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
@@ -402,16 +405,12 @@ func (p *OpenAIProvider) WebSearch(ctx context.Context, query string, maxUses in
 	}
 	defer resp.Body.Close()
 
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxWebSearchResponseBytes))
 	if err != nil {
 		return nil, wrapReadError(parentCtx, callTimedOut.Load(), callTimeout, "read web search response", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		msg := string(data)
-		if len(msg) > 500 {
-			msg = msg[:500]
-		}
-		return nil, fmt.Errorf("web search HTTP %d: %s", resp.StatusCode, msg)
+		return nil, webSearchHTTPError(resp.StatusCode, data)
 	}
 
 	return parseOpenAIWebSearchResponse(data, maxUses)

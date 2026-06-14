@@ -21,6 +21,9 @@ const (
 	defaultAnthropicTimeout  = 120 * time.Second
 	defaultAnthropicMaxToken = 4096
 	anthropicVersion         = "2023-06-01"
+
+	maxWebSearchResponseBytes = 2 * 1024 * 1024
+	maxErrorMessageLen        = 500
 )
 
 type AnthropicProvider struct {
@@ -891,9 +894,9 @@ func anthropicWebSearch(ctx context.Context, client *http.Client, cfg *ProviderC
 		endpoint = base
 	}
 
-	body, _ := json.Marshal(map[string]any{
+	body, err := json.Marshal(map[string]any{
 		"model":      cfg.Model,
-		"max_tokens": 4096,
+		"max_tokens": defaultAnthropicMaxToken,
 		"tools": []map[string]any{{
 			"type":     "web_search_20250305",
 			"name":     "web_search",
@@ -904,6 +907,9 @@ func anthropicWebSearch(ctx context.Context, client *http.Client, cfg *ProviderC
 			"content": "Search the web for: " + query,
 		}},
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal web search request: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
@@ -922,16 +928,12 @@ func anthropicWebSearch(ctx context.Context, client *http.Client, cfg *ProviderC
 	}
 	defer resp.Body.Close()
 
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxWebSearchResponseBytes))
 	if err != nil {
 		return nil, wrapReadError(parentCtx, callTimedOut.Load(), callTimeout, "read web search response", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		msg := string(data)
-		if len(msg) > 500 {
-			msg = msg[:500]
-		}
-		return nil, fmt.Errorf("web search HTTP %d: %s", resp.StatusCode, msg)
+		return nil, webSearchHTTPError(resp.StatusCode, data)
 	}
 
 	return parseAnthropicWebSearchResponse(data)
@@ -1017,4 +1019,12 @@ func parseAnthropicWebSearchResponse(data []byte) (*WebSearchResponse, error) {
 	}
 	out.Summary = strings.TrimSpace(out.Summary)
 	return out, nil
+}
+
+func webSearchHTTPError(statusCode int, body []byte) error {
+	msg := string(body)
+	if len(msg) > maxErrorMessageLen {
+		msg = msg[:maxErrorMessageLen]
+	}
+	return fmt.Errorf("web search HTTP %d: %s", statusCode, msg)
 }

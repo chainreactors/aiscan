@@ -15,6 +15,7 @@ const (
 	ANSIBlue    = "\033[34m"
 	ANSIMagenta = "\033[35m"
 	ANSICyan    = "\033[36m"
+	ANSIGrey    = "\033[90m"
 )
 
 type Color struct {
@@ -106,7 +107,7 @@ func (c Color) Dim(s string) string {
 	if !c.Enabled {
 		return s
 	}
-	return "\033[90m" + s + ANSIReset
+	return ANSIGrey + s + ANSIReset
 }
 
 func (c Color) Status(s string) string {

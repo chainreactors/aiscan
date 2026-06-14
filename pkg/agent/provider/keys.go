@@ -42,7 +42,7 @@ func normalizeAPIKeys(primary string, extra []string) []string {
 }
 
 func splitAPIKeyList(raw string) []string {
-	fields := strings.FieldsFunc(raw, func(r rune) bool {
+	return strings.FieldsFunc(raw, func(r rune) bool {
 		switch r {
 		case ',', '\n', '\r', '\t', ' ':
 			return true
@@ -50,12 +50,4 @@ func splitAPIKeyList(raw string) []string {
 			return false
 		}
 	})
-	out := make([]string, 0, len(fields))
-	for _, field := range fields {
-		field = strings.TrimSpace(field)
-		if field != "" {
-			out = append(out, field)
-		}
-	}
-	return out
 }

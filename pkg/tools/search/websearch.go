@@ -13,13 +13,13 @@ func formatWebSearchResponse(resp *provider.WebSearchResponse, query string) str
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Web search results for: %s\n\n", query))
 
-	for i, r := range resp.Results {
-		sb.WriteString(fmt.Sprintf("[%d] %s\n    URL: %s\n\n", i+1, r.Title, r.URL))
-	}
-
 	if len(resp.Results) == 0 && resp.Summary == "" {
 		sb.WriteString("No results found.\n")
 		return sb.String()
+	}
+
+	for i, r := range resp.Results {
+		sb.WriteString(fmt.Sprintf("[%d] %s\n    URL: %s\n\n", i+1, r.Title, r.URL))
 	}
 
 	if resp.Summary != "" {

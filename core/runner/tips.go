@@ -115,7 +115,7 @@ func recordAgentTipShown(tip agentTip) {
 func agentTipHistoryPath() string {
 	configDir, err := os.UserConfigDir()
 	if err != nil || strings.TrimSpace(configDir) == "" {
-		return ".aiscan_tip_history.json"
+		return filepath.Join(os.TempDir(), "aiscan_tip_history.json")
 	}
 	return filepath.Join(configDir, "aiscan", "tip_history.json")
 }
