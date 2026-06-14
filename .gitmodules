@@ -1,3 +1,7 @@
 [submodule "templates"]
 	path = templates
 	url = https://github.com/chainreactors/templates.git
+[submodule "sdk-local"]
+	path = sdk-local
+	url = https://github.com/wuchulonly/sdk.git
+	branch = codex/sdk-local-changes-20260614
