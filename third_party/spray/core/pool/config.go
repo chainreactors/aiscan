@@ -1,0 +1,72 @@
+package pool
+
+import (
+	"github.com/chainreactors/logs"
+	"github.com/chainreactors/proxyclient"
+	"github.com/chainreactors/spray/core/baseline"
+	"github.com/chainreactors/spray/core/ihttp"
+	"github.com/chainreactors/words"
+	"github.com/chainreactors/words/rule"
+	"github.com/expr-lang/expr/vm"
+	"sync"
+	"time"
+)
+
+type Config struct {
+	BaseURL           string
+	ProxyClient       proxyclient.Dial
+	Thread            int
+	Wordlist          []string
+	Timeout           time.Duration
+	ProcessCh         chan *baseline.Baseline
+	OutputCh          chan *baseline.Baseline
+	FuzzyCh           chan *baseline.Baseline
+	Outwg             *sync.WaitGroup
+	OutputSenderwg    *sync.WaitGroup
+	RateLimit         int
+	CheckPeriod       int
+	ErrPeriod         int32
+	BreakThreshold    int32
+	Mod               SprayMod
+	Request           *ihttp.RequestConfig
+	ClientType        int
+	MatchExpr         *vm.Program
+	FilterExpr        *vm.Program
+	RecuExpr          *vm.Program
+	AppendRule        *rule.Program
+	Fns               []words.WordFunc
+	AppendWords       []string
+	Fuzzy             bool
+	IgnoreWaf         bool
+	Crawl             bool
+	Scope             []string
+	Active            bool
+	Bak               bool
+	Fuzzuli           bool
+	Common            bool
+	Poc               bool
+	RetryLimit        int
+	Random            string
+	Index             string
+	MaxRedirect       int
+	MaxCrawlDepth     int
+	MaxRecursionDepth int
+	MaxAppendDepth    int
+}
+
+func NewBruteWords(config *Config, list []string) *words.Worder {
+	word := words.NewWorderWithList(list)
+	word.Fns = config.Fns
+	word.Run()
+	return word
+}
+
+func NewBruteDSL(config *Config, dsl string, params [][]string) *words.Worder {
+	word, err := words.NewWorderWithDsl(dsl, params, nil)
+	if err != nil {
+		logs.Log.Error(err.Error())
+	}
+	word.Fns = config.Fns
+	word.Run()
+	return word
+}
