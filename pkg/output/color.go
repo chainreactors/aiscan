@@ -1,20 +1,20 @@
 package output
 
 import (
-	"github.com/chainreactors/logs"
 	"github.com/chainreactors/parsers"
 )
 
 const (
 	ANSIReset   = "\033[0m"
 	ANSIBold    = "\033[1m"
-	ANSIDim     = "\033[2m"
-	ANSIRed     = "\033[31m"
-	ANSIGreen   = "\033[32m"
-	ANSIYellow  = "\033[33m"
-	ANSIBlue    = "\033[34m"
-	ANSIMagenta = "\033[35m"
-	ANSICyan    = "\033[36m"
+	ANSIDim     = "\033[90m"
+	ANSIRed     = "\033[38;5;203m"
+	ANSIGreen   = "\033[38;5;114m"
+	ANSIYellow  = "\033[38;5;214m"
+	ANSIBlue    = "\033[38;5;75m"
+	ANSIMagenta = "\033[38;5;177m"
+	ANSICyan    = "\033[38;5;81m"
+	ANSIBorder  = "\033[38;5;240m"
 )
 
 type Color struct {
@@ -36,63 +36,63 @@ func (c Color) Green(s string) string {
 	if !c.Enabled {
 		return s
 	}
-	return logs.Green(s)
+	return ANSIGreen + s + ANSIReset
 }
 
 func (c Color) GreenBold(s string) string {
 	if !c.Enabled {
 		return s
 	}
-	return logs.GreenBold(s)
+	return ANSIBold + ANSIGreen + s + ANSIReset
 }
 
 func (c Color) Red(s string) string {
 	if !c.Enabled {
 		return s
 	}
-	return logs.Red(s)
+	return ANSIRed + s + ANSIReset
 }
 
 func (c Color) RedBold(s string) string {
 	if !c.Enabled {
 		return s
 	}
-	return logs.RedBold(s)
+	return ANSIBold + ANSIRed + s + ANSIReset
 }
 
 func (c Color) Yellow(s string) string {
 	if !c.Enabled {
 		return s
 	}
-	return logs.Yellow(s)
+	return ANSIYellow + s + ANSIReset
 }
 
 func (c Color) YellowBold(s string) string {
 	if !c.Enabled {
 		return s
 	}
-	return logs.YellowBold(s)
+	return ANSIBold + ANSIYellow + s + ANSIReset
 }
 
 func (c Color) Cyan(s string) string {
 	if !c.Enabled {
 		return s
 	}
-	return logs.Cyan(s)
+	return ANSICyan + s + ANSIReset
 }
 
 func (c Color) Blue(s string) string {
 	if !c.Enabled {
 		return s
 	}
-	return logs.Blue(s)
+	return ANSIBlue + s + ANSIReset
 }
 
 func (c Color) Magenta(s string) string {
 	if !c.Enabled {
 		return s
 	}
-	return logs.Purple(s)
+	return ANSIMagenta + s + ANSIReset
 }
 
 func (c Color) Bold(s string) string {
@@ -106,7 +106,7 @@ func (c Color) Dim(s string) string {
 	if !c.Enabled {
 		return s
 	}
-	return "\033[90m" + s + ANSIReset
+	return ANSIDim + s + ANSIReset
 }
 
 func (c Color) Status(s string) string {
@@ -122,13 +122,13 @@ func (c Color) ForPriority(p string) func(string) string {
 	}
 	switch p {
 	case "low":
-		return logs.Cyan
+		return c.Cyan
 	case "medium":
-		return logs.Yellow
+		return c.Yellow
 	case "high":
-		return logs.Red
+		return c.Red
 	case "critical":
-		return logs.RedBold
+		return c.RedBold
 	default:
 		return c.Dim
 	}
@@ -140,12 +140,12 @@ func (c Color) ForStatus(status string) func(string) string {
 	}
 	switch status {
 	case "confirmed":
-		return logs.Green
+		return c.Green
 	case "not_confirmed", "failed":
-		return logs.Red
+		return c.Red
 	case "info":
-		return logs.Yellow
+		return c.Yellow
 	default:
-		return logs.Yellow
+		return c.Yellow
 	}
 }

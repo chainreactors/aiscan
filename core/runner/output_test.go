@@ -3,6 +3,8 @@ package runner
 import (
 	"bytes"
 	"context"
+	"io"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -11,7 +13,9 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
+	cmdpkg "github.com/chainreactors/aiscan/pkg/command"
 	outpkg "github.com/chainreactors/aiscan/pkg/output"
+	"github.com/reeflective/readline/inputrc"
 )
 
 var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -71,13 +75,104 @@ func TestAgentConsoleBannerHonorsNoColor(t *testing.T) {
 	}
 }
 
-func TestAgentConsoleDisablesNoisyAutoHints(t *testing.T) {
+func TestAgentConsoleSessionsOutput(t *testing.T) {
+	reg := cmdpkg.NewRegistry()
+	bash := cmdpkg.NewBashTool(t.TempDir(), 1)
+	t.Cleanup(bash.Close)
+	reg.RegisterTool(bash)
+
+	session := agent.NewAgent(agent.Config{Tools: reg})
+	repl := NewAgentConsole(context.Background(), nil, &app.App{}, session, &AgentOutput{
+		stdout: &bytes.Buffer{},
+		stderr: &bytes.Buffer{},
+		color:  outpkg.NewColor(false),
+	})
+
+	if got := stripANSI(repl.sessionsOutput()); !strings.Contains(got, "no PTY sessions") {
+		t.Fatalf("empty sessions output = %q", got)
+	}
+
+	_, err := bash.Manager().CreateFunc("worker", time.Second, func(ctx context.Context, w io.Writer) error {
+		_, _ = io.WriteString(w, "hello from worker\n")
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("create func session: %v", err)
+	}
+	<-bash.Manager().Done("worker")
+
+	got := stripANSI(repl.sessionsOutput())
+	for _, want := range []string{"sessions", "worker", "completed"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("sessions output missing %q: %q", want, got)
+		}
+	}
+	if summary := repl.sessionCountSummary(); !strings.Contains(summary, "completed=1") {
+		t.Fatalf("session count summary = %q, want completed=1", summary)
+	}
+
+	tail := stripANSI(repl.tailOutput("worker", "hello from worker\n", false, true))
+	for _, want := range []string{"tail", "worker", "hello from worker"} {
+		if !strings.Contains(tail, want) {
+			t.Fatalf("tail output missing %q: %q", want, tail)
+		}
+	}
+}
+
+func TestAgentConsolePromptPlainFallback(t *testing.T) {
+	repl := &AgentConsole{
+		application: &app.App{
+			ProviderConfig: agent.ProviderConfig{Provider: "anthropic", Model: "glm-5.2"},
+		},
+		output: &AgentOutput{color: outpkg.NewColor(false)},
+	}
+
+	if got := repl.promptString(); got != "aiscan> " {
+		t.Fatalf("plain prompt = %q, want %q", got, "aiscan> ")
+	}
+}
+
+func TestAgentConsolePromptRendersCompactInputLine(t *testing.T) {
+	repl := &AgentConsole{
+		application: &app.App{
+			ProviderConfig: agent.ProviderConfig{Provider: "anthropic", Model: "glm-5.2"},
+		},
+		output: &AgentOutput{color: outpkg.NewColor(true)},
+	}
+
+	got := stripANSI(repl.promptString())
+	if got != "aiscan ❯ " {
+		t.Fatalf("compact prompt = %q, want %q", got, "aiscan ❯ ")
+	}
+	if strings.Contains(got, "glm-5.2") || strings.Contains(got, "space default") {
+		t.Fatalf("compact prompt should not include old inline context: %q", got)
+	}
+	for _, border := range []string{"╭", "╰", "─", "╮"} {
+		if strings.Contains(got, border) {
+			t.Fatalf("compact prompt should not render input borders: %q", got)
+		}
+	}
+}
+
+func TestAgentConsolePromptSecondary(t *testing.T) {
+	if got := stripANSI(agentPromptSecondary(&AgentOutput{color: outpkg.NewColor(true)})); got != "... " {
+		t.Fatalf("colored secondary prompt = %q, want %q", got, "... ")
+	}
+	if got := agentPromptSecondary(&AgentOutput{color: outpkg.NewColor(false)}); got != "> " {
+		t.Fatalf("plain secondary prompt = %q, want %q", got, "> ")
+	}
+}
+
+func TestAgentConsoleEnablesCommandPreviewWithoutHistoryGhostText(t *testing.T) {
 	repl := NewAgentConsole(nil, nil, &app.App{}, nil, &AgentOutput{})
 	cfg := repl.console.Shell().Config
-	for _, name := range []string{"autocomplete", "usage-hint-always", "history-autosuggest"} {
-		if cfg.GetBool(name) {
-			t.Fatalf("%s should be disabled for the agent REPL", name)
+	for _, name := range []string{"autocomplete", "usage-hint-always"} {
+		if !cfg.GetBool(name) {
+			t.Fatalf("%s should be enabled for slash-command preview", name)
 		}
+	}
+	if cfg.GetBool("history-autosuggest") {
+		t.Fatal("history-autosuggest should be disabled for the agent REPL")
 	}
 }
 
@@ -110,7 +205,8 @@ func TestAgentOutputStreamingModeEnv(t *testing.T) {
 		stdoutIsTerminal bool
 		want             bool
 	}{
-		{name: "default pretty", value: "", stdoutIsTerminal: true, want: false},
+		{name: "default stream tty", value: "", stdoutIsTerminal: true, want: true},
+		{name: "default non tty", value: "", stdoutIsTerminal: false, want: false},
 		{name: "stream enabled tty", value: "1", stdoutIsTerminal: true, want: true},
 		{name: "stream enabled non tty", value: "1", stdoutIsTerminal: false, want: false},
 		{name: "stream word", value: "stream", stdoutIsTerminal: true, want: true},
@@ -127,16 +223,121 @@ func TestAgentOutputStreamingModeEnv(t *testing.T) {
 	}
 }
 
-func TestAgentConsoleReadlineKeepsManualCompletionOnly(t *testing.T) {
+func TestAgentConsoleReadlineKeepsCompletionEnabled(t *testing.T) {
 	repl := NewAgentConsole(context.Background(), nil, &app.App{}, nil, &AgentOutput{})
 	cfg := repl.console.Shell().Config
-	for _, name := range []string{"autocomplete", "usage-hint-always", "history-autosuggest", "enable-bracketed-paste"} {
-		if cfg.GetBool(name) {
-			t.Fatalf("%s should be disabled for smoother readline typing", name)
+	if cfg.GetBool("history-autosuggest") {
+		t.Fatal("history-autosuggest should be disabled for smoother readline typing")
+	}
+	if !cfg.GetBool("enable-bracketed-paste") {
+		t.Fatal("bracketed paste should be enabled so large pastes insert in one redraw")
+	}
+	for _, name := range []string{"autocomplete", "usage-hint-always"} {
+		if !cfg.GetBool(name) {
+			t.Fatalf("%s should remain enabled", name)
 		}
 	}
 	if cfg.GetBool("disable-completion") {
 		t.Fatal("manual Tab completion should remain enabled")
+	}
+}
+
+func TestAgentConsoleReadlineBracketedPasteBinding(t *testing.T) {
+	repl := NewAgentConsole(context.Background(), nil, &app.App{}, nil, &AgentOutput{})
+	cfg := repl.console.Shell().Config
+	for _, keymap := range []string{"emacs", "emacs-standard", "vi-insert"} {
+		got := cfg.Binds[keymap][inputrc.Unescape(`\M-[200~`)].Action
+		if got != "bracketed-paste-begin" {
+			t.Fatalf("%s bracketed paste binding = %q, want bracketed-paste-begin", keymap, got)
+		}
+	}
+}
+
+func TestAgentConsoleReadlineKeepsNoisyPasteFallbacksDisabled(t *testing.T) {
+	repl := NewAgentConsole(context.Background(), nil, &app.App{}, nil, &AgentOutput{})
+	cfg := repl.console.Shell().Config
+	for _, name := range []string{"show-all-if-ambiguous", "show-all-if-unmodified", "page-completions"} {
+		if cfg.GetBool(name) {
+			t.Fatalf("%s should be disabled to avoid noisy redraws while typing or pasting", name)
+		}
+	}
+}
+
+func TestAgentConsoleReadlineSlashArrowBindings(t *testing.T) {
+	repl := NewAgentConsole(context.Background(), nil, &app.App{}, nil, &AgentOutput{})
+	shell := repl.console.Shell()
+	commands := shell.Keymap.Commands()
+	for _, name := range []string{agentSlashMenuCompleteCommand, agentSlashMenuCompleteBackwardCommand} {
+		if commands[name] == nil {
+			t.Fatalf("readline command %s should be registered", name)
+		}
+	}
+
+	tests := []struct {
+		keymap string
+		seq    string
+		want   string
+	}{
+		{keymap: "emacs", seq: `\M-[A`, want: agentSlashMenuCompleteBackwardCommand},
+		{keymap: "emacs", seq: `\M-[B`, want: agentSlashMenuCompleteCommand},
+		{keymap: "vi-insert", seq: `\M-[A`, want: agentSlashMenuCompleteBackwardCommand},
+		{keymap: "vi-insert", seq: `\M-[B`, want: agentSlashMenuCompleteCommand},
+	}
+	for _, tt := range tests {
+		t.Run(tt.keymap+"/"+tt.seq, func(t *testing.T) {
+			got := shell.Config.Binds[tt.keymap][inputrc.Unescape(tt.seq)].Action
+			if got != tt.want {
+				t.Fatalf("binding = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAgentReadlineCursorInSlashCommand(t *testing.T) {
+	repl := NewAgentConsole(context.Background(), nil, &app.App{}, nil, &AgentOutput{})
+	shell := repl.console.Shell()
+	tests := []struct {
+		name   string
+		line   string
+		cursor int
+		want   bool
+	}{
+		{name: "slash prefix", line: "/re", cursor: 3, want: true},
+		{name: "leading spaces", line: "  /re", cursor: 5, want: true},
+		{name: "bare slash", line: "/", cursor: 1, want: true},
+		{name: "cursor before slash", line: "/re", cursor: 0, want: false},
+		{name: "plain text", line: "scan /re", cursor: 8, want: false},
+		{name: "after slash command arg", line: "/report now", cursor: 11, want: false},
+		{name: "inside command before arg", line: "/report now", cursor: 3, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shell.Line().Set([]rune(tt.line)...)
+			shell.Cursor().Set(tt.cursor)
+			if got := agentReadlineCursorInSlashCommand(shell); got != tt.want {
+				t.Fatalf("agentReadlineCursorInSlashCommand() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunAgentSlashSelectionCommandFallsBackOutsideSlashCommand(t *testing.T) {
+	repl := NewAgentConsole(context.Background(), nil, &app.App{}, nil, &AgentOutput{})
+	shell := repl.console.Shell()
+	var slashCalls, fallbackCalls int
+
+	shell.Line().Set([]rune("/re")...)
+	shell.Cursor().Set(3)
+	runAgentSlashSelectionCommand(shell, func() { slashCalls++ }, func() { fallbackCalls++ })
+	if slashCalls != 1 || fallbackCalls != 0 {
+		t.Fatalf("slash prefix calls = (%d slash, %d fallback), want (1, 0)", slashCalls, fallbackCalls)
+	}
+
+	shell.Line().Set([]rune("scan target")...)
+	shell.Cursor().Set(4)
+	runAgentSlashSelectionCommand(shell, func() { slashCalls++ }, func() { fallbackCalls++ })
+	if slashCalls != 1 || fallbackCalls != 1 {
+		t.Fatalf("plain text calls = (%d slash, %d fallback), want (1, 1)", slashCalls, fallbackCalls)
 	}
 }
 
@@ -236,7 +437,7 @@ func TestAgentOutputFinalShowsTipForInteractiveTTY(t *testing.T) {
 	}
 }
 
-func TestAgentOutputStartSkipsSingleLinePromptEcho(t *testing.T) {
+func TestAgentOutputStartRendersPromptEcho(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	output := &AgentOutput{
 		stdout: &stdout,
@@ -245,13 +446,19 @@ func TestAgentOutputStartSkipsSingleLinePromptEcho(t *testing.T) {
 	}
 
 	output.Start("prompt", "你好呀")
-	if got := stderr.String(); got != "" {
-		t.Fatalf("single-line prompt should not be echoed, got %q", got)
+	if got := stripANSI(stderr.String()); !strings.Contains(got, "user") || !strings.Contains(got, "你好呀") {
+		t.Fatalf("single-line prompt echo missing body: %q", got)
 	}
 
 	output.Start("prompt", "line one\nline two")
 	if got := stripANSI(stderr.String()); !strings.Contains(got, "line one") || !strings.Contains(got, "line two") {
 		t.Fatalf("multi-line prompt echo missing body: %q", got)
+	}
+
+	stderr.Reset()
+	output.Start("prompt", "   ")
+	if got := stderr.String(); got != "" {
+		t.Fatalf("empty prompt should not be echoed, got %q", got)
 	}
 }
 
@@ -323,7 +530,7 @@ func TestAgentOutputToolSummary(t *testing.T) {
 	}
 }
 
-func TestAgentOutputToolDebugDetails(t *testing.T) {
+func TestAgentOutputToolDebugDoesNotRenderRawArgs(t *testing.T) {
 	var stderr bytes.Buffer
 	output := &AgentOutput{
 		stdout: &bytes.Buffer{},
@@ -349,11 +556,58 @@ func TestAgentOutputToolDebugDetails(t *testing.T) {
 	if !strings.Contains(got, "read") || !strings.Contains(got, "docs/usage.md") {
 		t.Fatalf("stderr missing read summary: %q", got)
 	}
-	if !strings.Contains(got, `args: {"path":"docs/usage.md","limit":20}`) {
-		t.Fatalf("stderr missing compact args in debug mode: %q", got)
+	if strings.Contains(got, `args: {"path":"docs/usage.md","limit":20}`) {
+		t.Fatalf("stderr should not include raw args in debug mode: %q", got)
 	}
 	if !strings.Contains(got, "file content") {
 		t.Fatalf("stderr missing result content in debug mode: %q", got)
+	}
+}
+
+func TestAgentOutputCompactsEmbeddedSkillRead(t *testing.T) {
+	var stderr bytes.Buffer
+	output := &AgentOutput{
+		stdout: &bytes.Buffer{},
+		stderr: &stderr,
+		tools:  make(map[string]agentToolSummary),
+	}
+
+	output.HandleEvent(agent.Event{
+		Type:       agent.EventToolExecutionStart,
+		ToolCallID: "call-1",
+		ToolName:   "read",
+		Arguments:  `{"path":"aiscan://skills/aiscan/SKILL.md"}`,
+	})
+	output.HandleEvent(agent.Event{
+		Type:       agent.EventToolExecutionEnd,
+		ToolCallID: "call-1",
+		ToolName:   "read",
+		Arguments:  `{"path":"aiscan://skills/aiscan/SKILL.md"}`,
+		Result:     "---\nname: aiscan\ndescription: internal rules\n---\nbody",
+	})
+
+	got := stripANSI(stderr.String())
+	if !strings.Contains(got, "skill: aiscan") {
+		t.Fatalf("stderr missing compact skill summary: %q", got)
+	}
+	if !strings.Contains(got, "loaded built-in skill aiscan (5 lines)") {
+		t.Fatalf("stderr missing compact skill load result: %q", got)
+	}
+	for _, raw := range []string{"description: internal rules", "---"} {
+		if strings.Contains(got, raw) {
+			t.Fatalf("embedded skill body should not be previewed, leaked %q in %q", raw, got)
+		}
+	}
+}
+
+func TestAgentOutputDoesNotHyperlinkVirtualReadPath(t *testing.T) {
+	output := &AgentOutput{mode: ModeInteractive, tty: true}
+	got := output.hyperlinkSummary("read", `{"path":"aiscan://skills/aiscan/SKILL.md"}`, "skill: aiscan")
+	if strings.Contains(got, "\x1b]8;;") || strings.Contains(got, "file://") {
+		t.Fatalf("virtual read path should not be hyperlinked: %q", got)
+	}
+	if got != "skill: aiscan" {
+		t.Fatalf("virtual read path display changed: %q", got)
 	}
 }
 
@@ -425,6 +679,26 @@ func TestAgentOutputTurnUsageShowsInDebug(t *testing.T) {
 	got := stripANSI(stderr.String())
 	if !strings.Contains(got, "[turn 7]") || !strings.Contains(got, "prompt=100") {
 		t.Fatalf("debug turn usage missing: %q", got)
+	}
+}
+
+func TestAgentOutputAgentEndShowsInDebug(t *testing.T) {
+	var stderr bytes.Buffer
+	output := &AgentOutput{
+		stdout: &bytes.Buffer{},
+		stderr: &stderr,
+		debug:  true,
+	}
+
+	output.HandleEvent(agent.Event{
+		Type:   agent.EventAgentEnd,
+		Stop:   agent.StopReasonCompleted,
+		Detail: "assistant response had no tool calls and no pending work",
+	})
+
+	got := stripANSI(stderr.String())
+	if !strings.Contains(got, "[agent] stop=completed") || !strings.Contains(got, "no tool calls") {
+		t.Fatalf("debug agent end missing stop detail: %q", got)
 	}
 }
 
@@ -502,6 +776,69 @@ func TestAgentOutputStreamsDeltasAndSkipsFinal(t *testing.T) {
 	}
 }
 
+func TestAgentOutputStreamsMarkdownBlocksAndFinalTail(t *testing.T) {
+	var stdout bytes.Buffer
+	o := &AgentOutput{stdout: &stdout, stderr: &bytes.Buffer{}, stream: true, markdown: true}
+
+	first := "Intro\n\n**能力**\n- one\n"
+	final := first + "- two\n\nTail **done**"
+
+	o.HandleEvent(agent.Event{Type: agent.EventTurnStart, Turn: 1})
+	o.HandleEvent(agent.Event{Type: agent.EventMessageUpdate, Turn: 1, Message: contentMsg(first)})
+	if got := stripANSI(stdout.String()); !strings.Contains(got, "Intro") ||
+		!strings.Contains(got, "能力") || !strings.Contains(got, "one") {
+		t.Fatalf("streamed markdown block missing expected content: %q", got)
+	}
+
+	o.HandleEvent(agent.Event{Type: agent.EventMessageUpdate, Turn: 1, Message: contentMsg(final)})
+	o.Final(final)
+
+	got := stripANSI(stdout.String())
+	for _, want := range []string{"Intro", "能力", "one", "two", "Tail", "done"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("streamed markdown output missing %q: %q", want, got)
+		}
+	}
+	for _, raw := range []string{"**能力**", "**done**"} {
+		if strings.Contains(got, raw) {
+			t.Fatalf("streamed markdown output leaked raw markdown %q: %q", raw, got)
+		}
+	}
+	if c := strings.Count(got, "Intro"); c != 1 {
+		t.Fatalf("streamed markdown duplicated rendered prefix %d times: %q", c, got)
+	}
+}
+
+func TestAgentOutputMarkdownStreamWaitsForClosedFence(t *testing.T) {
+	var stdout bytes.Buffer
+	o := &AgentOutput{stdout: &stdout, stderr: &bytes.Buffer{}, stream: true, markdown: true}
+
+	open := "```go\nfmt.Println(1)\n\n"
+	closed := open + "```\nAfter"
+
+	o.HandleEvent(agent.Event{Type: agent.EventTurnStart, Turn: 1})
+	o.HandleEvent(agent.Event{Type: agent.EventMessageUpdate, Turn: 1, Message: contentMsg(open)})
+	if got := stdout.String(); got != "" {
+		t.Fatalf("open code fence should not stream early, got %q", got)
+	}
+
+	o.HandleEvent(agent.Event{Type: agent.EventMessageUpdate, Turn: 1, Message: contentMsg(closed)})
+	o.Final(closed)
+
+	got := stripANSI(stdout.String())
+	for _, want := range []string{"fmt.Println(1)", "After"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("streamed markdown output missing %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "```") {
+		t.Fatalf("streamed markdown output leaked raw fence: %q", got)
+	}
+	if c := strings.Count(got, "fmt.Println(1)"); c != 1 {
+		t.Fatalf("streamed code block duplicated %d times: %q", c, got)
+	}
+}
+
 // streamPrinted resets per turn so multi-turn runs stream each turn's text once.
 func TestAgentOutputStreamResetsPerTurn(t *testing.T) {
 	var stdout bytes.Buffer
@@ -572,6 +909,65 @@ func TestAgentOutputStreamNewlineBeforeToolStartDoesNotDoubleSpace(t *testing.T)
 	}
 }
 
+func TestAgentOutputSuppressesScannerToolSpinner(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	o := &AgentOutput{
+		stdout:   &stdout,
+		stderr:   &stderr,
+		stream:   true,
+		markdown: false,
+		mode:     ModeInteractive,
+		tty:      true,
+		spinner:  newSpinner(&stderr, ""),
+	}
+
+	o.HandleEvent(agent.Event{
+		Type:      agent.EventToolExecutionStart,
+		Turn:      1,
+		ToolName:  "bash",
+		Arguments: `{"command":"spray -l /tmp/subs.txt -t 50"}`,
+	})
+
+	o.spinner.mu.Lock()
+	running := o.spinner.running
+	o.spinner.mu.Unlock()
+	if running {
+		o.spinner.Stop()
+		t.Fatalf("scanner-like bash calls should not start an activity spinner")
+	}
+	if got := stripANSI(stderr.String()); !strings.Contains(got, "⎿ bash") || strings.Contains(got, "⠼ bash spray") {
+		t.Fatalf("unexpected stderr for scanner-like bash call: %q", got)
+	}
+}
+
+func TestAgentOutputKeepsSpinnerForPlainBash(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	o := &AgentOutput{
+		stdout:   &stdout,
+		stderr:   &stderr,
+		stream:   true,
+		markdown: false,
+		mode:     ModeInteractive,
+		tty:      true,
+		spinner:  newSpinner(&stderr, ""),
+	}
+	defer o.spinner.Stop()
+
+	o.HandleEvent(agent.Event{
+		Type:      agent.EventToolExecutionStart,
+		Turn:      1,
+		ToolName:  "bash",
+		Arguments: `{"command":"sleep 1"}`,
+	})
+
+	o.spinner.mu.Lock()
+	running := o.spinner.running
+	o.spinner.mu.Unlock()
+	if !running {
+		t.Fatalf("plain bash calls should keep the activity spinner")
+	}
+}
+
 func TestAgentOutputStartResetsStreamStateForAnyRun(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	o := &AgentOutput{stdout: &stdout, stderr: &stderr, stream: true, markdown: false}
@@ -586,6 +982,63 @@ func TestAgentOutputStartResetsStreamStateForAnyRun(t *testing.T) {
 	if o.didStream || o.streamPrinted != 0 || o.streamLineOpen {
 		t.Fatalf("stream state not reset: didStream=%v streamPrinted=%d streamLineOpen=%v",
 			o.didStream, o.streamPrinted, o.streamLineOpen)
+	}
+}
+
+func TestAgentConsolePrintResultDoesNotSayNoOutputAfterStreaming(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	o := &AgentOutput{
+		stdout:   &stdout,
+		stderr:   &stderr,
+		stream:   true,
+		markdown: false,
+		color:    outpkg.NewColor(false),
+	}
+	repl := &AgentConsole{output: o}
+
+	o.beginRun()
+	o.HandleEvent(agent.Event{Type: agent.EventTurnStart, Turn: 1})
+	o.HandleEvent(agent.Event{Type: agent.EventMessageUpdate, Turn: 1, Message: contentMsg("visible")})
+	repl.printResult(&agent.Result{})
+
+	if got := stdout.String(); got != "visible\n" {
+		t.Fatalf("stdout = %q, want streamed content plus newline", got)
+	}
+	if got := stripANSI(stderr.String()); strings.Contains(got, "No output") {
+		t.Fatalf("stderr should not report No output after streamed content: %q", got)
+	}
+	if o.didStream {
+		t.Fatal("printResult should reset stream state after finalizing streamed content")
+	}
+}
+
+func TestAgentConsoleEnableDebugEventsWritesJSONL(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	session := agent.NewAgent(agent.Config{SessionID: "debug-test"})
+	repl := &AgentConsole{
+		session: session,
+		output:  &AgentOutput{color: outpkg.NewColor(false)},
+	}
+	if err := repl.enableDebugEvents(path); err != nil {
+		t.Fatalf("enableDebugEvents() error = %v", err)
+	}
+	defer repl.closeDebugEvents()
+
+	session.Cfg.Bus.Emit(agent.Event{
+		Type:   agent.EventAgentEnd,
+		Stop:   agent.StopReasonCompleted,
+		Detail: "assistant response had no tool calls",
+	})
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read debug events file: %v", err)
+	}
+	got := string(data)
+	for _, want := range []string{`"type":"agent_end"`, `"stop":"completed"`, `"detail":"assistant response had no tool calls"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("events file missing %s: %s", want, got)
+		}
 	}
 }
 

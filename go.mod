@@ -22,6 +22,7 @@ require (
 	github.com/gookit/config/v2 v2.2.8
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jessevdk/go-flags v1.6.1
+	github.com/mattn/go-runewidth v0.0.23
 	github.com/muesli/termenv v0.16.0
 	github.com/projectdiscovery/gologger v1.1.68
 	github.com/projectdiscovery/katana v1.6.1
@@ -149,7 +150,6 @@ require (
 	github.com/lunixbochs/struc v0.0.0-20241101090106-8d528fa2c543 // indirect
 	github.com/mark3labs/mcp-go v0.45.0 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
-	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/metacubex/utls v1.7.3 // indirect
 	github.com/mholt/archiver v3.1.1+incompatible // indirect
 	github.com/mholt/archives v0.1.5 // indirect
@@ -270,6 +270,7 @@ require (
 
 replace (
 	github.com/chainreactors/sdk => ./sdk-local
+	github.com/chainreactors/spray => ./third_party/spray
 	github.com/chainreactors/utils => ./utils-local
 	github.com/reeflective/console => github.com/chainreactors/malice-network/external/console v0.0.0-20260422184128-e856ed004d32
 	github.com/reeflective/readline => github.com/chainreactors/malice-network/external/readline v0.0.0-20260422184128-e856ed004d32

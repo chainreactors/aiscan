@@ -43,7 +43,7 @@ func RenderRecordsTerminal(w io.Writer, records []Record) error {
 				color = ANSIRed
 			}
 			fmt.Fprintf(w, "%s[%s]%s %s %s\n",
-				c.Code(color), c.Code(ANSIReset), prefix, d.Target, d.Description)
+				c.Code(color), prefix, c.Code(ANSIReset), d.Target, d.Description)
 
 		case TypeScanEnd:
 			d, _ := ParseRecordData[ScanEnd](r)

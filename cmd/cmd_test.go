@@ -123,13 +123,13 @@ func TestDirectScannerModeSuppressesInitInfoByDefault(t *testing.T) {
 	}
 }
 
-func TestDirectScannerModeDebugShowsInitInfo(t *testing.T) {
+func TestDirectScannerModeExplicitDebugShowsInitInfo(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := telemetry.NewLogger(telemetry.LogConfig{Debug: true, Output: &logBuf})
 	stdout, err := captureStdoutForTest(t, func() error {
 		return runner.RunDirectScannerMode(context.Background(), &cfg.Option{
 			MiscOptions: cfg.MiscOptions{Debug: true, NoColor: true},
-		}, []string{"scan", "-i", "http://127.0.0.1:1", "--timeout", "1", "--no-color"}, logger)
+		}, []string{"scan", "-i", "http://127.0.0.1:1", "--timeout", "1", "--no-color", "--debug"}, logger)
 	})
 	if err != nil {
 		t.Fatalf("RunDirectScannerMode() error = %v", err)
@@ -488,11 +488,17 @@ func TestAgentConsoleArgsForLine(t *testing.T) {
 		{name: "help", input: "/help", wantArgs: []string{"/help"}},
 		{name: "reset", input: "/reset", wantArgs: []string{"/reset"}},
 		{name: "continue", input: "/continue", wantArgs: []string{"/continue"}},
+		{name: "bare continue alias", input: "continue", wantArgs: []string{"/continue"}},
+		{name: "chinese continue alias", input: "继续", wantArgs: []string{"/continue"}},
 		{name: "exit", input: "/exit", wantArgs: []string{"/exit"}},
 		{name: "quit", input: "/quit", wantArgs: []string{"/quit"}},
 		{name: "bare exit stays prompt", input: "exit", wantArgs: []string{"__prompt", "exit"}},
 		{name: "bare quit stays prompt", input: "quit", wantArgs: []string{"__prompt", "quit"}},
 		{name: "skill slash command preserves prompt", input: `/scan explain "scan result"`, wantArgs: []string{"/scan", `explain "scan result"`}},
+		{name: "tail command splits flags", input: "/tail --full worker", wantArgs: []string{"/tail", "--full", "worker"}},
+		{name: "send command splits target and text", input: "/send worker echo hello", wantArgs: []string{"/send", "worker", "echo", "hello"}},
+		{name: "kill command splits target", input: "/kill worker", wantArgs: []string{"/kill", "worker"}},
+		{name: "debug command splits action and path", input: "/debug on /tmp/events.jsonl", wantArgs: []string{"/debug", "on", "/tmp/events.jsonl"}},
 		{name: "unknown slash command", input: "/unknown", wantArgs: []string{"/unknown"}},
 		{name: "legacy skill command", input: "/skill:scan check target", wantArgs: []string{"__prompt", "/skill:scan check target"}},
 	}
