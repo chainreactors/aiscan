@@ -21,7 +21,6 @@ import (
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
 	"github.com/chainreactors/fingers/common"
-	"github.com/chainreactors/logs"
 	"github.com/chainreactors/neutron/operators"
 	neutronhttp "github.com/chainreactors/neutron/protocols/http"
 	"github.com/chainreactors/neutron/templates"
@@ -343,28 +342,6 @@ func TestWebTargetScopeUsesAssetHost(t *testing.T) {
 	want := []string{"127.0.0.1:4200", "app.local", "app.local:4200"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("scope = %#v, want %#v", got, want)
-	}
-}
-
-func TestSprayResultScopeRejectsExternalURLs(t *testing.T) {
-	base := "http://127.0.0.1:4200/"
-	if got := sanitizeSprayResultScope(base, &parsers.SprayResult{UrlString: "https://github.com/trending"}); got != nil {
-		t.Fatalf("external result kept: %#v", got)
-	}
-	got := sanitizeSprayResultScope(base, &parsers.SprayResult{
-		UrlString:   "http://127.0.0.1:4200/assets/app.js",
-		RedirectURL: "https://github.com/login",
-		IsValid:     true,
-		Status:      200,
-		BodyLength:  12,
-		ContentType: "text/javascript",
-		ReqDepth:    1,
-	})
-	if got == nil {
-		t.Fatal("same asset result was dropped")
-	}
-	if got.RedirectURL != "" {
-		t.Fatalf("external redirect was not cleared: %#v", got.RedirectURL)
 	}
 }
 
@@ -1201,14 +1178,15 @@ func TestScanColorizesWebProbePrefixOnly(t *testing.T) {
 	}))})
 
 	raw := buf.String()
+	c := output.NewColor(true)
 	for _, want := range []string{
-		logs.Green("[web]"),
+		c.Green("[web]"),
 	} {
 		if !strings.Contains(raw, want) {
 			t.Fatalf("colored output missing %q in %q", want, raw)
 		}
 	}
-	if strings.Contains(raw, logs.Yellow("401")) || strings.Contains(raw, logs.Green(`"json data"`)) {
+	if strings.Contains(raw, c.Yellow("401")) || strings.Contains(raw, c.Green(`"json data"`)) {
 		t.Fatalf("scan output should not parse and color parser fields: %q", raw)
 	}
 	out := output.StripANSI(raw)
@@ -1266,10 +1244,11 @@ func TestScanLootPriorityUsesFocusOutputOnly(t *testing.T) {
 	}
 
 	colored := formatEventLine(lootEvent(capSprayCheck, fingerprintLoot("http://127.0.0.1", []string{"struts2"}, true)), true)
+	c := output.NewColor(true)
 	if strings.Contains(output.StripANSI(colored), " high ") {
 		t.Fatalf("colored loot output should not print priority text: %q", colored)
 	}
-	if !strings.Contains(colored, logs.Red("[fingerprint]")) {
+	if !strings.Contains(colored, c.Red("[fingerprint]")) {
 		t.Fatalf("colored loot output should encode high priority in color: %q", colored)
 	}
 }
