@@ -91,10 +91,17 @@ func requestWithRetry(ctx context.Context, cfg Config, bus emitter, messages []C
 			}
 		}
 
+		started := time.Now()
+		cfg.Logger.Debugf("[turn %d] llm request start attempt=%d/%d provider=%s model=%s messages=%d tools=%d stream=%v",
+			turn, attempt+1, maxAttempts, providerName(cfg.Provider), cfg.Model, len(messages), len(tools), cfg.Stream)
 		msg, usage, err := requestAssistantMessageWithUsage(ctx, cfg, bus, messages, tools, turn)
 		if err == nil {
+			cfg.Logger.Debugf("[turn %d] llm request done attempt=%d/%d elapsed=%s usage=%s",
+				turn, attempt+1, maxAttempts, compactDuration(time.Since(started)), usageDebugString(usage))
 			return msg, usage, nil
 		}
+		cfg.Logger.Warnf("[turn %d] llm request failed attempt=%d/%d elapsed=%s error=%q",
+			turn, attempt+1, maxAttempts, compactDuration(time.Since(started)), err.Error())
 		lastErr = err
 
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -105,6 +112,26 @@ func requestWithRetry(ctx context.Context, cfg Config, bus emitter, messages []C
 		}
 	}
 	return ChatMessage{}, nil, lastErr
+}
+
+func providerName(p Provider) string {
+	if p == nil {
+		return ""
+	}
+	return p.Name()
+}
+
+func usageDebugString(usage *Usage) string {
+	if usage == nil {
+		return "n/a"
+	}
+	if usage.CacheReadTokens > 0 || usage.CacheWriteTokens > 0 {
+		return fmt.Sprintf("prompt=%d completion=%d total=%d cache_read=%d cache_write=%d",
+			usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens,
+			usage.CacheReadTokens, usage.CacheWriteTokens)
+	}
+	return fmt.Sprintf("prompt=%d completion=%d total=%d",
+		usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens)
 }
 
 func requestAssistantMessageWithUsage(ctx context.Context, cfg Config, bus emitter, messages []ChatMessage, tools []ToolDefinition, turn int) (ChatMessage, *Usage, error) {
@@ -133,9 +160,10 @@ func requestAssistantMessageWithUsage(ctx context.Context, cfg Config, bus emitt
 		return ChatMessage{}, nil, fmt.Errorf("empty response from LLM at turn %d", turn)
 	}
 	msg := resp.Choices[0].Message
+	setAssistantStopReason(&msg, resp.Choices[0].FinishReason)
 	bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: msg})
 	bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: msg})
-	logAssistantAndUsage(cfg.Logger, msg, resp.Usage, resp.Choices[0].FinishReason)
+	logAssistantAndUsage(cfg.Logger, msg, resp.Usage)
 	return msg, resp.Usage, nil
 }
 
@@ -174,10 +202,41 @@ func streamAssistantMessageWithUsage(ctx context.Context, p StreamingProvider, r
 	}
 
 	msg := builder.Message()
+	setAssistantStopReason(&msg, finishReason)
 	if !started {
 		bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: msg})
 	}
 	bus.Emit(Event{Type: EventMessageEnd, Turn: turn, Message: msg})
-	logAssistantAndUsage(logger, msg, usage, finishReason)
+	logAssistantAndUsage(logger, msg, usage)
 	return msg, usage, nil
+}
+
+func setAssistantStopReason(msg *ChatMessage, providerReason string) {
+	if msg == nil || msg.Role != "assistant" {
+		return
+	}
+	stopReason := normalizeProviderStopReason(providerReason)
+	if stopReason == "" && len(msg.ToolCalls) > 0 {
+		stopReason = "toolUse"
+	}
+	msg.StopReason = stopReason
+}
+
+func normalizeProviderStopReason(reason string) string {
+	switch reason {
+	case "":
+		return ""
+	case "stop", "end", "end_turn", "stop_sequence":
+		return "stop"
+	case "length", "max_tokens":
+		return "length"
+	case "tool_calls", "function_call", "tool_use":
+		return "toolUse"
+	case "content_filter", "network_error", "error":
+		return "error"
+	case "aborted":
+		return "aborted"
+	default:
+		return reason
+	}
 }

@@ -34,6 +34,7 @@ type MessageJSON struct {
 	ReasoningContent string                `json:"reasoning_content,omitempty"`
 	ToolCalls        []MessageToolCallJSON `json:"tool_calls,omitempty"`
 	ToolCallID       string                `json:"tool_call_id,omitempty"`
+	StopReason       string                `json:"stop_reason,omitempty"`
 }
 
 type MessageToolCallJSON struct {
@@ -82,6 +83,7 @@ func ToMessageJSON(msg ChatMessage) *MessageJSON {
 	out := &MessageJSON{
 		Role:       msg.Role,
 		ToolCallID: msg.ToolCallID,
+		StopReason: msg.StopReason,
 	}
 	if msg.ReasoningContent != nil {
 		out.ReasoningContent = TruncateField(*msg.ReasoningContent, EventPreviewLimit)

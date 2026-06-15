@@ -1,8 +1,10 @@
 package inbox
 
 import (
+	"context"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestBufferedPushDrain(t *testing.T) {
@@ -150,5 +152,26 @@ func TestProducerRegistration(t *testing.T) {
 	h2.Done()
 	if b.ActiveProducers() != 0 {
 		t.Fatalf("expected 0 producers, got %d", b.ActiveProducers())
+	}
+}
+
+func TestWaitWakesWhenProducerCompletesWithoutMessage(t *testing.T) {
+	b := NewBuffered(4)
+	producer := b.RegisterProducer("silent-task")
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		producer.Done()
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if b.Wait(ctx) {
+		t.Fatal("wait should not report a message when only producer state changed")
+	}
+	if err := ctx.Err(); err != nil {
+		t.Fatalf("wait did not wake before context deadline: %v", err)
+	}
+	if got := b.ActiveProducers(); got != 0 {
+		t.Fatalf("active producers = %d, want 0", got)
 	}
 }

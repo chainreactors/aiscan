@@ -211,6 +211,41 @@ func TestRunWaitsWhenKeepAliveIsTrue(t *testing.T) {
 	}
 }
 
+func TestRunReleasesWhenProducerCompletesWithoutMessage(t *testing.T) {
+	tools := command.NewRegistry()
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "waiting")),
+			chatResponse(NewTextMessage("assistant", "should-not-need-second-turn")),
+		},
+	}
+	ib := inbox.NewBuffered(4)
+	producer := ib.RegisterProducer("silent-bg-task")
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		producer.Done()
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	result, err := NewAgent(Config{
+		Provider:     llm,
+		Tools:        tools,
+		Model:        "test",
+		SystemPrompt: "system",
+		Inbox:        ib,
+	}).Run(ctx, "start silent background task")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Output != "waiting" {
+		t.Fatalf("result = %q, want waiting", result.Output)
+	}
+	if got := len(llm.requestsSnapshot()); got != 1 {
+		t.Fatalf("requests = %d, want 1", got)
+	}
+}
+
 func TestProducerBarrierBatchesSubagentCompletions(t *testing.T) {
 	// Regression guard for the source fix: when several subagents (inbox
 	// producers) finish at staggered times, the parent must batch their
@@ -290,13 +325,11 @@ func TestProducerBarrierBatchesSubagentCompletions(t *testing.T) {
 	}
 }
 
-func TestFinishToolTerminatesLoop(t *testing.T) {
-	// Regression guard for Fix A: a tool whose Execute returns a terminating
-	// ToolResult (command.TerminateResult, used by FinishTool) must end the
-	// run via the ToolFlowTerminate path. Before this, that path was dead
-	// code — finite loop-mode tasks had no way to stop themselves.
+func TestTerminatingToolResultTerminatesLoop(t *testing.T) {
+	// A tool whose Execute returns command.TerminateResult should end the run
+	// without paying for an automatic follow-up LLM turn.
 	tools := command.NewRegistry()
-	tools.RegisterTool(NewFinishTool())
+	tools.RegisterTool(&terminatingTool{name: "finalize", output: "all subsystems reported"})
 	llm := &scriptedProvider{
 		responses: []*ChatCompletionResponse{
 			chatResponse(ChatMessage{
@@ -304,10 +337,10 @@ func TestFinishToolTerminatesLoop(t *testing.T) {
 				ToolCalls: []ToolCall{{
 					ID:       "call_1",
 					Type:     "function",
-					Function: FunctionCall{Name: "finish", Arguments: `{"reason":"all subsystems reported"}`},
+					Function: FunctionCall{Name: "finalize", Arguments: `{}`},
 				}},
 			}),
-			// Must never be consumed: finish terminates before a 2nd LLM call.
+			// Must never be consumed: the terminating batch skips the follow-up LLM call.
 			chatResponse(NewTextMessage("assistant", "should-not-reach")),
 		},
 	}
@@ -325,36 +358,36 @@ func TestFinishToolTerminatesLoop(t *testing.T) {
 
 	requests := llm.requestsSnapshot()
 	if len(requests) != 1 {
-		t.Fatalf("requests = %d, want 1 (finish must terminate, no follow-up LLM call)", len(requests))
+		t.Fatalf("requests = %d, want 1 (terminating batch skips follow-up LLM call)", len(requests))
 	}
-	if result.Output != "task complete: all subsystems reported" {
-		t.Fatalf("result output = %q, want finish tool result", result.Output)
+	if result.Output != "all subsystems reported" {
+		t.Fatalf("result output = %q, want terminating tool result", result.Output)
 	}
 	found := false
 	for _, m := range result.Messages {
-		if strings.Contains(contentOf(m), "task complete") {
+		if strings.Contains(contentOf(m), "all subsystems reported") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("transcript missing finish termination result: %#v", result.Messages)
+		t.Fatalf("transcript missing terminating tool result: %#v", result.Messages)
 	}
 }
 
-func TestFinishToolTerminatesWhenMixedWithOtherToolCalls(t *testing.T) {
+func TestMixedTerminatingAndNonTerminatingToolCallsContinue(t *testing.T) {
 	tools := command.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "echo", output: "ok"})
-	tools.RegisterTool(NewFinishTool())
+	tools.RegisterTool(&terminatingTool{name: "finalize", output: "done"})
 	llm := &scriptedProvider{
 		responses: []*ChatCompletionResponse{
 			chatResponse(ChatMessage{
 				Role: "assistant",
 				ToolCalls: []ToolCall{
 					{
-						ID:       "call_finish",
+						ID:       "call_finalize",
 						Type:     "function",
-						Function: FunctionCall{Name: "finish", Arguments: `{"reason":"done"}`},
+						Function: FunctionCall{Name: "finalize", Arguments: `{}`},
 					},
 					{
 						ID:       "call_echo",
@@ -363,7 +396,7 @@ func TestFinishToolTerminatesWhenMixedWithOtherToolCalls(t *testing.T) {
 					},
 				},
 			}),
-			chatResponse(NewTextMessage("assistant", "should-not-reach")),
+			chatResponse(NewTextMessage("assistant", "synthesized after mixed batch")),
 		},
 	}
 
@@ -377,12 +410,31 @@ func TestFinishToolTerminatesWhenMixedWithOtherToolCalls(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	if got := len(llm.requestsSnapshot()); got != 1 {
-		t.Fatalf("requests = %d, want 1 (any finish call must terminate the batch)", got)
+	if got := len(llm.requestsSnapshot()); got != 2 {
+		t.Fatalf("requests = %d, want 2 (mixed terminating/non-terminating batch must continue)", got)
 	}
-	if result.Output != "task complete: done" {
-		t.Fatalf("result output = %q, want finish tool result", result.Output)
+	if result.Output != "synthesized after mixed batch" {
+		t.Fatalf("result output = %q, want follow-up synthesis", result.Output)
 	}
+}
+
+type terminatingTool struct {
+	name   string
+	output string
+}
+
+func (t *terminatingTool) Name() string { return t.name }
+
+func (t *terminatingTool) Description() string {
+	return "test tool that returns a terminating result"
+}
+
+func (t *terminatingTool) Definition() ToolDefinition {
+	return command.ToolDef(t.Name(), t.Description(), struct{}{})
+}
+
+func (t *terminatingTool) Execute(context.Context, string) (command.ToolResult, error) {
+	return command.TerminateResult(t.output), nil
 }
 
 func TestRunWaitsForLoopSchedulerInboxFire(t *testing.T) {

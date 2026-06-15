@@ -6,7 +6,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
@@ -14,6 +16,7 @@ import (
 const (
 	defaultMaxEmptyRuns          = 5
 	defaultMaxZeroTokenEmptyRuns = 3
+	inboxWaitDebugInterval       = 15 * time.Second
 )
 
 func runLoop(ctx context.Context, cfg Config) (*Result, error) {
@@ -29,6 +32,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 	emptyRuns := 0
 	zeroTokenEmptyRuns := 0
 	var pendingInboxEvents []ChatMessage
+	skipSteeringDrain := false
 	// synthesized tracks whether the agent has produced at least one
 	// assistant response this run. The producer barrier below only batches
 	// inbox wakes AFTER the initial response, so the agent still answers the
@@ -70,14 +74,10 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 
 		if ib != nil {
 			inboxMsgs := ib.Drain()
-			for i, msg := range inboxMsgs {
-				if cfg.Expander != nil {
-					inboxMsgs[i] = cfg.Expander.Expand(msg)
-				}
-				for _, cm := range inboxMsgs[i].ToChatMessages() {
-					transcript.append(cm)
-					pendingInboxEvents = append(pendingInboxEvents, cm)
-				}
+			inboxEvents := inboxMessagesToChatMessages(cfg, inboxMsgs)
+			if len(inboxEvents) > 0 {
+				transcript.append(inboxEvents...)
+				pendingInboxEvents = append(pendingInboxEvents, inboxEvents...)
 			}
 			if len(inboxMsgs) > 0 {
 				cfg.Logger.Debugf("[turn %d] drained %d inbox message(s)", turn+1, len(inboxMsgs))
@@ -85,6 +85,13 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			if ib.Closed() {
 				ib = nil
 			}
+		}
+		if skipSteeringDrain {
+			skipSteeringDrain = false
+		} else if queued := drainQueuedMessages(cfg, cfg.GetSteeringMessages); len(queued) > 0 {
+			transcript.append(queued...)
+			pendingInboxEvents = append(pendingInboxEvents, queued...)
+			cfg.Logger.Debugf("[turn %d] drained %d steering message(s)", turn+1, len(queued))
 		}
 
 		// BATCH: once the agent has answered the opening task, withhold
@@ -98,7 +105,9 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		// ActiveProducers() to 0 and releases the gate.
 		if synthesized && ib != nil && ib.ActiveProducers() > 0 {
 			if ib.Len() == 0 {
-				ib.Wait(ctx)
+				_ = waitForInbox(ctx, cfg, turn, "producer_barrier", func() bool {
+					return ib.ActiveProducers() > 0
+				})
 			}
 			continue
 		}
@@ -164,7 +173,39 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		bus.Emit(Event{Type: EventTurnEnd, Turn: turn, Message: assistantMsg, ToolResults: toolResults, Usage: usage, ContextTokens: transcript.contextTokens})
 		transcript.completedTurns = turn
 
+		if cfg.ShouldStopAfterTurn != nil {
+			shouldStop, err := cfg.ShouldStopAfterTurn(ctx, ShouldStopAfterTurnContext{
+				AssistantMessage: assistantMsg,
+				ToolResults:      append([]ChatMessage(nil), toolResults...),
+				Messages:         append([]ChatMessage(nil), transcript.messages...),
+				NewMessages:      append([]ChatMessage(nil), transcript.newMessages...),
+			})
+			if err != nil {
+				result := transcript.result(messageContent(assistantMsg), turn, err)
+				return end(result, err, StopReasonError)
+			}
+			if shouldStop {
+				cfg.Logger.Importantf("agent status=stopped turns=%d tokens=%d", turn, transcript.totalUsage.TotalTokens)
+				result := transcript.result(messageContent(assistantMsg), turn, nil)
+				return end(result, nil, StopReasonStopped)
+			}
+		}
+
 		if terminate {
+			if queued := drainQueuedMessages(cfg, cfg.GetSteeringMessages); len(queued) > 0 {
+				transcript.append(queued...)
+				pendingInboxEvents = append(pendingInboxEvents, queued...)
+				skipSteeringDrain = true
+				cfg.Logger.Debugf("[turn %d] queued %d steering message(s) for next turn", turn, len(queued))
+				continue
+			}
+			if queued := drainQueuedMessages(cfg, cfg.GetFollowUpMessages); len(queued) > 0 {
+				transcript.append(queued...)
+				pendingInboxEvents = append(pendingInboxEvents, queued...)
+				skipSteeringDrain = true
+				cfg.Logger.Debugf("[turn %d] queued %d follow-up message(s) for next turn", turn, len(queued))
+				continue
+			}
 			cfg.Logger.Importantf("agent status=completed turns=%d tokens=%d", turn, transcript.totalUsage.TotalTokens)
 			result := transcript.result(terminalOutput(assistantMsg, terminateOutput, toolResults), turn, nil)
 			return end(result, nil, StopReasonTerminated)
@@ -174,6 +215,14 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 			cfg.Logger.Importantf("agent status=stopped turns=%d/%d tokens=%d", turn, cfg.MaxTurns, transcript.totalUsage.TotalTokens)
 			result := transcript.result(messageContent(assistantMsg), turn, nil)
 			return end(result, nil, StopReasonStopped)
+		}
+
+		if queued := drainQueuedMessages(cfg, cfg.GetSteeringMessages); len(queued) > 0 {
+			transcript.append(queued...)
+			pendingInboxEvents = append(pendingInboxEvents, queued...)
+			skipSteeringDrain = true
+			cfg.Logger.Debugf("[turn %d] queued %d steering message(s) for next turn", turn, len(queued))
+			continue
 		}
 
 		if len(assistantMsg.ToolCalls) == 0 {
@@ -216,6 +265,15 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 				zeroTokenEmptyRuns = 0
 			}
 
+			cfg.Logger.Debugf("[turn %d] no-tool decision content_len=%d reasoning=%v inbox=%d loops=%d producers=%d preview=%q",
+				turn,
+				len(content),
+				hasReasoningContent(assistantMsg),
+				inboxLen(ib),
+				schedulerActive(cfg.LoopScheduler),
+				activeProducers(ib),
+				preview(compactLogContent(content), 300))
+
 			if ib != nil && ib.Len() > 0 {
 				cfg.Logger.Debugf("[turn %d] continuing for pending inbox message(s)", turn)
 				continue
@@ -225,20 +283,50 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 				(ib != nil && ib.ActiveProducers() > 0)
 
 			if alive && ib != nil && !ib.Closed() {
-				cfg.Logger.Debugf("[turn %d] waiting for inbox (loops=%d producers=%d)",
-					turn, schedulerActive(cfg.LoopScheduler), ib.ActiveProducers())
-				hasMessage := ib.Wait(ctx)
-				if hasMessage {
+				if waitForInbox(ctx, cfg, turn, "background_work", func() bool {
+					return schedulerActive(cfg.LoopScheduler) > 0 || ib.ActiveProducers() > 0
+				}) {
 					continue
 				}
 			}
 
+			if queued := drainQueuedMessages(cfg, cfg.GetFollowUpMessages); len(queued) > 0 {
+				transcript.append(queued...)
+				pendingInboxEvents = append(pendingInboxEvents, queued...)
+				skipSteeringDrain = true
+				cfg.Logger.Debugf("[turn %d] queued %d follow-up message(s) for next turn", turn, len(queued))
+				continue
+			}
+
+			cfg.Logger.Debugf("[turn %d] completion decision=completed reason=no_tool_calls_no_pending_work content_len=%d loops=%d producers=%d inbox=%d",
+				turn, len(content), schedulerActive(cfg.LoopScheduler), activeProducers(ib), inboxLen(ib))
 			cfg.Logger.Importantf("agent status=completed turns=%d tokens=%d", turn, transcript.totalUsage.TotalTokens)
 			result := transcript.result(messageContent(assistantMsg), turn, nil)
 			return end(result, nil, StopReasonCompleted)
 		}
 	}
 
+}
+
+func drainQueuedMessages(cfg Config, drain func() []inbox.Message) []ChatMessage {
+	if drain == nil {
+		return nil
+	}
+	return inboxMessagesToChatMessages(cfg, drain())
+}
+
+func inboxMessagesToChatMessages(cfg Config, messages []inbox.Message) []ChatMessage {
+	if len(messages) == 0 {
+		return nil
+	}
+	out := make([]ChatMessage, 0, len(messages))
+	for _, msg := range messages {
+		if cfg.Expander != nil {
+			msg = cfg.Expander.Expand(msg)
+		}
+		out = append(out, msg.ToChatMessages()...)
+	}
+	return out
 }
 
 type transcript struct {
@@ -392,7 +480,7 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 	}
 	return toolBatchResult{
 		messages:        messages,
-		terminate:       terminations > 0,
+		terminate:       len(slots) > 0 && terminations == len(slots),
 		terminateOutput: terminateOutput,
 	}, nil
 }
@@ -412,8 +500,15 @@ type toolExecution struct {
 	flow       ToolFlowDecision
 }
 
-func runToolCall(ctx context.Context, cfg Config, assistantMsg ChatMessage, tc ToolCall) toolExecution {
-	execution := beforeToolCall(ctx, cfg, assistantMsg, tc)
+func runToolCall(ctx context.Context, cfg Config, assistantMsg ChatMessage, tc ToolCall) (execution toolExecution) {
+	started := time.Now()
+	cfg.Logger.Debugf("tool_exec start name=%s args_bytes=%d", tc.Function.Name, len(tc.Function.Arguments))
+	defer func() {
+		cfg.Logger.Debugf("tool_exec done name=%s elapsed=%s bytes=%d raw_bytes=%d error=%v flow=%d",
+			tc.Function.Name, compactDuration(time.Since(started)), len(execution.result), len(execution.rawResult), execution.isError, execution.flow)
+	}()
+
+	execution = beforeToolCall(ctx, cfg, assistantMsg, tc)
 	if execution.result == "" && !execution.isError {
 		toolResult, execErr := cfg.Tools.ExecuteTool(ctx, tc.Function.Name, tc.Function.Arguments)
 		execution.result = toolResult.Text()
@@ -570,12 +665,12 @@ func terminalOutput(assistantMsg ChatMessage, terminateOutput string, toolResult
 	return messageContent(assistantMsg)
 }
 
-func logAssistantAndUsage(logger telemetry.Logger, msg ChatMessage, usage *Usage, finishReason string) {
+func logAssistantAndUsage(logger telemetry.Logger, msg ChatMessage, usage *Usage) {
 	content := messageContent(msg)
 	reasoning := messageReasoningContent(msg)
-	logger.Debugf("assistant message role=%s finish_reason=%s content_len=%d reasoning_len=%d tool_calls=%d content=%q",
+	logger.Debugf("assistant message role=%s stop_reason=%s content_len=%d reasoning_len=%d tool_calls=%d content=%q",
 		msg.Role,
-		finishReason,
+		msg.StopReason,
 		len(content),
 		len(reasoning),
 		len(msg.ToolCalls),
@@ -615,6 +710,74 @@ func schedulerActive(s *LoopScheduler) int {
 		return 0
 	}
 	return s.Active()
+}
+
+func inboxLen(ib inbox.Inbox) int {
+	if ib == nil {
+		return 0
+	}
+	return ib.Len()
+}
+
+func activeProducers(ib inbox.Inbox) int {
+	if ib == nil {
+		return 0
+	}
+	return ib.ActiveProducers()
+}
+
+func waitForInbox(ctx context.Context, cfg Config, turn int, reason string, keepWaiting func() bool) bool {
+	ib := cfg.Inbox
+	if ib == nil {
+		return false
+	}
+
+	started := time.Now()
+	nextLog := time.Time{}
+	for {
+		buffered := ib.Len()
+		if buffered > 0 {
+			cfg.Logger.Debugf("[turn %d] inbox ready reason=%s buffered=%d elapsed=%s",
+				turn, reason, buffered, compactDuration(time.Since(started)))
+			return true
+		}
+		if ib.Closed() {
+			cfg.Logger.Debugf("[turn %d] inbox closed reason=%s elapsed=%s",
+				turn, reason, compactDuration(time.Since(started)))
+			return false
+		}
+		if err := ctx.Err(); err != nil {
+			cfg.Logger.Debugf("[turn %d] inbox wait canceled reason=%s elapsed=%s error=%q",
+				turn, reason, compactDuration(time.Since(started)), err.Error())
+			return false
+		}
+		if keepWaiting != nil && !keepWaiting() {
+			cfg.Logger.Debugf("[turn %d] inbox wait released reason=%s loops=%d producers=%d elapsed=%s",
+				turn, reason, schedulerActive(cfg.LoopScheduler), ib.ActiveProducers(), compactDuration(time.Since(started)))
+			return false
+		}
+
+		now := time.Now()
+		if nextLog.IsZero() || !now.Before(nextLog) {
+			cfg.Logger.Debugf("[turn %d] waiting for inbox reason=%s loops=%d producers=%d buffered=%d elapsed=%s",
+				turn, reason, schedulerActive(cfg.LoopScheduler), ib.ActiveProducers(), buffered, compactDuration(time.Since(started)))
+			nextLog = now.Add(inboxWaitDebugInterval)
+		}
+
+		waitCtx, cancel := context.WithTimeout(ctx, inboxWaitDebugInterval)
+		hasMessage := ib.Wait(waitCtx)
+		cancel()
+		if hasMessage {
+			continue
+		}
+	}
+}
+
+func compactDuration(d time.Duration) time.Duration {
+	if d < time.Second {
+		return d.Round(time.Millisecond)
+	}
+	return d.Round(time.Second)
 }
 
 type messageBuilder struct {

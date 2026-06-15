@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
@@ -48,6 +49,34 @@ func TestRunWithoutToolsReturnsFinalText(t *testing.T) {
 	}
 	if requests[0].Messages[0].Role != "system" || *requests[0].Messages[0].Content != "system" {
 		t.Fatalf("system message not injected: %#v", requests[0].Messages)
+	}
+}
+
+func TestAssistantMessageCarriesStopReason(t *testing.T) {
+	tools := command.NewRegistry()
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{{
+			Choices: []Choice{{
+				Message:      NewTextMessage("assistant", "partial"),
+				FinishReason: "length",
+			}},
+		}},
+	}
+
+	result, err := (NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+	})).Run(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("result has no messages")
+	}
+	msg := result.Messages[len(result.Messages)-1]
+	if msg.StopReason != "length" {
+		t.Fatalf("StopReason = %q, want length", msg.StopReason)
 	}
 }
 
@@ -97,6 +126,31 @@ func TestRunExecutesToolLoop(t *testing.T) {
 	}
 	if !containsEvent(events, EventToolExecutionStart) || !containsEvent(events, EventToolExecutionEnd) {
 		t.Fatalf("tool events missing: %#v", events)
+	}
+}
+
+func TestRunDoesNotContinuePoliteFinalCloser(t *testing.T) {
+	tools := command.NewRegistry()
+	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "Done. Let me know if you want more detail.")),
+		},
+	}
+
+	result, err := (NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+	})).Run(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Output != "Done. Let me know if you want more detail." {
+		t.Fatalf("output = %q", result.Output)
+	}
+	if got := len(llm.requestsSnapshot()); got != 1 {
+		t.Fatalf("requests = %d, want 1", got)
 	}
 }
 
@@ -375,6 +429,34 @@ func TestStreamingProviderEmitsMessageUpdates(t *testing.T) {
 	}
 }
 
+func TestStreamingAssistantMessageCarriesStopReason(t *testing.T) {
+	tools := command.NewRegistry()
+	llm := &scriptedProvider{
+		streamEvents: []ChatCompletionStreamEvent{
+			{Delta: ChatMessageDelta{Role: "assistant"}},
+			{Delta: ChatMessageDelta{Content: strPtr("needs more")}},
+			{FinishReason: "length", Done: true},
+		},
+	}
+
+	result, err := (NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+		Stream:   true,
+	})).Run(context.Background(), "stream")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(result.Messages) == 0 {
+		t.Fatal("result has no messages")
+	}
+	msg := result.Messages[len(result.Messages)-1]
+	if msg.StopReason != "length" {
+		t.Fatalf("StopReason = %q, want length", msg.StopReason)
+	}
+}
+
 func TestStreamingReasoningSignatureBuildsReasoningBlock(t *testing.T) {
 	tools := command.NewRegistry()
 	llm := &scriptedProvider{
@@ -468,6 +550,294 @@ func TestResetDoesNotAllowConcurrentPrompt(t *testing.T) {
 	close(llm.release)
 	if err := <-done; err != nil {
 		t.Fatalf("first Prompt() error = %v", err)
+	}
+}
+
+func TestInjectUserMessageRequiresRunningAgent(t *testing.T) {
+	a := NewAgent(Config{Provider: &scriptedProvider{}, Tools: command.NewRegistry(), Model: "test"})
+	if err := a.InjectUserMessage("follow up"); err == nil || !strings.Contains(err.Error(), "not running") {
+		t.Fatalf("InjectUserMessage() error = %v, want not running", err)
+	}
+}
+
+func TestInjectUserMessageIsDrainedByRunningLoop(t *testing.T) {
+	tools := command.NewRegistry()
+	llm := &blockingProvider{started: make(chan struct{}), release: make(chan struct{})}
+	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test", MaxRetries: -1})
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := a.Run(context.Background(), "first")
+		done <- err
+	}()
+
+	select {
+	case <-llm.started:
+	case <-time.After(time.Second):
+		t.Fatal("provider was not called")
+	}
+
+	if err := a.InjectUserMessage("follow up"); err != nil {
+		t.Fatalf("InjectUserMessage() error = %v", err)
+	}
+
+	close(llm.release)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run() did not finish")
+	}
+
+	requests := llm.requestsSnapshot()
+	if len(requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(requests))
+	}
+	if !hasUserMessage(requests[1].Messages, "follow up") {
+		t.Fatalf("second request missing injected user message: %#v", requests[1].Messages)
+	}
+}
+
+func TestSteerUserMessageDefaultOneAtATime(t *testing.T) {
+	tools := command.NewRegistry()
+	llm := &blockingProvider{started: make(chan struct{}), release: make(chan struct{})}
+	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test", MaxRetries: -1})
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := a.Run(context.Background(), "first")
+		done <- err
+	}()
+
+	select {
+	case <-llm.started:
+	case <-time.After(time.Second):
+		t.Fatal("provider was not called")
+	}
+
+	a.SteerUserMessage("steer 1")
+	a.SteerUserMessage("steer 2")
+	close(llm.release)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run() did not finish")
+	}
+
+	requests := llm.requestsSnapshot()
+	if len(requests) != 3 {
+		t.Fatalf("requests = %d, want 3", len(requests))
+	}
+	if !hasUserMessage(requests[1].Messages, "steer 1") {
+		t.Fatalf("second request missing first steering message: %#v", requests[1].Messages)
+	}
+	if hasUserMessage(requests[1].Messages, "steer 2") {
+		t.Fatalf("second request should not contain second steering message in one-at-a-time mode: %#v", requests[1].Messages)
+	}
+	if !hasUserMessage(requests[2].Messages, "steer 2") {
+		t.Fatalf("third request missing second steering message: %#v", requests[2].Messages)
+	}
+}
+
+func TestFollowUpMessageDeliveredAfterAgentWouldStop(t *testing.T) {
+	tools := command.NewRegistry()
+	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(ChatMessage{
+				Role: "assistant",
+				ToolCalls: []ToolCall{{
+					ID:       "call-1",
+					Type:     "function",
+					Function: FunctionCall{Name: "echo", Arguments: "{}"},
+				}},
+			}),
+			chatResponse(NewTextMessage("assistant", "original complete")),
+			chatResponse(NewTextMessage("assistant", "follow-up response")),
+		},
+	}
+	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test", MaxRetries: -1})
+	a.FollowUpUserMessage("after current run")
+
+	result, err := a.Run(context.Background(), "first")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Output != "follow-up response" {
+		t.Fatalf("output = %q, want follow-up response", result.Output)
+	}
+
+	requests := llm.requestsSnapshot()
+	if len(requests) != 3 {
+		t.Fatalf("requests = %d, want 3", len(requests))
+	}
+	if hasUserMessage(requests[0].Messages, "after current run") {
+		t.Fatalf("first request unexpectedly contains follow-up: %#v", requests[0].Messages)
+	}
+	if hasUserMessage(requests[1].Messages, "after current run") {
+		t.Fatalf("tool-result request unexpectedly contains follow-up: %#v", requests[1].Messages)
+	}
+	if !hasUserMessage(requests[2].Messages, "after current run") {
+		t.Fatalf("final request missing follow-up: %#v", requests[2].Messages)
+	}
+}
+
+func TestShouldStopAfterTurnStopsBeforeFollowUp(t *testing.T) {
+	tools := command.NewRegistry()
+	echo := &recordingTool{name: "echo", output: "tool output"}
+	tools.RegisterTool(echo)
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(ChatMessage{
+				Role:    "assistant",
+				Content: strPtr("tool turn"),
+				ToolCalls: []ToolCall{{
+					ID:       "call-1",
+					Type:     "function",
+					Function: FunctionCall{Name: "echo", Arguments: "{}"},
+				}},
+			}),
+			chatResponse(NewTextMessage("assistant", "should not be called")),
+		},
+	}
+
+	followUpPolls := 0
+	var endStop StopReason
+	result, err := (NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+		Bus: testBus(func(event Event) {
+			if event.Type == EventAgentEnd {
+				endStop = event.Stop
+			}
+		}),
+		ShouldStopAfterTurn: func(context.Context, ShouldStopAfterTurnContext) (bool, error) {
+			return true, nil
+		},
+		GetFollowUpMessages: func() []inbox.Message {
+			followUpPolls++
+			return []inbox.Message{inbox.NewUserMessage("follow-up")}
+		},
+	})).Run(context.Background(), "first")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Turns != 1 {
+		t.Fatalf("turns = %d, want 1", result.Turns)
+	}
+	if got := len(llm.requestsSnapshot()); got != 1 {
+		t.Fatalf("provider calls = %d, want 1", got)
+	}
+	if followUpPolls != 0 {
+		t.Fatalf("follow-up polls = %d, want 0", followUpPolls)
+	}
+	if endStop != StopReasonStopped {
+		t.Fatalf("agent_end stop = %q, want %q", endStop, StopReasonStopped)
+	}
+	if got := echo.callsSnapshot(); !reflect.DeepEqual(got, []string{"{}"}) {
+		t.Fatalf("tool calls = %#v, want one call", got)
+	}
+}
+
+func TestShouldStopAfterTurnReceivesContextAfterToolResults(t *testing.T) {
+	tools := command.NewRegistry()
+	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(ChatMessage{
+				Role: "assistant",
+				ToolCalls: []ToolCall{{
+					ID:       "call-1",
+					Type:     "function",
+					Function: FunctionCall{Name: "echo", Arguments: "{}"},
+				}},
+			}),
+		},
+	}
+
+	var hookCtx ShouldStopAfterTurnContext
+	_, err := (NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+		ShouldStopAfterTurn: func(_ context.Context, ctx ShouldStopAfterTurnContext) (bool, error) {
+			hookCtx = ctx
+			return true, nil
+		},
+	})).Run(context.Background(), "first")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(hookCtx.ToolResults) != 1 {
+		t.Fatalf("tool results = %d, want 1", len(hookCtx.ToolResults))
+	}
+	if hookCtx.ToolResults[0].Role != "tool" || hookCtx.ToolResults[0].ToolCallID != "call-1" {
+		t.Fatalf("unexpected tool result: %#v", hookCtx.ToolResults[0])
+	}
+	if !hasToolMessage(hookCtx.Messages, "call-1", "tool output") {
+		t.Fatalf("hook messages missing tool result: %#v", hookCtx.Messages)
+	}
+	if !hasToolMessage(hookCtx.NewMessages, "call-1", "tool output") {
+		t.Fatalf("hook new messages missing tool result: %#v", hookCtx.NewMessages)
+	}
+	if len(hookCtx.Messages) != 3 || hookCtx.Messages[0].Role != "user" || hookCtx.Messages[1].Role != "assistant" || hookCtx.Messages[2].Role != "tool" {
+		t.Fatalf("hook messages order = %#v", hookCtx.Messages)
+	}
+}
+
+func TestShouldStopAfterTurnErrorStopsRun(t *testing.T) {
+	tools := command.NewRegistry()
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "done")),
+		},
+	}
+
+	var end Event
+	result, err := (NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+		Bus: testBus(func(event Event) {
+			if event.Type == EventAgentEnd {
+				end = event
+			}
+		}),
+		ShouldStopAfterTurn: func(context.Context, ShouldStopAfterTurnContext) (bool, error) {
+			return false, fmt.Errorf("hook failed")
+		},
+	})).Run(context.Background(), "first")
+	if err == nil || !strings.Contains(err.Error(), "hook failed") {
+		t.Fatalf("Run() error = %v, want hook failed", err)
+	}
+	if result == nil || result.Err == nil {
+		t.Fatalf("result = %#v, want result error", result)
+	}
+	if end.Stop != StopReasonError || end.Err == nil {
+		t.Fatalf("agent_end = %#v, want error stop", end)
+	}
+	if got := len(llm.requestsSnapshot()); got != 1 {
+		t.Fatalf("provider calls = %d, want 1", got)
+	}
+}
+
+func TestResetClearsQueuedMessages(t *testing.T) {
+	a := NewAgent(Config{Provider: &scriptedProvider{}, Tools: command.NewRegistry(), Model: "test"})
+	a.SteerUserMessage("steer")
+	a.FollowUpUserMessage("follow")
+
+	a.Reset()
+
+	steering, followUp := a.QueuedMessageCounts()
+	if steering != 0 || followUp != 0 {
+		t.Fatalf("queued counts = %d/%d, want 0/0", steering, followUp)
 	}
 }
 
@@ -694,6 +1064,16 @@ func (p *scriptedProvider) requestsSnapshot() []*ChatCompletionRequest {
 	return out
 }
 
+func (p *blockingProvider) requestsSnapshot() []*ChatCompletionRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]*ChatCompletionRequest, 0, len(p.requests))
+	for _, req := range p.requests {
+		out = append(out, cloneRequest(req))
+	}
+	return out
+}
+
 func chatResponse(msg ChatMessage) *ChatCompletionResponse {
 	return &ChatCompletionResponse{
 		Choices: []Choice{{Message: msg}},
@@ -710,6 +1090,18 @@ func cloneRequest(req *ChatCompletionRequest) *ChatCompletionRequest {
 func hasToolMessage(messages []ChatMessage, toolCallID, contains string) bool {
 	for _, msg := range messages {
 		if msg.Role != "tool" || msg.ToolCallID != toolCallID || msg.Content == nil {
+			continue
+		}
+		if strings.Contains(*msg.Content, contains) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasUserMessage(messages []ChatMessage, contains string) bool {
+	for _, msg := range messages {
+		if msg.Role != "user" || msg.Content == nil {
 			continue
 		}
 		if strings.Contains(*msg.Content, contains) {

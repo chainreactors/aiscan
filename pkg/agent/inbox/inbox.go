@@ -18,6 +18,9 @@ type Inbox interface {
 	Close()
 	Closed() bool
 	Len() int
+	// Wait blocks until the inbox state changes. It returns true when buffered
+	// messages are available; callers should re-check producer/closed state when
+	// it returns false.
 	Wait(ctx context.Context) bool
 	RegisterProducer(name string) *ProducerHandle
 	ActiveProducers() int
@@ -160,6 +163,10 @@ func (b *Buffered) Wait(ctx context.Context) bool {
 		case <-ctx.Done():
 			return false
 		case <-ch:
+			b.mu.Lock()
+			hasMessages := len(b.buf) > 0
+			b.mu.Unlock()
+			return hasMessages
 		}
 	}
 }

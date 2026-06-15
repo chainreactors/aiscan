@@ -45,6 +45,7 @@ type ChatMessage struct {
 	ReasoningBlocks  []ReasoningBlock `json:"-"`
 	ToolCalls        []ToolCall       `json:"tool_calls,omitempty"`
 	ToolCallID       string           `json:"tool_call_id,omitempty"`
+	StopReason       string           `json:"-"`
 }
 
 func (m ChatMessage) MarshalJSON() ([]byte, error) {
