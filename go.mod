@@ -3,11 +3,11 @@ module github.com/chainreactors/aiscan
 go 1.26.1
 
 require (
-	github.com/chainreactors/fingers v1.2.1
+	github.com/chainreactors/fingers v1.2.2-0.20260611155635-f5c144ea1c12
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c
 	github.com/chainreactors/ioa v0.0.0-20260609170545-7ec2ed23664d
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
-	github.com/chainreactors/neutron v0.0.0-20260611015444-55dd3cf86e5b
+	github.com/chainreactors/neutron v0.0.0-20260612092850-1a0a5a8b4280
 	github.com/chainreactors/parsers v0.0.0-20260608085142-3d2c51baa8fe
 	github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593
 	github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3
@@ -16,7 +16,6 @@ require (
 	github.com/chainreactors/utils v0.0.0-20260529172343-6465cb8568b2
 	github.com/chainreactors/zombie v1.2.3-0.20260611172539-bdd2cdfd5a21
 	github.com/charmbracelet/glamour v0.8.0
-	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/go-rod/rod v0.116.2
 	github.com/go-rod/stealth v0.4.9
 	github.com/gookit/config/v2 v2.2.8
@@ -28,6 +27,7 @@ require (
 	github.com/projectdiscovery/uncover v1.2.1
 	github.com/projectdiscovery/utils v0.10.1
 	github.com/reeflective/console v0.0.0-00010101000000-000000000000
+	github.com/reeflective/readline v1.1.3
 	github.com/spf13/cobra v1.10.2
 	github.com/ysmood/gson v0.7.3
 	golang.org/x/sys v0.46.0
@@ -54,6 +54,9 @@ require (
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
+	github.com/antchfx/htmlquery v1.3.6 // indirect
+	github.com/antchfx/xmlquery v1.5.1 // indirect
+	github.com/antchfx/xpath v1.3.6 // indirect
 	github.com/anytls/sing-anytls v0.0.11 // indirect
 	github.com/apernet/hysteria/core/v2 v2.9.2 // indirect
 	github.com/apernet/quic-go v0.59.1-0.20260425001925-6c6cc9bcb716 // indirect
@@ -72,10 +75,12 @@ require (
 	github.com/carapace-sh/carapace-shlex v1.0.1 // indirect
 	github.com/censys/censys-sdk-go v0.19.1 // indirect
 	github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0 // indirect
-	github.com/chainreactors/proton v0.2.1-0.20260608085216-03df34ba928d // indirect
+	github.com/chainreactors/neutron/operators/full v0.0.0-20260612092850-1a0a5a8b4280 // indirect
+	github.com/chainreactors/proton v0.3.1-0.20260611174627-89c10c8c27e5 // indirect
 	github.com/chainreactors/words v0.0.0-20260520145736-270600e60fb4 // indirect
 	github.com/charlievieth/fastwalk v1.0.14 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
+	github.com/charmbracelet/lipgloss v1.1.0 // indirect
 	github.com/charmbracelet/x/ansi v0.11.7 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
@@ -113,6 +118,7 @@ require (
 	github.com/gofrs/uuid/v5 v5.3.2 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
+	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -134,6 +140,8 @@ require (
 	github.com/iangcarroll/cookiemonster v1.6.0 // indirect
 	github.com/icodeface/tls v0.0.0-20230910023335-34df9250cd12 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/itchyny/gojq v0.12.19 // indirect
+	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/jlaffaye/ftp v0.2.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kataras/jwt v0.1.8 // indirect
@@ -187,7 +195,6 @@ require (
 	github.com/projectdiscovery/retryablehttp-go v1.3.10 // indirect
 	github.com/projectdiscovery/wappalyzergo v0.2.79 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/reeflective/readline v1.1.3 // indirect
 	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/remeh/sizedwaitgroup v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
@@ -269,8 +276,7 @@ require (
 )
 
 replace (
-	github.com/chainreactors/sdk => ./sdk-local
-	github.com/chainreactors/utils => ./utils-local
+	github.com/chainreactors/sdk => github.com/wuchulonly/sdk v0.1.1-0.20260614153551-12bf618dcc65
 	github.com/reeflective/console => github.com/chainreactors/malice-network/external/console v0.0.0-20260422184128-e856ed004d32
 	github.com/reeflective/readline => github.com/chainreactors/malice-network/external/readline v0.0.0-20260422184128-e856ed004d32
 )
