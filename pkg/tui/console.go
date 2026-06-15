@@ -17,7 +17,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
 	outputpkg "github.com/chainreactors/aiscan/pkg/output"
-	skillpkg "github.com/chainreactors/aiscan/skills"
+	"github.com/chainreactors/aiscan/pkg/repl"
 	ioaclient "github.com/chainreactors/ioa/client"
 	"github.com/reeflective/console"
 	"github.com/reeflective/readline/inputrc"
@@ -35,7 +35,7 @@ type AgentConsole struct {
 	ctx         context.Context
 	option      *cfg.Option
 	application *app.App
-	session     *agent.Agent
+	agent       *agent.Agent
 	console     *console.Console
 	menu        *console.Menu
 	output      *AgentOutput
@@ -74,12 +74,12 @@ func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.A
 		ctx:         ctx,
 		option:      option,
 		application: application,
-		session:     session,
+		agent:       session,
 		console:     c,
 		menu:        menu,
 		output:      output,
 	}
-	repl.controller = newInteractiveRunController(ctx, session, output)
+	repl.controller = newInteractiveRunController(ctx, repl.agent, output)
 	repl.controller.SetOnFinish(repl.refreshPromptAfterAsyncRun)
 	repl.configureInterruptKey()
 	menu.SetCommands(repl.rootCommand)
@@ -618,121 +618,136 @@ func (r *AgentConsole) skillSlashNames() string {
 	return strings.Join(names, "  ")
 }
 
+func (r *AgentConsole) replSession() *repl.Session {
+	return &repl.Session{
+		Ctx:        r.ctx,
+		Option:     r.option,
+		App:        r.application,
+		Agent:      r.agent,
+		Controller: r.ensureController(),
+	}
+}
+
 func (r *AgentConsole) rootCommand() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "agent",
-		Short:         "aiscan interactive agent",
-		SilenceUsage:  true,
-		SilenceErrors: true,
+		Use: "agent", Short: "aiscan interactive agent",
+		SilenceUsage: true, SilenceErrors: true,
 	}
 	root.CompletionOptions.HiddenDefaultCmd = true
 	root.SetHelpCommand(&cobra.Command{Use: "help", Hidden: true})
 	root.SetOut(os.Stdout)
 	root.SetErr(os.Stderr)
 
-	root.AddCommand(
-		r.promptCommand(),
-		r.helpCommand(),
-		r.statusCommand(),
-		r.resetCommand(),
-		r.continueCommand(),
-		r.stopCommand(),
-		r.followUpCommand(),
-		r.exitCommand(),
-	)
+	root.AddCommand(&cobra.Command{
+		Use: agentPromptCommandName, Hidden: true, Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return repl.RunPrompt(r.replSession(), "prompt", args[0])
+		},
+	})
+
+	for _, cmd := range repl.BuiltinCommands() {
+		root.AddCommand(r.wrapCommand(cmd))
+	}
+	for _, cmd := range repl.SkillCommands(r.replSession()) {
+		root.AddCommand(r.wrapCommand(cmd))
+	}
 	root.AddCommand(r.ioaCommands()...)
-	root.AddCommand(r.skillCommands()...)
 	return root
 }
 
-func (r *AgentConsole) promptCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:    agentPromptCommandName,
-		Hidden: true,
-		Args:   cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return r.runPrompt(cmd.Context(), args[0])
-		},
+func (r *AgentConsole) wrapCommand(cmd repl.Command) *cobra.Command {
+	cc := &cobra.Command{
+		Use:   cmd.Name,
+		Short: cmd.Description,
 	}
-}
+	if len(cmd.Aliases) > 0 {
+		cc.Aliases = cmd.Aliases
+	}
+	if cmd.Hidden {
+		cc.Hidden = true
+	}
+	switch cmd.Args {
+	case repl.ArgsNone:
+		cc.Args = cobra.NoArgs
+	case repl.ArgsExact1:
+		cc.Args = cobra.ExactArgs(1)
+		cc.DisableFlagParsing = true
+	case repl.ArgsOptional:
+		cc.DisableFlagParsing = true
+	}
 
-func (r *AgentConsole) helpCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "/help",
-		Short: "Show interactive commands",
-		Args:  cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			fmt.Fprint(os.Stdout, r.helpOutput())
+	switch cmd.Name {
+	case "/help":
+		cc.RunE = func(_ *cobra.Command, _ []string) error {
+			fmt.Fprint(os.Stdout, r.renderHelp())
 			return nil
-		},
+		}
+	case "/status":
+		cc.Run = func(_ *cobra.Command, _ []string) {
+			fmt.Fprint(os.Stdout, r.renderStatus())
+		}
+	case "/stop":
+		cc.Run = func(_ *cobra.Command, _ []string) {
+			if !r.stopCurrentRun() {
+				fmt.Fprintln(os.Stderr, "No running task.")
+			}
+		}
+	case "/reset":
+		run := cmd.Run
+		cc.RunE = func(c *cobra.Command, _ []string) error {
+			if err := run(c.Context(), r.replSession(), nil); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return nil
+			}
+			fmt.Fprintln(os.Stdout, "Context reset.")
+			return nil
+		}
+	case "/exit":
+		cc.RunE = func(_ *cobra.Command, _ []string) error { return errAgentConsoleExit }
+	default:
+		if cmd.Run == nil {
+			break
+		}
+		run := cmd.Run
+		cc.RunE = func(c *cobra.Command, args []string) error {
+			return run(c.Context(), r.replSession(), args)
+		}
 	}
+	return cc
 }
 
-func (r *AgentConsole) statusCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "/status",
-		Short: "Show current agent status",
-		Args:  cobra.NoArgs,
-		Run: func(_ *cobra.Command, _ []string) {
-			fmt.Fprint(os.Stdout, r.statusOutput())
-		},
-	}
-}
+// ---------------------------------------------------------------------------
+// Rendering: help, status, panels
+// ---------------------------------------------------------------------------
 
-func (r *AgentConsole) helpOutput() string {
+func (r *AgentConsole) renderHelp() string {
 	colorEnabled := r.output != nil && r.output.color.Enabled
-	rows := []helpRow{
-		{Command: "/help", Detail: "查看这份命令面板"},
-		{Command: "/status", Detail: "查看模型、渲染模式、IOA 和 skills"},
-		{Command: "/reset", Detail: "清空当前会话上下文"},
-		{Command: "/continue", Detail: "不追加输入，继续上一轮任务"},
-		{Command: "/stop", Detail: "停止当前正在运行的任务"},
-		{Command: "/followup 文本", Detail: "运行中排队到当前任务自然结束后再发送"},
-		{Command: "/exit", Detail: "退出交互模式"},
+	cmds := repl.BuiltinCommands()
+	rows := make([]helpRow, 0, len(cmds)+4)
+	for _, c := range cmds {
+		rows = append(rows, helpRow{Command: c.Name, Detail: c.Description})
 	}
-	rows = append(rows, helpRow{Command: "", Detail: ""})
+	rows = append(rows, helpRow{})
 	rows = append(rows, helpRow{Command: "普通文本", Detail: "直接发送自然语言任务"})
 	rows = append(rows, helpRow{Command: "/<skill> 任务", Detail: "用指定 skill 处理后面的任务"})
 	rows = append(rows, helpRow{Command: "/spaces /nodes", Detail: "配置 IOA 时查看协作状态"})
 	return r.renderPanel("commands", renderHelpRows(rows, colorEnabled), colorEnabled)
 }
 
-func (r *AgentConsole) statusOutput() string {
+func (r *AgentConsole) renderStatus() string {
 	colorEnabled := r.output != nil && r.output.color.Enabled
-	provider, model := r.providerModel()
-	if provider == "" {
-		provider = "not configured"
-	}
-	if model == "" {
-		model = "-"
-	}
-
-	ioa := "disabled"
-	if r != nil && r.option != nil && strings.TrimSpace(r.option.IOAURL) != "" {
-		ioa = strings.TrimSpace(r.option.IOAURL)
-		if r.option.Space != "" {
-			ioa += " · space " + r.option.Space
-		}
-	}
-
+	info := repl.CollectStatus(r.replSession(), r.sessionSummary(), agentConsoleHistoryPath())
 	rows := []helpRow{
-		{Command: "model", Detail: provider + " / " + model},
-		{Command: "render", Detail: r.sessionSummary()},
-		{Command: "task", Detail: r.taskStatus()},
-		{Command: "ioa", Detail: ioa},
-		{Command: "history", Detail: agentConsoleHistoryPath()},
+		{Command: "model", Detail: info.Provider + " / " + info.Model},
+		{Command: "render", Detail: info.Mode},
+		{Command: "task", Detail: info.Task},
+		{Command: "ioa", Detail: info.IOA},
+		{Command: "history", Detail: info.History},
 	}
-	if skills := r.skillSlashNames(); skills != "" {
-		rows = append(rows, helpRow{Command: "skills", Detail: skills})
+	if info.Skills != "" {
+		rows = append(rows, helpRow{Command: "skills", Detail: info.Skills})
 	}
 	return r.renderPanel("status", renderHelpRows(rows, colorEnabled), colorEnabled)
-}
-
-func (r *AgentConsole) taskStatus() string {
-	if r != nil && r.controller != nil && r.controller.Running() {
-		return "running"
-	}
-	return "idle"
 }
 
 type helpRow struct {
@@ -765,135 +780,6 @@ func (r *AgentConsole) renderPanel(title, body string, colorEnabled bool) string
 	return "\n" + renderFixedBox(header+"\n"+body, r.bannerWidth(), colorEnabled) + "\n\n"
 }
 
-func (r *AgentConsole) resetCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "/reset",
-		Short: "Clear conversation context",
-		Args:  cobra.NoArgs,
-		Run: func(_ *cobra.Command, _ []string) {
-			if r.controller != nil && r.controller.Running() {
-				fmt.Fprintln(os.Stderr, "Task is running. Use /stop before /reset.")
-				return
-			}
-			r.session.Reset()
-			fmt.Fprintln(os.Stdout, "Context reset.")
-		},
-	}
-}
-
-func (r *AgentConsole) continueCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "/continue",
-		Short: "Continue without a new prompt",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			_ = cmd.Context()
-			return r.ensureController().Continue()
-		},
-	}
-}
-
-func (r *AgentConsole) stopCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "/stop",
-		Short: "Stop current agent run",
-		Args:  cobra.NoArgs,
-		Run: func(_ *cobra.Command, _ []string) {
-			if !r.stopCurrentRun() {
-				fmt.Fprintln(os.Stderr, "No running task.")
-			}
-		},
-	}
-}
-
-func (r *AgentConsole) followUpCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:                "/followup [prompt]",
-		Short:              "Queue a prompt after the current run finishes",
-		DisableFlagParsing: true,
-		Args:               cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return r.runFollowUp(cmd.Context(), args[0])
-		},
-	}
-}
-
-func (r *AgentConsole) exitCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:     "/exit",
-		Aliases: []string{"/quit"},
-		Short:   "Exit",
-		Args:    cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return errAgentConsoleExit
-		},
-	}
-}
-
-func (r *AgentConsole) skillCommands() []*cobra.Command {
-	if r.application == nil || r.application.Skills == nil {
-		return nil
-	}
-	commands := make([]*cobra.Command, 0, len(r.application.Skills.Skills))
-	for _, skill := range r.application.Skills.Skills {
-		skill := skill
-		if strings.TrimSpace(skill.Name) == "" {
-			continue
-		}
-		commands = append(commands, r.skillCommand(skill))
-	}
-	return commands
-}
-
-func (r *AgentConsole) skillCommand(skill skillpkg.Skill) *cobra.Command {
-	return &cobra.Command{
-		Use:                "/" + skill.Name + " [prompt]",
-		Short:              skill.Description,
-		DisableFlagParsing: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return r.runSkill(cmd.Context(), skill, strings.Join(args, " "))
-		},
-	}
-}
-
-func (r *AgentConsole) runPrompt(ctx context.Context, input string) error {
-	prompt := skillpkg.ExpandCommand(input, r.application.Skills)
-	prompt, err := cfg.ApplySelectedSkills(prompt, r.option.Skills, r.application.Skills)
-	if err != nil {
-		return err
-	}
-	_ = ctx
-	return r.ensureController().SubmitPrompt("prompt", input, prompt)
-}
-
-func (r *AgentConsole) runSkill(ctx context.Context, skill skillpkg.Skill, input string) error {
-	prompt := r.application.Skills.FormatInvocation(skill, input)
-	prompt, err := cfg.ApplySelectedSkills(prompt, r.option.Skills, r.application.Skills)
-	if err != nil {
-		return err
-	}
-	_ = ctx
-	return r.ensureController().SubmitPrompt("skill "+skill.Name, input, prompt)
-}
-
-func (r *AgentConsole) runFollowUp(ctx context.Context, input string) error {
-	prompt := skillpkg.ExpandCommand(input, r.application.Skills)
-	prompt, err := cfg.ApplySelectedSkills(prompt, r.option.Skills, r.application.Skills)
-	if err != nil {
-		return err
-	}
-	_ = ctx
-	return r.ensureController().SubmitPrompt("follow-up", input, prompt)
-}
-
-func (r *AgentConsole) printResult(result *agent.Result) {
-	if result == nil || strings.TrimSpace(result.Output) == "" {
-		r.ensureOutput().Empty()
-		return
-	}
-	r.ensureOutput().Final(result.Output)
-}
-
 func (r *AgentConsole) ensureOutput() *AgentOutput {
 	if r.output == nil {
 		r.output = NewAgentOutput(r.option)
@@ -903,7 +789,7 @@ func (r *AgentConsole) ensureOutput() *AgentOutput {
 
 func (r *AgentConsole) ensureController() *interactiveRunController {
 	if r.controller == nil {
-		r.controller = newInteractiveRunController(r.ctx, r.session, r.ensureOutput())
+		r.controller = newInteractiveRunController(r.ctx, r.agent, r.ensureOutput())
 		r.controller.SetOnFinish(r.refreshPromptAfterAsyncRun)
 	}
 	return r.controller
