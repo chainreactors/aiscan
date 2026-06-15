@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
@@ -87,8 +88,8 @@ func TestAgentConsoleFastInputMode(t *testing.T) {
 	if fastInputEnabledForMode("", true) {
 		t.Fatal("interactive TTY should default to readline input")
 	}
-	if !fastInputEnabledForMode("", false) {
-		t.Fatal("non-TTY stdin should default to fast line input")
+	if fastInputEnabledForMode("", false) {
+		t.Fatal("non-TTY stdin should default to readline input unless AISCAN_REPL=fast is explicit")
 	}
 
 	t.Setenv("AISCAN_REPL", "rich")
@@ -98,32 +99,11 @@ func TestAgentConsoleFastInputMode(t *testing.T) {
 	if !fastInputEnabledForMode("fast", true) {
 		t.Fatal("AISCAN_REPL=fast should force fast line input")
 	}
+	if !fastInputEnabledForMode("fast", false) {
+		t.Fatal("AISCAN_REPL=fast should force fast line input even for non-TTY stdin")
+	}
 	if fastInputEnabledForMode("readline", false) {
 		t.Fatal("AISCAN_REPL=readline should force readline input")
-	}
-}
-
-func TestAgentOutputStreamingModeEnv(t *testing.T) {
-	cases := []struct {
-		name             string
-		value            string
-		stdoutIsTerminal bool
-		want             bool
-	}{
-		{name: "default pretty", value: "", stdoutIsTerminal: true, want: false},
-		{name: "stream enabled tty", value: "1", stdoutIsTerminal: true, want: true},
-		{name: "stream enabled non tty", value: "1", stdoutIsTerminal: false, want: false},
-		{name: "stream word", value: "stream", stdoutIsTerminal: true, want: true},
-		{name: "pretty word", value: "pretty", stdoutIsTerminal: true, want: false},
-		{name: "disabled", value: "off", stdoutIsTerminal: true, want: false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := streamingEnabledForEnv(tc.value, tc.stdoutIsTerminal); got != tc.want {
-				t.Fatalf("streamingEnabledForEnv(%q, %v) = %v, want %v",
-					tc.value, tc.stdoutIsTerminal, got, tc.want)
-			}
-		})
 	}
 }
 
@@ -315,7 +295,7 @@ func TestAgentOutputToolSummary(t *testing.T) {
 	})
 
 	got := stripANSI(stderr.String())
-	if !strings.Contains(got, "bash") || !strings.Contains(got, "scan -i 127.0.0.1 --mode quick") {
+	if !strings.Contains(got, "bash started") || !strings.Contains(got, "scan -i 127.0.0.1 --mode quick") {
 		t.Fatalf("stderr missing tool summary: %q", got)
 	}
 	if !strings.Contains(got, "⎿") {
@@ -428,6 +408,31 @@ func TestAgentOutputTurnUsageShowsInDebug(t *testing.T) {
 	}
 }
 
+func TestAgentOutputTurnEndShowsStopReasonInDebug(t *testing.T) {
+	var stderr bytes.Buffer
+	output := &AgentOutput{
+		stdout: &bytes.Buffer{},
+		stderr: &stderr,
+		debug:  true,
+	}
+	msg := agent.NewTextMessage("assistant", "partial")
+	msg.StopReason = "length"
+
+	output.HandleEvent(agent.Event{
+		Type:    agent.EventTurnEnd,
+		Turn:    7,
+		Message: msg,
+	})
+
+	got := stripANSI(stderr.String())
+	if !strings.Contains(got, "stop_reason=length") {
+		t.Fatalf("debug stop reason missing: %q", got)
+	}
+	if strings.Contains(got, "finish_reason") {
+		t.Fatalf("debug output should use stop_reason, got: %q", got)
+	}
+}
+
 func TestAgentOutputWriteEditSummary(t *testing.T) {
 	var stderr bytes.Buffer
 	output := &AgentOutput{
@@ -460,7 +465,7 @@ func TestAgentOutputMultiLineResult(t *testing.T) {
 		tools:  make(map[string]agentToolSummary),
 	}
 
-	result := "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8"
+	result := "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10"
 	output.HandleEvent(agent.Event{
 		Type:       agent.EventToolExecutionEnd,
 		ToolCallID: "call-1",
@@ -474,6 +479,63 @@ func TestAgentOutputMultiLineResult(t *testing.T) {
 	}
 	if !strings.Contains(got, "+") && !strings.Contains(got, "lines") {
 		t.Fatalf("stderr missing truncation hint for multi-line result: %q", got)
+	}
+}
+
+func TestAgentOutputFetchPreviewIncludesBody(t *testing.T) {
+	var stderr bytes.Buffer
+	output := &AgentOutput{
+		stdout: &bytes.Buffer{},
+		stderr: &stderr,
+		tools:  make(map[string]agentToolSummary),
+	}
+
+	result := strings.Join([]string{
+		"Fetched: https://example.test/app.js",
+		"Status: 200 OK",
+		"Content-Type: text/javascript",
+		"Size: 4096 bytes",
+		"---",
+		"",
+		"const routes = ['/api/users', '/api/admin'];",
+		"fetch('/api/desk/webhooks')",
+		"fetch('/api/mall/checkout')",
+		"fetch('/api/ads/creatives')",
+		"fetch('/api/hidden')",
+	}, "\n")
+	output.HandleEvent(agent.Event{
+		Type:       agent.EventToolExecutionEnd,
+		ToolCallID: "call-1",
+		ToolName:   "fetch",
+		Result:     result,
+	})
+
+	got := stripANSI(stderr.String())
+	for _, want := range []string{
+		"fetch result",
+		"Fetched: https://example.test/app.js",
+		"Content-Type: text/javascript",
+		"const routes",
+		"/api/desk/webhooks",
+		"+1 lines hidden",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stderr missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestAgentOutputToolPreviewTruncatesUTF8Safely(t *testing.T) {
+	result := strings.Repeat("漏洞", toolResultPreviewWidth+10)
+	preview := buildToolResultPreview("bash", result, false)
+	if len(preview.lines) != 1 {
+		t.Fatalf("preview lines = %d, want 1", len(preview.lines))
+	}
+	if !utf8.ValidString(preview.lines[0]) {
+		t.Fatalf("preview contains invalid UTF-8: %q", preview.lines[0])
+	}
+	if !strings.HasSuffix(preview.lines[0], "…") {
+		t.Fatalf("preview should show ellipsis after truncation: %q", preview.lines[0])
 	}
 }
 
@@ -499,6 +561,24 @@ func TestAgentOutputStreamsDeltasAndSkipsFinal(t *testing.T) {
 	}
 	if !strings.HasSuffix(got, "Hello!\n") {
 		t.Fatalf("expected trailing newline after stream, got %q", got)
+	}
+}
+
+func TestAgentOutputStreamsDeltasButKeepsUnstreamedFinal(t *testing.T) {
+	var stdout bytes.Buffer
+	o := &AgentOutput{stdout: &stdout, stderr: &bytes.Buffer{}, stream: true, markdown: false}
+
+	o.HandleEvent(agent.Event{Type: agent.EventTurnStart, Turn: 1})
+	o.HandleEvent(agent.Event{Type: agent.EventMessageUpdate, Turn: 1, Message: contentMsg("I'll check that.")})
+	o.HandleEvent(agent.Event{Type: agent.EventTurnEnd, Turn: 1})
+	o.Final("task complete: done")
+
+	got := stdout.String()
+	if !strings.Contains(got, "I'll check that.") {
+		t.Fatalf("stdout missing streamed progress: %q", got)
+	}
+	if !strings.Contains(got, "task complete: done") {
+		t.Fatalf("stdout missing unstreamed final: %q", got)
 	}
 }
 
@@ -583,9 +663,44 @@ func TestAgentOutputStartResetsStreamStateForAnyRun(t *testing.T) {
 	if got, want := stdout.String(), "partial\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
-	if o.didStream || o.streamPrinted != 0 || o.streamLineOpen {
-		t.Fatalf("stream state not reset: didStream=%v streamPrinted=%d streamLineOpen=%v",
-			o.didStream, o.streamPrinted, o.streamLineOpen)
+	if o.didStream || o.streamPrinted != 0 || o.streamLineOpen || o.lastStreamed != "" {
+		t.Fatalf("stream state not reset: didStream=%v streamPrinted=%d streamLineOpen=%v lastStreamed=%q",
+			o.didStream, o.streamPrinted, o.streamLineOpen, o.lastStreamed)
+	}
+}
+
+func TestAgentOutputAbortCurrentRunSuppressesLateEventsAndFinal(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	o := &AgentOutput{
+		stdout:   &stdout,
+		stderr:   &stderr,
+		color:    outpkg.NewColor(false),
+		tools:    make(map[string]agentToolSummary),
+		stream:   true,
+		markdown: false,
+	}
+
+	o.Start("prompt", "first")
+	o.HandleEvent(agent.Event{Type: agent.EventTurnStart, Turn: 1})
+	o.HandleEvent(agent.Event{Type: agent.EventMessageUpdate, Turn: 1, Message: contentMsg("partial")})
+	o.AbortCurrentRun()
+	o.HandleEvent(agent.Event{Type: agent.EventMessageUpdate, Turn: 1, Message: contentMsg("partial leak")})
+	o.HandleEvent(agent.Event{Type: agent.EventToolExecutionStart, Turn: 1, ToolName: "bash", Arguments: `{"command":"id"}`})
+	o.Final("late final")
+
+	if got, want := stdout.String(), "partial\n"; got != want {
+		t.Fatalf("stdout after abort = %q, want %q", got, want)
+	}
+	if got := stripANSI(stderr.String()); strings.Contains(got, "bash") || strings.Contains(got, "late final") {
+		t.Fatalf("stderr contains late output after abort: %q", got)
+	}
+
+	o.Start("prompt", "next")
+	o.HandleEvent(agent.Event{Type: agent.EventTurnStart, Turn: 2})
+	o.HandleEvent(agent.Event{Type: agent.EventMessageUpdate, Turn: 2, Message: contentMsg("next")})
+
+	if got, want := stdout.String(), "partial\nnext"; got != want {
+		t.Fatalf("stdout after next run = %q, want %q", got, want)
 	}
 }
 

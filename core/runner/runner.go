@@ -182,9 +182,6 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 	rt.Config = agent.NewAgent(rt.Config).Cfg
 
 	rt.App.Commands.RegisterTool(agent.NewLoopTool(scheduler))
-	if !pc.ScannerAgentMode {
-		rt.App.Commands.RegisterTool(agent.NewFinishTool())
-	}
 
 	if pc.FindingsPath == "" {
 		pc.FindingsPath = findingsLogPath(rt.Config.SessionID)
@@ -286,7 +283,7 @@ func runOneShotMode(ctx context.Context, option *cfg.Option, logger telemetry.Lo
 	rt.Output.Start("task", task)
 	result, err := agent.NewAgent(rt.Config.
 		WithSystemPrompt(rt.SystemPrompt).
-		WithStream(false)).
+		WithStream(agentStreamingEnabled(option))).
 		Run(ctx, task)
 	if err != nil {
 		return err
@@ -326,7 +323,7 @@ func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetr
 
 	session := agent.NewAgent(rt.Config.
 		WithSystemPrompt(rt.SystemPrompt).
-		WithStream(interactiveStreamingEnabled(option)))
+		WithStream(agentStreamingEnabled(option)))
 
 	// Reuse the runtime's bus-subscribed output so streaming deltas, tool
 	// events, and the final render share one set of state (avoids a second

@@ -8,7 +8,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
@@ -17,11 +20,14 @@ import (
 	skillpkg "github.com/chainreactors/aiscan/skills"
 	ioaclient "github.com/chainreactors/ioa/client"
 	"github.com/reeflective/console"
+	"github.com/reeflective/readline/inputrc"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
 const agentPromptCommandName = "__prompt"
+const agentConsoleInterruptCommandName = "aiscan-interrupt"
+const agentConsoleEscapeSequenceWait = 10 * time.Millisecond
 
 var errAgentConsoleExit = errors.New("agent console exit")
 
@@ -33,6 +39,11 @@ type AgentConsole struct {
 	console     *console.Console
 	menu        *console.Menu
 	output      *AgentOutput
+	controller  *interactiveRunController
+	// readlineActive is true only while the foreground goroutine is blocked in
+	// Readline. Async agent output can then refresh the prompt without changing
+	// the input buffer or creating a duplicate prompt between reads.
+	readlineActive atomic.Bool
 	// startupNotice, when set, is rendered once below the welcome banner (e.g.
 	// an IOA-unavailable degradation warning). Set by the caller before Start.
 	startupNotice string
@@ -68,6 +79,9 @@ func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.A
 		menu:        menu,
 		output:      output,
 	}
+	repl.controller = newInteractiveRunController(ctx, session, output)
+	repl.controller.SetOnFinish(repl.refreshPromptAfterAsyncRun)
+	repl.configureInterruptKey()
 	menu.SetCommands(repl.rootCommand)
 	menu.Command = repl.rootCommand()
 	c.SwitchMenu("agent")
@@ -93,8 +107,138 @@ func configureAgentReadline(c *console.Console) {
 	_ = cfg.Set("enable-bracketed-paste", false)
 }
 
+func (r *AgentConsole) configureInterruptKey() {
+	if r == nil || r.console == nil || r.console.Shell() == nil {
+		return
+	}
+	shell := r.console.Shell()
+	shell.Keymap.Register(map[string]func(){
+		agentConsoleInterruptCommandName: func() {
+			r.handleEscapeInterruptKey()
+		},
+	})
+	escape := inputrc.Unescape(`\e`)
+	for _, keymap := range []string{"emacs", "emacs-standard"} {
+		_ = shell.Config.Bind(keymap, escape, agentConsoleInterruptCommandName, false)
+	}
+}
+
+func (r *AgentConsole) handleEscapeInterruptKey() {
+	if r == nil || r.console == nil || r.console.Shell() == nil {
+		return
+	}
+	shell := r.console.Shell()
+	pending := string(shell.Keys.Read())
+	if pending == "" {
+		pending = readPendingTerminalBytes(agentConsoleEscapeSequenceWait)
+	}
+	keymap := string(shell.Keymap.Main())
+	if feed, ok := agentConsoleEscapeSequenceFeed(shell.Config.Binds[keymap], pending); ok {
+		shell.Keys.Feed(true, []rune(feed)...)
+		return
+	}
+	if pending != "" {
+		shell.Keys.Feed(true, []rune(pending)...)
+		return
+	}
+	shell.Display.AcceptLine()
+	shell.History.Accept(false, false, errors.New(os.Interrupt.String()))
+}
+
+func agentConsoleEscapeSequenceFeed(binds map[string]inputrc.Bind, pending string) (string, bool) {
+	if len(binds) == 0 || pending == "" {
+		return "", false
+	}
+	sequence := inputrc.Unescape(`\e`) + pending
+	matches := make([]string, 0, 4)
+	for seq := range binds {
+		readlineSeq := agentConsoleReadlineSequence(seq)
+		if len(readlineSeq) <= 1 || !strings.HasPrefix(readlineSeq, inputrc.Unescape(`\e`)) {
+			continue
+		}
+		if strings.HasPrefix(sequence, readlineSeq) {
+			matches = append(matches, seq)
+		}
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		left := agentConsoleReadlineSequence(matches[i])
+		right := agentConsoleReadlineSequence(matches[j])
+		if len(left) == len(right) {
+			return left < right
+		}
+		return len(left) > len(right)
+	})
+	for _, seq := range matches {
+		bind := binds[seq]
+		replacement, ok := agentConsoleEquivalentNonEscapeBind(binds, bind)
+		if !ok {
+			continue
+		}
+		return replacement + sequence[len(agentConsoleReadlineSequence(seq)):], true
+	}
+	return "", false
+}
+
+func agentConsoleEquivalentNonEscapeBind(binds map[string]inputrc.Bind, target inputrc.Bind) (string, bool) {
+	if target.Action == "" {
+		return "", false
+	}
+	candidates := make([]string, 0, 4)
+	for seq, bind := range binds {
+		if bind.Action != target.Action || bind.Macro != target.Macro || strings.HasPrefix(agentConsoleReadlineSequence(seq), inputrc.Unescape(`\e`)) {
+			continue
+		}
+		candidates = append(candidates, seq)
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		if len(candidates[i]) == len(candidates[j]) {
+			return candidates[i] < candidates[j]
+		}
+		return len(candidates[i]) < len(candidates[j])
+	})
+	if len(candidates) == 0 {
+		return agentConsoleFallbackNonEscapeBind(target)
+	}
+	return candidates[0], true
+}
+
+func agentConsoleFallbackNonEscapeBind(target inputrc.Bind) (string, bool) {
+	switch target.Action {
+	case "previous-history", "history-search-backward":
+		return inputrc.Unescape(`\C-p`), true
+	case "next-history", "history-search-forward":
+		return inputrc.Unescape(`\C-n`), true
+	case "backward-char", "vi-backward-char":
+		return inputrc.Unescape(`\C-b`), true
+	case "forward-char", "vi-forward-char":
+		return inputrc.Unescape(`\C-f`), true
+	case "beginning-of-line":
+		return inputrc.Unescape(`\C-a`), true
+	case "end-of-line":
+		return inputrc.Unescape(`\C-e`), true
+	default:
+		return "", false
+	}
+}
+
+func agentConsoleReadlineSequence(seq string) string {
+	if seq == "" {
+		return ""
+	}
+	converted := make([]rune, 0, len(seq))
+	for _, r := range seq {
+		if inputrc.IsMeta(r) {
+			converted = append(converted, inputrc.Esc, inputrc.Demeta(r))
+			continue
+		}
+		converted = append(converted, r)
+	}
+	return string(converted)
+}
+
 func (r *AgentConsole) Start() error {
 	r.renderBanner()
+	defer r.stopController()
 	if r.fastInputEnabled() {
 		return r.startFastInput()
 	}
@@ -165,13 +309,18 @@ func (r *AgentConsole) startReadline() error {
 			return nil
 		}
 
+		r.readlineActive.Store(true)
 		line, err := r.console.Shell().Readline()
+		r.readlineActive.Store(false)
 		if err != nil {
 			switch {
 			case errors.Is(err, io.EOF):
 				fmt.Fprintln(os.Stdout)
 				return nil
 			case err.Error() == os.Interrupt.String():
+				if r.stopCurrentRun() {
+					continue
+				}
 				fmt.Fprintln(os.Stdout)
 				return nil
 			default:
@@ -228,7 +377,7 @@ func (r *AgentConsole) fastInputEnabled() bool {
 	return fastInputEnabledForMode(os.Getenv("AISCAN_REPL"), term.IsTerminal(int(os.Stdin.Fd())))
 }
 
-func fastInputEnabledForMode(mode string, stdinIsTerminal bool) bool {
+func fastInputEnabledForMode(mode string, _ bool) bool {
 	mode = strings.ToLower(strings.TrimSpace(mode))
 	switch mode {
 	case "rich", "readline", "console":
@@ -236,7 +385,7 @@ func fastInputEnabledForMode(mode string, stdinIsTerminal bool) bool {
 	case "fast", "plain", "simple":
 		return true
 	}
-	return !stdinIsTerminal
+	return false
 }
 
 func (r *AgentConsole) executeArgs(ctx context.Context, args []string) error {
@@ -487,6 +636,8 @@ func (r *AgentConsole) rootCommand() *cobra.Command {
 		r.statusCommand(),
 		r.resetCommand(),
 		r.continueCommand(),
+		r.stopCommand(),
+		r.followUpCommand(),
 		r.exitCommand(),
 	)
 	root.AddCommand(r.ioaCommands()...)
@@ -535,6 +686,8 @@ func (r *AgentConsole) helpOutput() string {
 		{Command: "/status", Detail: "查看模型、渲染模式、IOA 和 skills"},
 		{Command: "/reset", Detail: "清空当前会话上下文"},
 		{Command: "/continue", Detail: "不追加输入，继续上一轮任务"},
+		{Command: "/stop", Detail: "停止当前正在运行的任务"},
+		{Command: "/followup 文本", Detail: "运行中排队到当前任务自然结束后再发送"},
 		{Command: "/exit", Detail: "退出交互模式"},
 	}
 	rows = append(rows, helpRow{Command: "", Detail: ""})
@@ -565,6 +718,7 @@ func (r *AgentConsole) statusOutput() string {
 	rows := []helpRow{
 		{Command: "model", Detail: provider + " / " + model},
 		{Command: "render", Detail: r.sessionSummary()},
+		{Command: "task", Detail: r.taskStatus()},
 		{Command: "ioa", Detail: ioa},
 		{Command: "history", Detail: agentConsoleHistoryPath()},
 	}
@@ -572,6 +726,20 @@ func (r *AgentConsole) statusOutput() string {
 		rows = append(rows, helpRow{Command: "skills", Detail: skills})
 	}
 	return r.renderPanel("status", renderHelpRows(rows, colorEnabled), colorEnabled)
+}
+
+func (r *AgentConsole) taskStatus() string {
+	status := "idle"
+	if r != nil && r.controller != nil && r.controller.Running() {
+		status = "running"
+	}
+	if r != nil && r.session != nil {
+		steering, followUp := r.session.QueuedMessageCounts()
+		if steering > 0 || followUp > 0 {
+			status += fmt.Sprintf(" · queued steering=%d follow-up=%d", steering, followUp)
+		}
+	}
+	return status
 }
 
 type helpRow struct {
@@ -610,6 +778,10 @@ func (r *AgentConsole) resetCommand() *cobra.Command {
 		Short: "Clear conversation context",
 		Args:  cobra.NoArgs,
 		Run: func(_ *cobra.Command, _ []string) {
+			if r.controller != nil && r.controller.Running() {
+				fmt.Fprintln(os.Stderr, "Task is running. Use /stop before /reset.")
+				return
+			}
 			r.session.Reset()
 			fmt.Fprintln(os.Stdout, "Context reset.")
 		},
@@ -622,14 +794,33 @@ func (r *AgentConsole) continueCommand() *cobra.Command {
 		Short: "Continue without a new prompt",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			r.ensureOutput().Start("continue", "")
-			result, err := r.session.Continue(cmd.Context())
-			if err != nil {
-				r.ensureOutput().ensureStreamNewline()
-				return err
+			_ = cmd.Context()
+			return r.ensureController().Continue()
+		},
+	}
+}
+
+func (r *AgentConsole) stopCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "/stop",
+		Short: "Stop current agent run",
+		Args:  cobra.NoArgs,
+		Run: func(_ *cobra.Command, _ []string) {
+			if !r.stopCurrentRun() {
+				fmt.Fprintln(os.Stderr, "No running task.")
 			}
-			r.printResult(result)
-			return nil
+		},
+	}
+}
+
+func (r *AgentConsole) followUpCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:                "/followup [prompt]",
+		Short:              "Queue a prompt after the current run finishes",
+		DisableFlagParsing: true,
+		Args:               cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return r.runFollowUp(cmd.Context(), args[0])
 		},
 	}
 }
@@ -678,14 +869,8 @@ func (r *AgentConsole) runPrompt(ctx context.Context, input string) error {
 	if err != nil {
 		return err
 	}
-	r.ensureOutput().Start("prompt", input)
-	result, err := r.session.Run(ctx, prompt)
-	if err != nil {
-		r.ensureOutput().ensureStreamNewline()
-		return err
-	}
-	r.printResult(result)
-	return nil
+	_ = ctx
+	return r.ensureController().SubmitPrompt("prompt", input, prompt)
 }
 
 func (r *AgentConsole) runSkill(ctx context.Context, skill skillpkg.Skill, input string) error {
@@ -694,14 +879,18 @@ func (r *AgentConsole) runSkill(ctx context.Context, skill skillpkg.Skill, input
 	if err != nil {
 		return err
 	}
-	r.ensureOutput().Start("skill "+skill.Name, input)
-	result, err := r.session.Run(ctx, prompt)
+	_ = ctx
+	return r.ensureController().SubmitPrompt("skill "+skill.Name, input, prompt)
+}
+
+func (r *AgentConsole) runFollowUp(ctx context.Context, input string) error {
+	prompt := skillpkg.ExpandCommand(input, r.application.Skills)
+	prompt, err := cfg.ApplySelectedSkills(prompt, r.option.Skills, r.application.Skills)
 	if err != nil {
-		r.ensureOutput().ensureStreamNewline()
 		return err
 	}
-	r.printResult(result)
-	return nil
+	_ = ctx
+	return r.ensureController().SubmitFollowUp("follow-up", input, prompt)
 }
 
 func (r *AgentConsole) printResult(result *agent.Result) {
@@ -717,6 +906,47 @@ func (r *AgentConsole) ensureOutput() *AgentOutput {
 		r.output = NewAgentOutput(r.option)
 	}
 	return r.output
+}
+
+func (r *AgentConsole) ensureController() *interactiveRunController {
+	if r.controller == nil {
+		r.controller = newInteractiveRunController(r.ctx, r.session, r.ensureOutput())
+		r.controller.SetOnFinish(r.refreshPromptAfterAsyncRun)
+	}
+	return r.controller
+}
+
+func (r *AgentConsole) refreshPromptAfterAsyncRun() {
+	if r == nil || !r.readlineActive.Load() {
+		return
+	}
+	if r.ctx != nil && r.ctx.Err() != nil {
+		return
+	}
+	if r.output != nil && r.output.mode != ModeInteractive {
+		return
+	}
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		return
+	}
+	if r.console == nil || r.console.Shell() == nil || r.console.Shell().Display == nil {
+		return
+	}
+	r.console.Shell().Display.Refresh()
+}
+
+func (r *AgentConsole) stopCurrentRun() bool {
+	if r.controller == nil || !r.controller.Stop() {
+		return false
+	}
+	r.ensureOutput().Stopping()
+	return true
+}
+
+func (r *AgentConsole) stopController() {
+	if r.controller != nil {
+		r.controller.StopAndWait()
+	}
 }
 
 func (r *AgentConsole) ioaClient() (*ioaclient.Client, error) {
@@ -792,6 +1022,9 @@ func AgentConsoleArgsForLine(line string) ([]string, error) {
 	text := strings.TrimSpace(line)
 	if text == "" {
 		return nil, nil
+	}
+	if text == "/" {
+		return []string{"/help"}, nil
 	}
 	if !strings.HasPrefix(text, "/") || strings.HasPrefix(text, "/skill:") {
 		return []string{agentPromptCommandName, text}, nil

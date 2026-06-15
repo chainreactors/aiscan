@@ -34,22 +34,6 @@ func TestRegisterScannerCheckpointToolAddsVisibleTool(t *testing.T) {
 	}
 }
 
-func TestGeneralPromptUsesFinishTerminationWhenToolRegistered(t *testing.T) {
-	reg := command.NewRegistry()
-	reg.RegisterTool(agent.NewFinishTool())
-
-	prompt := BuildSystemPrompt(&PromptConfig{
-		Tools: reg,
-	}, &agent.Config{Tools: reg})
-
-	if !strings.Contains(prompt, "### finish") {
-		t.Fatalf("prompt does not expose finish tool:\n%s", prompt)
-	}
-	if !strings.Contains(prompt, "call the `finish` tool exactly once") {
-		t.Fatalf("prompt should instruct finish termination:\n%s", prompt)
-	}
-}
-
 func TestFormatCheckpointMarkdown(t *testing.T) {
 	got := formatCheckpointMarkdown(&command.CheckpointResult{
 		Kind:    "verify",

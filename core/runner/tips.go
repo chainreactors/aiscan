@@ -19,7 +19,7 @@ var defaultAgentTips = []agentTip{
 	{ID: "continue", Text: "Use /continue when you want aiscan to keep working without adding new context."},
 	{ID: "reset", Text: "Use /reset before switching targets so stale context does not leak into the next task."},
 	{ID: "forwarded", Text: "Set AISCAN_RENDER=forwarded when another agent is consuming this PTY transcript."},
-	{ID: "readline", Text: "Set AISCAN_REPL=readline if you want richer local line editing and history behavior."},
+	{ID: "fast-repl", Text: "Set AISCAN_REPL=fast only when you explicitly want lightweight line input on a slow remote PTY."},
 	{ID: "evidence", Text: "For reports, ask aiscan to keep only findings with reproducible evidence."},
 }
 
