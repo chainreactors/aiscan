@@ -13,6 +13,24 @@ import (
 	"github.com/chainreactors/sdk/spray"
 )
 
+func mustGogoEngine(t *testing.T) *gogo.Engine {
+	t.Helper()
+	engine, err := gogo.NewEngine(nil)
+	if err != nil {
+		t.Fatalf("gogo.NewEngine() error = %v", err)
+	}
+	return engine
+}
+
+func mustSprayEngine(t *testing.T) *spray.Engine {
+	t.Helper()
+	engine, err := spray.NewEngine(nil)
+	if err != nil {
+		t.Fatalf("spray.NewEngine() error = %v", err)
+	}
+	return engine
+}
+
 func buildRegistry(engineSet *engine.Set) *command.CommandRegistry {
 	reg := command.NewRegistry()
 	deps := &command.Deps{
@@ -25,8 +43,8 @@ func buildRegistry(engineSet *engine.Set) *command.CommandRegistry {
 
 func TestRegisterAllTreatsNeutronAsOptional(t *testing.T) {
 	engineSet := &engine.Set{
-		Gogo:  gogo.NewEngine(nil),
-		Spray: spray.NewEngine(nil),
+		Gogo:  mustGogoEngine(t),
+		Spray: mustSprayEngine(t),
 	}
 	reg := buildRegistry(engineSet)
 

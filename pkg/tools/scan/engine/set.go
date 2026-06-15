@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"sync"
@@ -32,8 +33,8 @@ type ReconOptions struct {
 
 type Set struct {
 	Fingers   *sdkfingers.Engine
-	Gogo      *gogo.GogoEngine
-	Spray     *spray.SprayEngine
+	Gogo      *gogo.Engine
+	Spray     *spray.Engine
 	Neutron   *neutron.Engine
 	Zombie    *sdkzombie.Engine
 	Uncover   *UncoverEngine
@@ -143,7 +144,10 @@ func initWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 	if proxy != "" {
 		gogoConfig.WithProxy(proxy)
 	}
-	set.Gogo = gogo.NewEngine(gogoConfig)
+	set.Gogo, err = gogo.NewEngine(gogoConfig)
+	if err != nil {
+		return nil, fmt.Errorf("init gogo engine: %w", err)
+	}
 	logger.Infof("engine=gogo status=ready")
 
 	sprayConfig := spray.NewConfig()
@@ -157,7 +161,10 @@ func initWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 	if proxy != "" {
 		sprayConfig.WithProxy(proxy)
 	}
-	set.Spray = spray.NewEngine(sprayConfig)
+	set.Spray, err = spray.NewEngine(sprayConfig)
+	if err != nil {
+		return nil, fmt.Errorf("init spray engine: %w", err)
+	}
 	logger.Infof("engine=spray status=ready")
 
 	zombieConfig := sdkzombie.NewConfig()
@@ -168,8 +175,8 @@ func initWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 	if proxy != "" {
 		zombieConfig.WithProxy(proxy)
 	}
-	set.Zombie = sdkzombie.NewEngine(zombieConfig)
-	if err := set.Zombie.Init(); err != nil {
+	set.Zombie, err = sdkzombie.NewEngine(zombieConfig)
+	if err != nil {
 		logger.Warnf("engine=zombie status=disabled error=%q", err)
 		set.Zombie = nil
 	} else {

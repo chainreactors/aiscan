@@ -17,6 +17,24 @@ import (
 	_ "github.com/chainreactors/aiscan/pkg/tools/search"
 )
 
+func mustGogoEngine(t *testing.T) *gogo.Engine {
+	t.Helper()
+	engine, err := gogo.NewEngine(nil)
+	if err != nil {
+		t.Fatalf("gogo.NewEngine() error = %v", err)
+	}
+	return engine
+}
+
+func mustSprayEngine(t *testing.T) *spray.Engine {
+	t.Helper()
+	engine, err := spray.NewEngine(nil)
+	if err != nil {
+		t.Fatalf("spray.NewEngine() error = %v", err)
+	}
+	return engine
+}
+
 func TestInitCommandRegistryRegistersSearchAlways(t *testing.T) {
 	logger := telemetry.NopLogger()
 	reg := initCommandRegistry(nil, ScannerConfig{}, ToolConfig{}, nil, agent.ProviderConfig{}, nil, logger)
@@ -29,8 +47,8 @@ func TestInitCommandRegistryRegistersSearchAlways(t *testing.T) {
 func TestInitCommandRegistryRegistersScannerCommands(t *testing.T) {
 	logger := telemetry.NopLogger()
 	engines := &engine.Set{
-		Gogo:  gogo.NewEngine(nil),
-		Spray: spray.NewEngine(nil),
+		Gogo:  mustGogoEngine(t),
+		Spray: mustSprayEngine(t),
 	}
 
 	reg := initCommandRegistry(engines, ScannerConfig{}, ToolConfig{}, nil, agent.ProviderConfig{}, nil, logger)

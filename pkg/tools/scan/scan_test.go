@@ -34,6 +34,24 @@ import (
 	sdkzombie "github.com/chainreactors/sdk/zombie"
 )
 
+func mustGogoEngine(t *testing.T) *sdkgogo.Engine {
+	t.Helper()
+	engine, err := sdkgogo.NewEngine(nil)
+	if err != nil {
+		t.Fatalf("gogo.NewEngine() error = %v", err)
+	}
+	return engine
+}
+
+func mustSprayEngine(t *testing.T) *spray.Engine {
+	t.Helper()
+	engine, err := spray.NewEngine(nil)
+	if err != nil {
+		t.Fatalf("spray.NewEngine() error = %v", err)
+	}
+	return engine
+}
+
 func newTestPipeline(t *testing.T, ctx context.Context, caps []pipeline.Capability, coll *collector, debug bool) *pipeline.Pipeline {
 	t.Helper()
 	bus := eventbus.New[pipeline.Observation]()
@@ -53,7 +71,7 @@ func testSeeds(events ...event) []pipeline.Event {
 }
 
 func TestScanRunsWithOnlySprayStage(t *testing.T) {
-	cmd := New(&engine.Set{Spray: spray.NewEngine(nil)})
+	cmd := New(&engine.Set{Spray: mustSprayEngine(t)})
 	var buf strings.Builder
 	err := cmd.Execute(context.Background(), []string{"-i", "http://127.0.0.1:1", "--mode", "quick", "--timeout", "1"}, &buf)
 	if err != nil {
@@ -370,8 +388,8 @@ func TestSprayResultScopeRejectsExternalURLs(t *testing.T) {
 
 func TestScanBuildCapabilitiesUsesCapacityDrivenWorkers(t *testing.T) {
 	cmd := New(&engine.Set{
-		Gogo:  sdkgogo.NewEngine(nil),
-		Spray: spray.NewEngine(nil),
+		Gogo:  mustGogoEngine(t),
+		Spray: mustSprayEngine(t),
 	})
 	profile := profile{Capabilities: capabilitySet(
 		capGogoPortscan,
@@ -407,8 +425,8 @@ func TestScanBuildCapabilitiesUsesCapacityDrivenWorkers(t *testing.T) {
 
 func TestScanBuildCapabilitiesAdaptsToHighThread(t *testing.T) {
 	cmd := New(&engine.Set{
-		Gogo:  sdkgogo.NewEngine(nil),
-		Spray: spray.NewEngine(nil),
+		Gogo:  mustGogoEngine(t),
+		Spray: mustSprayEngine(t),
 	})
 	profile := profile{Capabilities: capabilitySet(capGogoPortscan, capSprayCheck)}
 
@@ -435,8 +453,8 @@ func TestScanBuildCapabilitiesAdaptsToHighThread(t *testing.T) {
 
 func TestScanBuildCapabilitiesLowThreadCapsPerInvocation(t *testing.T) {
 	cmd := New(&engine.Set{
-		Gogo:  sdkgogo.NewEngine(nil),
-		Spray: spray.NewEngine(nil),
+		Gogo:  mustGogoEngine(t),
+		Spray: mustSprayEngine(t),
 	})
 	profile := profile{Capabilities: capabilitySet(capGogoPortscan, capSprayCheck)}
 
@@ -1451,7 +1469,7 @@ func assetItemKindCounts(items []output.AssetItem) map[string]int {
 }
 
 func TestScanOutputFileWritesPlainTextWithoutChangingStdout(t *testing.T) {
-	cmd := New(&engine.Set{Spray: spray.NewEngine(nil)})
+	cmd := New(&engine.Set{Spray: mustSprayEngine(t)})
 	file := filepath.Join(t.TempDir(), "scan.txt")
 	var stream bytes.Buffer
 

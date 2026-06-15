@@ -15,13 +15,13 @@ import (
 )
 
 type Command struct {
-	engine  *spray.SprayEngine
+	engine  *spray.Engine
 	logger  telemetry.Logger
 	proxy   string
 	workDir string
 }
 
-func New(engine *spray.SprayEngine) *Command {
+func New(engine *spray.Engine) *Command {
 	return &Command{engine: engine, logger: telemetry.NopLogger()}
 }
 

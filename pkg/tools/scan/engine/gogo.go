@@ -25,7 +25,7 @@ type GogoScanOptions struct {
 	OnStats      func(sdktypes.Stats)
 }
 
-func GogoScanStream(ctx context.Context, eng *gogo.GogoEngine, opts GogoScanOptions) (<-chan *parsers.GOGOResult, error) {
+func GogoScanStream(ctx context.Context, eng *gogo.Engine, opts GogoScanOptions) (<-chan *parsers.GOGOResult, error) {
 	if eng == nil {
 		return nil, fmt.Errorf("gogo engine is not available")
 	}

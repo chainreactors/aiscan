@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
-	"github.com/chainreactors/sdk/gogo"
-	"github.com/chainreactors/sdk/spray"
 
 	_ "github.com/chainreactors/aiscan/pkg/tools/katana"
 	_ "github.com/chainreactors/aiscan/pkg/tools/passive"
@@ -15,8 +13,8 @@ import (
 
 func TestRegisterAllRegistersKatanaInFullBuild(t *testing.T) {
 	engineSet := &engine.Set{
-		Gogo:  gogo.NewEngine(nil),
-		Spray: spray.NewEngine(nil),
+		Gogo:  mustGogoEngine(t),
+		Spray: mustSprayEngine(t),
 	}
 	reg := buildRegistry(engineSet)
 

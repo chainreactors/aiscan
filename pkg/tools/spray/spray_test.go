@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -103,7 +106,7 @@ func TestExecuteInstallsResourceProviderBeforePrint(t *testing.T) {
 	defer spraypkg.ResetResourceProvider()
 
 	var calls atomic.Int32
-	engine := sdkspray.NewEngine(sdkspray.NewConfig().WithResourceProvider(func(name string) []byte {
+	engine, err := sdkspray.NewEngine(sdkspray.NewConfig().WithResourceProvider(func(name string) []byte {
 		calls.Add(1)
 		switch name {
 		case "http", "socket":
@@ -111,8 +114,11 @@ func TestExecuteInstallsResourceProviderBeforePrint(t *testing.T) {
 		}
 		return nil
 	}))
+	if err != nil {
+		t.Fatalf("spray.NewEngine() error = %v", err)
+	}
 
-	err := New(engine).Execute(context.Background(), []string{"--print"}, io.Discard)
+	err = New(engine).Execute(context.Background(), []string{"--print"}, io.Discard)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -130,5 +136,46 @@ func TestExecuteDebugActivatesTelemetryLogger(t *testing.T) {
 	}
 	if got := logs.String(); !strings.Contains(got, "[debug] spray debug enabled") {
 		t.Fatalf("debug logs = %q", got)
+	}
+}
+
+func TestExecuteCapturesStartupConfigInWriter(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+
+	stdoutFile, err := os.CreateTemp(t.TempDir(), "stdout-*")
+	if err != nil {
+		t.Fatalf("create temp stdout: %v", err)
+	}
+	oldStdout := os.Stdout
+	os.Stdout = stdoutFile
+	defer func() {
+		os.Stdout = oldStdout
+		_ = stdoutFile.Close()
+	}()
+
+	var out bytes.Buffer
+	err = New(nil).Execute(context.Background(), []string{
+		"-u", server.URL,
+		"--limit", "1",
+		"--timeout", "1",
+		"--no-color",
+	}, &out)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if got := out.String(); !strings.Contains(got, "URL") || !strings.Contains(got, server.URL) {
+		t.Fatalf("writer output missing startup config: %q", got)
+	}
+	if _, err := stdoutFile.Seek(0, io.SeekStart); err != nil {
+		t.Fatalf("seek stdout file: %v", err)
+	}
+	stdoutBytes, err := io.ReadAll(stdoutFile)
+	if err != nil {
+		t.Fatalf("read stdout file: %v", err)
+	}
+	if len(stdoutBytes) != 0 {
+		t.Fatalf("startup config leaked to real stdout: %q", string(stdoutBytes))
 	}
 }

@@ -23,7 +23,7 @@ import (
 )
 
 type Command struct {
-	engine  *gogo.GogoEngine
+	engine  *gogo.Engine
 	logger  telemetry.Logger
 	proxy   string
 	workDir string
@@ -46,7 +46,7 @@ func (b *lockedBuffer) String() string {
 	return b.buf.String()
 }
 
-func New(engine *gogo.GogoEngine) *Command {
+func New(engine *gogo.Engine) *Command {
 	return &Command{engine: engine, logger: telemetry.NopLogger()}
 }
 
