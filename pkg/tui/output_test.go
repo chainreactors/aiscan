@@ -1,4 +1,4 @@
-package runner
+package tui
 
 import (
 	"bytes"
@@ -161,7 +161,7 @@ func TestAgentOutputMultiLineResult(t *testing.T) {
 		tools:  make(map[string]agentToolSummary),
 	}
 
-	result := "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8"
+	result := "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12"
 	output.HandleEvent(agent.Event{
 		Type:       agent.EventToolExecutionEnd,
 		ToolCallID: "call-1",

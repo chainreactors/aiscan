@@ -80,6 +80,27 @@ func (a *Agent) Derive() *Agent {
 	})
 }
 
+// SteerUserMessage pushes user input into the running agent's inbox.
+// The loop drains it at the next turn boundary.
+func (a *Agent) SteerUserMessage(content string) {
+	a.mu.Lock()
+	ib := a.Cfg.Inbox
+	a.mu.Unlock()
+	if ib == nil {
+		return
+	}
+	msg := inbox.NewUserMessage(content)
+	msg.Priority = inbox.PriorityHigh
+	_ = ib.Push(msg)
+}
+
+// IsRunning returns whether the agent loop is currently executing.
+func (a *Agent) IsRunning() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.running
+}
+
 func (a *Agent) Reset() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
