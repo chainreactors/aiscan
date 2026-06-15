@@ -13,6 +13,7 @@ Katana is a web crawler from ProjectDiscovery that preserves full URLs including
 - After `scan` or `spray` discovers web targets — katana fills in the parameter layer that spray crawl strips
 - Before fuzzing — katana provides the target URLs with parameters to test
 - When JavaScript-heavy applications need deeper endpoint extraction (`-jc` flag)
+- When visible attack surface is thin — use katana as the batch candidate generator instead of manually extracting JS URLs one by one
 
 ## Relationship to Spray Crawl
 
@@ -21,12 +22,15 @@ Spray crawl discovers paths and fingerprints. Katana discovers parameterized URL
 - `spray --crawl` → paths, fingerprints, tech stack → feeds into neutron POC
 - `katana` → full URLs with `?key=value`, form targets, API endpoints → feeds into manual fuzzing
 
+Do not feed every discovered URL back to the model one by one. Save or consume katana output as a batch, group by host/path/parameter shape, then select high-value candidates for authorization, unauthenticated access, upload, GraphQL, or injection validation.
+
 ## Common Usage
 
 ```bash
 katana -u https://target.com -d 3 -jc
 katana -u https://target.com -d 2 -jsonl
 katana -u https://target.com -f qurl
+katana -u https://target.com -d 3 -jc -jsonl
 katana -list urls.txt -d 2 -jc -timeout 60
 ```
 

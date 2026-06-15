@@ -33,8 +33,8 @@ func (t *TmuxCommand) Usage() string {
   send-keys -t <id> "text" [Enter]
       Send keystrokes. Append Enter/C-m to send newline.
 
-  capture-pane -t <id> [-p] [-n lines] [--new]
-      Show session output. --new for incremental since last read.
+  capture-pane -t <id> [-p] [-n lines] [--full]
+      Show new output since last read (default incremental). --full for complete buffer.
 
   kill-session -t <id>
       Terminate session.
@@ -79,7 +79,7 @@ func (t *TmuxCommand) cmdImplicitNewSession(args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s: 1 windows (created %s) [detached]\nUse `tmux capture-pane -t %s` to inspect output.",
+	return fmt.Sprintf("%s: 1 windows (created %s) [detached]\nUse `tmux capture-pane -t %s` to check new output.",
 		info.ID, info.StartedAt.Format("Mon Jan 2 15:04:05 2006"), info.ID), nil
 }
 
@@ -128,7 +128,7 @@ func (t *TmuxCommand) cmdNewSession(ctx context.Context, args []string) (string,
 	}
 
 	if detached {
-		return fmt.Sprintf("%s: 1 windows (created %s) [detached]\nUse `tmux capture-pane -t %s` to inspect output.",
+		return fmt.Sprintf("%s: 1 windows (created %s) [detached]\nUse `tmux capture-pane -t %s` to check new output.",
 			info.ID, info.StartedAt.Format("Mon Jan 2 15:04:05 2006"), info.ID), nil
 	}
 
@@ -218,7 +218,7 @@ func (t *TmuxCommand) cmdSendKeys(args []string) (string, error) {
 	return fmt.Sprintf("sent %d bytes to %s", len(data), id), nil
 }
 
-// capture-pane -t <id> [-p] [-n lines] [--new]
+// capture-pane -t <id> [-p] [-n lines] [--full]
 func (t *TmuxCommand) cmdCapturePane(args []string) (string, error) {
 	id, rest := parseTarget(args)
 	if id == "" {
@@ -226,13 +226,15 @@ func (t *TmuxCommand) cmdCapturePane(args []string) (string, error) {
 	}
 
 	lines := 30
-	incremental := false
+	full := false
 	for i := 0; i < len(rest); i++ {
 		switch rest[i] {
 		case "-p":
 			// -p means print to stdout, which is our default behavior
+		case "--full":
+			full = true
 		case "--new":
-			incremental = true
+			// legacy flag, now the default — accepted but ignored
 		case "-n":
 			if i+1 < len(rest) {
 				i++
@@ -241,26 +243,26 @@ func (t *TmuxCommand) cmdCapturePane(args []string) (string, error) {
 		}
 	}
 
-	if incremental {
-		output, more, err := t.manager.PeekNew(id, 0)
+	if full {
+		output, err := t.manager.Peek(id, lines)
 		if err != nil {
 			return "", err
 		}
 		if output == "" {
-			return "(no new output)", nil
-		}
-		if more {
-			output += "\n\n[more output available; run `tmux capture-pane -t " + id + " --new` again]"
+			return "(no output yet)", nil
 		}
 		return output, nil
 	}
 
-	output, err := t.manager.Peek(id, lines)
+	output, more, err := t.manager.PeekNew(id, 0)
 	if err != nil {
 		return "", err
 	}
 	if output == "" {
-		return "(no output yet)", nil
+		return "(no new output since last read; use --full to re-read entire buffer)", nil
+	}
+	if more {
+		output += "\n\n[more output available; run `tmux capture-pane -t " + id + "` again]"
 	}
 	return output, nil
 }

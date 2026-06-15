@@ -1,60 +1,38 @@
 # Deep Testing
 
-Deep testing is aiscan's dynamic assessment skill. It runs after web endpoints or fingerprinted assets are discovered. Web targets use browser-backed inspection of rendered pages, forms, client-side routes, network activity, and safe canary-based browser checks. Fingerprinted non-web assets use fingerprint-aware assessment of exposed service risk, authentication surface, version-specific concerns, and safe validation steps.
+Deep testing is aiscan's dynamic assessment skill. It runs after web endpoints or fingerprinted assets are discovered. Use it to decide which leads deserve deeper manual or browser-backed validation, not to follow a fixed vulnerability checklist.
 
-## Core Rule
+## Assessment Standard
 
-Only test systems the user is authorized to assess. Do not run destructive actions, denial-of-service tests, credential stuffing, shell uploads, data deletion, or state-changing workflows unless the target explicitly presents a harmless test/demo action.
+Use browser automation only when HTTP evidence is insufficient, such as JS-rendered content, client-side routing, dialogs, storage, network traces, or multi-step interactions. `playwright` is full-build only; call it only when it appears in the runtime pseudo-command list. Otherwise, use curl/fetch/manual HTTP evidence and mark browser-only checks `inconclusive` when they cannot be evaluated.
 
-## Required Workflow
+Prefer observation before mutation. When input testing is appropriate, use unique canaries. Pick follow-up targets based on observed attack surface, authentication boundaries, unusual fingerprints, parameterized endpoints, exposed debug/admin behavior, or user priorities.
 
-For web targets, use the `bash` tool to call the browser automation pseudo-command directly.
+Save concise reproducible evidence when deep testing confirms a loot. Close any browser session you open.
 
-1. Open a browser session:
+## Target-Feature Decision Tree
 
-```bash
-playwright open <url> --session deep --ttl 0 --record
-```
+Choose the next branch from target traits and observed evidence. When several traits match, start with the branch that has the highest expected impact and freshest evidence. Do not run every branch as a checklist; switch only when the current branch stops producing useful evidence.
 
-2. Collect rendered and interactive context:
+- Has login, accounts, tenant IDs, object IDs, or admin routes -> prioritize authorization and IDOR. Replace IDs across 3-5 observed or adjacent values and compare owner, non-owner, anonymous, and baseline responses when credentials are available.
+- Is an API service, Swagger/OpenAPI surface, mobile-style JSON backend, or route set with many `/api/` paths -> prioritize unauthenticated access, method changes, role boundary checks, and feeding response fields from one endpoint into another.
+- Has file upload, import, attachment, avatar, media, or document conversion -> prioritize upload validation, storage access, content rendering, metadata leakage, and post-upload authorization using benign canaries.
+- Has search, filter, report, export, `sort`, `order`, or `orderBy` parameters -> prioritize injection-style validation and authorization-sensitive data slicing. Sorting parameters are high-value because they often reach query builders.
+- Has GraphQL -> treat introspection as reconnaissance only. Report only if a query or mutation exposes protected data or performs an unauthorized action.
+- Is a JS-heavy SPA with weak visible surface -> use katana or browser network/discover output as batch candidate sources, then inspect reachable bundles, source maps, route manifests, dynamic imports, embedded API clients, and network calls for hidden endpoints. Aim to exhaust reachable JS interface sources for the assessed scope; if time, auth, crawler limits, bundling, or blocked assets prevent that, state the limitation instead of claiming complete coverage.
+- Has no obvious surface -> run katana-style endpoint discovery, mine JS/source maps/route manifests/robots/sitemap/archived routes, then group results by host/path/parameter shape before selecting high-value APIs. Do not feed every discovered URL back one by one.
 
-```bash
-playwright url deep
-playwright discover deep
-playwright network deep --start
-playwright text-content deep
-```
+## Efficiency Gates
 
-3. Inspect forms and routes:
-
-- Identify login, search, upload, admin, debug, API, and SPA routes.
-- Prefer observation over mutation.
-- If a form is clearly safe, submit only a unique canary payload.
-
-4. Run safe checks where applicable:
-
-- Reflected XSS: arm dialog capture, submit a unique canary payload into search-like fields, and check dialogs/rendered reflection.
-- Open redirect: only test parameters that already look like redirect URLs, using a harmless external canary domain string; do not follow through sensitive flows.
-- Information disclosure: check rendered text, network URLs, source maps, exposed API endpoints, stack traces, and debug pages.
-- Authentication surface: identify login/admin areas and weak signals; do not brute force.
-- Client-side security: inspect cookies, local/session storage, CORS-like API calls, mixed content, and sensitive tokens in rendered content.
-
-5. Save reproducible evidence when a browser interaction confirms a loot:
-
-```bash
-playwright screenshot deep --output evidence.png --full-page
-playwright record deep --save deep-poc.yaml --id <loot-id>
-```
-
-6. Always close the session:
-
-```bash
-playwright close deep
-```
+- No PoC or executable reproduction means the result is not `confirmed`.
+- P3/low/informational issues are normally not worth a standalone report unless the user explicitly asks for full inventory or they chain into real impact.
+- CORS, security headers, version disclosure, GraphQL introspection, open redirect, and self-XSS are non-findings without a demonstrated impact chain.
+- A confirmed reportable result must include a curl/protocol command, saved browser replay, or equivalent executable reproduction in the checkpoint content.
+- If a branch produces no material progress after about 20 minutes or several negative probes, checkpoint the result and switch branches.
 
 ## Status Determination
 
-- `confirmed`: browser interaction produced direct, reproducible evidence of a security issue.
+- `confirmed`: probing produced direct, reproducible evidence of a security issue.
 - `info`: useful attack surface or exposure was found, but not exploitable as tested.
 - `not_confirmed`: the page was tested and no issue was supported.
 - `inconclusive`: testing could not complete because of tool failure, timeout, unstable target, or contradictory evidence.

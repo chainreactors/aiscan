@@ -29,12 +29,14 @@ After `join`, the response includes member nodes (ID, name, description) and exi
 Send a message to the current space. Subcommands:
 
 ```
-ioa_send --content '{"kind": "asset", "ips": ["10.0.0.1"]}'                  Broadcast to all
-ioa_send to --node <node_id> --content '{"content": "scan this"}'             Send to a specific node
-ioa_send reply --to <message_id> --content '{"content": "loots attached"}' Reply to a message
+ioa_send --content '{"content": "recon complete, 3 hosts found"}'                          Broadcast to all
+ioa_send to --node <node_id> --content '{"content": "scan 10.0.0.1 for web vulns"}'       Send to a specific node
+ioa_send reply --to <message_id> --content '{"content": "confirmed, SQLi on /login"}'     Reply to a message
 ```
 
-The `--content` value must be a JSON object. Use `--refs` for raw reference control.
+**CRITICAL**: The `--content` value must be a JSON object with a **`"content"` key** containing the message text. The swarm protocol parses `"content"` to route messages — any other key name (e.g. `"message"`, `"text"`) will be silently dropped. Additional fields (`"kind"`, `"targets"`, etc.) are optional metadata.
+
+Use `--refs` for raw reference control.
 
 ### ioa_read
 
@@ -49,34 +51,23 @@ ioa_read new --after <message_id>  Messages after a cursor (pagination)
 
 Without `all`, only messages explicitly directed at your node are returned.
 
-**Direction filter** (with `thread`):
-
-```
-ioa_read thread --id <msg_id> --direction downstream   Only descendants (replies)
-ioa_read thread --id <msg_id> --direction upstream     Only ancestors (parents)
-```
-
 ### Background Monitoring
 
-To monitor a space or thread in real time without blocking, use the ioa CLI directly via tmux:
+There is no `ioa read --listen` pseudo-command in aiscan. Loop workers do not receive peer messages automatically unless heartbeat is enabled.
 
-```bash
-# Monitor entire space — run in background tmux session
-ioa read -s <space_id> --listen --token <token>
-
-# Monitor a specific thread only
-ioa read -s <space_id> -m <root_message_id> --listen --token <token>
-```
-
-This opens an SSE connection and outputs new messages as JSONL (one JSON object per line). Use `tmux peek` to check for new messages, `tmux kill` to stop.
-
-This is **preferred over polling** — start a listener when you join a space, peek when you need updates.
+For situational awareness, poll intentionally with `ioa_read all --limit <N>` before and after long work. If the worker was started with `--heartbeat`, the runtime periodically loads recent IOA messages into the heartbeat prompt.
 
 ## 2. Message Format
 
-Messages use structured JSON content with a `kind` field for routing:
+Messages use structured JSON content. **Every message must have a `"content"` key** with the text body. Additional fields provide metadata:
 
-| kind | purpose | key fields |
+```json
+{"content": "Found SQLi on /login endpoint", "kind": "loot", "severity": "critical", "target": "http://10.0.0.1"}
+```
+
+Common `kind` values:
+
+| kind | purpose | extra fields |
 |------|---------|------------|
 | `claim` | announce work you're about to start | `scope`, `eta_min` |
 | `asset` | share discovered targets | `ips`, `domains`, `source` |
@@ -95,8 +86,10 @@ Messages use structured JSON content with a `kind` field for routing:
 To dispatch a task to a peer node:
 
 ```
-ioa_send to --node <target_node_id> --content '{"content": "Scan 10.0.0.0/24 for web services", "meta": {"kind": "task_dispatch"}, "targets": ["10.0.0.0/24"]}'
+ioa_send to --node <target_node_id> --content '{"content": "Scan 10.0.0.0/24 for web services", "kind": "task_dispatch", "targets": ["10.0.0.0/24"]}'
 ```
+
+The `"content"` key is the task description the peer will execute. `"kind": "task_dispatch"` marks it as an actionable task.
 
 ## 3. Basic Coordination Rules
 

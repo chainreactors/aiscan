@@ -1,67 +1,65 @@
 ---
 name: search
-description: Use this skill to learn how to use the search pseudo-command for web search, URL fetching, and cyberhub queries.
+description: Use this skill to learn how to use the cyberhub pseudo-command for querying loaded fingerprints and POC templates.
 internal: true
 ---
 
-# search
-
-Unified search across web and local resources. Three subcommands:
-
-## search tavily
-
-Search the web. Backend auto-selects: Tavily API when `TAVILY_API_KEY` is set, DuckDuckGo otherwise.
-
-```bash
-search tavily <query> [--num <N>]
-```
-
-- `<query>`: positional, multi-word auto-concatenated.
-- `--num <N>`: results count, 1–10, default 5.
-
-```bash
-search tavily "CVE-2024-1234 exploit"
-search tavily nginx misconfiguration --num 10
-```
-
-## search fetch
-
-Fetch a URL and return content as readable text. HTML is auto-converted to Markdown.
-
-```bash
-search fetch <url> [--extract <hint>]
-```
-
-- `<url>`: target URL. If no scheme is provided, HTTPS is assumed; explicit HTTP is preserved.
-- `--extract <hint>`: optional focus hint to return matching sections when possible.
-
-```bash
-search fetch https://nvd.nist.gov/vuln/detail/CVE-2024-1234
-search fetch https://example.com/advisory --extract "CVSS score"
-```
-
-## search cyberhub
+# cyberhub (also: search cyberhub)
 
 Search and list loaded fingerprints and POC templates.
 
+`cyberhub` is available both as a standalone command and as `search cyberhub`. Both forms are identical.
+
+## Quick examples (use these patterns)
+
 ```bash
-search cyberhub list [finger|poc|all] [options]
-search cyberhub search [finger|poc|all] <query> [options]
+# Search for POC templates by product name
+cyberhub search poc seeyon
+cyberhub search poc shiro
+cyberhub search poc jeecg
+cyberhub search poc spring
+
+# List high-severity POC templates
+cyberhub list poc --severity critical,high
+
+# Search fingerprints
+cyberhub search finger nginx
+cyberhub search finger tomcat
+
+# Filter POCs by tag
+cyberhub search poc struts --tag rce
+
+# JSON output
+cyberhub search poc nacos -j
+```
+
+## Full syntax
+
+```bash
+cyberhub list [finger|poc|all] [options]
+cyberhub search [finger|poc|all] <query> [options]
 ```
 
 Options:
-- `-t, --type`: Resource type: finger, poc, or all.
-- `-q, --query`: Search query.
+- `-s, --severity`: Filter POCs by severity (critical, high, medium, low).
 - `--tag`: Filter by tag. Can be comma-separated or repeated.
-- `--protocol`: Filter fingerprints by protocol: http or tcp.
 - `--finger`: Filter POCs by fingerprint name.
-- `-s, --severity`: Filter POCs by severity.
+- `--protocol`: Filter fingerprints by protocol: http or tcp.
 - `--limit`: Maximum rows (default: 50, 0 for all).
 - `-j, --json`: Output JSON Lines.
 
+## Common mistakes to avoid
+
 ```bash
-search cyberhub list finger --limit 20
-search cyberhub search finger nginx
-search cyberhub list poc --severity critical,high
-search cyberhub search poc spring --tag rce -j
+# WRONG — these flags don't exist:
+cyberhub -t seeyon           # -t is not a top-level flag
+cyberhub --search ecology    # --search is not a flag
+cyberhub --type poc -k struts # -k doesn't exist
+
+# RIGHT:
+cyberhub search poc seeyon
+cyberhub search poc ecology
+cyberhub search poc struts --tag rce
 ```
+
+**Note**: `cyberhub` is a pseudo-command — do NOT append `2>/dev/null`, pipe to `head`/`grep`, or use shell redirections. Output is returned directly in the tool result.
