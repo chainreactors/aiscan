@@ -6,9 +6,11 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
+	"github.com/chainreactors/aiscan/pkg/agent/evaluator"
 	inboxpkg "github.com/chainreactors/aiscan/pkg/agent/inbox"
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/app"
@@ -122,7 +124,10 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 
 	ib := inboxpkg.NewBuffered(agent.DefaultInboxCapacity)
 
-	sessMgr := bashSessionManager(rt.App.Commands)
+	sessMgr, bashTool := bashToolAndManager(rt.App.Commands)
+	if bashTool != nil {
+		bashTool.SetInbox(ib)
+	}
 	if sessMgr != nil {
 		sessMgr.SetOnDone(func(info tmuxpkg.Info) {
 			tail := sessMgr.PeekOrEmpty(info.ID, 20)
@@ -140,6 +145,15 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 	}
 
 	scheduler := agent.NewLoopScheduler(ib, logger)
+
+	if option.Heartbeat > 0 {
+		_ = scheduler.Add(ctx, agent.LoopEntry{
+			Name:     "heartbeat",
+			Interval: time.Duration(option.Heartbeat) * time.Minute,
+			Mode:     agent.ModeInbox,
+			Prompt:   "Heartbeat: review current context, check on any running sessions, and decide if action is needed.",
+		})
+	}
 
 	rt.Config = agent.Config{
 		Provider:       rt.App.Provider,
@@ -235,10 +249,18 @@ func runOneShotMode(ctx context.Context, option *cfg.Option, logger telemetry.Lo
 	}
 
 	rt.Output.Start("task", task)
-	result, err := agent.NewAgent(rt.Config.
+
+	a := agent.NewAgent(rt.Config.
 		WithSystemPrompt(rt.SystemPrompt).
-		WithStream(false)).
-		Run(ctx, task)
+		WithStream(false))
+
+	var result *agent.Result
+	if option.EvalCriteria != "" {
+		evalCfg := buildGoalEvalConfig(option, rt, logger, task)
+		result, _, err = evaluator.RunWithGoalEval(ctx, a, evalCfg)
+	} else {
+		result, err = a.Run(ctx, task)
+	}
 	if err != nil {
 		return err
 	}
@@ -267,7 +289,7 @@ func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetr
 		WithSystemPrompt(rt.SystemPrompt).
 		WithStream(tui.AgentStreamingEnabled(option)))
 
-	repl := tui.NewAgentConsole(ctx, option, rt.App, session, rt.Output)
+	repl := tui.NewAgentConsole(ctx, option, rt.App, session, rt.Output, rt.Bus)
 	return repl.Start()
 }
 
@@ -395,6 +417,32 @@ func scannerCommandSupportsDebug(name string) bool {
 }
 
 // ---------------------------------------------------------------------------
+// Goal evaluation
+// ---------------------------------------------------------------------------
+
+func buildGoalEvalConfig(option *cfg.Option, rt *AgentRuntime, logger telemetry.Logger, task string) evaluator.GoalLoopConfig {
+	model := option.Model
+	if option.EvalModel != "" {
+		model = option.EvalModel
+	}
+	maxRounds := option.EvalMaxRetries
+	if maxRounds <= 0 {
+		maxRounds = 3
+	}
+	return evaluator.GoalLoopConfig{
+		Evaluator: evaluator.New(evaluator.Config{
+			Provider: rt.App.Provider,
+			Model:    model,
+			Logger:   logger,
+		}),
+		MaxEvalRounds: maxRounds,
+		Goal:          task,
+		Criteria:      option.EvalCriteria,
+		Bus:           rt.Bus,
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -418,19 +466,19 @@ func registerIOATools(ctx context.Context, application *app.App, option *cfg.Opt
 	return application.InitIOA(ctx, ioaCfg)
 }
 
-func bashSessionManager(reg interface {
+func bashToolAndManager(reg interface {
 	GetTool(string) (cmdpkg.AgentTool, bool)
-}) *tmuxpkg.Manager {
+}) (*tmuxpkg.Manager, *cmdpkg.BashTool) {
 	if reg == nil {
-		return nil
+		return nil, nil
 	}
 	tool, ok := reg.GetTool("bash")
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	bt, ok := tool.(*cmdpkg.BashTool)
 	if !ok {
-		return nil
+		return nil, nil
 	}
-	return bt.Manager()
+	return bt.Manager(), bt
 }

@@ -79,6 +79,9 @@ const (
 	EventToolExecutionStart EventType = "tool_execution_start"
 	EventToolExecutionEnd   EventType = "tool_execution_end"
 	EventTokenBudgetWarning EventType = "token_budget_warning"
+	EventGoalEvalStart      EventType = "goal_eval_start"
+	EventGoalEvalEnd        EventType = "goal_eval_end"
+	EventGoalEvalError      EventType = "goal_eval_error"
 )
 
 type StopReason string
@@ -112,6 +115,9 @@ type Event struct {
 	Stop          StopReason
 	Usage         *Usage
 	ContextTokens int
+	EvalRound     int
+	EvalPass      bool
+	EvalReason    string
 }
 
 type TransformContextFunc func([]ChatMessage) []ChatMessage

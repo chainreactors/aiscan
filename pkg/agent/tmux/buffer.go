@@ -125,6 +125,15 @@ func (b *OutputBuffer) Len() int64 {
 	return b.baseOffset + int64(len(b.buf))
 }
 
+func (b *OutputBuffer) TailBytes(n int) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if n <= 0 || n >= len(b.buf) {
+		return string(b.buf)
+	}
+	return string(b.buf[len(b.buf)-n:])
+}
+
 func (b *OutputBuffer) AppendError(msg string) {
 	_, _ = b.Write([]byte("\n[task error] " + msg + "\n"))
 }

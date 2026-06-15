@@ -98,9 +98,10 @@ Interactive shells, `su`, interactive `python`/`mysql` prompts, and `expect`-sty
 
 Do not pass a background flag to `bash`. Commands that run longer than the auto-background threshold return a `session id` automatically.
 
-- Read live output with `tmux peek -t <id>` or `tmux capture-pane -t <id> --new`.
+- **Auto-monitored**: backgrounded sessions push incremental output to your inbox every 10 seconds as `<session_output>` messages. You do not need to poll manually.
+- A `<session_completion>` inbox message arrives when the session finishes, with exit code and last 20 lines.
+- Use `tmux capture-pane -t <id>` for incremental reads, `-n N` for last N lines, `-c N` for last N bytes.
 - Wait for completion with `tmux wait-for -t <id>` or stop it with `tmux kill -t <id>`.
-- The runtime may inject a follow-up inbox message when a tmux-backed command completes; still inspect the session output before reporting results.
 - Never assume a scanner wrote a result file unless you explicitly passed an output file flag.
 
 ## Evidence Handling

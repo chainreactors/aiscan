@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/agent/tmux"
 )
 
@@ -15,12 +16,15 @@ const (
 	autoBackgroundThreshold = 15 * time.Second
 )
 
+const monitorInterval = 10 * time.Second
+
 type BashTool struct {
 	workDir      string
 	timeout      int
 	scannerProxy string
 	tasks        *tmux.Manager
 	commandNames func() []string
+	inbox        inbox.Inbox
 }
 
 func NewBashTool(workDir string, timeout int) *BashTool {
@@ -37,6 +41,7 @@ func NewBashTool(workDir string, timeout int) *BashTool {
 func (t *BashTool) Manager() *tmux.Manager         { return t.tasks }
 func (t *BashTool) SetScannerProxy(proxy string)    { t.scannerProxy = proxy }
 func (t *BashTool) SetCommandNames(fn func() []string) { t.commandNames = fn }
+func (t *BashTool) SetInbox(ib inbox.Inbox)              { t.inbox = ib }
 func (t *BashTool) Name() string                    { return "bash" }
 func (t *BashTool) Close()                          { t.tasks.Shutdown() }
 
@@ -100,9 +105,10 @@ func (t *BashTool) waitOrBackground(id string, ctx context.Context) (ToolResult,
 		return t.collectResult(id, ctx), nil
 	case <-time.After(autoBackgroundThreshold):
 		info, _ := t.tasks.Get(id)
+		t.startMonitor(info)
 		return TextResult(fmt.Sprintf(
-			"Command auto-backgrounded (exceeded %s).\nsession id=%s name=%s\nUse `tmux peek -t %s` to check progress, `tmux kill -t %s` to stop.",
-			autoBackgroundThreshold, info.ID, info.Name, info.ID, info.ID)), nil
+			"Command auto-backgrounded (exceeded %s).\nsession id=%s name=%s\nIncremental output will be delivered automatically. Use `tmux kill -t %s` to stop.",
+			autoBackgroundThreshold, info.ID, info.Name, info.ID)), nil
 	case <-ctx.Done():
 		_ = t.tasks.Kill(id)
 		<-done
@@ -138,6 +144,23 @@ func (t *BashTool) proxyEnv() []string {
 		"HTTPS_PROXY=" + t.scannerProxy,
 		"https_proxy=" + t.scannerProxy,
 	}
+}
+
+func (t *BashTool) startMonitor(info tmux.Info) {
+	if t.inbox == nil {
+		return
+	}
+	t.tasks.Monitor(info.ID, monitorInterval, func(output string) {
+		msg := inbox.NewMessage(inbox.OriginSession, "user",
+			fmt.Sprintf("<session_output id=%q name=%q>\n%s\n</session_output>", info.ID, info.Name, output))
+		msg.Priority = inbox.PriorityLow
+		msg.Meta = map[string]any{
+			"session_id":   info.ID,
+			"session_name": info.Name,
+			"type":         "incremental",
+		}
+		_ = t.inbox.Push(msg)
+	})
 }
 
 func isOnlyCommentsOrBlank(cmdLine string) bool {

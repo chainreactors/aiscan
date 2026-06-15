@@ -364,3 +364,72 @@ func TestTmuxNewSessionMissingCommand(t *testing.T) {
 		t.Fatalf("error = %v, want 'missing command'", err)
 	}
 }
+
+func TestTmuxCapturePaneLastNLines(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-only")
+	}
+	tmux := tmuxTool(t)
+
+	tmux.Execute(context.Background(), []string{"new-session", "-d", "-s", "nlines", "printf", "a\\nb\\nc\\nd\\ne\\n"}, io.Discard)
+	<-tmux.manager.Done("nlines")
+
+	var buf strings.Builder
+	err := tmux.Execute(context.Background(), []string{"capture-pane", "-t", "nlines", "-n", "2"}, &buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) > 2 {
+		t.Fatalf("-n 2 should return at most 2 lines, got %d: %q", len(lines), out)
+	}
+	if !strings.Contains(out, "e") {
+		t.Fatalf("-n 2 should contain last lines, got: %q", out)
+	}
+}
+
+func TestTmuxCapturePaneLastNBytes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-only")
+	}
+	tmux := tmuxTool(t)
+
+	tmux.Execute(context.Background(), []string{"new-session", "-d", "-s", "nbytes", "printf", "0123456789"}, io.Discard)
+	<-tmux.manager.Done("nbytes")
+
+	var buf strings.Builder
+	err := tmux.Execute(context.Background(), []string{"capture-pane", "-t", "nbytes", "-c", "4"}, &buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if out != "6789" {
+		t.Fatalf("-c 4 should return last 4 bytes, got: %q", out)
+	}
+}
+
+func TestTmuxCapturePaneNDoesNotNeedFull(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-only")
+	}
+	tmux := tmuxTool(t)
+
+	tmux.Execute(context.Background(), []string{"new-session", "-d", "-s", "nonly", "printf", "x\\ny\\nz\\n"}, io.Discard)
+	<-tmux.manager.Done("nonly")
+
+	// First call with default (incremental) — advances cursor
+	var buf1 strings.Builder
+	tmux.Execute(context.Background(), []string{"capture-pane", "-t", "nonly"}, &buf1)
+
+	// Second call with -n 2 — should still return lines (non-incremental)
+	var buf2 strings.Builder
+	err := tmux.Execute(context.Background(), []string{"capture-pane", "-t", "nonly", "-n", "2"}, &buf2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := buf2.String()
+	if out == "" || strings.Contains(out, "no new output") {
+		t.Fatalf("-n should work independently of incremental cursor, got: %q", out)
+	}
+}

@@ -434,6 +434,185 @@ func TestTailLines(t *testing.T) {
 	}
 }
 
+func TestReadFromIndependentOffset(t *testing.T) {
+	mgr := NewManager()
+	buf := NewOutputBuffer(1024)
+	id := "readfrom-test"
+	s := &session{
+		Info:   Info{ID: id, State: StateRunning},
+		output: buf,
+		done:   make(chan struct{}),
+	}
+	mgr.mu.Lock()
+	mgr.sessions[id] = s
+	mgr.mu.Unlock()
+
+	buf.Write([]byte("line1\nline2\nline3\n"))
+
+	// ReadFrom with offset 0 — returns everything
+	text, off, err := mgr.ReadFrom(id, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "line1") || !strings.Contains(text, "line3") {
+		t.Fatalf("ReadFrom(0) = %q, want all lines", text)
+	}
+
+	// ReadFrom with the returned offset — returns nothing (no new data)
+	text2, off2, err := mgr.ReadFrom(id, off, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text2 != "" {
+		t.Fatalf("ReadFrom(%d) should be empty, got %q", off, text2)
+	}
+
+	// Write more, ReadFrom should only return new content
+	buf.Write([]byte("line4\n"))
+	text3, _, err := mgr.ReadFrom(id, off2, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text3 != "line4\n" {
+		t.Fatalf("ReadFrom after new write = %q, want %q", text3, "line4\n")
+	}
+
+	// PeekNew should still work from its own offset (starts at 0)
+	peekText, _, err := mgr.PeekNew(id, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(peekText, "line1") {
+		t.Fatalf("PeekNew should return from offset 0, got %q", peekText)
+	}
+}
+
+func TestPeekBytes(t *testing.T) {
+	mgr := NewManager()
+	buf := NewOutputBuffer(1024)
+	id := "peekbytes-test"
+	s := &session{
+		Info:   Info{ID: id, State: StateRunning},
+		output: buf,
+		done:   make(chan struct{}),
+	}
+	mgr.mu.Lock()
+	mgr.sessions[id] = s
+	mgr.mu.Unlock()
+
+	buf.Write([]byte("0123456789"))
+
+	text, err := mgr.PeekBytes(id, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text != "6789" {
+		t.Fatalf("PeekBytes(4) = %q, want %q", text, "6789")
+	}
+
+	_, err = mgr.PeekBytes("nonexistent", 4)
+	if err == nil {
+		t.Fatal("PeekBytes on nonexistent session should error")
+	}
+}
+
+func TestMonitorDeliversIncrementalOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-only")
+	}
+	mgr := NewManager()
+
+	info, err := mgr.Create("", "echo PART1; sleep 1; echo PART2; sleep 1; echo PART3", "", 10*time.Second, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	var chunks []string
+
+	mgr.Monitor(info.ID, 200*time.Millisecond, func(output string) {
+		mu.Lock()
+		chunks = append(chunks, output)
+		mu.Unlock()
+	})
+
+	<-mgr.Done(info.ID)
+	// Give final drain a moment to fire
+	time.Sleep(100 * time.Millisecond)
+
+	mu.Lock()
+	allOutput := strings.Join(chunks, "")
+	chunkCount := len(chunks)
+	mu.Unlock()
+
+	if !strings.Contains(allOutput, "PART1") {
+		t.Fatalf("monitor output missing PART1, got: %q", allOutput)
+	}
+	if !strings.Contains(allOutput, "PART3") {
+		t.Fatalf("monitor output missing PART3, got: %q", allOutput)
+	}
+	if chunkCount < 2 {
+		t.Fatalf("expected multiple incremental chunks, got %d", chunkCount)
+	}
+	// Verify no duplication: each PART should appear exactly once across all chunks
+	if strings.Count(allOutput, "PART1") != 1 {
+		t.Fatalf("PART1 duplicated in monitor output: %q", allOutput)
+	}
+	if strings.Count(allOutput, "PART3") != 1 {
+		t.Fatalf("PART3 duplicated in monitor output: %q", allOutput)
+	}
+}
+
+func TestMonitorStopsOnSessionEnd(t *testing.T) {
+	mgr := NewManager()
+	buf := NewOutputBuffer(1024)
+	id := "monitor-stop"
+	done := make(chan struct{})
+	s := &session{
+		Info:   Info{ID: id, State: StateRunning},
+		output: buf,
+		done:   done,
+	}
+	mgr.mu.Lock()
+	mgr.sessions[id] = s
+	mgr.mu.Unlock()
+
+	var pushCount int32
+	var mu sync.Mutex
+
+	mgr.Monitor(id, 50*time.Millisecond, func(output string) {
+		mu.Lock()
+		pushCount++
+		mu.Unlock()
+	})
+
+	buf.Write([]byte("data"))
+	time.Sleep(150 * time.Millisecond) // let a few ticks fire
+
+	// Close the session
+	close(done)
+	time.Sleep(150 * time.Millisecond)
+
+	mu.Lock()
+	countAtStop := pushCount
+	mu.Unlock()
+
+	// Write more after done — should not be delivered
+	buf.Write([]byte("after-close"))
+	time.Sleep(150 * time.Millisecond)
+
+	mu.Lock()
+	countAfter := pushCount
+	mu.Unlock()
+
+	if countAtStop == 0 {
+		t.Fatal("monitor should have delivered at least one push")
+	}
+	if countAfter != countAtStop {
+		t.Fatalf("monitor delivered pushes after session done: before=%d after=%d", countAtStop, countAfter)
+	}
+}
+
 func TestLabelFromCommand(t *testing.T) {
 	cases := map[string]string{
 		"scan -i fjbdg.com.cn --mode quick": "scan",

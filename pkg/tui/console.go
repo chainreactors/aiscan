@@ -16,6 +16,7 @@ import (
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
+	"github.com/chainreactors/aiscan/pkg/eventbus"
 	outputpkg "github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/repl"
 	ioaclient "github.com/chainreactors/ioa/client"
@@ -40,6 +41,7 @@ type AgentConsole struct {
 	menu        *console.Menu
 	output      *AgentOutput
 	controller  *interactiveRunController
+	bus         *eventbus.Bus[agent.Event]
 	// readlineActive is true only while the foreground goroutine is blocked in
 	// Readline. Async agent output can then refresh the prompt without changing
 	// the input buffer or creating a duplicate prompt between reads.
@@ -47,9 +49,10 @@ type AgentConsole struct {
 	// startupNotice, when set, is rendered once below the welcome banner (e.g.
 	// an IOA-unavailable degradation warning). Set by the caller before Start.
 	startupNotice string
+	evalCriteria  string
 }
 
-func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.App, session *agent.Agent, output *AgentOutput) *AgentConsole {
+func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.App, session *agent.Agent, output *AgentOutput, bus ...*eventbus.Bus[agent.Event]) *AgentConsole {
 	c := console.New("aiscan")
 	c.NewlineAfter = true
 	configureAgentReadline(c)
@@ -78,6 +81,12 @@ func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.A
 		console:     c,
 		menu:        menu,
 		output:      output,
+	}
+	if len(bus) > 0 && bus[0] != nil {
+		repl.bus = bus[0]
+	}
+	if option != nil && option.EvalCriteria != "" {
+		repl.evalCriteria = option.EvalCriteria
 	}
 	repl.controller = newInteractiveRunController(ctx, repl.agent, output)
 	repl.controller.SetOnFinish(repl.refreshPromptAfterAsyncRun)
@@ -619,13 +628,19 @@ func (r *AgentConsole) skillSlashNames() string {
 }
 
 func (r *AgentConsole) replSession() *repl.Session {
-	return &repl.Session{
-		Ctx:        r.ctx,
-		Option:     r.option,
-		App:        r.application,
-		Agent:      r.agent,
-		Controller: r.ensureController(),
+	s := &repl.Session{
+		Ctx:          r.ctx,
+		Option:       r.option,
+		App:          r.application,
+		Agent:        r.agent,
+		Controller:   r.ensureController(),
+		EvalCriteria: r.evalCriteria,
 	}
+	s.OnEvalChange = func(criteria string) {
+		r.evalCriteria = criteria
+		r.syncEvalToController()
+	}
+	return s
 }
 
 func (r *AgentConsole) rootCommand() *cobra.Command {
@@ -794,7 +809,35 @@ func (r *AgentConsole) ensureController() *interactiveRunController {
 		r.controller = newInteractiveRunController(r.ctx, r.agent, r.ensureOutput())
 		r.controller.SetOnFinish(r.refreshPromptAfterAsyncRun)
 	}
+	r.syncEvalToController()
 	return r.controller
+}
+
+func (r *AgentConsole) syncEvalToController() {
+	if r.controller == nil {
+		return
+	}
+	if r.evalCriteria == "" {
+		r.controller.Eval = nil
+		return
+	}
+	model := ""
+	if r.option != nil {
+		model = r.option.EvalModel
+	}
+	if model == "" && r.application != nil {
+		model = r.application.ProviderConfig.Model
+	}
+	var prov agent.Provider
+	if r.application != nil {
+		prov = r.application.Provider
+	}
+	r.controller.Eval = &EvalSettings{
+		Criteria: r.evalCriteria,
+		Model:    model,
+		Provider: prov,
+		Bus:      r.bus,
+	}
 }
 
 func (r *AgentConsole) refreshPromptAfterAsyncRun() {

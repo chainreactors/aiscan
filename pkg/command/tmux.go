@@ -33,8 +33,9 @@ func (t *TmuxCommand) Usage() string {
   send-keys -t <id> "text" [Enter]
       Send keystrokes. Append Enter/C-m to send newline.
 
-  capture-pane -t <id> [-p] [-n lines] [--full]
-      Show new output since last read (default incremental). --full for complete buffer.
+  capture-pane -t <id> [-p] [-n lines] [-c bytes] [--full]
+      Show new output since last read (default incremental).
+      -n N: last N lines. -c N: last N bytes. --full: entire buffer.
 
   kill-session -t <id>
       Terminate session.
@@ -218,32 +219,50 @@ func (t *TmuxCommand) cmdSendKeys(args []string) (string, error) {
 	return fmt.Sprintf("sent %d bytes to %s", len(data), id), nil
 }
 
-// capture-pane -t <id> [-p] [-n lines] [--full]
+// capture-pane -t <id> [-p] [-n lines] [-c bytes] [--full]
 func (t *TmuxCommand) cmdCapturePane(args []string) (string, error) {
 	id, rest := parseTarget(args)
 	if id == "" {
 		return "", fmt.Errorf("tmux capture-pane: -t <id> required")
 	}
 
-	lines := 30
+	lines := 0
+	bytes := 0
 	full := false
 	for i := 0; i < len(rest); i++ {
 		switch rest[i] {
 		case "-p":
-			// -p means print to stdout, which is our default behavior
 		case "--full":
 			full = true
 		case "--new":
-			// legacy flag, now the default — accepted but ignored
 		case "-n":
 			if i+1 < len(rest) {
 				i++
 				_, _ = fmt.Sscanf(rest[i], "%d", &lines)
 			}
+		case "-c", "--bytes":
+			if i+1 < len(rest) {
+				i++
+				_, _ = fmt.Sscanf(rest[i], "%d", &bytes)
+			}
 		}
 	}
 
-	if full {
+	if bytes > 0 {
+		output, err := t.manager.PeekBytes(id, bytes)
+		if err != nil {
+			return "", err
+		}
+		if output == "" {
+			return "(no output yet)", nil
+		}
+		return output, nil
+	}
+
+	if lines > 0 || full {
+		if lines <= 0 {
+			lines = 30
+		}
 		output, err := t.manager.Peek(id, lines)
 		if err != nil {
 			return "", err
@@ -259,7 +278,7 @@ func (t *TmuxCommand) cmdCapturePane(args []string) (string, error) {
 		return "", err
 	}
 	if output == "" {
-		return "(no new output since last read; use --full to re-read entire buffer)", nil
+		return "(no new output since last read; use --full or -n <lines> to re-read)", nil
 	}
 	if more {
 		output += "\n\n[more output available; run `tmux capture-pane -t " + id + "` again]"

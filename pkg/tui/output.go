@@ -347,6 +347,15 @@ func (o *AgentOutput) HandleEvent(event agent.Event) {
 	case agent.EventAgentEnd:
 		o.spinner.Stop()
 		o.agentEnd(event)
+	case agent.EventGoalEvalStart:
+		o.spinner.Stop()
+		o.goalEvalStart(event)
+	case agent.EventGoalEvalEnd:
+		o.spinner.Stop()
+		o.goalEvalEnd(event)
+	case agent.EventGoalEvalError:
+		o.spinner.Stop()
+		o.goalEvalError(event)
 	}
 }
 
@@ -790,6 +799,43 @@ func (o *AgentOutput) agentEnd(event agent.Event) {
 		hint,
 		errText,
 		o.color.Code(output.ANSIReset))
+}
+
+// ---------------------------------------------------------------------------
+// Goal evaluation output
+// ---------------------------------------------------------------------------
+
+func (o *AgentOutput) goalEvalStart(event agent.Event) {
+	if o.Quiet || o.stderr == nil {
+		return
+	}
+	label := fmt.Sprintf("Evaluating goal completion (round %d)...", event.EvalRound+1)
+	if o.canAnimate() {
+		o.spinner.Start(label)
+	} else {
+		fmt.Fprintf(o.stderr, "%s\n", label)
+	}
+}
+
+func (o *AgentOutput) goalEvalEnd(event agent.Event) {
+	if o.Quiet || o.stderr == nil {
+		return
+	}
+	if event.EvalPass {
+		fmt.Fprintf(o.stderr, "%s[eval] pass — %s%s\n",
+			o.color.Code(output.ANSIGreen), event.EvalReason, o.color.Code(output.ANSIReset))
+	} else {
+		fmt.Fprintf(o.stderr, "%s[eval] fail (round %d) — %s%s\n",
+			o.color.Code(output.ANSIYellow), event.EvalRound+1, event.EvalReason, o.color.Code(output.ANSIReset))
+	}
+}
+
+func (o *AgentOutput) goalEvalError(event agent.Event) {
+	if o.Quiet || o.stderr == nil {
+		return
+	}
+	fmt.Fprintf(o.stderr, "%s[eval] error (round %d) — evaluator LLM call failed, retrying...%s\n",
+		o.color.Code(output.ANSIYellow), event.EvalRound+1, o.color.Code(output.ANSIReset))
 }
 
 // ---------------------------------------------------------------------------

@@ -595,6 +595,16 @@ func (m *Manager) Peek(id string, n int) (string, error) {
 	return s.output.TailLines(n), nil
 }
 
+func (m *Manager) PeekBytes(id string, n int) (string, error) {
+	m.mu.Lock()
+	s := m.resolve(id)
+	m.mu.Unlock()
+	if s == nil {
+		return "", fmt.Errorf("no such session: %s", id)
+	}
+	return s.output.TailBytes(n), nil
+}
+
 func (m *Manager) PeekOrEmpty(id string, n int) string {
 	s, _ := m.Peek(id, n)
 	return s
@@ -627,6 +637,59 @@ func (m *Manager) PeekNew(id string, maxBytes int64) (string, bool, error) {
 	m.mu.Unlock()
 
 	return string(data), more, nil
+}
+
+// ReadFrom reads output since the given offset without modifying session state.
+// The caller tracks the returned offset for subsequent calls.
+func (m *Manager) ReadFrom(id string, offset int64, maxBytes int64) (string, int64, error) {
+	m.mu.Lock()
+	s := m.resolve(id)
+	m.mu.Unlock()
+	if s == nil {
+		return "", 0, fmt.Errorf("no such session: %s", id)
+	}
+	if maxBytes <= 0 {
+		maxBytes = defaultPeekNewMax
+	}
+	data, newOff, _, err := s.output.ReadSinceLimit(offset, maxBytes)
+	if err != nil {
+		return "", offset, err
+	}
+	return string(data), newOff, nil
+}
+
+// Monitor starts a goroutine that periodically reads incremental output
+// and calls push with new content. Stops automatically when the session ends.
+func (m *Manager) Monitor(id string, interval time.Duration, push func(output string)) {
+	m.mu.Lock()
+	s := m.resolve(id)
+	m.mu.Unlock()
+	if s == nil {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		var offset int64
+		for {
+			select {
+			case <-s.done:
+				if text, _, _ := m.ReadFrom(id, offset, 0); text != "" {
+					push(text)
+				}
+				return
+			case <-ticker.C:
+				text, newOff, err := m.ReadFrom(id, offset, 0)
+				if err != nil {
+					return
+				}
+				offset = newOff
+				if text != "" {
+					push(text)
+				}
+			}
+		}
+	}()
 }
 
 func (m *Manager) Write(id string, data []byte) error {

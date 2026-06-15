@@ -8,9 +8,20 @@ import (
 	"sync"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
+	"github.com/chainreactors/aiscan/pkg/agent/evaluator"
+	"github.com/chainreactors/aiscan/pkg/eventbus"
+	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
 type agentRunFunc func(context.Context) (*agent.Result, error)
+
+type EvalSettings struct {
+	Criteria string
+	Model    string
+	Provider agent.Provider
+	Bus      *eventbus.Bus[agent.Event]
+	Logger   telemetry.Logger
+}
 
 type interactiveRunController struct {
 	ctx     context.Context
@@ -23,6 +34,8 @@ type interactiveRunController struct {
 	cancel   context.CancelFunc
 	done     chan struct{}
 	onFinish func()
+
+	Eval *EvalSettings
 }
 
 func newInteractiveRunController(ctx context.Context, session *agent.Agent, output *AgentOutput) *interactiveRunController {
@@ -47,9 +60,7 @@ func (c *interactiveRunController) SubmitPrompt(label, displayText, prompt strin
 		return nil
 	}
 	c.mu.Unlock()
-	return c.start(label, displayText, func(ctx context.Context) (*agent.Result, error) {
-		return c.session.Run(ctx, prompt)
-	})
+	return c.start(label, displayText, c.buildRunFunc(prompt))
 }
 
 func (c *interactiveRunController) Continue() error {
@@ -65,6 +76,34 @@ func (c *interactiveRunController) Continue() error {
 	}
 	c.mu.Unlock()
 	return c.start("continue", "", c.session.Continue)
+}
+
+func (c *interactiveRunController) buildRunFunc(prompt string) agentRunFunc {
+	if c.Eval == nil || c.Eval.Criteria == "" {
+		return func(ctx context.Context) (*agent.Result, error) {
+			return c.session.Run(ctx, prompt)
+		}
+	}
+	eval := c.Eval
+	return func(ctx context.Context) (*agent.Result, error) {
+		logger := eval.Logger
+		if logger == nil {
+			logger = telemetry.NopLogger()
+		}
+		cfg := evaluator.GoalLoopConfig{
+			Evaluator: evaluator.New(evaluator.Config{
+				Provider: eval.Provider,
+				Model:    eval.Model,
+				Logger:   logger,
+			}),
+			MaxEvalRounds: 3,
+			Goal:          prompt,
+			Criteria:      eval.Criteria,
+			Bus:           eval.Bus,
+		}
+		result, _, err := evaluator.RunWithGoalEval(ctx, c.session, cfg)
+		return result, err
+	}
 }
 
 func (c *interactiveRunController) start(label, displayText string, run agentRunFunc) error {

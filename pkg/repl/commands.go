@@ -13,11 +13,13 @@ import (
 
 // Session holds the dependencies commands need to operate on.
 type Session struct {
-	Ctx         context.Context
-	Option      *cfg.Option
-	App         *app.App
-	Agent       *agent.Agent
-	Controller  Controller
+	Ctx            context.Context
+	Option         *cfg.Option
+	App            *app.App
+	Agent          *agent.Agent
+	Controller     Controller
+	EvalCriteria   string
+	OnEvalChange   func(string)
 }
 
 // Controller is the async execution interface that tui implements.
@@ -92,6 +94,34 @@ func BuiltinCommands() []Command {
 			Args: ArgsExact1,
 			Run: func(ctx context.Context, s *Session, args []string) error {
 				return RunPrompt(s, "follow-up", args[0])
+			},
+		},
+		{
+			Name: "/eval", Description: "设置/查看/关闭 goal evaluation (/eval off 关闭)",
+			Args: ArgsOptional,
+			Run: func(_ context.Context, s *Session, args []string) error {
+				text := strings.TrimSpace(strings.Join(args, " "))
+				switch text {
+				case "":
+					if s.EvalCriteria == "" {
+						fmt.Println("Goal evaluation: off")
+					} else {
+						fmt.Printf("Goal evaluation: on\n  criteria: %s\n", s.EvalCriteria)
+					}
+				case "off":
+					s.EvalCriteria = ""
+					if s.OnEvalChange != nil {
+						s.OnEvalChange("")
+					}
+					fmt.Println("Goal evaluation disabled.")
+				default:
+					s.EvalCriteria = text
+					if s.OnEvalChange != nil {
+						s.OnEvalChange(text)
+					}
+					fmt.Printf("Goal evaluation enabled: %s\n", text)
+				}
+				return nil
 			},
 		},
 		{

@@ -124,6 +124,26 @@ func TestOutputBufferLargeWrite(t *testing.T) {
 	}
 }
 
+func TestOutputBufferTailBytes(t *testing.T) {
+	buf := NewOutputBuffer(1024)
+	buf.Write([]byte("abcdefghij"))
+
+	got := buf.TailBytes(5)
+	if got != "fghij" {
+		t.Fatalf("TailBytes(5) = %q, want %q", got, "fghij")
+	}
+
+	got = buf.TailBytes(100)
+	if got != "abcdefghij" {
+		t.Fatalf("TailBytes(100) = %q, want full buffer", got)
+	}
+
+	got = buf.TailBytes(0)
+	if got != "abcdefghij" {
+		t.Fatalf("TailBytes(0) = %q, want full buffer", got)
+	}
+}
+
 func TestOutputBufferAppendError(t *testing.T) {
 	buf := NewOutputBuffer(1024)
 	buf.Write([]byte("output"))
