@@ -286,6 +286,7 @@ type Result struct {
 	TotalUsage    Usage
 	TurnUsages    []TurnUsage
 	ContextTokens int
+	Stop          StopReason
 	Err           error
 }
 

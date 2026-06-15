@@ -1,6 +1,7 @@
 package search
 
 import (
+	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/resources"
 )
@@ -13,6 +14,21 @@ func init() {
 			if deps.Resources != nil {
 				res, _ = deps.Resources.(*resources.Set)
 			}
+			var p provider.Provider
+			if deps.Provider != nil {
+				p, _ = deps.Provider.(provider.Provider)
+			}
+
+			tavily := NewTavilySearch(deps.TavilyKeys)
+			if deps.ScannerProxy != "" {
+				tavily.SetProxy(deps.ScannerProxy)
+			}
+
+			if p != nil {
+				reg.RegisterTool(NewWebSearchTool(p, tavily))
+			}
+			reg.RegisterTool(NewFetchTool())
+
 			cmd := New(Opts{
 				TavilyKeys:   deps.TavilyKeys,
 				ScannerProxy: deps.ScannerProxy,

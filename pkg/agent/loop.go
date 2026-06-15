@@ -33,6 +33,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		if err != nil && result.Err == nil {
 			result.Err = err
 		}
+		result.Stop = stop
 		if !ended {
 			ended = true
 			bus.Emit(Event{

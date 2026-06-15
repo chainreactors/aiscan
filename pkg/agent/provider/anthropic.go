@@ -495,11 +495,12 @@ type anthropicUsage struct {
 }
 
 type anthropicContentBlock struct {
-	Type  string          `json:"type"`
-	Text  string          `json:"text,omitempty"`
-	ID    string          `json:"id,omitempty"`
-	Name  string          `json:"name,omitempty"`
-	Input json.RawMessage `json:"input,omitempty"`
+	Type     string          `json:"type"`
+	Text     string          `json:"text,omitempty"`
+	Thinking string          `json:"thinking,omitempty"`
+	ID       string          `json:"id,omitempty"`
+	Name     string          `json:"name,omitempty"`
+	Input    json.RawMessage `json:"input,omitempty"`
 }
 
 type anthropicMessageResponse struct {
@@ -547,10 +548,12 @@ func anthropicBlocksToMessage(role string, blocks []anthropicContentBlock) ChatM
 	if role == "" {
 		role = "assistant"
 	}
-	var text strings.Builder
+	var text, thinking strings.Builder
 	toolCalls := make([]ToolCall, 0)
 	for _, block := range blocks {
 		switch block.Type {
+		case "thinking":
+			thinking.WriteString(block.Thinking)
 		case "text":
 			text.WriteString(block.Text)
 		case "tool_use":
@@ -567,6 +570,9 @@ func anthropicBlocksToMessage(role string, blocks []anthropicContentBlock) ChatM
 	}
 
 	msg := ChatMessage{Role: role}
+	if content := thinking.String(); content != "" {
+		msg.ReasoningContent = &content
+	}
 	if content := text.String(); content != "" {
 		msg.Content = &content
 	}
@@ -789,8 +795,92 @@ func (p *anthropicStreamParser) usageSnapshot() *Usage {
 }
 
 func anthropicTimeout(seconds int) time.Duration {
-	if seconds <= 0 {
-		return defaultAnthropicTimeout
+	return timeoutFromConfig(seconds)
+}
+
+// ---------------------------------------------------------------------------
+// WebSearch via Anthropic server-side web_search tool
+// ---------------------------------------------------------------------------
+
+func (p *AnthropicProvider) WebSearch(ctx context.Context, query string, maxResults int) (*WebSearchResponse, error) {
+	maxResults = clampInt(maxResults, 1, 10, 5)
+
+	data, err := doJSON(ctx, p.client, anthropicTimeout(p.config.Timeout),
+		http.MethodPost, p.completionEndpoint(),
+		map[string]any{
+			"model":      p.config.Model,
+			"max_tokens": defaultAnthropicMaxToken,
+			"tools": []map[string]any{{
+				"type": "web_search_20250305", "name": "web_search", "max_uses": maxResults,
+			}},
+			"messages": []map[string]string{{"role": "user", "content": "Search the web for: " + query}},
+		},
+		func(req *http.Request) {
+			p.setRequestHeaders(req, false)
+			req.Header.Set("anthropic-beta", "web-search-2025-03-05")
+		},
+	)
+	if err != nil {
+		return nil, err
 	}
-	return time.Duration(seconds) * time.Second
+	return parseAnthropicWebSearchResponse(data)
+}
+
+func parseAnthropicWebSearchResponse(data []byte) (*WebSearchResponse, error) {
+	var probe struct {
+		Type  string    `json:"type"`
+		Error *APIError `json:"error,omitempty"`
+	}
+	if err := json.Unmarshal(data, &probe); err == nil && probe.Type == "error" && probe.Error != nil {
+		return nil, probe.Error
+	}
+
+	var raw struct {
+		Content []struct {
+			Type    string          `json:"type"`
+			Text    string          `json:"text,omitempty"`
+			Content json.RawMessage `json:"content,omitempty"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parse web search response: %w", err)
+	}
+
+	out := &WebSearchResponse{}
+	for _, block := range raw.Content {
+		switch block.Type {
+		case "web_search_tool_result":
+			var results []struct {
+				Title string `json:"title"`
+				URL   string `json:"url"`
+			}
+			if json.Unmarshal(block.Content, &results) == nil {
+				for _, r := range results {
+					if r.URL == "" {
+						continue
+					}
+					out.Results = append(out.Results, WebSearchResult{Title: r.Title, URL: r.URL})
+				}
+			}
+		case "text":
+			if t := strings.TrimSpace(block.Text); t != "" {
+				out.Summary += t + "\n"
+			}
+		}
+	}
+	out.Summary = strings.TrimSpace(out.Summary)
+	return out, nil
+}
+
+func clampInt(v, min, max, fallback int) int {
+	if v <= 0 {
+		return fallback
+	}
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }

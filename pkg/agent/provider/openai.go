@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -298,32 +297,91 @@ func marshalOpenAIRequest(req *ChatCompletionRequest) ([]byte, error) {
 }
 
 func openAITimeout(seconds int) time.Duration {
-	if seconds <= 0 {
-		return defaultOpenAITimeout
-	}
-	return time.Duration(seconds) * time.Second
+	return timeoutFromConfig(seconds)
 }
 
-func readAllWithCancelTimeout(r io.Reader, cancel context.CancelFunc, timeout time.Duration) ([]byte, bool, error) {
-	var timedOut atomic.Bool
-	timer := time.AfterFunc(timeout, func() {
-		timedOut.Store(true)
-		cancel()
-	})
-	defer timer.Stop()
+// ---------------------------------------------------------------------------
+// WebSearch via OpenAI Responses API
+// ---------------------------------------------------------------------------
 
-	body, err := io.ReadAll(r)
-	return body, timedOut.Load(), err
+func (p *OpenAIProvider) WebSearch(ctx context.Context, query string, maxResults int) (*WebSearchResponse, error) {
+	maxResults = clampInt(maxResults, 1, 10, 5)
+
+	base := strings.TrimSuffix(p.config.BaseURL, "/")
+	endpoint := base + "/responses"
+
+	data, err := doJSON(ctx, p.client, openAITimeout(p.config.Timeout),
+		http.MethodPost, endpoint,
+		map[string]any{
+			"model": p.config.Model,
+			"input": "Search the web for: " + query,
+			"tools": []map[string]any{{"type": "web_search", "search_context_size": "medium"}},
+		},
+		func(req *http.Request) { p.setRequestHeaders(req, false) },
+	)
+	if err != nil {
+		return nil, err
+	}
+	return parseOpenAIWebSearchResponse(data, maxResults)
 }
 
-func wrapReadError(parentCtx context.Context, timedOut bool, timeout time.Duration, op string, err error) error {
-	if timedOut && parentCtx.Err() == nil {
-		return fmt.Errorf("%s: %w after %s: %v", op, ErrCallTimeout, timeout, err)
+func parseOpenAIWebSearchResponse(data []byte, maxResults int) (*WebSearchResponse, error) {
+	var probe struct {
+		Error *APIError `json:"error,omitempty"`
 	}
-	if errors.Is(err, context.Canceled) && parentCtx.Err() == nil {
-		return fmt.Errorf("%s: %w", op, ErrCallTimeout)
+	if json.Unmarshal(data, &probe) == nil && probe.Error != nil {
+		return nil, probe.Error
 	}
-	return fmt.Errorf("%s: %w", op, err)
+
+	var raw struct {
+		Output []struct {
+			Type    string `json:"type"`
+			Content []struct {
+				Type        string `json:"type"`
+				Text        string `json:"text"`
+				Annotations []struct {
+					Type  string `json:"type"`
+					Title string `json:"title"`
+					URL   string `json:"url"`
+				} `json:"annotations,omitempty"`
+			} `json:"content,omitempty"`
+		} `json:"output"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parse web search response: %w", err)
+	}
+
+	out := &WebSearchResponse{}
+	seen := make(map[string]struct{})
+	for _, block := range raw.Output {
+		if block.Type != "message" {
+			continue
+		}
+		for _, c := range block.Content {
+			if c.Type == "output_text" && strings.TrimSpace(c.Text) != "" {
+				out.Summary += c.Text + "\n"
+			}
+			for _, ann := range c.Annotations {
+				if ann.Type != "url_citation" || ann.URL == "" {
+					continue
+				}
+				if _, ok := seen[ann.URL]; ok {
+					continue
+				}
+				seen[ann.URL] = struct{}{}
+				title := ann.Title
+				if title == "" {
+					title = ann.URL
+				}
+				out.Results = append(out.Results, WebSearchResult{Title: title, URL: ann.URL})
+				if len(out.Results) >= maxResults {
+					break
+				}
+			}
+		}
+	}
+	out.Summary = strings.TrimSpace(out.Summary)
+	return out, nil
 }
 
 type openAIStreamChunk struct {
