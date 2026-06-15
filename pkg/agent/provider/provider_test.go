@@ -185,6 +185,39 @@ func TestAnthropicProviderChatCompletion(t *testing.T) {
 	}
 }
 
+func TestAnthropicProviderParsesThinkingBlock(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"thinking","thinking":"internal reasoning"},{"type":"text","text":"visible answer"}],"stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":20}}`)
+	}))
+	defer server.Close()
+
+	p, err := NewAnthropicProvider(&ProviderConfig{
+		Provider: "anthropic",
+		BaseURL:  server.URL + "/v1",
+		APIKey:   "test-key",
+		Timeout:  5,
+	})
+	if err != nil {
+		t.Fatalf("NewAnthropicProvider() error = %v", err)
+	}
+
+	resp, err := p.ChatCompletion(context.Background(), &ChatCompletionRequest{
+		Model:    "claude-test",
+		Messages: []ChatMessage{NewTextMessage("user", "think hard")},
+	})
+	if err != nil {
+		t.Fatalf("ChatCompletion() error = %v", err)
+	}
+	msg := resp.Choices[0].Message
+	if msg.Content == nil || *msg.Content != "visible answer" {
+		t.Fatalf("content = %v, want 'visible answer'", msg.Content)
+	}
+	if msg.ReasoningContent == nil || *msg.ReasoningContent != "internal reasoning" {
+		t.Fatalf("reasoning = %v, want 'internal reasoning'", msg.ReasoningContent)
+	}
+}
+
 func TestOpenAIProviderChatCompletionStream(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {

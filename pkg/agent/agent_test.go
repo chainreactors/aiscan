@@ -571,6 +571,36 @@ func (t *recordingTool) callsSnapshot() []string {
 	return append([]string(nil), t.calls...)
 }
 
+func TestFinishToolTerminatesLoop(t *testing.T) {
+	tools := command.NewRegistry()
+	tools.RegisterTool(NewFinishTool())
+
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(ChatMessage{
+				Role: "assistant",
+				ToolCalls: []ToolCall{{
+					ID: "call_1", Type: "function",
+					Function: FunctionCall{Name: "finish", Arguments: `{"summary":"all done"}`},
+				}},
+			}),
+		},
+	}
+
+	result, err := NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+		Bus:      testBus(nil),
+	}).Run(context.Background(), "do something")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Stop != StopReasonTerminated {
+		t.Fatalf("stop = %q, want %q", result.Stop, StopReasonTerminated)
+	}
+}
+
 type scriptedProvider struct {
 	mu                 sync.Mutex
 	responses          []*ChatCompletionResponse

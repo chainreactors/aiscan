@@ -14,10 +14,11 @@ const (
 // MessageJSON is the JSONL serialization shape for a ChatMessage.
 // Exported so external consumers (harness, monitors) can deserialize event files.
 type MessageJSON struct {
-	Role       string     `json:"role"`
-	Content    string     `json:"content,omitempty"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Role             string     `json:"role"`
+	Content          string     `json:"content,omitempty"`
+	ReasoningContent string     `json:"reasoning_content,omitempty"`
+	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string     `json:"tool_call_id,omitempty"`
 }
 
 // MarshalJSON serializes an Event to compact JSONL.
@@ -111,6 +112,9 @@ func toMessageJSON(msg ChatMessage) *MessageJSON {
 		out.Content = TruncateField(out.Content, EventPreviewLimit)
 	} else if msg.Content != nil {
 		out.Content = TruncateField(*msg.Content, EventPreviewLimit)
+	}
+	if msg.ReasoningContent != nil {
+		out.ReasoningContent = TruncateField(*msg.ReasoningContent, EventPreviewLimit)
 	}
 	for _, tc := range msg.ToolCalls {
 		out.ToolCalls = append(out.ToolCalls, ToolCall{
