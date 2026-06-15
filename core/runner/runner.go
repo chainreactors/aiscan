@@ -16,6 +16,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
+	"github.com/chainreactors/aiscan/pkg/tui"
 	"github.com/chainreactors/aiscan/skills"
 )
 
@@ -28,7 +29,7 @@ type AgentRuntime struct {
 	SystemPrompt string
 	Config       agent.Config
 	Bus          *eventbus.Bus[agent.Event]
-	Output       *AgentOutput
+	Output       *tui.AgentOutput
 	ownsApp      bool
 	cleanup      func()
 }
@@ -100,7 +101,7 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 	logger.Debugf("system prompt length: %d chars", len(rt.SystemPrompt))
 
 	if rc == nil || !rc.NoOutput {
-		rt.Output = NewAgentOutput(option)
+		rt.Output = tui.NewAgentOutput(option)
 	}
 
 	agentBus := eventbus.New[agent.Event]()
@@ -263,9 +264,9 @@ func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetr
 
 	session := agent.NewAgent(rt.Config.
 		WithSystemPrompt(rt.SystemPrompt).
-		WithStream(false))
+		WithStream(tui.AgentStreamingEnabled(option)))
 
-	repl := NewAgentConsole(ctx, option, rt.App, session)
+	repl := tui.NewAgentConsole(ctx, option, rt.App, session, rt.Output)
 	return repl.Start()
 }
 

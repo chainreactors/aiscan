@@ -11,16 +11,6 @@ const (
 	EventResultLimit  = 16 * 1024
 )
 
-// MessageJSON is the JSONL serialization shape for a ChatMessage.
-// Exported so external consumers (harness, monitors) can deserialize event files.
-type MessageJSON struct {
-	Role             string     `json:"role"`
-	Content          string     `json:"content,omitempty"`
-	ReasoningContent string     `json:"reasoning_content,omitempty"`
-	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID       string     `json:"tool_call_id,omitempty"`
-}
-
 // MarshalJSON serializes an Event to compact JSONL.
 // Heavy fields (Request body, full Messages history) are reduced to metadata;
 // Arguments and Result are truncated to bounded limits.
@@ -36,8 +26,8 @@ func (e Event) MarshalJSON() ([]byte, error) {
 		SessionID       string       `json:"session_id,omitempty"`
 		ParentSessionID string       `json:"parent_session_id,omitempty"`
 		Turn            int          `json:"turn,omitempty"`
-		Message         *MessageJSON `json:"message,omitempty"`
-		ToolResults     []MessageJSON `json:"tool_results,omitempty"`
+		Message         *ChatMessage  `json:"message,omitempty"`
+		ToolResults     []ChatMessage `json:"tool_results,omitempty"`
 		ToolCallID      string       `json:"tool_call_id,omitempty"`
 		ToolName        string       `json:"tool_name,omitempty"`
 		Arguments       string       `json:"arguments,omitempty"`
@@ -69,11 +59,11 @@ func (e Event) MarshalJSON() ([]byte, error) {
 	if e.Err != nil {
 		out.Error = e.Err.Error()
 	}
-	if m := toMessageJSON(e.Message); m != nil {
+	if m := TruncateMessage(e.Message, EventPreviewLimit); m != nil {
 		out.Message = m
 	}
 	for _, msg := range e.ToolResults {
-		if m := toMessageJSON(msg); m != nil {
+		if m := TruncateMessage(msg, EventPreviewLimit); m != nil {
 			out.ToolResults = append(out.ToolResults, *m)
 		}
 	}
@@ -92,29 +82,36 @@ func (e Event) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
-func toMessageJSON(msg ChatMessage) *MessageJSON {
+// TruncateMessage returns a truncated copy of msg suitable for event logs.
+// ContentParts are flattened to plain text Content; all text fields and tool
+// call arguments are capped at limit bytes. Returns nil for empty messages.
+func TruncateMessage(msg ChatMessage, limit int) *ChatMessage {
 	if msg.Role == "" && msg.Content == nil && len(msg.ContentParts) == 0 && len(msg.ToolCalls) == 0 && msg.ToolCallID == "" {
 		return nil
 	}
-	out := &MessageJSON{
+	out := ChatMessage{
 		Role:       msg.Role,
 		ToolCallID: msg.ToolCallID,
 	}
 	if len(msg.ContentParts) > 0 {
+		var s string
 		for _, part := range msg.ContentParts {
 			if part.Type == "text" {
-				out.Content += part.Text
+				s += part.Text
 			} else if part.Type == "image_url" && part.ImageURL != nil {
 				mediaType, _ := ParseDataURI(part.ImageURL.URL)
-				out.Content += fmt.Sprintf("[image: %s]", mediaType)
+				s += fmt.Sprintf("[image: %s]", mediaType)
 			}
 		}
-		out.Content = TruncateField(out.Content, EventPreviewLimit)
+		s = TruncateField(s, limit)
+		out.Content = &s
 	} else if msg.Content != nil {
-		out.Content = TruncateField(*msg.Content, EventPreviewLimit)
+		s := TruncateField(*msg.Content, limit)
+		out.Content = &s
 	}
 	if msg.ReasoningContent != nil {
-		out.ReasoningContent = TruncateField(*msg.ReasoningContent, EventPreviewLimit)
+		s := TruncateField(*msg.ReasoningContent, limit)
+		out.ReasoningContent = &s
 	}
 	for _, tc := range msg.ToolCalls {
 		out.ToolCalls = append(out.ToolCalls, ToolCall{
@@ -122,11 +119,11 @@ func toMessageJSON(msg ChatMessage) *MessageJSON {
 			Type: tc.Type,
 			Function: FunctionCall{
 				Name:      tc.Function.Name,
-				Arguments: TruncateField(tc.Function.Arguments, EventPreviewLimit),
+				Arguments: TruncateField(tc.Function.Arguments, limit),
 			},
 		})
 	}
-	return out
+	return &out
 }
 
 func TruncateField(s string, limit int) string {

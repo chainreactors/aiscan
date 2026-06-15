@@ -29,8 +29,8 @@ type AgentEvent struct {
 	IsError         bool                `json:"is_error,omitempty"`
 	Error           string              `json:"error,omitempty"`
 	Stop            string              `json:"stop,omitempty"`
-	Message         *agent.MessageJSON  `json:"message,omitempty"`
-	ToolResults     []agent.MessageJSON `json:"tool_results,omitempty"`
+	Message         *agent.ChatMessage  `json:"message,omitempty"`
+	ToolResults     []agent.ChatMessage `json:"tool_results,omitempty"`
 	Usage           *agent.Usage        `json:"usage,omitempty"`
 	ContextTokens   int                 `json:"context_tokens,omitempty"`
 	NewMessages     int                 `json:"new_messages,omitempty"`
