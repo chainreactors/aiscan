@@ -11,6 +11,16 @@ import (
 
 const Version = "0.1.0"
 
+var BuildMarker = "aiscan-build-marker:dev"
+
+func VersionString() string {
+	marker := strings.TrimSpace(BuildMarker)
+	if marker == "" {
+		return "aiscan v" + Version
+	}
+	return "aiscan v" + Version + " (" + marker + ")"
+}
+
 type Option struct {
 	LLMOptions     `group:"LLM Options" config:"llm"`
 	ScannerOptions `group:"Scanner Options" config:"cyberhub"`

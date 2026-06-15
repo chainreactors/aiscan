@@ -42,6 +42,28 @@ func TestMergeOptionOnlyFillsEmpty(t *testing.T) {
 	}
 }
 
+func TestVersionStringIncludesBuildMarker(t *testing.T) {
+	orig := BuildMarker
+	t.Cleanup(func() { BuildMarker = orig })
+
+	BuildMarker = "aiscan-build-marker:test"
+	got := VersionString()
+	if !strings.Contains(got, "aiscan v"+Version) || !strings.Contains(got, BuildMarker) {
+		t.Fatalf("VersionString() = %q, want version and build marker", got)
+	}
+}
+
+func TestVersionStringAllowsEmptyBuildMarker(t *testing.T) {
+	orig := BuildMarker
+	t.Cleanup(func() { BuildMarker = orig })
+
+	BuildMarker = ""
+	got := VersionString()
+	if got != "aiscan v"+Version {
+		t.Fatalf("VersionString() = %q, want plain version", got)
+	}
+}
+
 func TestMergeOptionSpaceDefault(t *testing.T) {
 	dst := Option{}
 	dst.Space = "default"

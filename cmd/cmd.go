@@ -68,7 +68,7 @@ func AiScan() {
 
 	option := parsed.Option
 	if option.Version {
-		fmt.Printf("aiscan v%s\n", cfg.Version)
+		fmt.Println(cfg.VersionString())
 		return
 	}
 	if option.InitConfig {

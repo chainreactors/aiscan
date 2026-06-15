@@ -252,6 +252,14 @@ fi
 
 # ─── 生成 ldflags ───────────────────────────────────────────────
 
+BUILD_TIME=$(date -u +%Y%m%dT%H%M%SZ)
+BUILD_COMMIT=$(git rev-parse --short=12 HEAD 2>/dev/null || true)
+[ -n "$BUILD_COMMIT" ] || BUILD_COMMIT="unknown"
+if [ "$BUILD_COMMIT" != "unknown" ] && { ! git diff --quiet --ignore-submodules HEAD -- 2>/dev/null || ! git diff --cached --quiet --ignore-submodules -- 2>/dev/null; }; then
+    BUILD_COMMIT="${BUILD_COMMIT}-dirty"
+fi
+BUILD_MARKER="aiscan-build-marker:${BUILD_TIME}:${BUILD_COMMIT}:${PROFILE}"
+
 LDFLAGS="-s -w"
 
 add_ldflag() {
@@ -275,6 +283,7 @@ add_ldflag DefaultIOANodeName  "$CFG_IOA_NODE_NAME"
 add_ldflag DefaultSpace        "$CFG_IOA_SPACE"
 add_ldflag DefaultVerify       "$CFG_VERIFY"
 add_ldflag DefaultVerifyTimeout "$CFG_VERIFY_TIMEOUT"
+add_ldflag BuildMarker         "$BUILD_MARKER"
 
 # ─── 仅打印 ldflags ─────────────────────────────────────────────
 
@@ -294,6 +303,7 @@ echo "profile:  $PROFILE"
 [ -n "$CFG_CYBERHUB_URL" ] && echo "cyberhub: $CFG_CYBERHUB_URL"
 [ -n "$CFG_IOA_URL" ]      && echo "ioa:      $CFG_IOA_URL"
 [ -n "$CFG_VERIFY" ]       && echo "verify:   $CFG_VERIFY"
+echo "marker:   $BUILD_MARKER"
 
 # ─── Profile ────────────────────────────────────────────────────
 
