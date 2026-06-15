@@ -1,24 +1,15 @@
 package provider
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"strings"
-	"sync/atomic"
-	"time"
-
-	"github.com/chainreactors/proxyclient"
 )
 
 const (
-	defaultAnthropicTimeout  = 120 * time.Second
 	defaultAnthropicMaxToken = 4096
 	anthropicVersion         = "2023-06-01"
 )
@@ -29,29 +20,10 @@ type AnthropicProvider struct {
 }
 
 func NewAnthropicProvider(cfg *ProviderConfig) (*AnthropicProvider, error) {
-	timeout := anthropicTimeout(cfg.Timeout)
-
-	transport := &http.Transport{
-		ResponseHeaderTimeout: timeout,
-		IdleConnTimeout:       90 * time.Second,
+	client, err := newHTTPClient(cfg)
+	if err != nil {
+		return nil, err
 	}
-
-	if cfg.Proxy != "" {
-		proxyURL, err := url.Parse(cfg.Proxy)
-		if err != nil {
-			return nil, fmt.Errorf("invalid proxy URL: %w", err)
-		}
-		dial, err := proxyclient.NewClient(proxyURL)
-		if err != nil {
-			return nil, fmt.Errorf("create proxy client: %w", err)
-		}
-		transport.DialContext = dial.DialContext
-	}
-
-	client := &http.Client{
-		Transport: transport,
-	}
-
 	return &AnthropicProvider{config: cfg, client: client}, nil
 }
 
@@ -65,59 +37,26 @@ func (p *AnthropicProvider) ChatCompletion(ctx context.Context, req *ChatComplet
 	}
 	req.Stream = false
 
-	parentCtx := ctx
-	callTimeout := anthropicTimeout(p.config.Timeout)
-	var callTimedOut atomic.Bool
-	if callTimeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithCancel(ctx)
-		timer := time.AfterFunc(callTimeout, func() {
-			callTimedOut.Store(true)
-			cancel()
-		})
-		defer func() {
-			timer.Stop()
-			cancel()
-		}()
-	}
-
 	bodyBytes, err := p.marshalRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	endpoint := p.completionEndpoint()
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(bodyBytes))
+	data, err := (&apiRequest{client: p.client, timeout: timeoutFromConfig(p.config.Timeout)}).do(
+		ctx, "POST", p.completionEndpoint(), bodyBytes, p.setAuthHeaders,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	p.setRequestHeaders(httpReq, false)
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		return nil, wrapReadError(parentCtx, callTimedOut.Load(), callTimeout, "http request", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, wrapReadError(parentCtx, callTimedOut.Load(), callTimeout, "read response", err)
+		return nil, err
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, &APIError{StatusCode: resp.StatusCode, Message: string(respBody)}
-	}
-
-	result, err := parseAnthropicResponse(respBody)
+	result, err := parseAnthropicResponse(data)
 	if err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) {
-			apiErr.StatusCode = resp.StatusCode
 			return nil, apiErr
 		}
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
-
 	return result, nil
 }
 
@@ -132,127 +71,11 @@ func (p *AnthropicProvider) ChatCompletionStream(ctx context.Context, req *ChatC
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	reqCtx, reqCancel := context.WithCancel(ctx)
-
-	endpoint := p.completionEndpoint()
-	httpReq, err := http.NewRequestWithContext(reqCtx, "POST", endpoint, bytes.NewReader(bodyBytes))
-	if err != nil {
-		reqCancel()
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	p.setRequestHeaders(httpReq, true)
-
-	resp, err := p.client.Do(httpReq)
-	if err != nil {
-		reqCancel()
-		return nil, fmt.Errorf("http request: %w", err)
-	}
-	closeBody := true
-	defer func() {
-		if closeBody {
-			resp.Body.Close()
-		}
-	}()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		defer reqCancel()
-		timeout := anthropicTimeout(p.config.Timeout)
-		respBody, timedOut, err := readAllWithCancelTimeout(resp.Body, reqCancel, timeout)
-		if err != nil {
-			return nil, wrapReadError(ctx, timedOut, timeout, "read response", err)
-		}
-		return nil, &APIError{StatusCode: resp.StatusCode, Message: string(respBody)}
-	}
-
-	stallTimeout := anthropicTimeout(p.config.Timeout)
-	var stallDetected atomic.Bool
-	stallTimer := time.AfterFunc(stallTimeout, func() {
-		stallDetected.Store(true)
-		reqCancel()
-	})
-
-	events := make(chan ChatCompletionStreamEvent)
-	closeBody = false // ownership transferred to goroutine
-	go func() {
-		defer reqCancel()
-		defer resp.Body.Close()
-		defer close(events)
-		defer stallTimer.Stop()
-
-		scanner := bufio.NewScanner(resp.Body)
-		buf := make([]byte, 0, 64*1024)
-		scanner.Buffer(buf, 1024*1024)
-
-		parser := &anthropicStreamParser{}
-		var sseEvent string
-
-		for scanner.Scan() {
-			stallTimer.Reset(stallTimeout)
-
-			line := strings.TrimSpace(scanner.Text())
-			if line == "" || strings.HasPrefix(line, ":") {
-				continue
-			}
-			if strings.HasPrefix(line, "event:") {
-				sseEvent = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-				continue
-			}
-			if !strings.HasPrefix(line, "data:") {
-				continue
-			}
-			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-			if data == "[DONE]" {
-				select {
-				case events <- ChatCompletionStreamEvent{Done: true}:
-				case <-ctx.Done():
-				}
-				return
-			}
-
-			event, err := parser.parse(sseEvent, []byte(data))
-			sseEvent = ""
-			if err != nil {
-				select {
-				case events <- ChatCompletionStreamEvent{Err: err}:
-				case <-ctx.Done():
-				}
-				return
-			}
-			if event.Done {
-				select {
-				case events <- event:
-				case <-ctx.Done():
-				}
-				return
-			}
-			if event.Err != nil || event.Delta.Role != "" || event.Delta.Content != nil || event.Delta.ReasoningContent != nil || len(event.Delta.ToolCalls) > 0 || event.FinishReason != "" || event.Usage != nil {
-				select {
-				case events <- event:
-				case <-ctx.Done():
-					return
-				}
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			streamErr := fmt.Errorf("read stream: %w", err)
-			if stallDetected.Load() {
-				streamErr = fmt.Errorf("%w (no data for %s): %v", ErrStreamStalled, stallTimeout, err)
-			}
-			select {
-			case events <- ChatCompletionStreamEvent{Err: streamErr}:
-			case <-ctx.Done():
-			}
-			return
-		}
-
-		select {
-		case events <- ChatCompletionStreamEvent{Done: true}:
-		case <-ctx.Done():
-		}
-	}()
-
-	return events, nil
+	parser := &anthropicStreamParser{}
+	return streamSSE(ctx, p.client, timeoutFromConfig(p.config.Timeout),
+		p.completionEndpoint(), bodyBytes, p.setAuthHeaders,
+		parser.parse,
+	)
 }
 
 func (p *AnthropicProvider) completionEndpoint() string {
@@ -263,11 +86,7 @@ func (p *AnthropicProvider) completionEndpoint() string {
 	return base + "/messages"
 }
 
-func (p *AnthropicProvider) setRequestHeaders(req *http.Request, stream bool) {
-	req.Header.Set("Content-Type", "application/json")
-	if stream {
-		req.Header.Set("Accept", "text/event-stream")
-	}
+func (p *AnthropicProvider) setAuthHeaders(req *http.Request) {
 	if p.config.APIKey != "" {
 		req.Header.Set("x-api-key", p.config.APIKey)
 	}
@@ -286,13 +105,6 @@ type anthropicTool struct {
 	CacheControl *cacheControlMarker    `json:"cache_control,omitempty"`
 }
 
-// marshalRequest serializes req to JSON for the Anthropic Messages API:
-//  1. Tools: type:"function" -> type:"custom", parameters -> input_schema
-//  2. System messages: extracted to top-level "system" field
-//  3. Assistant tool_calls -> tool_use content blocks
-//  4. Tool-role messages -> user-role with tool_result content blocks
-//  5. When CacheRetention is set, injects cache_control markers on system,
-//     last tool definition, and last user message for prompt caching.
 func (p *AnthropicProvider) marshalRequest(req *ChatCompletionRequest) ([]byte, error) {
 	cacheEnabled := req.CacheRetention != CacheNone
 
@@ -384,7 +196,6 @@ func (p *AnthropicProvider) marshalRequest(req *ChatCompletionRequest) ([]byte, 
 
 	merged := mergeConsecutive(messages)
 
-	// Cache breakpoint on last user message — marks the conversation boundary.
 	if cacheEnabled {
 		for i := len(merged) - 1; i >= 0; i-- {
 			if merged[i].Role == "user" && len(merged[i].Content) > 0 {
@@ -400,8 +211,6 @@ func (p *AnthropicProvider) marshalRequest(req *ChatCompletionRequest) ([]byte, 
 		maxTokens = defaultAnthropicMaxToken
 	}
 
-	// System prompt: use content blocks array when caching (to attach cache_control),
-	// plain string otherwise.
 	systemText := strings.Join(systemParts, "\n\n")
 	var system interface{}
 	if cacheEnabled && systemText != "" {
@@ -478,13 +287,6 @@ func contentPartsToAnthropicBlocks(parts []ContentPart) []map[string]interface{}
 		}
 	}
 	return blocks
-}
-
-func deref(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }
 
 type anthropicUsage struct {
@@ -794,18 +596,12 @@ func (p *anthropicStreamParser) usageSnapshot() *Usage {
 	return convertAnthropicUsage(&p.usage)
 }
 
-func anthropicTimeout(seconds int) time.Duration {
-	return timeoutFromConfig(seconds)
-}
-
-// ---------------------------------------------------------------------------
-// WebSearch via Anthropic server-side web_search tool
-// ---------------------------------------------------------------------------
+// --- WebSearch via Anthropic server-side web_search tool ---
 
 func (p *AnthropicProvider) WebSearch(ctx context.Context, query string, maxResults int) (*WebSearchResponse, error) {
 	maxResults = clampInt(maxResults, 1, 10, 5)
 
-	data, err := doJSON(ctx, p.client, anthropicTimeout(p.config.Timeout),
+	data, err := doJSON(ctx, p.client, timeoutFromConfig(p.config.Timeout),
 		http.MethodPost, p.completionEndpoint(),
 		map[string]any{
 			"model":      p.config.Model,
@@ -816,7 +612,7 @@ func (p *AnthropicProvider) WebSearch(ctx context.Context, query string, maxResu
 			"messages": []map[string]string{{"role": "user", "content": "Search the web for: " + query}},
 		},
 		func(req *http.Request) {
-			p.setRequestHeaders(req, false)
+			p.setAuthHeaders(req)
 			req.Header.Set("anthropic-beta", "web-search-2025-03-05")
 		},
 	)
@@ -870,17 +666,4 @@ func parseAnthropicWebSearchResponse(data []byte) (*WebSearchResponse, error) {
 	}
 	out.Summary = strings.TrimSpace(out.Summary)
 	return out, nil
-}
-
-func clampInt(v, min, max, fallback int) int {
-	if v <= 0 {
-		return fallback
-	}
-	if v < min {
-		return min
-	}
-	if v > max {
-		return max
-	}
-	return v
 }

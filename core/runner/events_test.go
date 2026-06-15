@@ -89,7 +89,7 @@ func TestEventsFileSubscriberAppendsJSONL(t *testing.T) {
 	}
 }
 
-func TestEventsFileSubscriberTruncatesLargeFields(t *testing.T) {
+func TestEventsFileSubscriberLargeFieldsPassThrough(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "events.jsonl")
 	w, err := newEventsFileSubscriber(path)
@@ -98,7 +98,7 @@ func TestEventsFileSubscriberTruncatesLargeFields(t *testing.T) {
 	}
 	defer w.Close()
 
-	huge := strings.Repeat("a", agent.EventResultLimit+1024)
+	huge := strings.Repeat("a", 20*1024)
 	w.HandleEvent(agent.Event{
 		Type:   agent.EventToolExecutionEnd,
 		Result: huge,
@@ -108,11 +108,8 @@ func TestEventsFileSubscriberTruncatesLargeFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read file: %v", err)
 	}
-	if !strings.Contains(string(data), "[truncated") {
-		t.Fatalf("expected truncation marker in: %s", string(data))
-	}
-	if len(data) > agent.EventResultLimit+2048 {
-		t.Fatalf("written line should be bounded; got %d bytes", len(data))
+	if !strings.Contains(string(data), huge) {
+		t.Fatalf("expected full result in event log")
 	}
 }
 
