@@ -58,6 +58,25 @@ func ProviderConfig(option *Option) agent.ProviderConfig {
 	return cfg
 }
 
+func FallbackProviderConfigs(option *Option) []agent.ProviderConfig {
+	var configs []agent.ProviderConfig
+	for _, entry := range option.Providers {
+		cfg := agent.ProviderConfig{
+			Provider: entry.Provider,
+			BaseURL:  entry.BaseURL,
+			APIKey:   entry.APIKey,
+			Model:    entry.Model,
+			Proxy:    entry.Proxy,
+			Timeout:  entry.Timeout,
+		}
+		if cfg.Timeout <= 0 {
+			cfg.Timeout = 120
+		}
+		configs = append(configs, cfg)
+	}
+	return configs
+}
+
 func ApplyResolvedProviderOptions(option *Option, cfg agent.ProviderConfig) {
 	option.Provider = cfg.Provider
 	option.BaseURL = cfg.BaseURL

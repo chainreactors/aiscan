@@ -68,6 +68,7 @@ func (a *Agent) Continue(ctx context.Context) (*Result, error) {
 func (a *Agent) Derive() *Agent {
 	return NewAgent(Config{
 		Provider:        a.Cfg.Provider,
+		Fallbacks:       a.Cfg.Fallbacks,
 		Tools:           a.Cfg.Tools,
 		Model:           a.Cfg.Model,
 		Logger:          a.Cfg.Logger,

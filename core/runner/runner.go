@@ -143,6 +143,7 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 
 	rt.Config = agent.Config{
 		Provider:       rt.App.Provider,
+		Fallbacks:      rt.App.ProviderFallbacks,
 		Tools:          rt.App.Commands,
 		Model:          option.Model,
 		Logger:         logger,
