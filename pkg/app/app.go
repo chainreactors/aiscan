@@ -31,9 +31,10 @@ type Config struct {
 }
 
 type ProviderConfig struct {
-	Enabled  bool
-	Config   agent.ProviderConfig
-	Optional bool
+	Enabled   bool
+	Config    agent.ProviderConfig
+	Fallbacks []agent.ProviderConfig
+	Optional  bool
 }
 
 type ScannerConfig struct {
@@ -70,12 +71,13 @@ type IOAConfig struct {
 }
 
 type App struct {
-	Provider         agent.Provider
-	ProviderConfig   agent.ProviderConfig
-	Commands         *command.CommandRegistry
-	Engines          *engine.Set
-	Skills           *skills.Store
-	SkillDiagnostics []skills.Diagnostic
+	Provider           agent.Provider
+	ProviderConfig     agent.ProviderConfig
+	ProviderFallbacks  []agent.ProviderEntry
+	Commands           *command.CommandRegistry
+	Engines            *engine.Set
+	Skills             *skills.Store
+	SkillDiagnostics   []skills.Diagnostic
 	IOAClient          protocols.ClientAPI
 	IOAStreamClient    ioaclient.StreamAPI
 }
@@ -101,6 +103,18 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		} else {
 			app.Provider = llmProvider
 			app.ProviderConfig = *resolved
+		}
+		for _, fbCfg := range cfg.Provider.Fallbacks {
+			fbProvider, fbResolved, err := initProvider(fbCfg, logger)
+			if err != nil {
+				logger.Warnf("fallback provider %s init failed: %s", fbCfg.Provider, err)
+				continue
+			}
+			app.ProviderFallbacks = append(app.ProviderFallbacks, agent.ProviderEntry{
+				Provider: fbProvider,
+				Model:    fbResolved.Model,
+			})
+			logger.Infof("fallback provider init provider=%s model=%s", fbResolved.Provider, fbResolved.Model)
 		}
 	}
 

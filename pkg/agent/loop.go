@@ -19,6 +19,9 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		cfg.Tools = command.NewRegistry()
 	}
 
+	fallbacks := cfg.Fallbacks
+	fallbackIndex := 0
+
 	transcript := newTranscript(cfg.Messages, 8)
 	turn := 0
 
@@ -86,6 +89,15 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		assistantMsg, usage, err := requestWithRetry(ctx, cfg, bus, reqMessages, cfg.Tools.ToolDefinitions(), turn)
 		transcript.recordTurnUsage(turn, usage)
 		if err != nil {
+			if fallbackIndex < len(fallbacks) {
+				next := fallbacks[fallbackIndex]
+				fallbackIndex++
+				cfg.Logger.Warnf("provider %s exhausted, switching to %s (model %s)",
+					cfg.Provider.Name(), next.Provider.Name(), next.Model)
+				cfg.Provider = next.Provider
+				cfg.Model = next.Model
+				continue
+			}
 			failure := NewTextMessage("assistant", "")
 			transcript.append(failure)
 			bus.Emit(Event{Type: EventMessageStart, Turn: turn, Message: failure})

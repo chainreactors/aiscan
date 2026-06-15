@@ -154,10 +154,16 @@ type AfterToolCallResult struct {
 // Receives the current config context so it can adapt to active tools, model, etc.
 type SystemPromptFunc func(cfg *Config) string
 
+type ProviderEntry struct {
+	Provider Provider
+	Model    string
+}
+
 type Config struct {
 	Provider         Provider
 	Tools            *command.CommandRegistry
 	Model            string
+	Fallbacks        []ProviderEntry
 	SystemPrompt     string
 	SystemPromptFn   SystemPromptFunc
 	Messages         []ChatMessage

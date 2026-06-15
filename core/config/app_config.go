@@ -19,9 +19,10 @@ type RuntimeFeatures struct {
 func AppConfig(option *Option, features RuntimeFeatures, logger telemetry.Logger) app.Config {
 	return app.Config{
 		Provider: app.ProviderConfig{
-			Enabled:  features.ProviderEnabled,
-			Config:   ProviderConfig(option),
-			Optional: features.ProviderOptional,
+			Enabled:   features.ProviderEnabled,
+			Config:    ProviderConfig(option),
+			Fallbacks: FallbackProviderConfigs(option),
+			Optional:  features.ProviderOptional,
 		},
 		Scanner: app.ScannerConfig{
 			CyberhubURL:       option.CyberhubURL,
