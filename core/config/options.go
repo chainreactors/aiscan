@@ -27,12 +27,22 @@ type ScanConfigOptions struct {
 }
 
 type LLMOptions struct {
-	Provider string `long:"provider" config:"provider" description:"LLM provider name (openai, deepseek, openrouter, ollama, etc.)"`
-	BaseURL  string `long:"base-url" config:"base_url" description:"LLM API base URL"`
-	APIKey   string `long:"api-key" config:"api_key" description:"LLM API key (or set env: OPENAI_API_KEY, AISCAN_API_KEY)"`
-	Model    string `long:"model" config:"model" description:"LLM model name"`
-	LLMProxy string `long:"llm-proxy" config:"proxy" description:"Proxy for LLM API requests"`
-	AI       bool   `long:"ai" description:"Analyze direct scanner output with an LLM"`
+	Provider  string              `long:"provider" config:"provider" description:"LLM provider name (openai, deepseek, openrouter, ollama, etc.)"`
+	BaseURL   string              `long:"base-url" config:"base_url" description:"LLM API base URL"`
+	APIKey    string              `long:"api-key" config:"api_key" description:"LLM API key (or set env: OPENAI_API_KEY, AISCAN_API_KEY)"`
+	Model     string              `long:"model" config:"model" description:"LLM model name"`
+	LLMProxy  string              `long:"llm-proxy" config:"proxy" description:"Proxy for LLM API requests"`
+	Providers []LLMProviderEntry  `no-flag:"true" config:"providers" yaml:"providers"`
+	AI        bool                `long:"ai" description:"Analyze direct scanner output with an LLM"`
+}
+
+type LLMProviderEntry struct {
+	Provider string `config:"provider" yaml:"provider"`
+	BaseURL  string `config:"base_url" yaml:"base_url"`
+	APIKey   string `config:"api_key" yaml:"api_key"`
+	Model    string `config:"model" yaml:"model"`
+	Proxy    string `config:"proxy" yaml:"proxy"`
+	Timeout  int    `config:"timeout" yaml:"timeout"`
 }
 
 type ScannerOptions struct {

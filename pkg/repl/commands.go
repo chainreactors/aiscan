@@ -125,6 +125,17 @@ func SkillCommands(s *Session) []Command {
 	return cmds
 }
 
+// ProviderCommands returns the /provider command group.
+func ProviderCommands() []Command {
+	return []Command{
+		{
+			Name:        "/provider",
+			Description: "查看/管理 LLM provider 链",
+			Args:        ArgsOptional,
+		},
+	}
+}
+
 // RunPrompt expands skills and submits a prompt to the controller.
 func RunPrompt(s *Session, label, input string) error {
 	prompt := skills.ExpandCommand(input, s.App.Skills)
@@ -136,14 +147,21 @@ func RunPrompt(s *Session, label, input string) error {
 }
 
 // StatusInfo collects current session state for display.
+type ProviderInfo struct {
+	Name   string
+	Model  string
+	Active bool
+}
+
 type StatusInfo struct {
-	Provider string
-	Model    string
-	Mode     string
-	Task     string
-	IOA      string
-	History  string
-	Skills   string
+	Provider  string
+	Model     string
+	Providers []ProviderInfo
+	Mode      string
+	Task      string
+	IOA       string
+	History   string
+	Skills    string
 }
 
 func CollectStatus(s *Session, mode, historyPath string) StatusInfo {
@@ -154,6 +172,16 @@ func CollectStatus(s *Session, mode, historyPath string) StatusInfo {
 	if s.App != nil {
 		info.Provider = s.App.ProviderConfig.Provider
 		info.Model = s.App.ProviderConfig.Model
+		if info.Provider != "" {
+			info.Providers = append(info.Providers, ProviderInfo{
+				Name: info.Provider, Model: info.Model, Active: true,
+			})
+		}
+		for _, fb := range s.App.ProviderFallbacks {
+			info.Providers = append(info.Providers, ProviderInfo{
+				Name: fb.Provider.Name(), Model: fb.Model,
+			})
+		}
 	}
 	if info.Provider == "" {
 		info.Provider = "not configured"

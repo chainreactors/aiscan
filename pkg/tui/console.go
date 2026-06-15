@@ -651,6 +651,7 @@ func (r *AgentConsole) rootCommand() *cobra.Command {
 	for _, cmd := range repl.SkillCommands(r.replSession()) {
 		root.AddCommand(r.wrapCommand(cmd))
 	}
+	root.AddCommand(r.providerCommand())
 	root.AddCommand(r.ioaCommands()...)
 	return root
 }
@@ -730,6 +731,7 @@ func (r *AgentConsole) renderHelp() string {
 	rows = append(rows, helpRow{})
 	rows = append(rows, helpRow{Command: "普通文本", Detail: "直接发送自然语言任务"})
 	rows = append(rows, helpRow{Command: "/<skill> 任务", Detail: "用指定 skill 处理后面的任务"})
+	rows = append(rows, helpRow{Command: "/provider", Detail: "查看/管理 LLM provider 链"})
 	rows = append(rows, helpRow{Command: "/spaces /nodes", Detail: "配置 IOA 时查看协作状态"})
 	return r.renderPanel("commands", renderHelpRows(rows, colorEnabled), colorEnabled)
 }
@@ -834,6 +836,48 @@ func (r *AgentConsole) ioaClient() (*ioaclient.Client, error) {
 		return nil, fmt.Errorf("IOA not configured: use --ioa-url")
 	}
 	return ioaclient.NewClient(ioaURL, "")
+}
+
+func (r *AgentConsole) providerCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "/provider",
+		Short: "查看/管理 LLM provider 链",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				fmt.Fprint(os.Stdout, r.renderProviders())
+				return nil
+			}
+			switch args[0] {
+			case "list":
+				fmt.Fprint(os.Stdout, r.renderProviders())
+			default:
+				fmt.Fprintf(os.Stderr, "unknown subcommand: %s (use: list)\n", args[0])
+			}
+			return nil
+		},
+	}
+	cmd.DisableFlagParsing = true
+	return cmd
+}
+
+func (r *AgentConsole) renderProviders() string {
+	colorEnabled := r.output != nil && r.output.color.Enabled
+	info := repl.CollectStatus(r.replSession(), "", "")
+	if len(info.Providers) == 0 {
+		return "\n  No providers configured.\n\n"
+	}
+	var rows []helpRow
+	for i, p := range info.Providers {
+		status := "○ standby"
+		if p.Active {
+			status = "● active"
+		}
+		label := fmt.Sprintf("#%d  %s", i+1, p.Name)
+		detail := fmt.Sprintf("%-24s %s", p.Model, status)
+		rows = append(rows, helpRow{Command: label, Detail: detail})
+	}
+	return r.renderPanel("providers", renderHelpRows(rows, colorEnabled), colorEnabled)
 }
 
 func (r *AgentConsole) ioaCommands() []*cobra.Command {

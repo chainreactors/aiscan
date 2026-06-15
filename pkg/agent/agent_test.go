@@ -1069,3 +1069,80 @@ type retryableTimeoutError struct{}
 func (retryableTimeoutError) Error() string   { return "timeout awaiting response headers" }
 func (retryableTimeoutError) Timeout() bool   { return true }
 func (retryableTimeoutError) Temporary() bool { return true }
+
+func TestProviderFallbackOnRetryExhaustion(t *testing.T) {
+	primary := &scriptedProvider{err: &APIError{StatusCode: 401, Message: "invalid api key"}}
+	fallback := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "from fallback")),
+		},
+	}
+
+	a := NewAgent(Config{
+		Provider:   primary,
+		Model:      "primary-model",
+		Fallbacks:  []ProviderEntry{{Provider: fallback, Model: "fallback-model"}},
+		MaxRetries: 0,
+		Logger:     telemetry.NopLogger(),
+	})
+
+	result, err := a.Run(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil (fallback should succeed)", err)
+	}
+	if result.Output != "from fallback" {
+		t.Fatalf("Output = %q, want 'from fallback'", result.Output)
+	}
+	if len(fallback.requestsSnapshot()) == 0 {
+		t.Fatal("fallback provider was never called")
+	}
+}
+
+func TestProviderFallbackAllExhausted(t *testing.T) {
+	primary := &scriptedProvider{err: &APIError{StatusCode: 401, Message: "bad key"}}
+	fallback := &scriptedProvider{err: &APIError{StatusCode: 403, Message: "forbidden"}}
+
+	a := NewAgent(Config{
+		Provider:   primary,
+		Model:      "primary-model",
+		Fallbacks:  []ProviderEntry{{Provider: fallback, Model: "fallback-model"}},
+		MaxRetries: 0,
+		Logger:     telemetry.NopLogger(),
+	})
+
+	_, err := a.Run(context.Background(), "hello")
+	if err == nil {
+		t.Fatal("Run() error = nil, want error when all providers exhausted")
+	}
+}
+
+func TestNoFallbackWhenPrimarySucceeds(t *testing.T) {
+	primary := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "from primary")),
+		},
+	}
+	fallback := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "from fallback")),
+		},
+	}
+
+	a := NewAgent(Config{
+		Provider:   primary,
+		Fallbacks:  []ProviderEntry{{Provider: fallback, Model: "fallback-model"}},
+		MaxRetries: 0,
+		Logger:     telemetry.NopLogger(),
+	})
+
+	result, err := a.Run(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Output != "from primary" {
+		t.Fatalf("Output = %q, want 'from primary'", result.Output)
+	}
+	if len(fallback.requestsSnapshot()) != 0 {
+		t.Fatal("fallback provider should not be called when primary succeeds")
+	}
+}

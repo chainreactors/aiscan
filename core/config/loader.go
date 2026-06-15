@@ -166,6 +166,14 @@ llm:
   # LLM API 代理
   # 环境变量: AISCAN_LLM_PROXY
   proxy: ""
+  # 备用 provider 列表（按优先级排序，主 provider 不可用时自动切换）
+  # providers:
+  #   - provider: openai
+  #     model: gpt-4o
+  #     api_key: ""
+  #   - provider: ollama
+  #     model: llama3.1
+  #     base_url: http://localhost:11434/v1
 
 # Cyberhub 资源服务
 cyberhub:
