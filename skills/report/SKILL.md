@@ -26,6 +26,12 @@ The scan input uses markdown annotations to convey verification status. Treat th
 - Sniper CVE intelligence is a lead. Never report it as a confirmed exploit.
 - Strikethrough/not_confirmed loots are excluded from Critical Loots under all circumstances.
 - Separate confirmed vulnerabilities from unverified leads in the summary.
+- No executable PoC means no confirmed finding. Each confirmed item must include a curl/protocol command, saved browser replay, or equivalent reproducible command.
+- Do not write standalone P3/low/informational findings unless the user explicitly requested an inventory or the issue chains into demonstrated impact.
+- CORS, security headers, version disclosure, GraphQL introspection, open redirect, and self-XSS stay out of confirmed findings unless the report includes the impact chain evidence.
+- If all material is below P3/medium or lacks executable reproduction, say "no confirmed reportable vulnerability" instead of inflating severity.
+- Keep the report focused on confirmed impact first; put unverified leads in Potential Risks only when they are high-value enough to guide follow-up.
+- For JS-heavy targets, include a coverage statement before claiming hidden-endpoint coverage. State which JS/interface sources were explored, such as rendered scripts, bundles, source maps, route manifests, dynamic imports, browser network traces, robots/sitemap, and archived routes. If those sources were not exhausted, say JS review was sampled/limited and do not claim complete coverage.
 
 ## Report Format
 
@@ -41,7 +47,7 @@ Count confirmed vulnerabilities separately from unverified leads. Strikethrough 
 
 List verified loots first. Unannotated scanner matches may appear only with "unverified scanner match" stated clearly.
 For each:
-- **[target]** — vulnerability description, CVE if applicable, impact, verification status
+- **[target]** — vulnerability description, CVE if applicable, impact, verification status, reproducible PoC command
 
 ## Potential Risks (Unverified)
 

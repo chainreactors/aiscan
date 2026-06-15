@@ -1,28 +1,28 @@
 # Fuzz
 
-Post-scan parameter fuzzing. After scan/spray discovers web endpoints, evaluate and fuzz interesting parameters for injection vulnerabilities.
+Post-scan parameter review. After scan/spray discovers web endpoints, identify inputs that deserve focused validation without treating every parameter as mandatory work.
 
 ## Timing
 
-After `scan` or `spray --crawl`, enumerate parameterized URLs. In full builds, use `katana -u <target> -d 2 -f qurl`; otherwise work from scan/spray URLs, forms, and manually observed parameters. Spray crawl strips query parameters by design; katana preserves them when available.
+Use this skill when the user explicitly asks for parameter review, or when deep testing discovers parameterized URLs, forms, or manually observed inputs worth reviewing. In full builds, `katana -u <target> -d 2 -f qurl` can help enumerate URLs with query strings. Spray crawl strips query parameters by design; katana preserves them when available.
+
+This is not a request to fuzz every parameter. Select a small set of high-value candidates from observed evidence and stop when the branch is not producing useful signal.
 
 ## Target Selection
 
-Fuzz candidates: query parameters, dynamic path segments, POST bodies from form actions, headers that influence output (Host, X-Forwarded-For). Prioritize parameters that reflect in responses or interact with backend state. Skip static assets and third-party CDNs.
+Prioritize inputs that are security-relevant: reflected values, parameters that influence backend state, authenticated or privileged actions, file/upload surfaces, dynamic path segments, and unusual API endpoints. Skip static assets, third-party CDNs, and low-value noise.
 
-## Methodology
+When several inputs compete for time, prefer authorization-sensitive and backend-shaping parameters first: object IDs, tenant/user/account IDs, export/report filters, `sort`, `order`, `orderBy`, `fields`, `include`, and pagination cursors. Try values learned from one endpoint against related endpoints when the field names or object types line up.
 
-For each candidate parameter:
+## Standard
 
-1. **Baseline first** — capture the normal response (status, body length, timing) before injecting anything.
-2. **Classify the interaction** — reflection in output → test injection into that output context. Backend data influence → test data-layer injection. Opaque output → try timing-based blind techniques. Verbose errors → use error-based confirmation.
-3. **One variable at a time** — hold everything else constant.
-4. **Use unique canaries** — generate a random marker per test (e.g., `aiscan_7f3b2c9`). Never rely on generic strings (`alert(1)`, `<script>`) that may exist naturally in the page.
-5. **Reproduce before reporting** — a single anomalous response is a lead. Confirm with a distinct payload.
-6. **Respect defenses** — if WAF blocks, vary approach or slow down. Don't retry identical payloads.
+- Capture a baseline before drawing conclusions.
+- Change one variable at a time when comparing behavior.
+- Use unique canaries or measurable signals instead of generic strings.
+- Treat a single anomaly as a lead, not a finding.
 
 ## Confirmation Standard
 
-A loot is confirmed only when there is a measurable, reproducible difference between baseline and injected responses, proven by: the exact payload (curl-reproducible), the response fragment showing exploitation, and the baseline for comparison. Without all three, classify as "potential/unverified".
+A loot is confirmed only when there is a measurable, reproducible difference from baseline and the evidence demonstrates security impact. Without baseline, reproduction, and impact evidence, classify it as potential or unverified.
 
 Apply the `verify` skill's validation rules for all loots.
