@@ -42,9 +42,6 @@ func TestBuildSystemPromptAllowsNilConfig(t *testing.T) {
 	if !strings.Contains(prompt, "## Environment") {
 		t.Fatalf("prompt missing environment section:\n%s", prompt)
 	}
-	if !strings.Contains(prompt, "## Key Principles") {
-		t.Fatalf("prompt missing principles section:\n%s", prompt)
-	}
 }
 
 func TestSystemPromptFuncAdaptsToTools(t *testing.T) {
@@ -57,16 +54,30 @@ func TestSystemPromptFuncAdaptsToTools(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPromptAlwaysLoadsAiscanSkill(t *testing.T) {
+	prompt := BuildSystemPrompt(&PromptConfig{}, nil)
+	if !strings.Contains(prompt, "## Skill: aiscan") {
+		t.Fatalf("prompt missing base aiscan skill:\n%s", prompt)
+	}
+	// Key content from the aiscan skill should be present
+	for _, want := range []string{
+		"Platform Context",
+		"Response Style",
+		"Verification Standard",
+		"Operating Rules",
+		"Findings Log",
+		"Termination",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt missing aiscan skill section %q:\n%s", want, prompt)
+		}
+	}
+}
+
 func TestBuildSystemPromptUsesSessionFindingsPath(t *testing.T) {
 	prompt := BuildSystemPrompt(&PromptConfig{}, &agent.Config{SessionID: "sess/evil"})
-	if strings.Contains(prompt, "/tmp/findings.md") {
-		t.Fatalf("prompt still uses global findings path:\n%s", prompt)
-	}
 	if !strings.Contains(prompt, "aiscan-findings-sess-evil.md") {
 		t.Fatalf("prompt missing session findings path:\n%s", prompt)
-	}
-	if !strings.Contains(prompt, "reproducible command or PoC evidence") {
-		t.Fatalf("prompt missing generalized evidence wording:\n%s", prompt)
 	}
 }
 
@@ -79,9 +90,9 @@ func TestBuildSystemPromptIncludesDecisionBoundaries(t *testing.T) {
 		"Test 3-5 observed",
 		"enumerate all reachable script sources",
 		"remaining limits are clear",
-		"Decision routing",
-		"Login/auth boundary -> authorization",
-		"API service -> unauthenticated access",
+		"Default ROI routing",
+		"login or account boundary -> authorization",
+		"API or Swagger/OpenAPI -> unauthenticated access",
 		"sort/orderBy",
 		"about 20 minutes",
 	} {
@@ -109,10 +120,32 @@ func TestBuildSystemPromptLoadsSkillBody(t *testing.T) {
 			t.Fatalf("prompt missing %q:\n%s", want, prompt)
 		}
 	}
-	// Loaded skills should appear before Key Principles
-	skillIdx := strings.Index(prompt, "## Skill: scan/verify")
-	principlesIdx := strings.Index(prompt, "## Key Principles")
-	if skillIdx > principlesIdx {
-		t.Fatal("loaded skills should appear before principles")
+}
+
+func TestBuildSystemPromptDeduplicatesAiscan(t *testing.T) {
+	prompt := BuildSystemPrompt(&PromptConfig{
+		LoadedSkills: []LoadedSkill{
+			{Name: "aiscan", Body: "duplicate body that should be skipped"},
+		},
+	}, nil)
+	if strings.Contains(prompt, "duplicate body that should be skipped") {
+		t.Fatal("should not include duplicate aiscan skill body from LoadedSkills")
+	}
+	if strings.Count(prompt, "## Skill: aiscan") != 1 {
+		t.Fatal("aiscan skill should appear exactly once")
+	}
+}
+
+func TestBuildSystemPromptScannerMode(t *testing.T) {
+	prompt := BuildSystemPrompt(&PromptConfig{
+		ScannerAgentMode: true,
+		ScannerName:      "gogo",
+	}, nil)
+	if !strings.Contains(prompt, "Scanner Agent Constraints") {
+		t.Fatalf("scanner mode prompt missing constraints:\n%s", prompt)
+	}
+	// Should still contain the base aiscan skill
+	if !strings.Contains(prompt, "## Skill: aiscan") {
+		t.Fatalf("scanner mode prompt missing base aiscan skill:\n%s", prompt)
 	}
 }

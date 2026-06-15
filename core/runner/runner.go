@@ -182,6 +182,7 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 	rt.Config = agent.NewAgent(rt.Config).Cfg
 
 	rt.App.Commands.RegisterTool(agent.NewLoopTool(scheduler))
+	rt.App.Commands.RegisterTool(agent.NewFinishTool())
 
 	if pc.FindingsPath == "" {
 		pc.FindingsPath = findingsLogPath(rt.Config.SessionID)
@@ -283,7 +284,7 @@ func runOneShotMode(ctx context.Context, option *cfg.Option, logger telemetry.Lo
 	rt.Output.Start("task", task)
 	result, err := agent.NewAgent(rt.Config.
 		WithSystemPrompt(rt.SystemPrompt).
-		WithStream(agentStreamingEnabled(option))).
+		WithStream(false)).
 		Run(ctx, task)
 	if err != nil {
 		return err
@@ -323,7 +324,7 @@ func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetr
 
 	session := agent.NewAgent(rt.Config.
 		WithSystemPrompt(rt.SystemPrompt).
-		WithStream(agentStreamingEnabled(option)))
+		WithStream(interactiveStreamingEnabled(option)))
 
 	// Reuse the runtime's bus-subscribed output so streaming deltas, tool
 	// events, and the final render share one set of state (avoids a second
@@ -505,8 +506,13 @@ func renderHeartbeatPrompt(option *cfg.Option, initialTask, nodeID string, info 
 		}
 	}
 
-	sb.WriteString("\nDecide whether to dispatch work, reply, summarize, or stay idle. ")
-	sb.WriteString("Use IOA tools for coordination and avoid repeating completed work.")
+	if instruction := skills.ReadFile("ioa/heartbeat.md"); instruction != "" {
+		sb.WriteByte('\n')
+		sb.WriteString(strings.TrimSpace(instruction))
+	} else {
+		sb.WriteString("\nDecide whether to dispatch work, reply, summarize, or stay idle. ")
+		sb.WriteString("Use IOA tools for coordination and avoid repeating completed work.")
+	}
 	return sb.String()
 }
 

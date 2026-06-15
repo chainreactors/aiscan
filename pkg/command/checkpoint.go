@@ -42,7 +42,7 @@ func (t *CheckpointTool) Result() *CheckpointResult {
 func (t *CheckpointTool) Name() string { return "checkpoint" }
 
 func (t *CheckpointTool) Description() string {
-	return "Submit the final checkpoint after completing verification or analysis. This terminates the current session. Call exactly once with your conclusion."
+	return "Record a structured checkpoint with evidence and analysis details. Can be called multiple times; each call overwrites the previous result. Does NOT terminate the session — call the finish tool when done."
 }
 
 func (t *CheckpointTool) Definition() ToolDefinition {
@@ -67,7 +67,7 @@ func (t *CheckpointTool) Execute(_ context.Context, arguments string) (ToolResul
 		Options: args.Options,
 		Labels:  args.Labels,
 	}
-	return TerminateResult(fmt.Sprintf("checkpoint submitted: kind=%s title=%s", t.result.Kind, t.result.Title)), nil
+	return TextResult(fmt.Sprintf("checkpoint recorded: kind=%s title=%s", t.result.Kind, t.result.Title)), nil
 }
 
 func NormalizeStatus(value string) string {

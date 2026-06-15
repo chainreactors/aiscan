@@ -108,7 +108,7 @@ func TestReadVirtual(t *testing.T) {
 	if !handled {
 		t.Fatal("ReadVirtual() handled = false")
 	}
-	if !strings.Contains(content, "name: aiscan") || !strings.Contains(content, "# Aiscan Mechanisms") {
+	if !strings.Contains(content, "name: aiscan") || !strings.Contains(content, "# Aiscan") {
 		t.Fatalf("unexpected content:\n%s", content)
 	}
 
