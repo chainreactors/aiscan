@@ -103,7 +103,7 @@ func TestExecuteInstallsResourceProviderBeforePrint(t *testing.T) {
 	defer spraypkg.ResetResourceProvider()
 
 	var calls atomic.Int32
-	engine := sdkspray.NewEngine(sdkspray.NewConfig().WithResourceProvider(func(name string) []byte {
+	engine, err := sdkspray.NewEngine(sdkspray.NewConfig().WithResourceProvider(func(name string) []byte {
 		calls.Add(1)
 		switch name {
 		case "http", "socket":
@@ -111,8 +111,11 @@ func TestExecuteInstallsResourceProviderBeforePrint(t *testing.T) {
 		}
 		return nil
 	}))
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	err := New(engine).Execute(context.Background(), []string{"--print"}, io.Discard)
+	err = New(engine).Execute(context.Background(), []string{"--print"}, io.Discard)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}

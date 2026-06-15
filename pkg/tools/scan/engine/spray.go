@@ -36,7 +36,7 @@ type SprayCheckOptions struct {
 	OnStats       func(sdktypes.Stats)
 }
 
-func SprayCheckStream(ctx context.Context, eng *spray.SprayEngine, opts SprayCheckOptions) (<-chan *parsers.SprayResult, error) {
+func SprayCheckStream(ctx context.Context, eng *spray.Engine, opts SprayCheckOptions) (<-chan *parsers.SprayResult, error) {
 	if eng == nil {
 		return nil, fmt.Errorf("spray engine is not available")
 	}
@@ -63,6 +63,7 @@ func SprayCheckStream(ctx context.Context, eng *spray.SprayEngine, opts SprayChe
 
 	out := make(chan *parsers.SprayResult)
 	go func() {
+		defer telemetry.SDKGoRecover("spray")
 		defer cancel()
 		defer close(out)
 		for {

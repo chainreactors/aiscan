@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	"github.com/chainreactors/parsers"
 	sdktypes "github.com/chainreactors/sdk/pkg/types"
@@ -15,6 +16,7 @@ import (
 )
 
 func (c *Command) runPortDiscoveryCapability(ctx context.Context, discovery discoveryOptions, profile profile, input target, emit func(event)) {
+	defer telemetry.SDKCapRecover("gogo", func(msg string) { emitError(emit, capGogoPortscan, "%s", msg) })
 	target, ok := input.(scanTarget)
 	if !ok {
 		return
@@ -54,6 +56,7 @@ func (c *Command) runPortDiscoveryCapability(ctx context.Context, discovery disc
 }
 
 func (c *Command) runSprayCapability(ctx context.Context, flags flags, web webOptions, input target, source string, opts engine.SprayCheckOptions, emit func(event)) {
+	defer telemetry.SDKCapRecover("spray", func(msg string) { emitError(emit, source, "%s", msg) })
 	target, ok := input.(webTarget)
 	if !ok || target.URL == "" {
 		return
@@ -108,6 +111,7 @@ func runWebResultAnalysisCapability(_ context.Context, profile profile, input ta
 }
 
 func (c *Command) runWeakpassCapability(ctx context.Context, flags flags, credentials credentialOptions, input target, emit func(event)) {
+	defer telemetry.SDKCapRecover("zombie", func(msg string) { emitError(emit, capZombieWeakpass, "%s", msg) })
 	target, ok := input.(weakpassTarget)
 	if !ok || target.Target.Service == "" || target.Target.Address() == ":" {
 		return
@@ -142,6 +146,7 @@ func (c *Command) runWeakpassCapability(ctx context.Context, flags flags, creden
 }
 
 func (c *Command) runPOCCapability(ctx context.Context, flags flags, input target, emit func(event)) {
+	defer telemetry.SDKCapRecover("neutron", func(msg string) { emitError(emit, capNeutronPOC, "%s", msg) })
 	target, ok := input.(pocTarget)
 	if !ok || target.Target == "" {
 		return

@@ -25,9 +25,11 @@ func TestInitCommandRegistryRegistersSearchAlways(t *testing.T) {
 
 func TestInitCommandRegistryRegistersScannerCommands(t *testing.T) {
 	logger := telemetry.NopLogger()
+	gogoEng, _ := gogo.NewEngine(nil)
+	sprayEng, _ := spray.NewEngine(nil)
 	engines := &engine.Set{
-		Gogo:  gogo.NewEngine(nil),
-		Spray: spray.NewEngine(nil),
+		Gogo:  gogoEng,
+		Spray: sprayEng,
 	}
 
 	reg := initCommandRegistry(engines, ScannerConfig{}, ToolConfig{}, nil, "", nil, logger)

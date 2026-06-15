@@ -49,6 +49,7 @@ func ZombieWeakpassStream(ctx context.Context, eng *sdkzombie.Engine, opts Zombi
 
 	out := make(chan *parsers.ZombieResult)
 	go func() {
+		defer telemetry.SDKGoRecover("zombie")
 		defer close(out)
 		for result := range resultCh {
 			if result == nil || !result.Success() {

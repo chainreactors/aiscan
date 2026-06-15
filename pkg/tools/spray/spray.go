@@ -15,13 +15,13 @@ import (
 )
 
 type Command struct {
-	engine  *spray.SprayEngine
+	engine  *spray.Engine
 	logger  telemetry.Logger
 	proxy   string
 	workDir string
 }
 
-func New(engine *spray.SprayEngine) *Command {
+func New(engine *spray.Engine) *Command {
 	return &Command{engine: engine, logger: telemetry.NopLogger()}
 }
 
@@ -47,7 +47,8 @@ func (c *Command) Usage() string {
 	return spraycore.Help()
 }
 
-func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error {
+func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) (err error) {
+	defer telemetry.SDKRecover("spray", &err)
 	args = c.resolveRelativePaths(args)
 	var buf bytes.Buffer
 	debug := toolargs.BoolFlagEnabled(args, "--debug")

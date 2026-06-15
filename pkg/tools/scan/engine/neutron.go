@@ -47,6 +47,7 @@ func NeutronExecuteStream(ctx context.Context, eng *neutron.Engine, index *assoc
 
 	out := make(chan *neutron.ExecuteResult)
 	go func() {
+		defer telemetry.SDKGoRecover("neutron")
 		defer close(out)
 		for result := range resultCh {
 			execResult, ok := result.(*neutron.ExecuteResult)

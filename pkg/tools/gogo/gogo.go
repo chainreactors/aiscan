@@ -23,7 +23,7 @@ import (
 )
 
 type Command struct {
-	engine  *gogo.GogoEngine
+	engine  *gogo.Engine
 	logger  telemetry.Logger
 	proxy   string
 	workDir string
@@ -46,7 +46,7 @@ func (b *lockedBuffer) String() string {
 	return b.buf.String()
 }
 
-func New(engine *gogo.GogoEngine) *Command {
+func New(engine *gogo.Engine) *Command {
 	return &Command{engine: engine, logger: telemetry.NopLogger()}
 }
 
@@ -256,7 +256,8 @@ func parseSDKScanArgs(args []string) (*sdkScanArgs, bool, error) {
 
 // executeViaSDK runs the scan through the SDK engine, which spawns a
 // goroutine that checks ctx.Done() at every IP and every ants pool dispatch.
-func (c *Command) executeViaSDK(ctx context.Context, opts *sdkScanArgs) (string, error) {
+func (c *Command) executeViaSDK(ctx context.Context, opts *sdkScanArgs) (_ string, err error) {
+	defer telemetry.SDKRecover("gogo", &err)
 	if err := c.engine.Init(); err != nil {
 		return "", fmt.Errorf("gogo: init: %w", err)
 	}

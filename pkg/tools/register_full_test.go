@@ -11,9 +11,11 @@ import (
 )
 
 func TestRegisterAllRegistersKatanaInFullBuild(t *testing.T) {
+	gogoEng, _ := gogo.NewEngine(nil)
+	sprayEng, _ := spray.NewEngine(nil)
 	engineSet := &engine.Set{
-		Gogo:  gogo.NewEngine(nil),
-		Spray: spray.NewEngine(nil),
+		Gogo:  gogoEng,
+		Spray: sprayEng,
 	}
 	reg := buildRegistry(engineSet)
 

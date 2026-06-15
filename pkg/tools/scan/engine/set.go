@@ -32,8 +32,8 @@ type ReconOptions struct {
 
 type Set struct {
 	Fingers   *sdkfingers.Engine
-	Gogo      *gogo.GogoEngine
-	Spray     *spray.SprayEngine
+	Gogo      *gogo.Engine
+	Spray     *spray.Engine
 	Neutron   *neutron.Engine
 	Zombie    *sdkzombie.Engine
 	Uncover   *UncoverEngine
@@ -143,8 +143,13 @@ func initWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 	if proxy != "" {
 		gogoConfig.WithProxy(proxy)
 	}
-	set.Gogo = gogo.NewEngine(gogoConfig)
-	logger.Infof("engine=gogo status=ready")
+	gogoEngine, err := gogo.NewEngine(gogoConfig)
+	if err != nil {
+		logger.Warnf("engine=gogo status=disabled error=%q", err)
+	} else {
+		set.Gogo = gogoEngine
+		logger.Infof("engine=gogo status=ready")
+	}
 
 	sprayConfig := spray.NewConfig()
 	sprayConfig.WithResourceProvider(resourceSet.SprayConfig)
@@ -157,8 +162,13 @@ func initWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 	if proxy != "" {
 		sprayConfig.WithProxy(proxy)
 	}
-	set.Spray = spray.NewEngine(sprayConfig)
-	logger.Infof("engine=spray status=ready")
+	sprayEngine, err := spray.NewEngine(sprayConfig)
+	if err != nil {
+		logger.Warnf("engine=spray status=disabled error=%q", err)
+	} else {
+		set.Spray = sprayEngine
+		logger.Infof("engine=spray status=ready")
+	}
 
 	zombieConfig := sdkzombie.NewConfig()
 	zombieConfig.WithResourceProvider(resourceSet.ZombieConfig)
@@ -168,11 +178,11 @@ func initWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 	if proxy != "" {
 		zombieConfig.WithProxy(proxy)
 	}
-	set.Zombie = sdkzombie.NewEngine(zombieConfig)
-	if err := set.Zombie.Init(); err != nil {
+	zombieEngine, err := sdkzombie.NewEngine(zombieConfig)
+	if err != nil {
 		logger.Warnf("engine=zombie status=disabled error=%q", err)
-		set.Zombie = nil
 	} else {
+		set.Zombie = zombieEngine
 		logger.Infof("engine=zombie status=ready")
 	}
 

@@ -20,12 +20,15 @@ func TestExecuteInstallsResourceProviderBeforePrepare(t *testing.T) {
 	defer gogopkg.ResetResourceProvider()
 
 	var calls atomic.Int32
-	engine := sdkgogo.NewEngine(sdkgogo.NewConfig().WithResourceProvider(func(string) []byte {
+	engine, err := sdkgogo.NewEngine(sdkgogo.NewConfig().WithResourceProvider(func(string) []byte {
 		calls.Add(1)
 		return nil
 	}))
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	err := New(engine).Execute(context.Background(), []string{"-P", "extract"}, io.Discard)
+	err = New(engine).Execute(context.Background(), []string{"-P", "extract"}, io.Discard)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}

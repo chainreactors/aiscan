@@ -34,7 +34,9 @@ type neutronExecuteOptions struct {
 	Debug               bool
 }
 
-func neutronExecuteStream(ctx context.Context, engine *sdkneutron.Engine, index *association.Index, opts neutronExecuteOptions) (<-chan *sdkneutron.ExecuteResult, error) {
+func neutronExecuteStream(ctx context.Context, engine *sdkneutron.Engine, index *association.Index, opts neutronExecuteOptions) (_ <-chan *sdkneutron.ExecuteResult, err error) {
+	defer telemetry.SDKRecover("neutron", &err)
+
 	if engine == nil {
 		return nil, errors.New("neutron engine is not available")
 	}
@@ -71,6 +73,7 @@ func neutronExecuteStream(ctx context.Context, engine *sdkneutron.Engine, index 
 
 	out := make(chan *sdkneutron.ExecuteResult)
 	go func() {
+		defer telemetry.SDKGoRecover("neutron")
 		defer close(out)
 		for result := range resultCh {
 			execResult, ok := result.(*sdkneutron.ExecuteResult)
@@ -118,6 +121,7 @@ func neutronExecuteTemplatesConcurrent(ctx context.Context, engine *sdkneutron.E
 		wg.Add(concurrency)
 		for i := 0; i < concurrency; i++ {
 			go func() {
+				defer telemetry.SDKGoRecover("neutron")
 				defer wg.Done()
 				for tmpl := range jobs {
 					if limiter != nil {

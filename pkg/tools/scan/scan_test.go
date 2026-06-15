@@ -53,7 +53,8 @@ func testSeeds(events ...event) []pipeline.Event {
 }
 
 func TestScanRunsWithOnlySprayStage(t *testing.T) {
-	cmd := New(&engine.Set{Spray: spray.NewEngine(nil)})
+	sprayEng, _ := spray.NewEngine(nil)
+	cmd := New(&engine.Set{Spray: sprayEng})
 	var buf strings.Builder
 	err := cmd.Execute(context.Background(), []string{"-i", "http://127.0.0.1:1", "--mode", "quick", "--timeout", "1"}, &buf)
 	if err != nil {
@@ -369,9 +370,11 @@ func TestSprayResultScopeRejectsExternalURLs(t *testing.T) {
 }
 
 func TestScanBuildCapabilitiesUsesCapacityDrivenWorkers(t *testing.T) {
+	gogoEng, _ := sdkgogo.NewEngine(nil)
+	sprayEng, _ := spray.NewEngine(nil)
 	cmd := New(&engine.Set{
-		Gogo:  sdkgogo.NewEngine(nil),
-		Spray: spray.NewEngine(nil),
+		Gogo:  gogoEng,
+		Spray: sprayEng,
 	})
 	profile := profile{Capabilities: capabilitySet(
 		capGogoPortscan,
@@ -406,9 +409,11 @@ func TestScanBuildCapabilitiesUsesCapacityDrivenWorkers(t *testing.T) {
 }
 
 func TestScanBuildCapabilitiesAdaptsToHighThread(t *testing.T) {
+	gogoEng, _ := sdkgogo.NewEngine(nil)
+	sprayEng, _ := spray.NewEngine(nil)
 	cmd := New(&engine.Set{
-		Gogo:  sdkgogo.NewEngine(nil),
-		Spray: spray.NewEngine(nil),
+		Gogo:  gogoEng,
+		Spray: sprayEng,
 	})
 	profile := profile{Capabilities: capabilitySet(capGogoPortscan, capSprayCheck)}
 
@@ -434,9 +439,11 @@ func TestScanBuildCapabilitiesAdaptsToHighThread(t *testing.T) {
 }
 
 func TestScanBuildCapabilitiesLowThreadCapsPerInvocation(t *testing.T) {
+	gogoEng, _ := sdkgogo.NewEngine(nil)
+	sprayEng, _ := spray.NewEngine(nil)
 	cmd := New(&engine.Set{
-		Gogo:  sdkgogo.NewEngine(nil),
-		Spray: spray.NewEngine(nil),
+		Gogo:  gogoEng,
+		Spray: sprayEng,
 	})
 	profile := profile{Capabilities: capabilitySet(capGogoPortscan, capSprayCheck)}
 
@@ -1451,7 +1458,8 @@ func assetItemKindCounts(items []output.AssetItem) map[string]int {
 }
 
 func TestScanOutputFileWritesPlainTextWithoutChangingStdout(t *testing.T) {
-	cmd := New(&engine.Set{Spray: spray.NewEngine(nil)})
+	sprayEng, _ := spray.NewEngine(nil)
+	cmd := New(&engine.Set{Spray: sprayEng})
 	file := filepath.Join(t.TempDir(), "scan.txt")
 	var stream bytes.Buffer
 
