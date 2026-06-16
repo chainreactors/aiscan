@@ -16,7 +16,6 @@ import (
 
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/app"
 	"github.com/chainreactors/aiscan/core/eventbus"
 	outputpkg "github.com/chainreactors/aiscan/core/output"
 ioaclient "github.com/chainreactors/ioa/client"
@@ -35,7 +34,7 @@ var errAgentConsoleExit = errors.New("agent console exit")
 type AgentConsole struct {
 	ctx         context.Context
 	option      *cfg.Option
-	application *app.App
+	appInfo     AppInfo
 	agent       *agent.Agent
 	console     *console.Console
 	menu        *console.Menu
@@ -55,7 +54,7 @@ type AgentConsole struct {
 	directCancel context.CancelFunc
 }
 
-func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.App, session *agent.Agent, output *AgentOutput, bus ...*eventbus.Bus[agent.Event]) *AgentConsole {
+func NewAgentConsole(ctx context.Context, option *cfg.Option, appInfo AppInfo, session *agent.Agent, output *AgentOutput, bus ...*eventbus.Bus[agent.Event]) *AgentConsole {
 	c := console.New("aiscan")
 	c.NewlineAfter = true
 	configureAgentReadline(c)
@@ -79,7 +78,7 @@ func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.A
 	repl := &AgentConsole{
 		ctx:         ctx,
 		option:      option,
-		application: application,
+		appInfo:     appInfo,
 		agent:       session,
 		console:     c,
 		menu:        menu,
@@ -601,21 +600,21 @@ func (r *AgentConsole) sessionSummary() string {
 }
 
 func (r *AgentConsole) providerModel() (string, string) {
-	if r.application == nil {
+	if r.appInfo.Commands == nil {
 		return "", ""
 	}
-	pc := r.application.ProviderConfig
+	pc := r.appInfo.ProviderConfig
 	return pc.Provider, pc.Model
 }
 
 // skillSlashNames lists user-facing skills as slash commands, capped so the
 // banner stays tidy when many skills are loaded.
 func (r *AgentConsole) skillSlashNames() string {
-	if r.application == nil || r.application.Skills == nil {
+	if r.appInfo.Commands == nil || r.appInfo.Skills == nil {
 		return ""
 	}
-	names := make([]string, 0, len(r.application.Skills.Skills))
-	for _, s := range r.application.Skills.Skills {
+	names := make([]string, 0, len(r.appInfo.Skills.Skills))
+	for _, s := range r.appInfo.Skills.Skills {
 		if strings.TrimSpace(s.Name) == "" || s.Internal {
 			continue
 		}
@@ -635,7 +634,7 @@ func (r *AgentConsole) replSession() *Session {
 	s := &Session{
 		Ctx:          r.ctx,
 		Option:       r.option,
-		App:          r.application,
+		AppInfo:      r.appInfo,
 		Agent:        r.agent,
 		Controller:   r.ensureController(),
 		EvalCriteria: r.evalCriteria,
@@ -981,12 +980,12 @@ func (r *AgentConsole) syncEvalToController() {
 	if r.option != nil {
 		model = r.option.EvalModel
 	}
-	if model == "" && r.application != nil {
-		model = r.application.ProviderConfig.Model
+	if model == "" && r.appInfo.Commands != nil {
+		model = r.appInfo.ProviderConfig.Model
 	}
 	var prov agent.Provider
-	if r.application != nil {
-		prov = r.application.Provider
+	if r.appInfo.Commands != nil {
+		prov = r.appInfo.Provider
 	}
 	r.controller.Eval = &EvalSettings{
 		Criteria: r.evalCriteria,
@@ -1094,17 +1093,17 @@ func (r *AgentConsole) renderProviders() string {
 }
 
 func (r *AgentConsole) pseudoCommandNames() []string {
-	if r.application == nil || r.application.Commands == nil {
+	if r.appInfo.Commands == nil || r.appInfo.Commands == nil {
 		return nil
 	}
-	return r.application.Commands.Names()
+	return r.appInfo.Commands.Names()
 }
 
 // executeBashDirect runs a command line directly through the command registry,
 // bypassing the LLM agent. Pseudo-commands (gogo, cyberhub, etc.) and shell
 // commands are both supported, matching the "! command" REPL prefix.
 func (r *AgentConsole) executeBashDirect(ctx context.Context, cmdLine string) error {
-	reg := r.application.Commands
+	reg := r.appInfo.Commands
 	if reg == nil {
 		return fmt.Errorf("command registry not available")
 	}

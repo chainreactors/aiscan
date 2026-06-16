@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/app"
+	"github.com/chainreactors/aiscan/core/runner"
 	"github.com/chainreactors/aiscan/core/output"
 )
 
@@ -21,9 +21,9 @@ type LLMConfigStore interface {
 
 type ServiceConfig struct {
 	Store         Store
-	App           *app.App
+	App           *runner.App
 	ConfigStore   LLMConfigStore
-	AppFactory    func(ctx context.Context) (*app.App, error)
+	AppFactory    func(ctx context.Context) (*runner.App, error)
 	MaxConcurrent int
 	ScanTimeout   time.Duration
 }
@@ -31,9 +31,9 @@ type ServiceConfig struct {
 type Service struct {
 	store   Store
 	appMu   sync.RWMutex
-	app     *app.App
+	app     *runner.App
 	config  LLMConfigStore
-	reload  func(ctx context.Context) (*app.App, error)
+	reload  func(ctx context.Context) (*runner.App, error)
 	hub     *Hub
 	sem     chan struct{}
 	timeout time.Duration
@@ -287,7 +287,7 @@ func (s *Service) aiAvailable() bool {
 	return app != nil && app.Provider != nil
 }
 
-func (s *Service) appSnapshot() *app.App {
+func (s *Service) appSnapshot() *runner.App {
 	if s == nil {
 		return nil
 	}
@@ -296,7 +296,7 @@ func (s *Service) appSnapshot() *app.App {
 	return s.app
 }
 
-func (s *Service) swapApp(next *app.App) {
+func (s *Service) swapApp(next *runner.App) {
 	if s == nil || next == nil {
 		return
 	}

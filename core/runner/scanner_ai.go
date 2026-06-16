@@ -8,14 +8,14 @@ import (
 
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/app"
+	
 	"github.com/chainreactors/aiscan/core/pidlock"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
 	"github.com/chainreactors/aiscan/skills"
 )
 
-func RunScannerWithAgent(ctx context.Context, option *cfg.Option, application *app.App, scannerArgs []string, logger telemetry.Logger) error {
+func RunScannerWithAgent(ctx context.Context, option *cfg.Option, application *App, scannerArgs []string, logger telemetry.Logger) error {
 	if application.Provider == nil {
 		return fmt.Errorf("--ai requires a configured LLM provider")
 	}

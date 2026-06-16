@@ -18,7 +18,7 @@ import (
 	"time"
 
 	cfg "github.com/chainreactors/aiscan/core/config"
-	"github.com/chainreactors/aiscan/pkg/app"
+	"github.com/chainreactors/aiscan/core/runner"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/web"
 
@@ -69,7 +69,7 @@ func main() {
 		Store:         store,
 		App:           application,
 		ConfigStore:   &llmConfigFileStore{explicit: *configFile},
-		AppFactory:    func(ctx context.Context) (*app.App, error) { return initApp(ctx, *configFile, logger) },
+		AppFactory:    func(ctx context.Context) (*runner.App, error) { return initApp(ctx, *configFile, logger) },
 		MaxConcurrent: *maxScans,
 		ScanTimeout:   time.Duration(*scanTimeout) * time.Second,
 	})
@@ -330,7 +330,7 @@ func loadYAMLConfig(path string) yamlConfig {
 	return cfg
 }
 
-func initApp(ctx context.Context, configFile string, logger telemetry.Logger) (*app.App, error) {
+func initApp(ctx context.Context, configFile string, logger telemetry.Logger) (*runner.App, error) {
 	option := cfg.Option{}
 	if configFile != "" {
 		option.ConfigFile = configFile
@@ -352,7 +352,7 @@ func initApp(ctx context.Context, configFile string, logger telemetry.Logger) (*
 	appCfg.Scanner.EnableAllAISkills = false
 	appCfg.Scanner.VerifyMode = "off"
 
-	return app.New(ctx, appCfg)
+	return runner.NewApp(ctx, appCfg)
 }
 
 // parseSimpleYAML is a minimal YAML parser for flat/two-level config.

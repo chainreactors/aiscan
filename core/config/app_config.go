@@ -3,7 +3,6 @@ package config
 import (
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/app"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
@@ -16,15 +15,15 @@ type RuntimeFeatures struct {
 	Warning          string
 }
 
-func AppConfig(option *Option, features RuntimeFeatures, logger telemetry.Logger) app.Config {
-	return app.Config{
-		Provider: app.ProviderConfig{
+func AppConfig(option *Option, features RuntimeFeatures, logger telemetry.Logger) RuntimeConfig {
+	return RuntimeConfig{
+		Provider: RuntimeProviderConfig{
 			Enabled:   features.ProviderEnabled,
 			Config:    ProviderConfig(option),
 			Fallbacks: FallbackProviderConfigs(option),
 			Optional:  features.ProviderOptional,
 		},
-		Scanner: app.ScannerConfig{
+		Scanner: ScannerConfig{
 			CyberhubURL:       option.CyberhubURL,
 			CyberhubKey:       option.CyberhubKey,
 			CyberhubMode:      option.CyberhubMode,
@@ -40,7 +39,7 @@ func AppConfig(option *Option, features RuntimeFeatures, logger telemetry.Logger
 			ReconProxy:        option.ReconProxy,
 			ReconLimit:        intOptionValue(option.ReconLimit),
 		},
-		Tools: app.ToolConfig{
+		Tools: ToolConfig{
 			Enabled:     features.ToolsEnabled,
 			BashTimeout: 300,
 			TavilyKeys:  DefaultTavilyKeys,

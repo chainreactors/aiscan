@@ -7,15 +7,24 @@ import (
 
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/app"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/skills"
 )
+
+// AppInfo holds the subset of runtime state that tui commands need.
+type AppInfo struct {
+	Provider          agent.Provider
+	ProviderConfig    agent.ProviderConfig
+	ProviderFallbacks []agent.ProviderEntry
+	Commands          *commands.CommandRegistry
+	Skills            *skills.Store
+}
 
 // Session holds the dependencies commands need to operate on.
 type Session struct {
 	Ctx          context.Context
 	Option       *cfg.Option
-	App          *app.App
+	AppInfo      AppInfo
 	Agent        *agent.Agent
 	Controller   Controller
 	EvalCriteria string
@@ -50,11 +59,11 @@ const (
 
 // SkillCommands generates commands for each non-internal skill.
 func SkillCommands(s *Session) []Command {
-	if s.App == nil || s.App.Skills == nil {
+	if s.AppInfo.Skills == nil {
 		return nil
 	}
 	var cmds []Command
-	for _, skill := range s.App.Skills.Skills {
+	for _, skill := range s.AppInfo.Skills.Skills {
 		if strings.TrimSpace(skill.Name) == "" || skill.Internal {
 			continue
 		}
@@ -64,7 +73,7 @@ func SkillCommands(s *Session) []Command {
 			Description: sk.Description,
 			Args:        ArgsOptional,
 			Run: func(ctx context.Context, s *Session, args []string) error {
-				prompt := s.App.Skills.FormatInvocation(sk, strings.Join(args, " "))
+				prompt := s.AppInfo.Skills.FormatInvocation(sk, strings.Join(args, " "))
 				return RunPrompt(s, "skill "+sk.Name, prompt)
 			},
 		})
@@ -74,8 +83,8 @@ func SkillCommands(s *Session) []Command {
 
 // RunPrompt expands skills and submits a prompt to the controller.
 func RunPrompt(s *Session, label, input string) error {
-	prompt := skills.ExpandCommand(input, s.App.Skills)
-	prompt, err := cfg.ApplySelectedSkills(prompt, s.Option.Skills, s.App.Skills)
+	prompt := skills.ExpandCommand(input, s.AppInfo.Skills)
+	prompt, err := cfg.ApplySelectedSkills(prompt, s.Option.Skills, s.AppInfo.Skills)
 	if err != nil {
 		return err
 	}
@@ -105,15 +114,15 @@ func CollectStatus(s *Session, mode, historyPath string) StatusInfo {
 		Mode:    mode,
 		History: historyPath,
 	}
-	if s.App != nil {
-		info.Provider = s.App.ProviderConfig.Provider
-		info.Model = s.App.ProviderConfig.Model
+	if s.AppInfo.ProviderConfig.Provider != "" {
+		info.Provider = s.AppInfo.ProviderConfig.Provider
+		info.Model = s.AppInfo.ProviderConfig.Model
 		if info.Provider != "" {
 			info.Providers = append(info.Providers, ProviderInfo{
 				Name: info.Provider, Model: info.Model, Active: true,
 			})
 		}
-		for _, fb := range s.App.ProviderFallbacks {
+		for _, fb := range s.AppInfo.ProviderFallbacks {
 			info.Providers = append(info.Providers, ProviderInfo{
 				Name: fb.Provider.Name(), Model: fb.Model,
 			})
@@ -137,9 +146,9 @@ func CollectStatus(s *Session, mode, historyPath string) StatusInfo {
 			info.IOA += " · space " + s.Option.Space
 		}
 	}
-	if s.App != nil && s.App.Skills != nil {
+	if s.AppInfo.Skills != nil {
 		var names []string
-		for _, sk := range s.App.Skills.Skills {
+		for _, sk := range s.AppInfo.Skills.Skills {
 			if strings.TrimSpace(sk.Name) == "" || sk.Internal {
 				continue
 			}

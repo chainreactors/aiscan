@@ -1,4 +1,4 @@
-package app
+package runner
 
 import (
 	"context"
@@ -7,10 +7,11 @@ import (
 	"strings"
 	"time"
 
+	cfg "github.com/chainreactors/aiscan/core/config"
+	"github.com/chainreactors/aiscan/core/resources"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/agent/truncate"
 	"github.com/chainreactors/aiscan/pkg/commands"
-	"github.com/chainreactors/aiscan/core/resources"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
@@ -18,58 +19,8 @@ import (
 	ioaclient "github.com/chainreactors/ioa/client"
 	"github.com/chainreactors/ioa/protocols"
 
-	// Register scanner command factories with the unified command registry.
 	_ "github.com/chainreactors/aiscan/pkg/tools"
 )
-
-type Config struct {
-	Provider      ProviderConfig
-	Scanner       ScannerConfig
-	Tools         ToolConfig
-	IOA           *IOAConfig
-	Logger        telemetry.Logger
-	CLISkillPaths []string
-}
-
-type ProviderConfig struct {
-	Enabled   bool
-	Config    agent.ProviderConfig
-	Fallbacks []agent.ProviderConfig
-	Optional  bool
-}
-
-type ScannerConfig struct {
-	CyberhubURL       string
-	CyberhubKey       string
-	CyberhubMode      string
-	AIEnabled         bool
-	EnableAllAISkills bool
-	AITimeout         int
-	VerifyMode        string
-	Proxy             string
-	FofaEmail         string
-	FofaKey           string
-	HunterToken       string
-	HunterAPIKey      string
-	ReconProxy        string
-	ReconLimit        int
-}
-
-type ToolConfig struct {
-	Enabled     bool
-	BashTimeout int
-	TavilyKeys  string // comma-separated Tavily API keys (build-time fallback)
-}
-
-type IOAConfig struct {
-	URL           string
-	NodeID        string
-	NodeName      string
-	Space         string
-	RegisterTools bool
-	AutoRegister  bool
-	NodeMeta      map[string]any
-}
 
 type App struct {
 	Provider           agent.Provider
@@ -84,35 +35,35 @@ type App struct {
 	enginesReady       chan struct{}
 }
 
-func New(ctx context.Context, cfg Config) (*App, error) {
-	app := &App{}
-	logger := cfg.Logger
+func NewApp(ctx context.Context, rc cfg.RuntimeConfig) (*App, error) {
+	a := &App{}
+	logger := rc.Logger
 	if logger == nil {
 		logger = telemetry.NopLogger()
 	}
 
-	store, diagnostics := skills.LoadAll(cfg.CLISkillPaths)
-	app.Skills = store
-	app.SkillDiagnostics = diagnostics
+	store, diagnostics := skills.LoadAll(rc.CLISkillPaths)
+	a.Skills = store
+	a.SkillDiagnostics = diagnostics
 
-	if cfg.Provider.Enabled {
-		llmProvider, resolved, err := initProvider(cfg.Provider.Config, logger)
+	if rc.Provider.Enabled {
+		llmProvider, resolved, err := initProvider(rc.Provider.Config, logger)
 		if err != nil {
-			if !cfg.Provider.Optional {
+			if !rc.Provider.Optional {
 				return nil, err
 			}
 			logger.Debugf("provider not configured: %s", err)
 		} else {
-			app.Provider = llmProvider
-			app.ProviderConfig = *resolved
+			a.Provider = llmProvider
+			a.ProviderConfig = *resolved
 		}
-		for _, fbCfg := range cfg.Provider.Fallbacks {
+		for _, fbCfg := range rc.Provider.Fallbacks {
 			fbProvider, fbResolved, err := initProvider(fbCfg, logger)
 			if err != nil {
 				logger.Warnf("fallback provider %s init failed: %s", fbCfg.Provider, err)
 				continue
 			}
-			app.ProviderFallbacks = append(app.ProviderFallbacks, agent.ProviderEntry{
+			a.ProviderFallbacks = append(a.ProviderFallbacks, agent.ProviderEntry{
 				Provider: fbProvider,
 				Model:    fbResolved.Model,
 			})
@@ -120,26 +71,24 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		}
 	}
 
-	// Build core tools (bash, read, write, fetch, web_search) immediately.
-	app.Commands = initCoreCommands(cfg, app.Provider, app.Skills, logger)
+	a.Commands = initCoreCommands(rc, a.Provider, a.Skills, logger)
 
-	// Load engines and scanner tools in the background so the REPL starts instantly.
-	app.enginesReady = make(chan struct{})
+	a.enginesReady = make(chan struct{})
 	go func() {
-		es := initEngines(ctx, cfg.Scanner, logger)
-		app.Engines = es
-		registerScannerCommands(app.Commands, es, cfg.Scanner, cfg.Tools, app.Provider, app.ProviderConfig.Model, app.Skills, logger)
-		close(app.enginesReady)
+		es := initEngines(ctx, rc.Scanner, logger)
+		a.Engines = es
+		registerScannerCommands(a.Commands, es, rc.Scanner, rc.Tools, a.Provider, a.ProviderConfig.Model, a.Skills, logger)
+		close(a.enginesReady)
 	}()
 
-	if cfg.IOA != nil {
-		if err := app.InitIOA(ctx, *cfg.IOA); err != nil {
-			app.Close()
+	if rc.IOA != nil {
+		if err := a.InitIOA(ctx, *rc.IOA); err != nil {
+			a.Close()
 			return nil, err
 		}
 	}
 
-	return app, nil
+	return a, nil
 }
 
 func (a *App) WaitEngines(ctx context.Context) error {
@@ -172,8 +121,8 @@ func (a *App) Close() {
 	}
 }
 
-func initProvider(cfg agent.ProviderConfig, logger telemetry.Logger) (agent.Provider, *agent.ProviderConfig, error) {
-	resolved, err := agent.ResolveProvider(&cfg)
+func initProvider(provCfg agent.ProviderConfig, logger telemetry.Logger) (agent.Provider, *agent.ProviderConfig, error) {
+	resolved, err := agent.ResolveProvider(&provCfg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -185,52 +134,47 @@ func initProvider(cfg agent.ProviderConfig, logger telemetry.Logger) (agent.Prov
 	return llmProvider, resolved, nil
 }
 
-func initEngines(ctx context.Context, cfg ScannerConfig, logger telemetry.Logger) *engine.Set {
+func initEngines(ctx context.Context, sc cfg.ScannerConfig, logger telemetry.Logger) *engine.Set {
 	engineSet, err := engine.InitWithOptions(ctx, resources.Options{
-		CyberhubURL: cfg.CyberhubURL,
-		APIKey:      cfg.CyberhubKey,
-		Mode:        cfg.CyberhubMode,
-		Proxy:       cfg.Proxy,
+		CyberhubURL: sc.CyberhubURL,
+		APIKey:      sc.CyberhubKey,
+		Mode:        sc.CyberhubMode,
+		Proxy:       sc.Proxy,
 	}, logger)
 	if err != nil {
 		logger.Warnf("scanner engines init error=%q action=continue_without_scanners", err)
 		return nil
 	}
 	recon := engine.ReconOptions{
-		FofaEmail:    cfg.FofaEmail,
-		FofaKey:      cfg.FofaKey,
-		HunterToken:  cfg.HunterToken,
-		HunterAPIKey: cfg.HunterAPIKey,
-		IngressProxy: cfg.ReconProxy,
-		Limit:        cfg.ReconLimit,
+		FofaEmail:    sc.FofaEmail,
+		FofaKey:      sc.FofaKey,
+		HunterToken:  sc.HunterToken,
+		HunterAPIKey: sc.HunterAPIKey,
+		IngressProxy: sc.ReconProxy,
+		Limit:        sc.ReconLimit,
 	}
 	engineSet.SetupUncover(recon, logger)
 	return engineSet
 }
 
-// initCoreCommands registers bash, read, write, glob, fetch, web_search —
-// everything that doesn't need scanner engines.
-func initCoreCommands(cfg Config, llmProvider agent.Provider, skillStore *skills.Store, logger telemetry.Logger) *commands.CommandRegistry {
+func initCoreCommands(rc cfg.RuntimeConfig, llmProvider agent.Provider, skillStore *skills.Store, logger telemetry.Logger) *commands.CommandRegistry {
 	cmdReg := commands.NewRegistry()
 	workDir, _ := os.Getwd()
 	deps := &commands.Deps{
 		WorkDir:     workDir,
-		BashTimeout: cfg.Tools.BashTimeout,
+		BashTimeout: rc.Tools.BashTimeout,
 		SkillStore:  skillStore,
 		Provider:    llmProvider,
-		Model:       cfg.Provider.Config.Model,
+		Model:       rc.Provider.Config.Model,
 		Logger:      logger,
-		TavilyKeys:  cfg.Tools.TavilyKeys,
+		TavilyKeys:  rc.Tools.TavilyKeys,
 	}
 	commands.BuildGroup("core", deps, cmdReg)
 	commands.BuildGroup("tools", deps, cmdReg)
 	return cmdReg
 }
 
-// registerScannerCommands adds scanner tools (gogo, spray, neutron, cyberhub, etc.)
-// after engines finish loading. Safe to call from a goroutine — CommandRegistry is
-// thread-safe.
-func registerScannerCommands(cmdReg *commands.CommandRegistry, engineSet *engine.Set, scanCfg ScannerConfig, toolCfg ToolConfig, llmProvider agent.Provider, model string, skillStore *skills.Store, logger telemetry.Logger) {
+func registerScannerCommands(cmdReg *commands.CommandRegistry, engineSet *engine.Set, scanCfg cfg.ScannerConfig, toolCfg cfg.ToolConfig, llmProvider agent.Provider, model string, skillStore *skills.Store, logger telemetry.Logger) {
 	var scanOpts []any
 	if scanCfg.AIEnabled && llmProvider != nil {
 		scanOpts = append(scanOpts, scan.WithParent(agent.NewAgent(agent.Config{
@@ -265,7 +209,6 @@ func registerScannerCommands(cmdReg *commands.CommandRegistry, engineSet *engine
 	commands.BuildGroup("ioa", deps, cmdReg)
 	logger.Infof("scanner commands ready: %v", cmdReg.GroupNames("scanner"))
 }
-
 
 func collectDeepBrowserArtifacts(ctx context.Context, reg *commands.CommandRegistry, targetURL string, logger telemetry.Logger) (string, error) {
 	if reg == nil || !reg.Has("playwright") {
@@ -400,11 +343,8 @@ func quoteCommandArg(value string) string {
 	return `"` + value + `"`
 }
 
-
-
-
-func (a *App) InitIOA(ctx context.Context, cfg IOAConfig) error {
-	client, err := newIOAClient(cfg)
+func (a *App) InitIOA(ctx context.Context, ioa cfg.IOAConfig) error {
+	client, err := newIOAClient(ioa)
 	if err != nil {
 		return err
 	}
@@ -412,23 +352,22 @@ func (a *App) InitIOA(ctx context.Context, cfg IOAConfig) error {
 	if streamClient, ok := client.(ioaclient.StreamAPI); ok {
 		a.IOAStreamClient = streamClient
 	}
-	if cfg.RegisterTools && a.Commands != nil {
+	if ioa.RegisterTools && a.Commands != nil {
 		deps := &commands.Deps{
 			IOAClient: client,
-			NodeName:  cfg.NodeName,
-			NodeMeta:  cfg.NodeMeta,
+			NodeName:  ioa.NodeName,
+			NodeMeta:  ioa.NodeMeta,
 		}
 		commands.BuildGroup("ioa", deps, a.Commands)
 	}
-	if cfg.AutoRegister && client != nil && client.NodeID() == "" {
-		_, err := client.RegisterNode(ctx, cfg.NodeName, "", cfg.NodeMeta)
+	if ioa.AutoRegister && client != nil && client.NodeID() == "" {
+		_, err := client.RegisterNode(ctx, ioa.NodeName, "", ioa.NodeMeta)
 		if err != nil {
 			return err
 		}
 	}
-	// Auto-join the configured space so ioa_send/ioa_read work immediately.
-	if cfg.Space != "" && client != nil && client.NodeID() != "" {
-		info, err := client.Space(ctx, cfg.Space, "aiscan agent")
+	if ioa.Space != "" && client != nil && client.NodeID() != "" {
+		info, err := client.Space(ctx, ioa.Space, "aiscan agent")
 		if err == nil {
 			a.setIOASpace(info.ID)
 		}
@@ -444,9 +383,9 @@ func (a *App) setIOASpace(spaceID string) {
 	}
 }
 
-func newIOAClient(cfg IOAConfig) (protocols.ClientAPI, error) {
-	if cfg.URL == "" {
+func newIOAClient(ioa cfg.IOAConfig) (protocols.ClientAPI, error) {
+	if ioa.URL == "" {
 		return nil, nil
 	}
-	return ioaclient.NewClient(cfg.URL, cfg.NodeID)
+	return ioaclient.NewClient(ioa.URL, ioa.NodeID)
 }

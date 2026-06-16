@@ -13,7 +13,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent/evaluator"
 	inboxpkg "github.com/chainreactors/aiscan/pkg/agent/inbox"
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
-	"github.com/chainreactors/aiscan/pkg/app"
+	
 	cmdpkg "github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/core/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
@@ -27,7 +27,7 @@ import (
 // ---------------------------------------------------------------------------
 
 type AgentRuntime struct {
-	App          *app.App
+	App          *App
 	SystemPrompt string
 	Config       agent.Config
 	Bus          *eventbus.Bus[agent.Event]
@@ -37,8 +37,8 @@ type AgentRuntime struct {
 }
 
 type RuntimeConfig struct {
-	ExistingApp  *app.App
-	IOA          *app.IOAConfig
+	ExistingApp  *App
+	IOA          *cfg.IOAConfig
 	PromptConfig *PromptConfig
 	NoOutput     bool
 }
@@ -57,7 +57,7 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		if rc != nil && rc.IOA != nil {
 			appCfg.IOA = rc.IOA
 		}
-		application, err := app.New(ctx, appCfg)
+		application, err := NewApp(ctx, appCfg)
 		if err != nil {
 			return nil, fmt.Errorf("init app: %w", err)
 		}
@@ -293,7 +293,13 @@ func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetr
 		WithSystemPrompt(rt.SystemPrompt).
 		WithStream(tui.AgentStreamingEnabled(option)))
 
-	repl := tui.NewAgentConsole(ctx, option, rt.App, session, rt.Output, rt.Bus)
+	repl := tui.NewAgentConsole(ctx, option, tui.AppInfo{
+		Provider:          rt.App.Provider,
+		ProviderConfig:    rt.App.ProviderConfig,
+		ProviderFallbacks: rt.App.ProviderFallbacks,
+		Commands:          rt.App.Commands,
+		Skills:            rt.App.Skills,
+	}, session, rt.Output, rt.Bus)
 	if setInterrupt != nil {
 		setInterrupt(repl.InterruptCurrentRun)
 	}
@@ -312,7 +318,7 @@ func runLoop(ctx context.Context, option *cfg.Option, logger telemetry.Logger) e
 
 	rt, err := NewAgentRuntime(ctx, option, logger, &RuntimeConfig{
 		NoOutput: true,
-		IOA: &app.IOAConfig{
+		IOA: &cfg.IOAConfig{
 			URL:           ioaURL,
 			NodeID:        option.IOANodeID,
 			NodeName:      option.IOANodeName,
@@ -371,7 +377,7 @@ func RunDirectScannerMode(ctx context.Context, option *cfg.Option, rest []string
 		defer restoreLogs()
 	}
 
-	application, err := app.New(ctx, cfg.AppConfig(option, features, scannerLogger))
+	application, err := NewApp(ctx, cfg.AppConfig(option, features, scannerLogger))
 	if err != nil {
 		return fmt.Errorf("init app: %w", err)
 	}
@@ -456,12 +462,12 @@ func buildGoalEvalConfig(option *cfg.Option, rt *AgentRuntime, logger telemetry.
 // Helpers
 // ---------------------------------------------------------------------------
 
-func registerIOATools(ctx context.Context, application *app.App, option *cfg.Option) error {
+func registerIOATools(ctx context.Context, application *App, option *cfg.Option) error {
 	ioaURL := option.IOAURL
 	if ioaURL == "" {
 		return nil
 	}
-	ioaCfg := app.IOAConfig{
+	ioaCfg := cfg.IOAConfig{
 		URL:           ioaURL,
 		NodeID:        option.IOANodeID,
 		NodeName:      option.IOANodeName,
