@@ -23,10 +23,10 @@ require (
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/muesli/termenv v0.16.0
 	github.com/projectdiscovery/goflags v0.1.74
-	github.com/projectdiscovery/gologger v1.1.68
+	github.com/projectdiscovery/gologger v1.1.70
 	github.com/projectdiscovery/katana v1.6.1
 	github.com/projectdiscovery/uncover v1.2.1
-	github.com/projectdiscovery/utils v0.10.1
+	github.com/projectdiscovery/utils v0.11.0
 	github.com/reeflective/console v0.0.0-00010101000000-000000000000
 	github.com/reeflective/readline v1.1.3
 	github.com/spf13/cobra v1.10.2

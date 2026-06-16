@@ -717,8 +717,8 @@ github.com/projectdiscovery/fastdialer v0.5.6 h1:kIBFmzbXrua41uf4fGsQClTZmT7cm7E
 github.com/projectdiscovery/fastdialer v0.5.6/go.mod h1:QxvCe02Jii+j8vA3hWYkymgZIY8cqMgs2s3Jbz6mvbs=
 github.com/projectdiscovery/goflags v0.1.74 h1:n85uTRj5qMosm0PFBfsvOL24I7TdWRcWq/1GynhXS7c=
 github.com/projectdiscovery/goflags v0.1.74/go.mod h1:UMc9/7dFz2oln+10tv6cy+7WZKTHf9UGhaNkF95emh4=
-github.com/projectdiscovery/gologger v1.1.68 h1:KfdIO/3X7BtHssWZuqhxPZ+A946epCCx2cz+3NnRAnU=
-github.com/projectdiscovery/gologger v1.1.68/go.mod h1:Xae0t4SeqJVa0RQGK9iECx/+HfXhvq70nqOQp2BuW+o=
+github.com/projectdiscovery/gologger v1.1.70 h1:A1ZAsUJfRUXO6qqwTwyTWXLVlBrVu/Gpi1zzL1hg5LY=
+github.com/projectdiscovery/gologger v1.1.70/go.mod h1:kpLKNafZWRN9P7WpJYtIOY/XvY/v41GDdU9NzICdKmo=
 github.com/projectdiscovery/gostruct v0.0.2 h1:s8gP8ApugGM4go1pA+sVlPDXaWqNP5BBDDSv7VEdG1M=
 github.com/projectdiscovery/gostruct v0.0.2/go.mod h1:H86peL4HKwMXcQQtEa6lmC8FuD9XFt6gkNR0B/Mu5PE=
 github.com/projectdiscovery/hmap v0.0.100 h1:DBZ3Req9lWf4P1YC9PRa4eiMvLY0Uxud43NRBcocPfs=
@@ -737,8 +737,8 @@ github.com/projectdiscovery/retryablehttp-go v1.3.10 h1:v2flyFi5byeSc4++8s6ik7rG
 github.com/projectdiscovery/retryablehttp-go v1.3.10/go.mod h1:RplucKGOCf+lHFxd1HVEale4qWKLSEu1ZJp2BRnuFp8=
 github.com/projectdiscovery/uncover v1.2.1 h1:8U46T/96CLT7BPoXBgkTvWqB06lOyeTSLvh5+UjzATE=
 github.com/projectdiscovery/uncover v1.2.1/go.mod h1:0p8onrWxfpXQEYs90ZDzTSpu1107gWmodX1NWqu/+z4=
-github.com/projectdiscovery/utils v0.10.1 h1:9luYfL7PpN1L/cLO4bAES4+ltDaEBKOUnRiTn920XfM=
-github.com/projectdiscovery/utils v0.10.1/go.mod h1:x3jGS2YIxnUYxlpB9HWBKf0k+AE83nYCGRX/YStC8G8=
+github.com/projectdiscovery/utils v0.11.0 h1:CxImZSRyj9spy1wpB9HKJopr5MsIPm2r5iS8uyhAMoQ=
+github.com/projectdiscovery/utils v0.11.0/go.mod h1:q2mZngH1s4WDO3knYxG7iyP1KcxoRSORJCWSpCKFc1s=
 github.com/projectdiscovery/wappalyzergo v0.2.79 h1:LBAd+nA+yv2Hf//q2TlODLRDkaaqzWlCaIPcwYyHZcU=
 github.com/projectdiscovery/wappalyzergo v0.2.79/go.mod h1:hRsnKNleH693FFJsBOD5NMUDbxw/Q94f0Oq2OV04Q6M=
 github.com/prometheus/client_golang v0.9.1/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=
