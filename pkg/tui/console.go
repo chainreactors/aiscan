@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -26,7 +27,6 @@ ioaclient "github.com/chainreactors/ioa/client"
 )
 
 const agentPromptCommandName = "__prompt"
-const bashDirectCommandName = "__bash"
 const agentConsoleInterruptCommandName = "aiscan-interrupt"
 const agentConsoleEscapeSequenceWait = 10 * time.Millisecond
 
@@ -50,6 +50,9 @@ type AgentConsole struct {
 	// an IOA-unavailable degradation warning). Set by the caller before Start.
 	startupNotice string
 	evalCriteria  string
+
+	directMu     sync.Mutex
+	directCancel context.CancelFunc
 }
 
 func NewAgentConsole(ctx context.Context, option *cfg.Option, application *app.App, session *agent.Agent, output *AgentOutput, bus ...*eventbus.Bus[agent.Event]) *AgentConsole {
@@ -101,19 +104,23 @@ func configureAgentReadline(c *console.Console) {
 	if c == nil {
 		return
 	}
-	cfg := c.Shell().Config
-	// Keep readline history and Tab completion, but avoid expensive/noisy
-	// as-you-type panels that recalculate and redraw on every keystroke.
-	_ = cfg.Set("autocomplete", false)
+	shell := c.Shell()
+	cfg := shell.Config
+	_ = cfg.Set("autocomplete", true)
 	_ = cfg.Set("usage-hint-always", false)
-	_ = cfg.Set("history-autosuggest", false)
-	_ = cfg.Set("show-all-if-ambiguous", false)
-	_ = cfg.Set("show-all-if-unmodified", false)
-	_ = cfg.Set("menu-complete-display-prefix", false)
+	_ = cfg.Set("history-autosuggest", true)
+	_ = cfg.Set("show-all-if-ambiguous", true)
+	_ = cfg.Set("show-all-if-unmodified", true)
+	_ = cfg.Set("menu-complete-display-prefix", true)
 	_ = cfg.Set("page-completions", false)
 	_ = cfg.Set("completion-query-items", 1000)
 	_ = cfg.Set("bell-style", "none")
 	_ = cfg.Set("enable-bracketed-paste", false)
+	// Bind Tab to menu-complete so arrow keys navigate the dropdown.
+	for _, keymap := range []string{"emacs", "emacs-standard", "vi-insert"} {
+		_ = cfg.Bind(keymap, `\t`, "menu-complete", false)
+		_ = cfg.Bind(keymap, inputrc.Unescape(`\e[Z`), "menu-complete-backward", false)
+	}
 }
 
 func (r *AgentConsole) configureInterruptKey() {
@@ -327,11 +334,8 @@ func (r *AgentConsole) startReadline() error {
 				fmt.Fprintln(os.Stdout)
 				return nil
 			case err.Error() == os.Interrupt.String():
-				if r.stopCurrentRun() {
-					continue
-				}
-				fmt.Fprintln(os.Stdout)
-				return nil
+				r.InterruptCurrentRun()
+				continue
 			default:
 				fmt.Fprintf(os.Stderr, "error: read interactive input: %s\n", err)
 				continue
@@ -659,13 +663,17 @@ func (r *AgentConsole) rootCommand() *cobra.Command {
 			return RunPrompt(r.replSession(), "prompt", args[0])
 		},
 	})
-	root.AddCommand(&cobra.Command{
-		Use: bashDirectCommandName, Hidden: true, Args: cobra.ExactArgs(1),
-		DisableFlagParsing: true,
-		RunE: func(c *cobra.Command, args []string) error {
-			return r.executeBashDirect(c.Context(), args[0])
-		},
-	})
+	for _, name := range r.pseudoCommandNames() {
+		n := name
+		root.AddCommand(&cobra.Command{
+			Use:                "!" + n,
+			Short:              n,
+			DisableFlagParsing: true,
+			RunE: func(c *cobra.Command, args []string) error {
+				return r.executeBashDirect(c.Context(), n+" "+strings.Join(args, " "))
+			},
+		})
+	}
 
 	for _, cmd := range r.allCommands() {
 		root.AddCommand(wrapCommand(cmd, r.replSession()))
@@ -724,7 +732,7 @@ func (r *AgentConsole) builtinCommands() []Command {
 			Name: "/stop", Description: "停止当前正在运行的任务",
 			Args: ArgsNone,
 			Run: func(_ context.Context, _ *Session, _ []string) error {
-				if !r.stopCurrentRun() {
+				if !r.InterruptCurrentRun() {
 					fmt.Fprintln(os.Stderr, "No running task.")
 				}
 				return nil
@@ -1007,12 +1015,21 @@ func (r *AgentConsole) refreshPromptAfterAsyncRun() {
 	r.console.Shell().Display.Refresh()
 }
 
-func (r *AgentConsole) stopCurrentRun() bool {
-	if r.controller == nil || !r.controller.Stop() {
-		return false
+// InterruptCurrentRun stops the current agent run or direct command.
+// Called by both the Escape-key readline handler and the signal handler.
+func (r *AgentConsole) InterruptCurrentRun() bool {
+	if r.controller != nil && r.controller.Stop() {
+		r.ensureOutput().Stopping()
+		return true
 	}
-	r.ensureOutput().Stopping()
-	return true
+	r.directMu.Lock()
+	cancel := r.directCancel
+	r.directMu.Unlock()
+	if cancel != nil {
+		cancel()
+		return true
+	}
+	return false
 }
 
 func (r *AgentConsole) stopController() {
@@ -1071,6 +1088,13 @@ func (r *AgentConsole) renderProviders() string {
 	return r.renderPanel("providers", renderHelpRows(rows, colorEnabled), colorEnabled)
 }
 
+func (r *AgentConsole) pseudoCommandNames() []string {
+	if r.application == nil || r.application.Commands == nil {
+		return nil
+	}
+	return r.application.Commands.Names()
+}
+
 // executeBashDirect runs a command line directly through the command registry,
 // bypassing the LLM agent. Pseudo-commands (gogo, cyberhub, etc.) and shell
 // commands are both supported, matching the "! command" REPL prefix.
@@ -1079,8 +1103,24 @@ func (r *AgentConsole) executeBashDirect(ctx context.Context, cmdLine string) er
 	if reg == nil {
 		return fmt.Errorf("command registry not available")
 	}
-	result, err := reg.Execute(ctx, cmdLine)
+	directCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	r.directMu.Lock()
+	r.directCancel = cancel
+	r.directMu.Unlock()
+	defer func() {
+		r.directMu.Lock()
+		r.directCancel = nil
+		r.directMu.Unlock()
+	}()
+
+	result, err := reg.Execute(directCtx, cmdLine)
 	if err != nil {
+		if errors.Is(err, context.Canceled) && directCtx.Err() != nil && ctx.Err() == nil {
+			fmt.Fprintln(os.Stderr, "\ncommand interrupted")
+			return nil
+		}
 		return err
 	}
 	if result != "" {
@@ -1106,11 +1146,15 @@ func AgentConsoleArgsForLine(line string) ([]string, error) {
 		return []string{"/help"}, nil
 	}
 	if strings.HasPrefix(text, "!") {
-		cmdLine := strings.TrimSpace(text[1:])
-		if cmdLine == "" {
+		rest := strings.TrimSpace(text[1:])
+		if rest == "" {
 			return nil, nil
 		}
-		return []string{bashDirectCommandName, cmdLine}, nil
+		cmd, args, _ := strings.Cut(rest, " ")
+		if args == "" {
+			return []string{"!" + cmd}, nil
+		}
+		return []string{"!" + cmd, strings.TrimSpace(args)}, nil
 	}
 	if !strings.HasPrefix(text, "/") || strings.HasPrefix(text, "/skill:") {
 		return []string{agentPromptCommandName, text}, nil

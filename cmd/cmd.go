@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -115,11 +116,11 @@ func AiScan() {
 	}
 	defer cancel()
 
-	setupSignalHandler(cancel, logger)
+	sigHandler := setupSignalHandler(cancel, logger)
 
 	switch parsed.Mode {
 	case cfg.RunModeAgent:
-		if err := runner.RunAgentMode(ctx, &option, logger); err != nil {
+		if err := runner.RunAgentMode(ctx, &option, logger, sigHandler); err != nil {
 			logger.Errorf("agent failed: %s", err)
 			os.Exit(1)
 		}
@@ -574,26 +575,68 @@ func boolFlagEnabled(args []string, flag string) bool {
 	return false
 }
 
-func setupSignalHandler(cancel context.CancelFunc, logger telemetry.Logger) {
+// SignalHandler manages SIGINT/SIGTERM with a two-phase shutdown:
+// first Ctrl+C stops the current task (if any), second cancels the
+// root context, third force-exits.
+type SignalHandler struct {
+	mu     sync.Mutex
+	stopFn func() bool
+}
+
+// SetStopFunc registers a callback that attempts to stop the current
+// task. It should return true if a task was stopped.
+func (h *SignalHandler) SetStopFunc(fn func() bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.stopFn = fn
+}
+
+func (h *SignalHandler) tryStop() bool {
+	h.mu.Lock()
+	fn := h.stopFn
+	h.mu.Unlock()
+	if fn != nil {
+		return fn()
+	}
+	return false
+}
+
+func setupSignalHandler(cancel context.CancelFunc, logger telemetry.Logger) *SignalHandler {
 	if logger == nil {
 		logger = telemetry.NopLogger()
 	}
+	handler := &SignalHandler{}
 	sigChan := make(chan os.Signal, 2)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
 		sigCount := 0
+		var lastSig time.Time
 		for range sigChan {
+			now := time.Now()
+			if now.Sub(lastSig) > 5*time.Second {
+				sigCount = 0
+			}
 			sigCount++
-			if sigCount == 1 {
+			lastSig = now
+
+			switch {
+			case sigCount == 1:
+				if handler.tryStop() {
+					sigCount = 0
+					continue
+				}
+				fmt.Fprintf(os.Stderr, "\nPress Ctrl+C again to exit\n")
+			case sigCount == 2:
 				logger.Warnf("signal=shutdown action=finish_current_turn")
 				cancel()
-			} else {
+			default:
 				logger.Warnf("signal=shutdown action=force_exit")
 				os.Exit(1)
 			}
 		}
 	}()
+	return handler
 }
 
 func printHelp(parser *goflags.Parser) {

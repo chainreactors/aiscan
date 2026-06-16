@@ -90,6 +90,7 @@ func (t *BashTool) Execute(ctx context.Context, arguments string) (ToolResult, e
 		Timeout: time.Duration(t.timeout) * time.Second,
 		WorkDir: t.workDir,
 		Env:     t.proxyEnv(),
+		Ctx:     ctx,
 	})
 	if runErr != nil {
 		return ToolResult{}, runErr

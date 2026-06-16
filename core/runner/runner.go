@@ -216,12 +216,22 @@ func (rt *AgentRuntime) Close() {
 // Mode dispatch
 // ---------------------------------------------------------------------------
 
-func RunAgentMode(ctx context.Context, option *cfg.Option, logger telemetry.Logger) error {
+// StopRegistrar allows registering a callback to stop the current task
+// on Ctrl+C. Typically backed by the signal handler.
+type StopRegistrar interface {
+	SetStopFunc(fn func() bool)
+}
+
+func RunAgentMode(ctx context.Context, option *cfg.Option, logger telemetry.Logger, stopReg ...StopRegistrar) error {
 	if option.Loop {
 		return runLoop(ctx, option, logger)
 	}
+	var sr StopRegistrar
+	if len(stopReg) > 0 {
+		sr = stopReg[0]
+	}
 	if !cfg.HasAgentOneShotInput(option) {
-		return runInteractiveMode(ctx, option, logger)
+		return runInteractiveMode(ctx, option, logger, sr)
 	}
 	return runOneShotMode(ctx, option, logger)
 }
@@ -274,7 +284,7 @@ func runOneShotMode(ctx context.Context, option *cfg.Option, logger telemetry.Lo
 // Agent interactive (REPL)
 // ---------------------------------------------------------------------------
 
-func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetry.Logger) error {
+func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetry.Logger, stopReg StopRegistrar) error {
 	rt, err := NewAgentRuntime(ctx, option, logger, nil)
 	if err != nil {
 		return err
@@ -290,6 +300,9 @@ func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetr
 		WithStream(tui.AgentStreamingEnabled(option)))
 
 	repl := tui.NewAgentConsole(ctx, option, rt.App, session, rt.Output, rt.Bus)
+	if stopReg != nil {
+		stopReg.SetStopFunc(repl.InterruptCurrentRun)
+	}
 	return repl.Start()
 }
 

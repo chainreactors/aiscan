@@ -84,6 +84,7 @@ type RunOpts struct {
 	Timeout time.Duration
 	WorkDir string
 	Env     []string
+	Ctx     context.Context
 }
 
 // SetCommands injects the lookup function used by RunCommand to detect
@@ -167,7 +168,7 @@ func (m *Manager) RunCommand(cmdLine string, opts RunOpts) (Info, error) {
 			args := tokens[1:]
 			return m.CreateFunc(name, timeout, func(ctx context.Context, w io.Writer) error {
 				return cmd.Execute(ctx, args, w)
-			})
+			}, opts.Ctx)
 		}
 	}
 
@@ -203,7 +204,9 @@ func (m *Manager) Create(workDir, cmdLine, name string, timeout time.Duration, e
 // CreateFunc starts a goroutine-based session. The function fn runs in a
 // goroutine; its output (written to w) is captured in the same OutputBuffer
 // used by PTY sessions, so Peek/Kill/Wait/Done work identically.
-func (m *Manager) CreateFunc(name string, timeout time.Duration, fn func(ctx context.Context, w io.Writer) error) (Info, error) {
+// An optional parent context may be provided; the session context is derived
+// from it so that external cancellation propagates to the function.
+func (m *Manager) CreateFunc(name string, timeout time.Duration, fn func(ctx context.Context, w io.Writer) error, parentCtx ...context.Context) (Info, error) {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
@@ -221,7 +224,14 @@ func (m *Manager) CreateFunc(name string, timeout time.Duration, fn func(ctx con
 		return Info{}, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	parent := context.Background()
+	for _, p := range parentCtx {
+		if p != nil {
+			parent = p
+			break
+		}
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
 
 	info := Info{
 		ID:        id,
