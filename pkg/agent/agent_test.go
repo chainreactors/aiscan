@@ -12,7 +12,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent/truncate"
 
 	"github.com/chainreactors/aiscan/pkg/commands"
-	"github.com/chainreactors/aiscan/pkg/eventbus"
+	"github.com/chainreactors/aiscan/core/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 

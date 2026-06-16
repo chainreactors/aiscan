@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chainreactors/aiscan/pkg/output"
+	"github.com/chainreactors/aiscan/core/output"
 )
 
 func TestBuildMarkdownReportKeepsAssetDetailAsMarkdown(t *testing.T) {

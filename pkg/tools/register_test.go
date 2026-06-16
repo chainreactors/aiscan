@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/chainreactors/aiscan/pkg/commands"
-	"github.com/chainreactors/aiscan/pkg/resources"
+	"github.com/chainreactors/aiscan/core/resources"
 	_ "github.com/chainreactors/aiscan/pkg/tools/search"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	fingerslib "github.com/chainreactors/fingers/fingers"
