@@ -620,14 +620,14 @@ func setupSignalHandler(cancel context.CancelFunc, logger telemetry.Logger) *Sig
 			sigCount++
 			lastSig = now
 
-			switch {
-			case sigCount == 1:
+			switch sigCount {
+			case 1:
 				if handler.tryStop() {
 					sigCount = 0
 					continue
 				}
 				fmt.Fprintf(os.Stderr, "\nPress Ctrl+C again to exit\n")
-			case sigCount == 2:
+			case 2:
 				logger.Warnf("signal=shutdown action=finish_current_turn")
 				cancel()
 			default:
