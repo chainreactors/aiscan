@@ -45,6 +45,53 @@ Scanner commands available in all builds:
 - `neutron`: template-based POC checks when templates are available.
 - `cyberhub`: search loaded fingerprints and POC templates.
 
+### scan flags
+
+```
+scan -i <target>                    # single target
+scan -i <target> --mode full        # full mode (adds spray plugins + brute)
+scan -i <target> --mode quick       # quick mode (default)
+scan -i <target> --ports 1-65535    # custom port range
+scan -i <target> -j                 # JSON Lines output
+scan -i <target> --sniper           # AI-driven public vuln search per fingerprint
+scan -i <target> --deep             # AI deep testing for discovered assets
+scan -i <target> --verify=high      # AI verification of findings at given severity
+scan -i <target> --thread 500       # concurrency budget
+scan -i <target> --timeout 10       # per-probe timeout in seconds (integer, no unit suffix)
+```
+
+**scan mode** only accepts `quick` (default) or `full`. Do NOT use `aggressive`, `stealth`, `deep`, or any other value.
+
+### gogo flags
+
+```
+gogo -i <target>                    # scan with default ports (top1)
+gogo -i <target> -p top2k           # top 2000 ports
+gogo -i <target> -p 1-65535         # full port range
+gogo -i <target> -j                 # JSON output (use -j, NOT -f json)
+gogo -i <target> -d 5               # timeout in seconds (integer, NOT --timeout 5s)
+gogo -i <target> -t 500             # thread count
+gogo -i <target> -e                 # enable auto exploit
+gogo -i <target> -v                 # verbose output
+gogo -i <target> --proxy socks5://host:port
+```
+
+**Important**: `-f` is file output path, NOT format. Use `-j` for JSON format. Timeout is `-d` (integer seconds), not `--timeout 5s`.
+
+### spray flags
+
+```
+spray -u <url>                      # basic web probe
+spray -u <url> --crawl              # crawl mode
+spray -u <url> --finger             # fingerprint detection (NOT --fingerprint)
+spray -u <url> --crawl --finger     # crawl + fingerprint
+spray -u <url> -d <dict>            # dictionary-based path discovery
+spray -u <url> -f <file>            # output to file
+spray -u <url> --proxy http://host:port
+```
+
+**Important**: fingerprint flag is `--finger`, NOT `--fingerprint`.
+
 Full-build scanner commands are available only when they appear in the runtime pseudo-command list:
 
 - `passive`: domain or ICP seed -> IPs / CIDRs / domains via multi-engine cyberspace search (FOFA/Hunter/Shodan/etc.). Runs before `gogo`.
@@ -57,15 +104,28 @@ Utility commands:
 
 - `web_search` tool: search the web for public CVEs, advisories, exploits, and product documentation.
 - `fetch` tool: fetch and read a specific URL.
-- `cyberhub search <query>`: search loaded fingerprints and POC templates.
+- `cyberhub search --finger <name>`: find POCs associated with a fingerprint via association index.
+- `cyberhub search --cve <id>`: find fingerprints and POCs associated with a CVE.
+- `cyberhub id <name>`: show entity details and associations.
 - `cyberhub list poc --severity critical,high`: list available POC templates by severity.
+- `cyberhub search poc <query>`: full-text search loaded POC templates.
 
-When you discover a fingerprint (e.g. JeecgBoot 3.8.2, Seeyon V9, Landray OA), **always search for known POC templates before attempting manual exploitation**:
+When you discover a fingerprint (e.g. JeecgBoot 3.8.2, Seeyon V9, Shiro):
+
+1. **Query** associated POCs via the association index:
 ```bash
-cyberhub search poc seeyon
-cyberhub search poc jeecg
-cyberhub search poc shiro
+cyberhub search --finger seeyon
+cyberhub search --finger shiro --severity critical,high
+cyberhub id tomcat
 ```
+
+2. **Execute** matching POCs against the target:
+```bash
+neutron -u <target> --finger seeyon
+neutron -u <target> --finger shiro -s critical,high -c 5
+```
+
+Both `cyberhub --finger` and `neutron --finger` use the same association index, so search results match what neutron will execute. The index includes direct fingerprint links, alias mappings, and CPE-based auto-links.
 
 ## Scan Output Consumption
 

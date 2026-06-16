@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/resources"
+	"github.com/chainreactors/sdk/pkg/association"
 )
 
 type Command struct {
@@ -18,7 +18,7 @@ type Command struct {
 type Opts struct {
 	TavilyKeys   string
 	ScannerProxy string
-	Resources    *resources.Set
+	Index        *association.Index
 }
 
 func New(opts Opts) *Command {
@@ -29,8 +29,8 @@ func New(opts Opts) *Command {
 	if opts.ScannerProxy != "" {
 		cmd.tavily.SetProxy(opts.ScannerProxy)
 	}
-	if opts.Resources != nil {
-		cmd.cyberhub = NewCyberhubSearch(opts.Resources)
+	if opts.Index != nil {
+		cmd.cyberhub = NewCyberhubSearch(opts.Index)
 	}
 	return cmd
 }
@@ -78,7 +78,7 @@ func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) error
 		if c.cyberhub == nil {
 			return fmt.Errorf("search cyberhub: resources not loaded")
 		}
-		result, err = c.cyberhub.Execute(ctx, args[1:])
+		return c.cyberhub.Execute(ctx, args[1:], w)
 	default:
 		return fmt.Errorf("search: unknown subcommand %q\n\n%s", args[0], c.Usage())
 	}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	fingerslib "github.com/chainreactors/fingers/fingers"
 	fingerresources "github.com/chainreactors/fingers/resources"
@@ -76,27 +77,43 @@ func Init(ctx context.Context, opts Options) (*Set, error) {
 	}
 
 	if set.RemoteEnabled {
-		remoteFingers, err := loadRemoteFingers(ctx, opts.CyberhubURL, opts.APIKey)
-		if err != nil {
-			set.RemoteFingersErr = err
-		} else if remoteFingers.Len() > 0 {
-			set.RemoteFingers = remoteFingers.Len()
+		fingerCache := cachePath(opts.CyberhubURL, opts.APIKey, "fingers")
+		if ff, ok := loadCachedFingers(fingerCache); ok {
+			set.RemoteFingers = ff.Len()
 			if mode == ModeOverride {
-				finalFullFingers = cloneFullFingers(remoteFingers)
+				finalFullFingers = cloneFullFingers(ff)
 			} else {
-				finalFullFingers = mergeFullFingers(localFullFingers, remoteFingers)
+				finalFullFingers = mergeFullFingers(localFullFingers, ff)
+			}
+		} else if ff, err := loadRemoteFingers(ctx, opts.CyberhubURL, opts.APIKey); err != nil {
+			set.RemoteFingersErr = err
+		} else if ff.Len() > 0 {
+			set.RemoteFingers = ff.Len()
+			saveCachedFingers(fingerCache, ff)
+			if mode == ModeOverride {
+				finalFullFingers = cloneFullFingers(ff)
+			} else {
+				finalFullFingers = mergeFullFingers(localFullFingers, ff)
 			}
 		}
 
-		remoteTemplates, err := loadRemoteTemplates(ctx, opts.CyberhubURL, opts.APIKey)
-		if err != nil {
-			set.RemoteNeutronErr = err
-		} else if remoteTemplates.Len() > 0 {
-			set.RemoteNeutron = remoteTemplates.Len()
+		tplCache := cachePath(opts.CyberhubURL, opts.APIKey, "neutron")
+		if tpls, ok := loadCachedTemplates(tplCache); ok {
+			set.RemoteNeutron = len(tpls)
 			if mode == ModeOverride {
-				finalTemplates = remoteTemplates.Templates()
+				finalTemplates = tpls
 			} else {
-				finalTemplates = mergeTemplates(finalTemplates, remoteTemplates.Templates())
+				finalTemplates = mergeTemplates(finalTemplates, tpls)
+			}
+		} else if rt, err := loadRemoteTemplates(ctx, opts.CyberhubURL, opts.APIKey); err != nil {
+			set.RemoteNeutronErr = err
+		} else if rt.Len() > 0 {
+			set.RemoteNeutron = rt.Len()
+			saveCachedTemplates(tplCache, rt.Templates())
+			if mode == ModeOverride {
+				finalTemplates = rt.Templates()
+			} else {
+				finalTemplates = mergeTemplates(finalTemplates, rt.Templates())
 			}
 		}
 	}
@@ -238,7 +255,8 @@ func installLocalPortPreset() error {
 }
 
 func loadRemoteFingers(ctx context.Context, cyberhubURL, apiKey string) (fingers.FullFingers, error) {
-	config := fingers.NewConfig().WithProvider(cyberhub.NewProvider(cyberhubURL, apiKey))
+	provider := cyberhub.NewProvider(cyberhubURL, apiKey).WithTimeout(60 * time.Second)
+	config := fingers.NewConfig().WithProvider(provider)
 	if err := config.Load(ctx); err != nil {
 		return fingers.FullFingers{}, err
 	}
@@ -246,7 +264,8 @@ func loadRemoteFingers(ctx context.Context, cyberhubURL, apiKey string) (fingers
 }
 
 func loadRemoteTemplates(ctx context.Context, cyberhubURL, apiKey string) (neutron.Templates, error) {
-	config := neutron.NewConfig().WithProvider(cyberhub.NewProvider(cyberhubURL, apiKey))
+	provider := cyberhub.NewProvider(cyberhubURL, apiKey).WithTimeout(60 * time.Second)
+	config := neutron.NewConfig().WithProvider(provider)
 	if err := config.Load(ctx); err != nil {
 		return neutron.Templates{}, err
 	}

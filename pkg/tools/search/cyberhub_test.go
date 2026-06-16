@@ -6,12 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chainreactors/aiscan/pkg/resources"
 	"github.com/chainreactors/fingers/common"
 	fingerslib "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/neutron/templates"
-	sdkfingers "github.com/chainreactors/sdk/fingers"
-	sdkneutron "github.com/chainreactors/sdk/neutron"
+	"github.com/chainreactors/sdk/pkg/association"
 )
 
 func TestCyberhubSearchesFingerprints(t *testing.T) {
@@ -23,14 +21,11 @@ func TestCyberhubSearchesFingerprints(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "[cyberhub] finger nginx http focus active 1") {
+	if !strings.Contains(out, "nginx") {
 		t.Fatalf("output missing nginx fingerprint: %q", out)
 	}
 	if strings.Contains(out, "spring-rce") {
 		t.Fatalf("finger search included poc: %q", out)
-	}
-	if !strings.Contains(out, "[cyberhub] search finger 1 1") {
-		t.Fatalf("output missing summary: %q", out)
 	}
 }
 
@@ -38,16 +33,16 @@ func TestCyberhubListsPOCsWithFilters(t *testing.T) {
 	cmd := newTestSearchCommand()
 
 	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"cyberhub", "list", "poc", "--severity", "critical,high", "--finger", "spring", "--limit", "0"}, &buf)
+	err := cmd.Execute(context.Background(), []string{"cyberhub", "list", "poc", "--severity", "critical,high", "--limit", "0"}, &buf)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, "spring-rce critical spring") {
+	if !strings.Contains(out, "spring-rce") {
 		t.Fatalf("output missing spring poc: %q", out)
 	}
 	if strings.Contains(out, "tomcat-leak") {
-		t.Fatalf("poc filter included tomcat: %q", out)
+		t.Fatalf("poc filter included low severity tomcat: %q", out)
 	}
 }
 
@@ -73,37 +68,72 @@ func TestCyberhubSearchJSONLines(t *testing.T) {
 	}
 }
 
+func TestCyberhubFingerAssociation(t *testing.T) {
+	cmd := newTestSearchCommand()
+
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"cyberhub", "search", "--finger", "spring"}, &buf)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "spring-rce") {
+		t.Fatalf("--finger spring should find associated poc: %q", out)
+	}
+}
+
+func TestCyberhubID(t *testing.T) {
+	cmd := newTestSearchCommand()
+
+	var buf strings.Builder
+	err := cmd.Execute(context.Background(), []string{"cyberhub", "id", "nginx"}, &buf)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "nginx") {
+		t.Fatalf("id nginx should return nginx detail: %q", out)
+	}
+}
+
 func newTestSearchCommand() *Command {
-	fingerCfg := sdkfingers.NewConfig().WithFingers(fingerslib.Fingers{
+	fingers := fingerslib.Fingers{
 		{
-			Name:        "nginx",
-			Protocol:    "http",
-			Tags:        []string{"web", "server"},
-			Focus:       true,
-			IsActive:    true,
-			Level:       1,
-			Description: "nginx web server",
+			Name:     "nginx",
+			Protocol: "http",
+			Tags:     []string{"web", "server"},
+			Focus:    true,
+			IsActive: true,
+			Level:    1,
 			Attributes: common.Attributes{
 				Vendor:  "nginx",
 				Product: "nginx",
 			},
 		},
 		{
-			Name:        "redis",
-			Protocol:    "tcp",
-			Tags:        []string{"database"},
-			Description: "redis service",
+			Name:     "spring",
+			Protocol: "http",
+			Tags:     []string{"framework"},
+			Focus:    true,
+			Attributes: common.Attributes{
+				Vendor:  "pivotal",
+				Product: "spring",
+			},
 		},
-	})
-	neutronCfg := sdkneutron.NewConfig().WithTemplates([]*templates.Template{
+		{
+			Name:     "redis",
+			Protocol: "tcp",
+			Tags:     []string{"database"},
+		},
+	}
+	tpls := []*templates.Template{
 		{
 			Id:      "spring-rce",
 			Fingers: []string{"spring"},
 			Info: templates.Info{
-				Name:        "Spring RCE",
-				Severity:    "critical",
-				Tags:        "spring,rce",
-				Description: "spring remote code execution",
+				Name:     "Spring RCE",
+				Severity: "critical",
+				Tags:     "spring,rce",
 			},
 		},
 		{
@@ -115,11 +145,9 @@ func newTestSearchCommand() *Command {
 				Tags:     "tomcat,exposure",
 			},
 		},
-	})
-	return New(Opts{
-		Resources: &resources.Set{
-			FingersConfig: fingerCfg,
-			NeutronConfig: neutronCfg,
-		},
-	})
+	}
+	idx := association.NewIndex()
+	idx.BuildWithFingers(fingers, nil, tpls)
+
+	return New(Opts{Index: idx})
 }

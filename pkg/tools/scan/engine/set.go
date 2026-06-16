@@ -8,6 +8,8 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/resources"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
+	"github.com/chainreactors/fingers/alias"
+	fingersLib "github.com/chainreactors/fingers/fingers"
 	neutronhttp "github.com/chainreactors/neutron/protocols/http"
 	"github.com/chainreactors/proxyclient"
 	sdkfingers "github.com/chainreactors/sdk/fingers"
@@ -125,8 +127,15 @@ func initWithCapacity(ctx context.Context, opts resources.Options, caps Capacity
 
 	if set.Neutron != nil {
 		set.Index = association.NewIndex()
-		set.Index.Build(nil, set.Neutron.Get())
-		logger.Infof("index=finger_poc status=ready templates=%d", len(set.Neutron.Get()))
+		var fingers fingersLib.Fingers
+		var aliases []*alias.Alias
+		if set.Fingers != nil {
+			fingers = set.Fingers.Fingers()
+			aliases = set.Fingers.Aliases()
+		}
+		set.Index.BuildWithFingers(fingers, aliases, set.Neutron.Get())
+		logger.Infof("index=finger_poc status=ready fingers=%d aliases=%d templates=%d",
+			len(fingers), len(aliases), len(set.Neutron.Get()))
 	}
 
 	gogoConfig := gogo.NewConfig()

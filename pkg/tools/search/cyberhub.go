@@ -4,14 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/resources"
 	"github.com/chainreactors/aiscan/pkg/util"
+	"github.com/chainreactors/fingers/alias"
 	fingerslib "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/neutron/templates"
+	"github.com/chainreactors/sdk/pkg/association"
 	goflags "github.com/jessevdk/go-flags"
 )
 
@@ -22,7 +24,7 @@ const (
 )
 
 type CyberhubSearch struct {
-	resources *resources.Set
+	index *association.Index
 }
 
 type cyberhubFlags struct {
@@ -30,8 +32,12 @@ type cyberhubFlags struct {
 	Query     string   `short:"q" long:"query" description:"Search query"`
 	Tags      []string `long:"tag" description:"Filter by tag. Can be comma-separated or repeated"`
 	Protocol  string   `long:"protocol" description:"Filter fingerprints by protocol: http or tcp"`
-	Fingers   []string `long:"finger" description:"Filter POCs by fingerprint name. Can be comma-separated or repeated"`
-	Severity  []string `short:"s" long:"severity" description:"Filter POCs by severity. Can be comma-separated or repeated"`
+	Fingers   []string `long:"finger" description:"Filter by fingerprint (association-aware)"`
+	Severity  []string `short:"s" long:"severity" description:"Filter POCs by severity"`
+	CVEs      []string `long:"cve" description:"Filter by CVE ID"`
+	Vendor    string   `long:"vendor" description:"Filter by vendor name"`
+	Product   string   `long:"product" description:"Filter by product name"`
+	POC       bool     `long:"poc" description:"Only show entries with associated POC templates"`
 	Limit     int      `long:"limit" description:"Maximum rows to print. Use 0 for all" default:"50"`
 	JSONLines bool     `short:"j" long:"json" description:"Output JSON Lines"`
 }
@@ -51,10 +57,11 @@ type cyberhubItem struct {
 	Product     string   `json:"product,omitempty"`
 	Description string   `json:"description,omitempty"`
 	Author      string   `json:"author,omitempty"`
+	Associated  int      `json:"associated,omitempty"`
 }
 
-func NewCyberhubSearch(resources *resources.Set) *CyberhubSearch {
-	return &CyberhubSearch{resources: resources}
+func NewCyberhubSearch(index *association.Index) *CyberhubSearch {
+	return &CyberhubSearch{index: index}
 }
 
 func cyberhubUsage() string {
@@ -62,25 +69,49 @@ func cyberhubUsage() string {
 Usage:
   search cyberhub list [finger|poc|all] [options]
   search cyberhub search [finger|poc|all] <query> [options]
+  search cyberhub id <name-or-id>
 
 Options:
   -t, --type       Resource type: finger, poc, or all.
   -q, --query      Search query.
       --tag        Filter by tag. Can be comma-separated or repeated.
       --protocol   Filter fingerprints by protocol: http or tcp.
-      --finger     Filter POCs by fingerprint name.
+      --finger     Filter by fingerprint (association-aware: alias + CPE links).
   -s, --severity   Filter POCs by severity.
-      --limit      Maximum rows to print (default: 50, 0 for all).
+      --cve        Filter by CVE ID.
+      --vendor     Filter by vendor name.
+      --product    Filter by product name.
+      --poc        Only show entries with associated POC templates.
+      --limit      Maximum rows (default: 50, 0 for all).
   -j, --json       Output JSON Lines.
 
 Examples:
-  search cyberhub list finger --limit 20
-  search cyberhub search finger nginx
-  search cyberhub list poc --severity critical,high
-  search cyberhub search poc spring --tag rce -j`
+  search cyberhub search --finger tomcat
+  search cyberhub search --finger shiro --severity critical,high
+  search cyberhub search --cve CVE-2021-44228
+  search cyberhub search --vendor apache --product tomcat
+  search cyberhub search finger --poc
+  search cyberhub id tomcat
+  search cyberhub list poc --severity critical --limit 10
+  search cyberhub search poc seeyon`
 }
 
-func (c *CyberhubSearch) Execute(_ context.Context, args []string) (string, error) {
+func (c *CyberhubSearch) Name() string  { return "cyberhub" }
+func (c *CyberhubSearch) Usage() string { return cyberhubUsage() }
+
+func (c *CyberhubSearch) Execute(_ context.Context, args []string, w io.Writer) error {
+	result, err := c.execute(args)
+	if result != "" {
+		_, _ = io.WriteString(w, result)
+	}
+	return err
+}
+
+func (c *CyberhubSearch) execute(args []string) (string, error) {
+	if c.index == nil {
+		return "", fmt.Errorf("search cyberhub: association index not available")
+	}
+
 	var opts cyberhubFlags
 	parser := goflags.NewParser(&opts, goflags.Default&^goflags.PrintErrors)
 	rest, err := parser.ParseArgs(args)
@@ -90,17 +121,22 @@ func (c *CyberhubSearch) Execute(_ context.Context, args []string) (string, erro
 		}
 		return "", fmt.Errorf("search cyberhub: %w", err)
 	}
+	if opts.Limit < 0 {
+		return "", fmt.Errorf("search cyberhub: --limit cannot be negative")
+	}
 
 	action, typ, query, err := parseCyberhubAction(rest, opts.Type, opts.Query)
 	if err != nil {
 		return "", err
 	}
-	if opts.Limit < 0 {
-		return "", fmt.Errorf("search cyberhub: --limit cannot be negative")
+
+	if action == "id" {
+		return c.executeID(query, opts.JSONLines)
 	}
 
-	items := c.collectItems(typ)
-	items = filterCyberhubItems(items, query, opts)
+	q := c.buildQuery(query, opts)
+	result := c.index.Lookup(q)
+	items := c.resultToItems(result, typ, opts)
 	sortCyberhubItems(items)
 	total := len(items)
 	if opts.Limit > 0 && len(items) > opts.Limit {
@@ -108,6 +144,212 @@ func (c *CyberhubSearch) Execute(_ context.Context, args []string) (string, erro
 	}
 	return renderCyberhubItems(items, total, action, typ, opts.JSONLines)
 }
+
+// buildQuery constructs a single association.Query from all flags and text input.
+// Empty query (no flags, no text) returns all entities via Lookup.
+func (c *CyberhubSearch) buildQuery(text string, opts cyberhubFlags) *association.Query {
+	q := association.NewQuery()
+	if text != "" {
+		q.WithSearch(text)
+	}
+	if len(opts.Fingers) > 0 {
+		q.WithFingers(expandCSV(opts.Fingers)...)
+	}
+	if len(opts.CVEs) > 0 {
+		q.WithCVEs(expandCSV(opts.CVEs)...)
+	}
+	if len(opts.Tags) > 0 {
+		q.WithTags(expandCSV(opts.Tags)...)
+	}
+	if opts.Vendor != "" {
+		q.WithAttr("vendor", opts.Vendor)
+	}
+	if opts.Product != "" {
+		q.WithAttr("product", opts.Product)
+	}
+	return q
+}
+
+func (c *CyberhubSearch) resultToItems(result *association.QueryResult, typ string, opts cyberhubFlags) []cyberhubItem {
+	if result == nil {
+		return nil
+	}
+
+	severities := normalizeValues(opts.Severity)
+	protocol := strings.ToLower(strings.TrimSpace(opts.Protocol))
+
+	var items []cyberhubItem
+	if typ == typeAll || typ == typeFinger {
+		if opts.POC {
+			for _, fc := range result.FingersWithTemplates(c.index) {
+				item := fingerItem(fc.Finger)
+				item.Associated = fc.TemplateCount
+				if protocol != "" && !strings.EqualFold(item.Protocol, protocol) {
+					continue
+				}
+				items = append(items, item)
+			}
+		} else {
+			for _, f := range result.Fingers {
+				if f == nil {
+					continue
+				}
+				item := fingerItem(f)
+				if protocol != "" && !strings.EqualFold(item.Protocol, protocol) {
+					continue
+				}
+				items = append(items, item)
+			}
+		}
+	}
+	if typ == typeAll || typ == typePOC {
+		for _, t := range result.Templates {
+			if t == nil {
+				continue
+			}
+			item := templateItem(t)
+			if len(severities) > 0 && !containsNormalized(severities, item.Severity) {
+				continue
+			}
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+// executeID looks up a single entity by name/id and shows detail + associations.
+func (c *CyberhubSearch) executeID(name string, jsonOutput bool) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("search cyberhub id: name or id required")
+	}
+
+	if f := c.index.Finger(name); f != nil {
+		return c.renderFingerDetail(f, jsonOutput)
+	}
+	if t := c.index.Template(name); t != nil {
+		return c.renderTemplateDetail(t, jsonOutput)
+	}
+	if a := c.index.Alias(name); a != nil {
+		return c.renderAliasDetail(a, jsonOutput)
+	}
+	return "", fmt.Errorf("search cyberhub id: %q not found", name)
+}
+
+type detailResult struct {
+	Item       cyberhubItem   `json:"item"`
+	Associated []cyberhubItem `json:"associated,omitempty"`
+}
+
+func (c *CyberhubSearch) renderFingerDetail(f *fingerslib.Finger, jsonOutput bool) (string, error) {
+	item := fingerItem(f)
+	result := c.index.Lookup(association.NewQuery().WithFingers(f.Name))
+
+	var associated []cyberhubItem
+	if result != nil {
+		for _, t := range result.Templates {
+			if t != nil {
+				associated = append(associated, templateItem(t))
+			}
+		}
+	}
+
+	if jsonOutput {
+		data, _ := json.Marshal(detailResult{Item: item, Associated: associated})
+		return string(data) + "\n", nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString(formatCyberhubItem(item))
+	sb.WriteByte('\n')
+	if len(associated) > 0 {
+		sb.WriteString(fmt.Sprintf("  associated POCs (%d):\n", len(associated)))
+		for _, a := range associated {
+			sb.WriteString(fmt.Sprintf("    %-30s %-10s %s\n", a.ID, a.Severity, a.Name))
+		}
+	} else {
+		sb.WriteString("  no associated POCs\n")
+	}
+	return sb.String(), nil
+}
+
+func (c *CyberhubSearch) renderTemplateDetail(t *templates.Template, jsonOutput bool) (string, error) {
+	item := templateItem(t)
+	result := c.index.Lookup(association.NewQuery().WithTemplates(t.Id))
+
+	var associated []cyberhubItem
+	if result != nil {
+		for _, f := range result.Fingers {
+			if f != nil {
+				associated = append(associated, fingerItem(f))
+			}
+		}
+	}
+
+	if jsonOutput {
+		data, _ := json.Marshal(detailResult{Item: item, Associated: associated})
+		return string(data) + "\n", nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString(formatCyberhubItem(item))
+	sb.WriteByte('\n')
+	if t.Info.Description != "" {
+		sb.WriteString(fmt.Sprintf("  description: %s\n", t.Info.Description))
+	}
+	if len(associated) > 0 {
+		sb.WriteString(fmt.Sprintf("  associated fingerprints (%d):\n", len(associated)))
+		for _, a := range associated {
+			sb.WriteString(fmt.Sprintf("    %s\n", a.Name))
+		}
+	}
+	return sb.String(), nil
+}
+
+func (c *CyberhubSearch) renderAliasDetail(a *alias.Alias, jsonOutput bool) (string, error) {
+	result := c.index.Lookup(association.NewQuery().WithAliases(a.Name))
+	var items []cyberhubItem
+	if result != nil {
+		for _, f := range result.Fingers {
+			if f != nil {
+				items = append(items, fingerItem(f))
+			}
+		}
+		for _, t := range result.Templates {
+			if t != nil {
+				items = append(items, templateItem(t))
+			}
+		}
+	}
+
+	if jsonOutput {
+		data, _ := json.Marshal(map[string]interface{}{
+			"alias":      a.Name,
+			"vendor":     a.Attributes.Vendor,
+			"product":    a.Attributes.Product,
+			"associated": items,
+		})
+		return string(data) + "\n", nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("[alias] %s", a.Name))
+	if a.Attributes.Vendor != "" {
+		sb.WriteString(fmt.Sprintf("  vendor=%s", a.Attributes.Vendor))
+	}
+	if a.Attributes.Product != "" {
+		sb.WriteString(fmt.Sprintf("  product=%s", a.Attributes.Product))
+	}
+	sb.WriteByte('\n')
+	if len(items) > 0 {
+		sb.WriteString(fmt.Sprintf("  associated (%d):\n", len(items)))
+		for _, item := range items {
+			sb.WriteString(fmt.Sprintf("    %s %s\n", item.Kind, item.Name))
+		}
+	}
+	return sb.String(), nil
+}
+
+// --- action parsing ---
 
 func parseCyberhubAction(rest []string, flagType, flagQuery string) (string, string, string, error) {
 	action := "list"
@@ -119,6 +361,14 @@ func parseCyberhubAction(rest []string, flagType, flagQuery string) (string, str
 		case "search", "find":
 			action = "search"
 			rest = rest[1:]
+		case "id", "info", "show":
+			action = "id"
+			rest = rest[1:]
+			name := strings.TrimSpace(strings.Join(rest, " "))
+			if name == "" {
+				return "", "", "", fmt.Errorf("search cyberhub id: name or id required")
+			}
+			return action, "", name, nil
 		}
 	}
 
@@ -142,9 +392,6 @@ func parseCyberhubAction(rest []string, flagType, flagQuery string) (string, str
 			action = "search"
 		}
 	}
-	if action == "search" && query == "" {
-		return "", "", "", fmt.Errorf("search cyberhub: search requires a query")
-	}
 	return action, typ, query, nil
 }
 
@@ -163,40 +410,7 @@ func normalizeCyberhubType(value string) string {
 	}
 }
 
-func (c *CyberhubSearch) collectItems(typ string) []cyberhubItem {
-	var out []cyberhubItem
-	if typ == typeAll || typ == typeFinger {
-		for _, finger := range c.fingers() {
-			if finger == nil {
-				continue
-			}
-			out = append(out, fingerItem(finger))
-		}
-	}
-	if typ == typeAll || typ == typePOC {
-		for _, tmpl := range c.templates() {
-			if tmpl == nil {
-				continue
-			}
-			out = append(out, templateItem(tmpl))
-		}
-	}
-	return out
-}
-
-func (c *CyberhubSearch) fingers() fingerslib.Fingers {
-	if c == nil || c.resources == nil || c.resources.FingersConfig == nil {
-		return nil
-	}
-	return c.resources.FingersConfig.FullFingers.Fingers()
-}
-
-func (c *CyberhubSearch) templates() []*templates.Template {
-	if c == nil || c.resources == nil || c.resources.NeutronConfig == nil {
-		return nil
-	}
-	return c.resources.NeutronConfig.Templates.Templates()
-}
+// --- item construction ---
 
 func fingerItem(finger *fingerslib.Finger) cyberhubItem {
 	protocol := strings.TrimSpace(finger.Protocol)
@@ -240,56 +454,7 @@ func templateItem(tmpl *templates.Template) cyberhubItem {
 	}
 }
 
-func filterCyberhubItems(items []cyberhubItem, query string, opts cyberhubFlags) []cyberhubItem {
-	query = strings.ToLower(strings.TrimSpace(query))
-	tags := normalizeValues(opts.Tags)
-	fingers := normalizeValues(opts.Fingers)
-	severities := normalizeValues(opts.Severity)
-	protocol := strings.ToLower(strings.TrimSpace(opts.Protocol))
-
-	out := make([]cyberhubItem, 0, len(items))
-	for _, item := range items {
-		if query != "" && !cyberhubItemMatchesQuery(item, query) {
-			continue
-		}
-		if protocol != "" && (item.Kind != typeFinger || !strings.EqualFold(item.Protocol, protocol)) {
-			continue
-		}
-		if len(tags) > 0 && !intersectsNormalized(tags, item.Tags) {
-			continue
-		}
-		if len(fingers) > 0 && (item.Kind != typePOC || !intersectsNormalized(fingers, item.Fingers)) {
-			continue
-		}
-		if len(severities) > 0 && (item.Kind != typePOC || !containsNormalized(severities, item.Severity)) {
-			continue
-		}
-		out = append(out, item)
-	}
-	return out
-}
-
-func cyberhubItemMatchesQuery(item cyberhubItem, query string) bool {
-	values := []string{
-		item.Kind,
-		item.Name,
-		item.ID,
-		item.Protocol,
-		item.Severity,
-		item.Vendor,
-		item.Product,
-		item.Description,
-		item.Author,
-	}
-	values = append(values, item.Tags...)
-	values = append(values, item.Fingers...)
-	for _, value := range values {
-		if strings.Contains(strings.ToLower(value), query) {
-			return true
-		}
-	}
-	return false
-}
+// --- rendering ---
 
 func sortCyberhubItems(items []cyberhubItem) {
 	sort.SliceStable(items, func(i, j int) bool {
@@ -297,10 +462,7 @@ func sortCyberhubItems(items []cyberhubItem) {
 		if left.Kind != right.Kind {
 			return left.Kind < right.Kind
 		}
-		if left.Name != right.Name {
-			return strings.ToLower(left.Name) < strings.ToLower(right.Name)
-		}
-		return left.ID < right.ID
+		return strings.ToLower(left.Name) < strings.ToLower(right.Name)
 	})
 }
 
@@ -308,16 +470,12 @@ func renderCyberhubItems(items []cyberhubItem, total int, action, typ string, js
 	var sb strings.Builder
 	if jsonLines {
 		for _, item := range items {
-			line, err := json.Marshal(item)
-			if err != nil {
-				return "", err
-			}
+			line, _ := json.Marshal(item)
 			sb.Write(line)
 			sb.WriteByte('\n')
 		}
 		return sb.String(), nil
 	}
-
 	for _, item := range items {
 		sb.WriteString(formatCyberhubItem(item))
 		sb.WriteByte('\n')
@@ -341,6 +499,9 @@ func formatCyberhubItem(item cyberhubItem) string {
 			parts = append(parts, strconv.Itoa(item.Level))
 		}
 		parts = util.AppendNonEmpty(parts, item.Vendor, item.Product)
+		if item.Associated > 0 {
+			parts = append(parts, fmt.Sprintf("pocs=%d", item.Associated))
+		}
 	case typePOC:
 		parts = util.AppendNonEmpty(parts, item.ID, item.Severity)
 		if len(item.Fingers) > 0 {
@@ -351,6 +512,21 @@ func formatCyberhubItem(item cyberhubItem) string {
 		parts = append(parts, strings.Join(item.Tags, ","))
 	}
 	return strings.Join(util.QuoteFields(parts), " ")
+}
+
+// --- helpers ---
+
+func expandCSV(values []string) []string {
+	var out []string
+	for _, v := range values {
+		for _, part := range strings.Split(v, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				out = append(out, part)
+			}
+		}
+	}
+	return out
 }
 
 func splitList(value string) []string {
@@ -378,15 +554,6 @@ func normalizeValues(values []string) []string {
 		}
 	}
 	return out
-}
-
-func intersectsNormalized(want []string, got []string) bool {
-	for _, value := range got {
-		if containsNormalized(want, value) {
-			return true
-		}
-	}
-	return false
 }
 
 func containsNormalized(want []string, got string) bool {

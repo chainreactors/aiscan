@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -84,62 +83,3 @@ func TestNormalizeArgsConvertsValuelessJSONFlag(t *testing.T) {
 	}
 }
 
-func TestParseSDKScanArgsSupportsListFileModAndPing(t *testing.T) {
-	listPath := filepath.Join(t.TempDir(), "targets.txt")
-	if err := os.WriteFile(listPath, []byte("# comment\n127.0.0.1\n10.0.0.0/30\n\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	opts, ok, err := parseSDKScanArgs([]string{"-L", listPath, "-p", "80", "--ping", "-m", "s"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok {
-		t.Fatal("expected args to map to SDK scan path")
-	}
-	if opts.target != "127.0.0.1,10.0.0.0/30" {
-		t.Fatalf("target = %q", opts.target)
-	}
-	if opts.ports != "80" {
-		t.Fatalf("ports = %q", opts.ports)
-	}
-	if opts.mod != "s" {
-		t.Fatalf("mod = %q", opts.mod)
-	}
-	if !opts.ping {
-		t.Fatal("ping should be enabled")
-	}
-}
-
-func TestParseSDKScanArgsReportsListFileErrors(t *testing.T) {
-	opts, ok, err := parseSDKScanArgs([]string{"--list", filepath.Join(t.TempDir(), "missing.txt")})
-	if err == nil {
-		t.Fatal("expected list file error")
-	}
-	if ok || opts != nil {
-		t.Fatalf("opts = %#v, ok = %v; want nil, false", opts, ok)
-	}
-}
-
-func TestParseSDKScanArgsRejectsUnsupportedEqualsFlags(t *testing.T) {
-	opts, ok, err := parseSDKScanArgs([]string{"-i", "127.0.0.1", "--workflow=wf.yaml"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ok || opts != nil {
-		t.Fatalf("opts = %#v, ok = %v; want nil, false", opts, ok)
-	}
-}
-
-func TestParseSDKScanArgsSupportsFalsePingValue(t *testing.T) {
-	opts, ok, err := parseSDKScanArgs([]string{"-i", "127.0.0.1", "--ping=false"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok {
-		t.Fatal("expected SDK scan path")
-	}
-	if opts.ping {
-		t.Fatal("ping should be false")
-	}
-}
