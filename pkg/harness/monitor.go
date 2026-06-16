@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/chainreactors/aiscan/pkg/truncate"
 )
 
 // Monitor tails the agent events JSONL file in real-time, rendering a
@@ -124,35 +126,19 @@ func (m *Monitor) renderEvent(ev monitorEvent) {
 
 	case "message_end":
 		if ev.Message != nil && ev.Message.Role == "assistant" && ev.Message.Content != "" {
-			text := ev.Message.Content
-			if len(text) > 200 {
-				text = text[:197] + "..."
-			}
-			m.printf("  💬 %s\n", text)
+			m.printf("  💬 %s\n", truncate.Clip(ev.Message.Content, 200))
 		}
 
 	case "tool_execution_start":
-		args := ev.Args
-		if len(args) > 120 {
-			args = args[:117] + "..."
-		}
-		m.printf("  🔧 %s %s\n", ev.ToolName, args)
+		m.printf("  🔧 %s %s\n", ev.ToolName, truncate.Clip(ev.Args, 120))
 
 	case "tool_execution_end":
 		if ev.IsError {
-			result := ev.Result
-			if len(result) > 100 {
-				result = result[:97] + "..."
-			}
-			m.printf("  ❌ %s error: %s\n", ev.ToolName, result)
+			m.printf("  ❌ %s error: %s\n", ev.ToolName, truncate.Clip(ev.Result, 100))
 		} else {
 			size := len(ev.Result)
-			preview := ev.Result
-			if len(preview) > 100 {
-				preview = preview[:97] + "..."
-			}
 			if size > 0 {
-				m.printf("  ✓  %s → %d bytes: %s\n", ev.ToolName, size, preview)
+				m.printf("  ✓  %s → %d bytes: %s\n", ev.ToolName, size, truncate.Clip(ev.Result, 100))
 			} else {
 				m.printf("  ✓  %s → (empty)\n", ev.ToolName)
 			}

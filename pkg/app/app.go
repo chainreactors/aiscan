@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
+	"github.com/chainreactors/aiscan/pkg/truncate"
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/resources"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
@@ -294,7 +295,13 @@ func collectDeepBrowserArtifacts(ctx context.Context, reg *command.CommandRegist
 	closed = true
 	appendDeepBrowserStep(&sb, "close", "playwright close "+session, out, err)
 
-	return truncateDeepBrowserArtifact(sb.String(), 42000), nil
+	artifact := sb.String()
+	if tr := truncate.Head(artifact, truncate.Options{}); tr.Truncated {
+		artifact = tr.Content + fmt.Sprintf(
+			"\n\n[deep browser truncated: showing %d/%d lines (%s of %s)]",
+			tr.OutputLines, tr.TotalLines, truncate.FormatSize(tr.OutputBytes), truncate.FormatSize(tr.TotalBytes))
+	}
+	return artifact, nil
 }
 
 func executeRegistryCommand(ctx context.Context, reg *command.CommandRegistry, commandLine string, timeout time.Duration) (string, error) {
@@ -335,7 +342,12 @@ func appendDeepBrowserStep(sb *strings.Builder, name, commandLine, output string
 	}
 	output = strings.TrimSpace(output)
 	if output != "" {
-		sb.WriteString(truncateDeepBrowserArtifact(output, 8000))
+		if tr := truncate.Head(output, truncate.Options{}); tr.Truncated {
+			sb.WriteString(tr.Content)
+			sb.WriteString(fmt.Sprintf("\n[step truncated: %d/%d lines]", tr.OutputLines, tr.TotalLines))
+		} else {
+			sb.WriteString(tr.Content)
+		}
 		sb.WriteString("\n")
 	}
 }
@@ -352,12 +364,6 @@ func quoteCommandArg(value string) string {
 	return `"` + value + `"`
 }
 
-func truncateDeepBrowserArtifact(value string, max int) string {
-	if max <= 0 || len(value) <= max {
-		return value
-	}
-	return value[:max] + fmt.Sprintf("\n\n[truncated: showing %d of %d bytes]", max, len(value))
-}
 
 
 

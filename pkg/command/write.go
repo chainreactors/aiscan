@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/chainreactors/aiscan/pkg/truncate"
 )
 
 type WriteTool struct {
@@ -106,10 +107,7 @@ func (t *WriteTool) editFile(args WriteArgs) (ToolResult, error) {
 
 		count := strings.Count(original, edit.OldText)
 		if count == 0 {
-			hint := edit.OldText
-			if len(hint) > 200 {
-				hint = hint[:200] + "..."
-			}
+			hint := truncate.Clip(edit.OldText, 200)
 			return ErrorResult(fmt.Sprintf("edits[%d]: old_text not found in %s. Make sure it matches exactly (including whitespace and indentation).\nSearched for:\n%s", i, args.Path, hint)), nil
 		}
 		if count > 1 && !edit.ReplaceAll {

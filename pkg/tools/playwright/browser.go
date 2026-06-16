@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chainreactors/aiscan/pkg/truncate"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
@@ -23,7 +24,7 @@ import (
 
 const (
 	defaultTimeout = 30 * time.Second
-	maxOutputLen   = 100_000
+	maxOutputLen   = truncate.MaxContentLength
 	waitStableDur  = 300 * time.Millisecond
 )
 
@@ -1153,30 +1154,32 @@ func parsePDFOpts(args []string, usage string) (pdfOpts, error) {
 // ---------------------------------------------------------------------------
 
 func formatTextOutput(url, text string) string {
-	if len(text) > maxOutputLen {
-		text = text[:maxOutputLen] + fmt.Sprintf(
-			"\n\n[Content truncated: showing %d of %d characters]",
-			maxOutputLen, len(text))
-	}
+	tr := truncate.Head(text, truncate.Options{MaxBytes: maxOutputLen})
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("URL: %s\n", url))
-	sb.WriteString(fmt.Sprintf("Chars: %d\n", len(text)))
+	sb.WriteString(fmt.Sprintf("Chars: %d\n", tr.TotalBytes))
 	sb.WriteString("---\n\n")
-	sb.WriteString(text)
+	sb.WriteString(tr.Content)
+	if tr.Truncated {
+		sb.WriteString(fmt.Sprintf(
+			"\n\n[Content truncated: showing %d/%d lines (%s). Use playwright screenshot for full page.]",
+			tr.OutputLines, tr.TotalLines, truncate.FormatSize(tr.OutputBytes)))
+	}
 	return sb.String()
 }
 
 func formatHTMLOutput(url, html string) string {
-	if len(html) > maxOutputLen {
-		html = html[:maxOutputLen] + fmt.Sprintf(
-			"\n\n[Content truncated: showing %d of %d characters]",
-			maxOutputLen, len(html))
-	}
+	tr := truncate.Head(html, truncate.Options{MaxBytes: maxOutputLen})
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("URL: %s\n", url))
-	sb.WriteString(fmt.Sprintf("Size: %d bytes\n", len(html)))
+	sb.WriteString(fmt.Sprintf("Size: %d bytes\n", tr.TotalBytes))
 	sb.WriteString("---\n\n")
-	sb.WriteString(html)
+	sb.WriteString(tr.Content)
+	if tr.Truncated {
+		sb.WriteString(fmt.Sprintf(
+			"\n\n[Content truncated: showing %d/%d lines (%s). Use playwright screenshot for full page.]",
+			tr.OutputLines, tr.TotalLines, truncate.FormatSize(tr.OutputBytes)))
+	}
 	return sb.String()
 }
 

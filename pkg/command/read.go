@@ -11,12 +11,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/chainreactors/aiscan/pkg/truncate"
+
 )
 
 const (
-	defaultReadLineLimit = 2000
-	defaultReadByteLimit = 50 * 1024     // 50KB
-	maxImageSize         = 20 * 1024 * 1024 // 20MB
+	defaultReadLineLimit = truncate.DefaultMaxLines
+	defaultReadByteLimit = truncate.DefaultMaxBytes
+	maxImageSize         = truncate.MaxImageSize
 )
 
 type ReadTool struct {

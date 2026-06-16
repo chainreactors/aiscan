@@ -13,13 +13,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/chainreactors/aiscan/pkg/truncate"
 )
 
 const (
 	ddgSearchURL    = "https://html.duckduckgo.com/html/"
 	ddgUserAgent    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 	searchTimeout   = 30 * time.Second
-	maxResponseBody = 1024 * 1024
+	maxResponseBody = truncate.MaxResponseBody
 
 	defaultNumResults = 5
 	maxNumResults     = 10

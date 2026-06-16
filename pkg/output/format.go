@@ -3,6 +3,8 @@ package output
 import (
 	"regexp"
 	"strings"
+
+	"github.com/chainreactors/aiscan/pkg/truncate"
 )
 
 var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
@@ -33,12 +35,7 @@ func SanitizeLine(line string, color Color) string {
 }
 
 func TruncateStr(s string, maxLen int) string {
-	s = strings.ReplaceAll(s, "\n", " ")
-	s = strings.Join(strings.Fields(s), " ")
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
+	return truncate.Clip(s, maxLen)
 }
 
 func FirstNonEmpty(values ...string) string {

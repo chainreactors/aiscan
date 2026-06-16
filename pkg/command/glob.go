@@ -8,9 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/chainreactors/aiscan/pkg/truncate"
 )
 
-const maxGlobResults = 500
+const maxGlobResults = truncate.MaxGlobResults
 
 type VirtualGlobber interface {
 	GlobVirtual(pattern string) ([]string, bool)

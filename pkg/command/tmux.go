@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent/tmux"
+	"github.com/chainreactors/aiscan/pkg/truncate"
 )
 
 type TmuxCommand struct {
@@ -167,10 +168,7 @@ func (t *TmuxCommand) cmdListSessions() (string, error) {
 		} else {
 			elapsed = it.EndedAt.Sub(it.StartedAt).Round(time.Second)
 		}
-		cmd := it.Command
-		if len(cmd) > 50 {
-			cmd = cmd[:47] + "..."
-		}
+		cmd := truncate.Clip(it.Command, 50)
 		// tmux style: "session_name: 1 windows (created ...) [state]"
 		fmt.Fprintf(&sb, "%s (%s): %s [%s %s] %s\n",
 			it.ID, it.Name, cmd, it.State, elapsed, it.StartedAt.Format("Mon Jan 2 15:04:05 2006"))

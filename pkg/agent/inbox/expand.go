@@ -5,9 +5,11 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/chainreactors/aiscan/pkg/truncate"
 )
 
-const defaultMaxFileSize = 50 * 1024
+const defaultMaxFileSize = truncate.DefaultMaxBytes
 
 type Expander struct {
 	ReadFile    func(path string) (string, error)
@@ -89,10 +91,11 @@ func (e *Expander) expandFile(att Attachment, path string, maxSize int) Attachme
 		att.Error = fmt.Sprintf("read %s: %s", path, err)
 		return att
 	}
-	if len(data) > maxSize {
-		att.Content = data[:maxSize] + fmt.Sprintf("\n...[truncated: %d/%d bytes]", maxSize, len(data))
+	if tr := truncate.Head(data, truncate.Options{MaxBytes: maxSize}); tr.Truncated {
+		att.Content = tr.Content + fmt.Sprintf("\n...[truncated: %d/%d lines, %s. Use read tool to see full file.]",
+			tr.OutputLines, tr.TotalLines, truncate.FormatSize(tr.TotalBytes))
 	} else {
-		att.Content = data
+		att.Content = tr.Content
 	}
 	return att
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
+	"github.com/chainreactors/aiscan/pkg/truncate"
 )
 
 func runLoop(ctx context.Context, cfg Config) (*Result, error) {
@@ -244,7 +245,7 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 
 	// Phase 1: preflight all tool calls sequentially (emit start events, check beforeToolCall)
 	for i, tc := range toolCalls {
-		cfg.Logger.Infof("[turn %d] tool_call id=%s name=%s args=%q", turn, tc.ID, tc.Function.Name, preview(tc.Function.Arguments, 200))
+		cfg.Logger.Infof("[turn %d] tool_call id=%s name=%s args=%q", turn, tc.ID, tc.Function.Name, truncate.Clip(tc.Function.Arguments, 200))
 		bus.Emit(Event{
 			Type:       EventToolExecutionStart,
 			Turn:       turn,
@@ -359,7 +360,11 @@ func runToolCall(ctx context.Context, cfg Config, assistantMsg ChatMessage, tc T
 	if execution.rawResult == "" {
 		execution.rawResult = execution.result
 	}
-	execution.result = truncateResultSize(execution.result, cfg.MaxResultSize)
+	if tr := truncate.Head(execution.result, truncate.Options{MaxBytes: cfg.MaxResultSize}); tr.Truncated {
+		execution.result = tr.Content + fmt.Sprintf(
+			"\n\n[truncated: showing %d/%d lines (%s of %s). Refine your query or use filter/parse tools to access specific parts.]",
+			tr.OutputLines, tr.TotalLines, truncate.FormatSize(tr.OutputBytes), truncate.FormatSize(tr.TotalBytes))
+	}
 	return afterToolCall(ctx, cfg, assistantMsg, tc, execution)
 }
 
@@ -443,25 +448,7 @@ func afterToolCall(ctx context.Context, cfg Config, assistantMsg ChatMessage, tc
 	return execution
 }
 
-func truncateResult(result string) string {
-	return truncateResultSize(result, DefaultMaxResultSize)
-}
 
-func truncateResultSize(result string, maxSize int) string {
-	if len(result) <= maxSize {
-		return result
-	}
-	return result[:maxSize] + fmt.Sprintf(
-		"\n\n[truncated: showing %d of %d bytes. Refine your query or use filter/parse tools to access specific parts.]",
-		maxSize, len(result))
-}
-
-func preview(value string, limit int) string {
-	if limit <= 0 || len(value) <= limit {
-		return value
-	}
-	return value[:limit] + "..."
-}
 
 func requestMessages(systemPrompt string, messages []ChatMessage, transform TransformContextFunc) []ChatMessage {
 	out := append([]ChatMessage(nil), messages...)
@@ -484,7 +471,7 @@ func messageContent(msg ChatMessage) string {
 
 func logAssistantAndUsage(logger telemetry.Logger, msg ChatMessage, usage *Usage) {
 	if content := messageContent(msg); content != "" {
-		logger.Infof("assistant output=%q", preview(compactLogContent(content), 500))
+		logger.Infof("assistant output=%q", truncate.Clip(compactLogContent(content), 500))
 	}
 	if usage != nil {
 		if usage.CacheReadTokens > 0 || usage.CacheWriteTokens > 0 {

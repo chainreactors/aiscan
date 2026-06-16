@@ -8,10 +8,10 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/agent/tmux"
+	"github.com/chainreactors/aiscan/pkg/truncate"
 )
 
 const (
-	maxOutputSize           = 50 * 1024
 	defaultTimeout          = 300
 	autoBackgroundThreshold = 15 * time.Second
 )
@@ -117,10 +117,14 @@ func (t *BashTool) waitOrBackground(id string, ctx context.Context) (ToolResult,
 }
 
 func (t *BashTool) collectResult(id string, ctx context.Context) ToolResult {
-	output := t.tasks.PeekOrEmpty(id, 2000)
-	if len(output) > maxOutputSize {
-		original := len(output)
-		output = output[:maxOutputSize] + fmt.Sprintf("\n\n[truncated: showing %d of %d bytes]", maxOutputSize, original)
+	raw := t.tasks.PeekOrEmpty(id, truncate.DefaultMaxLines)
+	r := truncate.Tail(raw, truncate.Options{})
+	output := r.Content
+	if r.Truncated {
+		startLine := r.TotalLines - r.OutputLines + 1
+		output += fmt.Sprintf(
+			"\n\n[truncated: showing lines %d-%d of %d (%s of %s). Use tmux read to access earlier output.]",
+			startLine, r.TotalLines, r.TotalLines, truncate.FormatSize(r.OutputBytes), truncate.FormatSize(r.TotalBytes))
 	}
 	if ctx.Err() != nil {
 		output += fmt.Sprintf("\n[command timed out after %ds]", t.timeout)

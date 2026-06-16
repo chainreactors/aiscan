@@ -11,15 +11,16 @@ import (
 	"sync"
 	"time"
 	"unicode"
+
+	"github.com/chainreactors/aiscan/pkg/truncate"
 )
 
 const (
-	fetchTimeout      = 60 * time.Second
-	maxFetchBody      = 10 * 1024 * 1024
-	maxMarkdownLength = 100_000
-	maxURLLength      = 2000
-	maxRedirects      = 10
-	fetchUserAgent    = "Mozilla/5.0 (compatible; aiscan/1.0; +https://github.com/chainreactors/aiscan)"
+	fetchTimeout   = 60 * time.Second
+	maxFetchBody   = truncate.MaxFetchBody
+	maxURLLength   = 2000
+	maxRedirects   = 10
+	fetchUserAgent = "Mozilla/5.0 (compatible; aiscan/1.0; +https://github.com/chainreactors/aiscan)"
 
 	cacheTTL      = 15 * time.Minute
 	maxCacheBytes = 50 * 1024 * 1024
@@ -407,10 +408,10 @@ func formatFetchOutput(fetchedURL string, entry *cacheEntry, extract string) str
 		content = extractRelevantContent(content, extract)
 	}
 
-	if len(content) > maxMarkdownLength {
-		content = content[:maxMarkdownLength] +
-			fmt.Sprintf("\n\n[Content truncated: showing %d of %d characters. Use --extract to focus on specific content.]",
-				maxMarkdownLength, len(entry.content))
+	if tr := truncate.Head(content, truncate.Options{MaxBytes: truncate.MaxContentLength}); tr.Truncated {
+		content = tr.Content + fmt.Sprintf(
+			"\n\n[Content truncated: showing %d/%d lines (%s of %s). Use --extract to focus on specific content.]",
+			tr.OutputLines, tr.TotalLines, truncate.FormatSize(tr.OutputBytes), truncate.FormatSize(tr.TotalBytes))
 	}
 
 	var sb strings.Builder

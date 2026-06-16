@@ -1,9 +1,11 @@
 package agent
 
+import "github.com/chainreactors/aiscan/pkg/truncate"
+
 const (
-	DefaultMaxResultSize         = 50 * 1024
+	DefaultMaxResultSize         = truncate.DefaultMaxBytes
 	DefaultMaxRetries            = 9
 	DefaultTokenBudgetWarningPct = 80
 	DefaultInboxCapacity         = 64
-	SubInboxCapacity           = 16
+	SubInboxCapacity             = 16
 )

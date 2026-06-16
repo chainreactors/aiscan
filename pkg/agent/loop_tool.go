@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/truncate"
 )
 
 type LoopTool struct {
@@ -99,7 +100,7 @@ func (t *LoopTool) list() (command.ToolResult, error) {
 		if !l.LastFired.IsZero() {
 			sb.WriteString(fmt.Sprintf(" last=%s", time.Since(l.LastFired).Round(time.Second)))
 		}
-		sb.WriteString(fmt.Sprintf(" prompt=%q\n", truncatePrompt(l.Prompt, 60)))
+		sb.WriteString(fmt.Sprintf(" prompt=%q\n", truncate.Clip(l.Prompt, 60)))
 	}
 	return command.TextResult(sb.String()), nil
 }
@@ -114,9 +115,3 @@ func (t *LoopTool) delete(args loopArgs) (command.ToolResult, error) {
 	return command.TextResult(fmt.Sprintf("Loop %q deleted.", args.Name)), nil
 }
 
-func truncatePrompt(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max-3] + "..."
-}
