@@ -1015,8 +1015,13 @@ func (r *AgentConsole) refreshPromptAfterAsyncRun() {
 	r.console.Shell().Display.Refresh()
 }
 
+func (r *AgentConsole) setDirectCancel(fn context.CancelFunc) {
+	r.directMu.Lock()
+	r.directCancel = fn
+	r.directMu.Unlock()
+}
+
 // InterruptCurrentRun stops the current agent run or direct command.
-// Called by both the Escape-key readline handler and the signal handler.
 func (r *AgentConsole) InterruptCurrentRun() bool {
 	if r.controller != nil && r.controller.Stop() {
 		r.ensureOutput().Stopping()
@@ -1105,15 +1110,8 @@ func (r *AgentConsole) executeBashDirect(ctx context.Context, cmdLine string) er
 	}
 	directCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	r.directMu.Lock()
-	r.directCancel = cancel
-	r.directMu.Unlock()
-	defer func() {
-		r.directMu.Lock()
-		r.directCancel = nil
-		r.directMu.Unlock()
-	}()
+	r.setDirectCancel(cancel)
+	defer r.setDirectCancel(nil)
 
 	result, err := reg.Execute(directCtx, cmdLine)
 	if err != nil {

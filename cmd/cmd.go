@@ -120,7 +120,7 @@ func AiScan() {
 
 	switch parsed.Mode {
 	case cfg.RunModeAgent:
-		if err := runner.RunAgentMode(ctx, &option, logger, sigHandler); err != nil {
+		if err := runner.RunAgentMode(ctx, &option, logger, sigHandler.SetStopFunc); err != nil {
 			logger.Errorf("agent failed: %s", err)
 			os.Exit(1)
 		}
