@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/util"
 	"github.com/chainreactors/fingers/alias"
 	fingerslib "github.com/chainreactors/fingers/fingers"
 	"github.com/chainreactors/neutron/templates"
@@ -488,7 +487,7 @@ func formatCyberhubItem(item cyberhubItem) string {
 	parts := []string{"[cyberhub]", item.Kind, item.Name}
 	switch item.Kind {
 	case typeFinger:
-		parts = util.AppendNonEmpty(parts, item.Protocol)
+		parts = appendNonEmpty(parts, item.Protocol)
 		if item.Focus {
 			parts = append(parts, "focus")
 		}
@@ -498,12 +497,12 @@ func formatCyberhubItem(item cyberhubItem) string {
 		if item.Level > 0 {
 			parts = append(parts, strconv.Itoa(item.Level))
 		}
-		parts = util.AppendNonEmpty(parts, item.Vendor, item.Product)
+		parts = appendNonEmpty(parts, item.Vendor, item.Product)
 		if item.Associated > 0 {
 			parts = append(parts, fmt.Sprintf("pocs=%d", item.Associated))
 		}
 	case typePOC:
-		parts = util.AppendNonEmpty(parts, item.ID, item.Severity)
+		parts = appendNonEmpty(parts, item.ID, item.Severity)
 		if len(item.Fingers) > 0 {
 			parts = append(parts, strings.Join(item.Fingers, ","))
 		}
@@ -511,7 +510,7 @@ func formatCyberhubItem(item cyberhubItem) string {
 	if len(item.Tags) > 0 {
 		parts = append(parts, strings.Join(item.Tags, ","))
 	}
-	return strings.Join(util.QuoteFields(parts), " ")
+	return strings.Join(quoteFields(parts), " ")
 }
 
 // --- helpers ---
@@ -564,4 +563,38 @@ func containsNormalized(want []string, got string) bool {
 		}
 	}
 	return false
+}
+
+func appendNonEmpty(parts []string, values ...string) []string {
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			parts = append(parts, v)
+		}
+	}
+	return parts
+}
+
+func needsQuoting(value string) bool {
+	return strings.ContainsAny(value, " \t\r\n\"")
+}
+
+func formatValue(value string) string {
+	value = strings.TrimSpace(value)
+	if needsQuoting(value) {
+		return strconv.Quote(value)
+	}
+	return value
+}
+
+func quoteFields(parts []string) []string {
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		out = append(out, formatValue(part))
+	}
+	return out
 }

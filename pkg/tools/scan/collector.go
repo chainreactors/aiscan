@@ -9,7 +9,6 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/output"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
-	"github.com/chainreactors/aiscan/pkg/util"
 	"github.com/chainreactors/parsers"
 	sdktypes "github.com/chainreactors/sdk/pkg/types"
 	"github.com/chainreactors/utils"
@@ -287,12 +286,12 @@ func (s *statsCollector) Finish() {
 
 func (s *statsCollector) Snapshot() statsSnapshot {
 	out := s.summary
-	out.Accepted = util.CloneMap(out.Accepted)
-	out.CapabilityRuns = util.CloneMap(out.CapabilityRuns)
-	out.CapabilityOutput = util.CloneMap(out.CapabilityOutput)
-	out.SprayByCapability = util.CloneMap(out.SprayByCapability)
-	out.ErrorsBySource = util.CloneMap(out.ErrorsBySource)
-	out.EngineStats = util.CloneMap(out.EngineStats)
+	out.Accepted = cloneMap(out.Accepted)
+	out.CapabilityRuns = cloneMap(out.CapabilityRuns)
+	out.CapabilityOutput = cloneMap(out.CapabilityOutput)
+	out.SprayByCapability = cloneMap(out.SprayByCapability)
+	out.ErrorsBySource = cloneMap(out.ErrorsBySource)
+	out.EngineStats = cloneMap(out.EngineStats)
 	return out
 }
 
@@ -302,4 +301,15 @@ func (s statsSnapshot) Duration() time.Duration {
 		finished = time.Now()
 	}
 	return finished.Sub(s.StartedAt)
+}
+
+func cloneMap[K comparable, V any](m map[K]V) map[K]V {
+	if m == nil {
+		return nil
+	}
+	out := make(map[K]V, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }

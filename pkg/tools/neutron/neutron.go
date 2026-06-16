@@ -15,7 +15,6 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	scanengine "github.com/chainreactors/aiscan/pkg/tools/scan/engine"
-	"github.com/chainreactors/aiscan/pkg/util"
 	"github.com/chainreactors/neutron/templates"
 	sdkneutron "github.com/chainreactors/sdk/neutron"
 	"github.com/chainreactors/sdk/pkg/association"
@@ -337,8 +336,8 @@ func (c *Command) writeOrReturn(path, content string) (string, error) {
 
 func readNeutronTargets(inputs []string, input, listFile string) ([]string, error) {
 	var out []string
-	out = util.AppendNonEmpty(out, inputs...)
-	out = util.AppendNonEmpty(out, input)
+	out = appendNonEmpty(out, inputs...)
+	out = appendNonEmpty(out, input)
 	if listFile == "" {
 		return out, nil
 	}
@@ -555,6 +554,16 @@ func (c *Command) resolvePath(value string) string {
 		return value
 	}
 	return filepath.Join(c.workDir, value)
+}
+
+func appendNonEmpty(parts []string, values ...string) []string {
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			parts = append(parts, v)
+		}
+	}
+	return parts
 }
 
 func renderTemplateList(selected []*templates.Template, jsonOutput bool) string {
