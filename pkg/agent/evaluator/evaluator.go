@@ -9,14 +9,14 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
+	"github.com/chainreactors/aiscan/pkg/truncate"
 )
 
 const (
 	defaultMaxRetries = 3
-	maxArgsPreview    = 200
-	maxResultPreview  = 300
-	maxOutputPreview  = 1000
-	maxTraceSize      = 60000
+	maxResultPreview  = 200
+	maxOutputPreview  = 3000
+	maxTraceSize      = 16000
 )
 
 type Config struct {
@@ -65,82 +65,61 @@ func (e *Evaluator) Evaluate(ctx context.Context, goal, criteria string, message
 	return nil, fmt.Errorf("goal eval failed after %d attempts: %w", e.cfg.MaxRetries, lastErr)
 }
 
-const systemPrompt = `You are a goal completion evaluator for an AI agent system. Given the original goal, acceptance criteria, and execution trace, determine whether the goal was fully achieved.
+const systemPrompt = `You are a goal completion evaluator. Given the original goal, acceptance criteria, and execution trace, determine whether the goal was fully achieved.
 
-Respond with ONLY a JSON object:
-{"pass": true/false, "reason": "one sentence summary", "feedback": "actionable next step if not pass, empty string if pass"}
+You MUST call the "verdict" tool with your evaluation. Do not respond with text.
 
 Rules:
 - pass=true only if the goal was fully and correctly completed per the criteria
-- feedback: if pass=false, provide a specific, actionable instruction for what the agent should do next to complete the goal
-- Be strict: "ran without errors" is NOT the same as "fulfilled the goal"
-- Check that results contain expected data, not just that tools were called`
+- feedback: if pass=false, provide a specific, actionable instruction for what the agent should do next
+- Be strict: "ran without errors" is NOT the same as "fulfilled the goal"`
 
-var verdictResponseFormat = &provider.ResponseFormat{
-	Type: "json_object",
+var verdictTool = provider.ToolDefinition{
+	Type: "function",
+	Function: provider.FunctionDefinition{
+		Name:        "verdict",
+		Description: "Submit the goal evaluation result",
+		Parameters: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"pass":     map[string]interface{}{"type": "boolean", "description": "true only if goal was fully achieved per criteria"},
+				"reason":   map[string]interface{}{"type": "string", "description": "one sentence summary of the evaluation"},
+				"feedback": map[string]interface{}{"type": "string", "description": "actionable next step if not pass, empty string if pass"},
+			},
+			"required": []string{"pass", "reason", "feedback"},
+		},
+	},
 }
 
 func (e *Evaluator) call(ctx context.Context, userPrompt string) (*Verdict, error) {
 	temp := float64(0)
-	req := &provider.ChatCompletionRequest{
+	resp, err := e.cfg.Provider.ChatCompletion(ctx, &provider.ChatCompletionRequest{
 		Model: e.cfg.Model,
 		Messages: []provider.ChatMessage{
 			provider.NewTextMessage("system", systemPrompt),
 			provider.NewTextMessage("user", userPrompt),
 		},
-		MaxTokens:      512,
-		Temperature:    &temp,
-		ResponseFormat: verdictResponseFormat,
-	}
-
-	resp, err := e.cfg.Provider.ChatCompletion(ctx, req)
+		Tools:       []provider.ToolDefinition{verdictTool},
+		MaxTokens:   2048,
+		Temperature: &temp,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("evaluator LLM call: %w", err)
-	}
-	if resp.Error != nil {
-		return nil, fmt.Errorf("evaluator LLM error: %s", resp.Error.Message)
+		return nil, fmt.Errorf("LLM call: %w", err)
 	}
 	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("evaluator returned no choices")
+		return nil, fmt.Errorf("no choices returned")
 	}
 
-	content := ""
-	if resp.Choices[0].Message.Content != nil {
-		content = *resp.Choices[0].Message.Content
-	}
-	v, err := parseVerdict(content)
-	if err != nil {
-		e.cfg.Logger.Warnf("eval verdict parse failed, raw response (%d chars): %s", len(content), clip(content, 500))
-	}
-	return v, err
-}
-
-func parseVerdict(raw string) (*Verdict, error) {
-	raw = strings.TrimSpace(raw)
-
-	// Strip markdown fences
-	raw = strings.TrimPrefix(raw, "```json")
-	raw = strings.TrimPrefix(raw, "```")
-	raw = strings.TrimSuffix(raw, "```")
-	raw = strings.TrimSpace(raw)
-
-	// Try direct parse first
-	var v Verdict
-	if err := json.Unmarshal([]byte(raw), &v); err == nil {
-		return &v, nil
-	}
-
-	// Fallback: extract first JSON object from the response
-	if start := strings.Index(raw, "{"); start >= 0 {
-		if end := strings.LastIndex(raw, "}"); end > start {
-			candidate := raw[start : end+1]
-			if err := json.Unmarshal([]byte(candidate), &v); err == nil {
-				return &v, nil
+	for _, tc := range resp.Choices[0].Message.ToolCalls {
+		if tc.Function.Name == "verdict" {
+			var v Verdict
+			if err := json.Unmarshal([]byte(tc.Function.Arguments), &v); err != nil {
+				return nil, fmt.Errorf("unmarshal verdict: %w", err)
 			}
+			return &v, nil
 		}
 	}
-
-	return nil, fmt.Errorf("parse verdict: no valid JSON found in response (%d chars): %s", len(raw), clip(raw, 300))
+	return nil, fmt.Errorf("model did not call verdict tool")
 }
 
 func buildPrompt(goal, criteria, trace string) string {
@@ -163,30 +142,24 @@ func buildTrace(messages []provider.ChatMessage, output string, turns int) strin
 	}
 	fmt.Fprintf(&sb, "Tool calls: %d\n", toolCallCount)
 
-	sb.WriteString("\nTool call trace:\n")
+	sb.WriteString("\nTool call sequence:\n")
 	seq := 0
 	for _, msg := range messages {
 		for _, tc := range msg.ToolCalls {
 			seq++
 			fmt.Fprintf(&sb, "  [%d] %s\n", seq, tc.Function.Name)
-			if tc.Function.Arguments != "" {
-				fmt.Fprintf(&sb, "      args: %s\n", clip(tc.Function.Arguments, maxArgsPreview))
-			}
 		}
-		if msg.Role == "tool" && msg.Content != nil {
-			fmt.Fprintf(&sb, "      result: %s\n", clip(*msg.Content, maxResultPreview))
+	}
+
+	sb.WriteString("\nAssistant summaries:\n")
+	for _, msg := range messages {
+		if msg.Role == "assistant" && msg.Content != nil && *msg.Content != "" {
+			fmt.Fprintf(&sb, "- %s\n", truncate.Clip(*msg.Content, maxResultPreview))
 		}
 	}
 
 	if output = strings.TrimSpace(output); output != "" {
-		fmt.Fprintf(&sb, "\nFinal output:\n%s\n", clip(output, maxOutputPreview))
+		fmt.Fprintf(&sb, "\nFinal output:\n%s\n", truncate.Clip(output, maxOutputPreview))
 	}
-	return clip(sb.String(), maxTraceSize)
-}
-
-func clip(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
+	return truncate.Clip(sb.String(), maxTraceSize)
 }

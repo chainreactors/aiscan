@@ -15,6 +15,7 @@ import (
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/output"
+	"github.com/chainreactors/aiscan/pkg/truncate"
 	"github.com/charmbracelet/glamour"
 	"github.com/muesli/termenv"
 	"golang.org/x/term"
@@ -695,21 +696,7 @@ func normalizeToolResultLines(result string) []string {
 }
 
 func truncateToolResultLine(value string, limit int) string {
-	if limit <= 0 || utf8.RuneCountInString(value) <= limit {
-		return value
-	}
-	var b strings.Builder
-	b.Grow(limit + len("…"))
-	count := 0
-	for _, r := range value {
-		if count >= limit {
-			break
-		}
-		b.WriteRune(r)
-		count++
-	}
-	b.WriteString("…")
-	return b.String()
+	return truncate.ClipRunes(value, limit)
 }
 
 func toolResultTitle(toolName, elapsed string) string {
@@ -834,8 +821,12 @@ func (o *AgentOutput) goalEvalError(event agent.Event) {
 	if o.Quiet || o.stderr == nil {
 		return
 	}
-	fmt.Fprintf(o.stderr, "%s[eval] error (round %d) — evaluator LLM call failed, retrying...%s\n",
-		o.color.Code(output.ANSIYellow), event.EvalRound+1, o.color.Code(output.ANSIReset))
+	detail := "evaluator LLM call failed"
+	if event.EvalError != "" {
+		detail = event.EvalError
+	}
+	fmt.Fprintf(o.stderr, "%s[eval] error (round %d) — %s, continuing...%s\n",
+		o.color.Code(output.ANSIYellow), event.EvalRound+1, detail, o.color.Code(output.ANSIReset))
 }
 
 // ---------------------------------------------------------------------------
@@ -1242,11 +1233,7 @@ func firstNonEmptyString(values ...string) string {
 }
 
 func compactAgentLine(value string, limit int) string {
-	value = strings.Join(strings.Fields(value), " ")
-	if limit > 0 && len(value) > limit {
-		return value[:limit] + "…"
-	}
-	return value
+	return truncate.Clip(value, limit)
 }
 
 func compactAgentJSON(value string, limit int) string {

@@ -42,7 +42,7 @@ func RunWithGoalEval(ctx context.Context, a *agent.Agent, cfg GoalLoopConfig) (*
 
 		if evalErr != nil {
 			cfg.Evaluator.cfg.Logger.Warnf("goal eval error (round %d): %s", attempt+1, evalErr)
-			emitEvalEvent(cfg.Bus, agent.EventGoalEvalError, attempt, nil)
+			emitEvalErrorEvent(cfg.Bus, attempt, evalErr)
 			feedback := fmt.Sprintf("Goal evaluation could not determine if the task is complete. Original criteria: %s. Please review your work and continue if the goal is not yet fully achieved.", cfg.Criteria)
 			result, err = a.Run(ctx, feedback)
 			if err != nil {
@@ -80,7 +80,7 @@ func emitEvalEvent(bus *eventbus.Bus[agent.Event], eventType agent.EventType, ro
 		return
 	}
 	ev := agent.Event{
-		Type:     eventType,
+		Type:      eventType,
 		EvalRound: round,
 	}
 	if verdict != nil {
@@ -88,4 +88,15 @@ func emitEvalEvent(bus *eventbus.Bus[agent.Event], eventType agent.EventType, ro
 		ev.EvalReason = verdict.Reason
 	}
 	bus.Emit(ev)
+}
+
+func emitEvalErrorEvent(bus *eventbus.Bus[agent.Event], round int, err error) {
+	if bus == nil {
+		return
+	}
+	bus.Emit(agent.Event{
+		Type:      agent.EventGoalEvalError,
+		EvalRound: round,
+		EvalError: err.Error(),
+	})
 }

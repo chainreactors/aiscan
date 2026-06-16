@@ -118,6 +118,7 @@ type Event struct {
 	EvalRound     int
 	EvalPass      bool
 	EvalReason    string
+	EvalError     string
 }
 
 type TransformContextFunc func([]ChatMessage) []ChatMessage
