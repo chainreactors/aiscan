@@ -2,15 +2,15 @@ package search
 
 import (
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	"github.com/chainreactors/sdk/pkg/association"
 )
 
 func init() {
-	command.RegisterFactory(command.Factory{
+	commands.RegisterFactory(commands.Factory{
 		Group: "tools",
-		Build: func(deps *command.Deps, reg *command.CommandRegistry) {
+		Build: func(deps *commands.Deps, reg *commands.CommandRegistry) {
 			var p provider.Provider
 			if deps.Provider != nil {
 				p, _ = deps.Provider.(provider.Provider)

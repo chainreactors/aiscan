@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
@@ -50,7 +50,7 @@ func TestMultiTurnContextInheritanceAndCache(t *testing.T) {
 		events = append(events, e)
 	}
 
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 
 	agentCfg := Config{
 		Provider:       prov,
@@ -147,7 +147,7 @@ func TestMultiTurnStreamingCache(t *testing.T) {
 	systemPrompt := "You are a translator. " +
 		strings.Repeat("You translate English to French. Always respond with just the translation, nothing else. ", 30)
 
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 
 	agentCfg := Config{
 		Provider:       prov,
@@ -204,7 +204,7 @@ func TestMultiTurnWithToolCallsCache(t *testing.T) {
 	systemPrompt := "You are a calculator agent. " +
 		strings.Repeat("When asked to compute something, use the calculate tool. Always call the tool, never compute yourself. ", 25)
 
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	calcTool := &recordingTool{name: "calculate", output: "42"}
 	tools.RegisterTool(calcTool)
 
@@ -286,7 +286,7 @@ func TestCacheConfigInheritance(t *testing.T) {
 
 	parentCfg := Config{
 		Provider:       llm,
-		Tools:          command.NewRegistry(),
+		Tools:          commands.NewRegistry(),
 		Model:          "test",
 		SystemPrompt:   "sys",
 		CacheRetention: CacheShort,
@@ -372,7 +372,7 @@ func TestTurnUsageCacheAccumulation(t *testing.T) {
 		},
 	}
 
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "read", output: "file content"})
 
 	result, err := (NewAgent(Config{
@@ -443,7 +443,7 @@ func TestEventCarriesCacheUsage(t *testing.T) {
 
 	_, err := (NewAgent(Config{
 		Provider:     llm,
-		Tools:        command.NewRegistry(),
+		Tools:        commands.NewRegistry(),
 		Model:        "test",
 		SystemPrompt: "sys",
 		Bus: testBus(func(e Event) { handler(e) }),

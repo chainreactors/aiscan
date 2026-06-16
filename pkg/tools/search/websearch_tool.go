@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 )
 
 type WebSearchTool struct {
@@ -29,18 +29,18 @@ func (t *WebSearchTool) Description() string {
 	return "Search the web for CVEs, exploits, vulnerability details, and product documentation."
 }
 
-func (t *WebSearchTool) Definition() command.ToolDefinition {
-	return command.ToolDef("web_search", t.Description(), webSearchArgs{})
+func (t *WebSearchTool) Definition() commands.ToolDefinition {
+	return commands.ToolDef("web_search", t.Description(), webSearchArgs{})
 }
 
-func (t *WebSearchTool) Execute(ctx context.Context, arguments string) (command.ToolResult, error) {
-	args, err := command.ParseArgs[webSearchArgs](arguments)
+func (t *WebSearchTool) Execute(ctx context.Context, arguments string) (commands.ToolResult, error) {
+	args, err := commands.ParseArgs[webSearchArgs](arguments)
 	if err != nil {
-		return command.ToolResult{}, err
+		return commands.ToolResult{}, err
 	}
 	args.Query = strings.TrimSpace(args.Query)
 	if args.Query == "" {
-		return command.ToolResult{}, fmt.Errorf("query is required")
+		return commands.ToolResult{}, fmt.Errorf("query is required")
 	}
 
 	num := args.Num
@@ -54,16 +54,16 @@ func (t *WebSearchTool) Execute(ctx context.Context, arguments string) (command.
 	if ws, ok := t.provider.(provider.WebSearchProvider); ok {
 		resp, err := ws.WebSearch(ctx, args.Query, num)
 		if err == nil {
-			return command.TextResult(formatWebSearchResponse(resp, args.Query)), nil
+			return commands.TextResult(formatWebSearchResponse(resp, args.Query)), nil
 		}
 	}
 
 	if t.tavily != nil {
 		result, err := t.tavily.Execute(ctx, []string{args.Query, "--num", fmt.Sprint(num)})
 		if err == nil {
-			return command.TextResult(result), nil
+			return commands.TextResult(result), nil
 		}
 	}
 
-	return command.ToolResult{}, fmt.Errorf("web_search: no search backend available")
+	return commands.ToolResult{}, fmt.Errorf("web_search: no search backend available")
 }

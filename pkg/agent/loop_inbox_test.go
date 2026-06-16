@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 )
 
 func TestInboxDrainedBeforeFirstTurnLLMCall(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &scriptedProvider{
 		responses: []*ChatCompletionResponse{
 			chatResponse(NewTextMessage("assistant", "ack")),
@@ -58,7 +58,7 @@ func TestInboxDrainedBeforeFirstTurnLLMCall(t *testing.T) {
 }
 
 func TestInboxClosedDoesNotBlock(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &scriptedProvider{
 		responses: []*ChatCompletionResponse{
 			chatResponse(NewTextMessage("assistant", "done")),
@@ -97,7 +97,7 @@ func (p *pushingProvider) ChatCompletion(ctx context.Context, req *ChatCompletio
 }
 
 func TestInboxDrainedBetweenTurns(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
 
 	scripted := &scriptedProvider{
@@ -161,7 +161,7 @@ func TestInboxDrainedBetweenTurns(t *testing.T) {
 }
 
 func TestRunWaitsWhenKeepAliveIsTrue(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &scriptedProvider{
 		responses: []*ChatCompletionResponse{
 			chatResponse(NewTextMessage("assistant", "waiting")),

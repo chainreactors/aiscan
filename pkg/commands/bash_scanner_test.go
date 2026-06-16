@@ -1,4 +1,4 @@
-package command_test
+package commands_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	tmux "github.com/chainreactors/aiscan/pkg/agent/tmux"
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 )
 
 type simpleCommand struct{ name string }
@@ -22,9 +22,9 @@ func (c *simpleCommand) Execute(_ context.Context, _ []string, w io.Writer) erro
 }
 
 func TestScannerRejectsShellPipeAndFileRedir(t *testing.T) {
-	registry := command.NewRegistry()
+	registry := commands.NewRegistry()
 	registry.Register(&simpleCommand{name: "spray"}, "")
-	bash := command.NewBashTool(t.TempDir(), 5)
+	bash := commands.NewBashTool(t.TempDir(), 5)
 	bash.Manager().SetCommands(func(name string) (tmux.Command, bool) {
 		return registry.Get(name)
 	})
@@ -62,7 +62,7 @@ func TestBashProxyEnvInjection(t *testing.T) {
 		t.Skip("unix-only test")
 	}
 	proxy := "socks5://127.0.0.1:1080"
-	bash := command.NewBashTool(t.TempDir(), 5).WithScannerProxy(proxy)
+	bash := commands.NewBashTool(t.TempDir(), 5).WithScannerProxy(proxy)
 
 	res, err := bash.Execute(context.Background(), bashArgs("env"))
 	if err != nil {
@@ -80,7 +80,7 @@ func TestBashNoProxyEnvWhenEmpty(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix-only test")
 	}
-	bash := command.NewBashTool(t.TempDir(), 5)
+	bash := commands.NewBashTool(t.TempDir(), 5)
 
 	res, err := bash.Execute(context.Background(), bashArgs("env"))
 	if err != nil {

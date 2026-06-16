@@ -10,7 +10,7 @@ import (
 	"time"
 
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 )
 
 // TestLiveLLMTmuxInteraction uses a real LLM to drive tmux multi-round
@@ -47,14 +47,14 @@ func TestLiveLLMTmuxInteraction(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	registry := command.NewRegistry()
-	bash := command.NewBashTool(dir, 60)
+	registry := commands.NewRegistry()
+	bash := commands.NewBashTool(dir, 60)
 	bash.Manager().SetCommands(func(name string) (tmuxpkg.Command, bool) {
 		return registry.Get(name)
 	})
 	bash.Manager().SetWorkDir(dir)
 	registry.RegisterTool(bash)
-	tmuxCmd := command.NewTmuxCommand(bash.Manager())
+	tmuxCmd := commands.NewTmuxCommand(bash.Manager())
 	registry.Register(tmuxCmd, "core")
 	t.Cleanup(bash.Close)
 
@@ -135,7 +135,7 @@ Report what you observed at each step. Confirm the test passed or report failure
 	}
 }
 
-func buildTmuxTestPrompt(registry *command.CommandRegistry) string {
+func buildTmuxTestPrompt(registry *commands.CommandRegistry) string {
 	var sb strings.Builder
 	sb.WriteString(`You are a test agent. You have one tool: bash.
 

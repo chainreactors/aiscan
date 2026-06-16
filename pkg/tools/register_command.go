@@ -1,7 +1,7 @@
 package tools
 
 import (
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	gogocmd "github.com/chainreactors/aiscan/pkg/tools/gogo"
 	neutroncmd "github.com/chainreactors/aiscan/pkg/tools/neutron"
@@ -12,9 +12,9 @@ import (
 )
 
 func init() {
-	command.RegisterFactory(command.Factory{
+	commands.RegisterFactory(commands.Factory{
 		Group: "scanner",
-		Build: func(deps *command.Deps, reg *command.CommandRegistry) {
+		Build: func(deps *commands.Deps, reg *commands.CommandRegistry) {
 			es, _ := deps.EngineSet.(*engine.Set)
 			if es == nil {
 				return

@@ -13,7 +13,7 @@ import (
 	"github.com/chainreactors/aiscan/core/runner"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tui"
 	"github.com/chainreactors/aiscan/skills"
@@ -475,7 +475,7 @@ func TestAgentConsolePromptCommandRunsAgent(t *testing.T) {
 		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
 	llm := &fakeConsoleProvider{}
-	session := agent.NewAgent(agent.Config{Provider: llm, Tools: command.NewRegistry()})
+	session := agent.NewAgent(agent.Config{Provider: llm, Tools: commands.NewRegistry()})
 	repl := tui.NewAgentConsole(context.Background(), &cfg.Option{}, &app.App{Skills: store}, session, nil)
 	_ = repl // console created successfully — full REPL test requires readline
 }

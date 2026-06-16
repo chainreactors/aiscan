@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 )
 
 type AgentType struct {
@@ -70,38 +70,38 @@ type SubAgentArgs struct {
 }
 
 func (t *SubAgentTool) Definition() ToolDefinition {
-	return command.ToolDef(t.Name(), t.Description(), SubAgentArgs{})
+	return commands.ToolDef(t.Name(), t.Description(), SubAgentArgs{})
 }
 
-func (t *SubAgentTool) Execute(ctx context.Context, arguments string) (command.ToolResult, error) {
-	args, err := command.ParseArgs[SubAgentArgs](arguments)
+func (t *SubAgentTool) Execute(ctx context.Context, arguments string) (commands.ToolResult, error) {
+	args, err := commands.ParseArgs[SubAgentArgs](arguments)
 	if err != nil {
-		return command.ToolResult{}, err
+		return commands.ToolResult{}, err
 	}
 
 	switch args.Action {
 	case "list":
-		return command.TextResult(t.list()), nil
+		return commands.TextResult(t.list()), nil
 	case "kill":
 		output, err := t.kill(args.Name)
 		if err != nil {
-			return command.ToolResult{}, err
+			return commands.ToolResult{}, err
 		}
-		return command.TextResult(output), nil
+		return commands.TextResult(output), nil
 	case "message":
 		output, err := t.sendMessage(args.Name, args.Message)
 		if err != nil {
-			return command.ToolResult{}, err
+			return commands.ToolResult{}, err
 		}
-		return command.TextResult(output), nil
+		return commands.TextResult(output), nil
 	case "", "create":
 		output, err := t.create(ctx, args.Prompt, args.Type, args.Name, args.Mode, args.Timeout)
 		if err != nil {
-			return command.ToolResult{}, err
+			return commands.ToolResult{}, err
 		}
-		return command.TextResult(output), nil
+		return commands.TextResult(output), nil
 	default:
-		return command.ToolResult{}, fmt.Errorf("unknown action: %s", args.Action)
+		return commands.ToolResult{}, fmt.Errorf("unknown action: %s", args.Action)
 	}
 }
 

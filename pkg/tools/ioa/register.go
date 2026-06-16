@@ -1,7 +1,7 @@
 package ioa
 
 import (
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/ioa/protocols"
 
 	_ "github.com/chainreactors/ioa/protocols/checkpoint"
@@ -9,9 +9,9 @@ import (
 )
 
 func init() {
-	command.RegisterFactory(command.Factory{
+	commands.RegisterFactory(commands.Factory{
 		Group: "ioa",
-		Build: func(deps *command.Deps, reg *command.CommandRegistry) {
+		Build: func(deps *commands.Deps, reg *commands.CommandRegistry) {
 			client, _ := deps.IOAClient.(protocols.ClientAPI)
 			if client == nil {
 				return

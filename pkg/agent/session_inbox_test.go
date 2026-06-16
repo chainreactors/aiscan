@@ -8,11 +8,11 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/agent/tmux"
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 )
 
 func TestSessionCompletionInjectedIntoAgentLoop(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
 
 	ib := inbox.NewBuffered(8)

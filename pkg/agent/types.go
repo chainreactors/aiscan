@@ -8,7 +8,7 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/agent/inbox"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
@@ -168,7 +168,7 @@ type ProviderEntry struct {
 
 type Config struct {
 	Provider         Provider
-	Tools            *command.CommandRegistry
+	Tools            *commands.CommandRegistry
 	Model            string
 	Fallbacks        []ProviderEntry
 	SystemPrompt     string
@@ -198,7 +198,7 @@ type Config struct {
 // Builder methods — each returns a modified copy (Config is a value type).
 
 func (c Config) WithProvider(p Provider) Config                { c.Provider = p; return c }
-func (c Config) WithTools(t *command.CommandRegistry) Config   { c.Tools = t; return c }
+func (c Config) WithTools(t *commands.CommandRegistry) Config   { c.Tools = t; return c }
 func (c Config) WithModel(m string) Config                     { c.Model = m; return c }
 func (c Config) WithSystemPrompt(s string) Config              { c.SystemPrompt = s; return c }
 func (c Config) WithMessages(msgs []ChatMessage) Config        { c.Messages = msgs; return c }
@@ -242,7 +242,7 @@ func (c Config) init() Config {
 		c.SessionID = hex.EncodeToString(b)
 	}
 	if c.Tools == nil {
-		c.Tools = command.NewRegistry()
+		c.Tools = commands.NewRegistry()
 	}
 	if c.Inbox == nil {
 		c.Inbox = inbox.NewBuffered(SubInboxCapacity)
@@ -306,7 +306,7 @@ type Result struct {
 type State struct {
 	SystemPrompt string
 	Messages     []ChatMessage
-	Tools        *command.CommandRegistry
+	Tools        *commands.CommandRegistry
 	ErrorMessage string
 	LastError    error
 }

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/ioa/protocols"
 )
 
@@ -31,9 +31,9 @@ func (b *spaceBinding) set(id string) {
 	b.spaceID = id
 }
 
-func NewCommands(client protocols.ClientAPI, nodeName string, meta map[string]any) []command.Command {
+func NewCommands(client protocols.ClientAPI, nodeName string, meta map[string]any) []commands.Command {
 	binding := &spaceBinding{}
-	return []command.Command{
+	return []commands.Command{
 		&spaceCommand{client: client, binding: binding, nodeName: nodeName, meta: meta},
 		&sendCommand{client: client, binding: binding},
 		&readCommand{client: client, binding: binding},

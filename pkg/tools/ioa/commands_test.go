@@ -11,7 +11,7 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/agent"
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/ioa/protocols"
 )
 
@@ -466,12 +466,12 @@ func TestLLMIOAToolUsage(t *testing.T) {
 	client := newFakeIOAClient(protocols.SpaceInfo{ID: knownSpaceID, Name: "test-space"})
 	cmds := NewCommands(client, "llm-tester", nil)
 
-	registry := command.NewRegistry()
+	registry := commands.NewRegistry()
 	for _, cmd := range cmds {
 		registry.Register(cmd, "ioa")
 	}
 	dir := t.TempDir()
-	bash := command.NewBashTool(dir, 30)
+	bash := commands.NewBashTool(dir, 30)
 	bash.Manager().SetCommands(func(name string) (tmuxpkg.Command, bool) {
 		return registry.Get(name)
 	})
@@ -551,12 +551,12 @@ func envOr(key, fallback string) string {
 // helpers
 // ---------------------------------------------------------------------------
 
-func joinSpace(t *testing.T, cmds []command.Command) {
+func joinSpace(t *testing.T, cmds []commands.Command) {
 	t.Helper()
 	joinSpaceByName(t, cmds, "my-space")
 }
 
-func joinSpaceByName(t *testing.T, cmds []command.Command, name string) {
+func joinSpaceByName(t *testing.T, cmds []commands.Command, name string) {
 	t.Helper()
 	if err := findCmd(t, cmds, "ioa_space").Execute(context.Background(), []string{
 		"join", "--name", name, "--description", "test",
@@ -565,7 +565,7 @@ func joinSpaceByName(t *testing.T, cmds []command.Command, name string) {
 	}
 }
 
-func findCmd(t *testing.T, cmds []command.Command, name string) command.Command {
+func findCmd(t *testing.T, cmds []commands.Command, name string) commands.Command {
 	t.Helper()
 	for _, cmd := range cmds {
 		if cmd.Name() == name {

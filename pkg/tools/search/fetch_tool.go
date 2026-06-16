@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 )
 
 type FetchTool struct {
@@ -27,18 +27,18 @@ func (t *FetchTool) Description() string {
 	return "Fetch a URL and return the content as readable text. Useful for reading advisories, documentation, and vulnerability details."
 }
 
-func (t *FetchTool) Definition() command.ToolDefinition {
-	return command.ToolDef("fetch", t.Description(), fetchArgs{})
+func (t *FetchTool) Definition() commands.ToolDefinition {
+	return commands.ToolDef("fetch", t.Description(), fetchArgs{})
 }
 
-func (t *FetchTool) Execute(ctx context.Context, arguments string) (command.ToolResult, error) {
-	args, err := command.ParseArgs[fetchArgs](arguments)
+func (t *FetchTool) Execute(ctx context.Context, arguments string) (commands.ToolResult, error) {
+	args, err := commands.ParseArgs[fetchArgs](arguments)
 	if err != nil {
-		return command.ToolResult{}, err
+		return commands.ToolResult{}, err
 	}
 	args.URL = strings.TrimSpace(args.URL)
 	if args.URL == "" {
-		return command.ToolResult{}, fmt.Errorf("url is required")
+		return commands.ToolResult{}, fmt.Errorf("url is required")
 	}
 
 	cliArgs := []string{args.URL}
@@ -47,7 +47,7 @@ func (t *FetchTool) Execute(ctx context.Context, arguments string) (command.Tool
 	}
 	result, err := t.fetch.Execute(ctx, cliArgs)
 	if err != nil {
-		return command.ToolResult{}, fmt.Errorf("fetch: %w", err)
+		return commands.ToolResult{}, fmt.Errorf("fetch: %w", err)
 	}
-	return command.TextResult(result), nil
+	return commands.TextResult(result), nil
 }

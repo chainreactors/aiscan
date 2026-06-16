@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/skills"
 )
 
@@ -22,17 +22,17 @@ func TestAgentAutomaticWorkflowUsesScan(t *testing.T) {
 
 	dir := t.TempDir()
 
-	registry := command.NewRegistry()
+	registry := commands.NewRegistry()
 	registry.Register(&stubPseudoCommand{name: "scan", output: scanOutput}, "")
 
-	bash := command.NewBashTool(dir, 5)
+	bash := commands.NewBashTool(dir, 5)
 	bash.Manager().SetCommands(func(name string) (tmuxpkg.Command, bool) {
 		return registry.Get(name)
 	})
 	bash.Manager().SetWorkDir(dir)
 	registry.RegisterTool(bash)
 
-	tmuxCmd := command.NewTmuxCommand(bash.Manager())
+	tmuxCmd := commands.NewTmuxCommand(bash.Manager())
 	registry.Register(tmuxCmd, "core")
 
 	llm := &scriptedProvider{
@@ -91,12 +91,12 @@ func (c *stubPseudoCommand) Execute(_ context.Context, _ []string, w io.Writer) 
 }
 
 func TestAgentPromptIncludesEmbeddedSkillIndexAndExpansion(t *testing.T) {
-	registry := command.NewRegistry()
+	registry := commands.NewRegistry()
 	store, diagnostics := skills.LoadEmbeddedStore()
 	if len(diagnostics) != 0 {
 		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
-	registry.RegisterTool(command.NewReadTool(t.TempDir(), store))
+	registry.RegisterTool(commands.NewReadTool(t.TempDir(), store))
 
 	llm := &scriptedProvider{
 		responses: []*ChatCompletionResponse{
@@ -137,7 +137,7 @@ func scannerBashArgs(cmd string) string {
 	return string(data)
 }
 
-func buildTestSystemPrompt(tools *command.CommandRegistry, ss []skills.Skill) string {
+func buildTestSystemPrompt(tools *commands.CommandRegistry, ss []skills.Skill) string {
 	var sb strings.Builder
 	sb.WriteString("You are a test agent.\n\n## Available Tools\n\n")
 	if tools != nil {

@@ -11,7 +11,7 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/agent/truncate"
 
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
@@ -25,7 +25,7 @@ func testBus(handler func(Event)) *eventbus.Bus[Event] {
 }
 
 func TestRunWithoutToolsReturnsFinalText(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &scriptedProvider{
 		responses: []*ChatCompletionResponse{
 			chatResponse(NewTextMessage("assistant", "done")),
@@ -54,7 +54,7 @@ func TestRunWithoutToolsReturnsFinalText(t *testing.T) {
 }
 
 func TestRunExecutesToolLoop(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	echo := &recordingTool{name: "echo", output: "tool output"}
 	tools.RegisterTool(echo)
 	llm := &scriptedProvider{
@@ -103,7 +103,7 @@ func TestRunExecutesToolLoop(t *testing.T) {
 }
 
 func TestRunEmitsTurnEndAfterToolResults(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
 	llm := &scriptedProvider{
 		responses: []*ChatCompletionResponse{
@@ -164,7 +164,7 @@ func TestRunEmitsTurnEndAfterToolResults(t *testing.T) {
 }
 
 func TestContinueRequiresNonAssistantLastMessage(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &scriptedProvider{}
 	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test"})
 
@@ -179,7 +179,7 @@ func TestContinueRequiresNonAssistantLastMessage(t *testing.T) {
 }
 
 func TestAgentReusesConversationAcrossPrompts(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &scriptedProvider{
 		responses: []*ChatCompletionResponse{
 			chatResponse(NewTextMessage("assistant", "first")),
@@ -206,7 +206,7 @@ func TestAgentReusesConversationAcrossPrompts(t *testing.T) {
 }
 
 func TestAgentPromptReturnsRunScopedNewMessages(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &scriptedProvider{
 		responses: []*ChatCompletionResponse{
 			chatResponse(NewTextMessage("assistant", "next")),
@@ -227,7 +227,7 @@ func TestAgentPromptReturnsRunScopedNewMessages(t *testing.T) {
 }
 
 func TestTransformContextAppliesOnlyToProviderRequest(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &scriptedProvider{
 		responses: []*ChatCompletionResponse{
 			chatResponse(NewTextMessage("assistant", "one")),
@@ -261,7 +261,7 @@ func TestTransformContextAppliesOnlyToProviderRequest(t *testing.T) {
 }
 
 func TestProviderErrorEmitsAgentEndAndUpdatesState(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &scriptedProvider{err: fmt.Errorf("boom")}
 	var events []Event
 	a := NewAgent(Config{
@@ -308,7 +308,7 @@ func TestProviderErrorEmitsAgentEndAndUpdatesState(t *testing.T) {
 }
 
 func TestMaxTurnsStopsBeforeNextModelCall(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "echo", output: "tool output"})
 	llm := &scriptedProvider{
 		responses: []*ChatCompletionResponse{
@@ -345,7 +345,7 @@ func TestMaxTurnsStopsBeforeNextModelCall(t *testing.T) {
 }
 
 func TestStreamingProviderEmitsMessageUpdates(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &scriptedProvider{
 		streamEvents: []ChatCompletionStreamEvent{
 			{Delta: ChatMessageDelta{Role: "assistant"}},
@@ -378,7 +378,7 @@ func TestStreamingProviderEmitsMessageUpdates(t *testing.T) {
 }
 
 func TestStatefulAgentTracksStreamingMessage(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &scriptedProvider{
 		streamEvents: []ChatCompletionStreamEvent{
 			{Delta: ChatMessageDelta{Role: "assistant"}},
@@ -413,7 +413,7 @@ func TestStatefulAgentTracksStreamingMessage(t *testing.T) {
 }
 
 func TestResetDoesNotAllowConcurrentPrompt(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &blockingProvider{started: make(chan struct{}), release: make(chan struct{})}
 	a := NewAgent(Config{Provider: llm, Tools: tools, Model: "test"})
 
@@ -441,7 +441,7 @@ func TestResetDoesNotAllowConcurrentPrompt(t *testing.T) {
 }
 
 func TestStreamingToolCallDeltasAreAggregated(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	echo := &recordingTool{name: "echo", output: "ok"}
 	tools.RegisterTool(echo)
 	llm := &scriptedProvider{
@@ -488,7 +488,7 @@ func TestStreamingToolCallDeltasAreAggregated(t *testing.T) {
 }
 
 func TestToolHooksCanBlockRewriteAndTerminate(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	echo := &recordingTool{name: "echo", output: "raw"}
 	tools.RegisterTool(echo)
 	llm := &scriptedProvider{
@@ -557,14 +557,14 @@ func (t *recordingTool) Definition() ToolDefinition {
 	}
 }
 
-func (t *recordingTool) Execute(_ context.Context, arguments string) (command.ToolResult, error) {
+func (t *recordingTool) Execute(_ context.Context, arguments string) (commands.ToolResult, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.calls = append(t.calls, arguments)
 	if strings.Contains(arguments, "fail") {
-		return command.ToolResult{}, fmt.Errorf("failed")
+		return commands.ToolResult{}, fmt.Errorf("failed")
 	}
-	return command.TextResult(t.output), nil
+	return commands.TextResult(t.output), nil
 }
 
 func (t *recordingTool) callsSnapshot() []string {
@@ -574,7 +574,7 @@ func (t *recordingTool) callsSnapshot() []string {
 }
 
 func TestFinishToolTerminatesLoop(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	tools.RegisterTool(NewFinishTool())
 
 	llm := &scriptedProvider{
@@ -741,7 +741,7 @@ func strPtr(s string) *string {
 }
 
 func TestRetryOnTransientError(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	callCount := 0
 	llm := &callbackProvider{
 		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
@@ -771,7 +771,7 @@ func TestRetryOnTransientError(t *testing.T) {
 }
 
 func TestNoRetryOnAuthError(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	callCount := 0
 	llm := &callbackProvider{
 		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
@@ -795,7 +795,7 @@ func TestNoRetryOnAuthError(t *testing.T) {
 }
 
 func TestRetryExhaustedReturnsLastError(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	callCount := 0
 	llm := &callbackProvider{
 		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
@@ -853,7 +853,7 @@ func TestStreamAssistantMessageReturnsContextErrorOnClosedCanceledStream(t *test
 }
 
 func TestTokenBudgetWarning(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &callbackProvider{
 		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 			return &ChatCompletionResponse{
@@ -884,7 +884,7 @@ func TestTokenBudgetWarning(t *testing.T) {
 }
 
 func TestTokenBudgetExceeded(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	turn := 0
 	llm := &callbackProvider{
 		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
@@ -941,7 +941,7 @@ func TestTruncateResultIncludesSize(t *testing.T) {
 }
 
 func TestResultIncludesTotalUsage(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &callbackProvider{
 		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 			return &ChatCompletionResponse{
@@ -965,7 +965,7 @@ func TestResultIncludesTotalUsage(t *testing.T) {
 }
 
 func TestResultIncludesPerTurnUsageAndContextTokens(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	tools.RegisterTool(&recordingTool{name: "echo", output: "ok"})
 
 	turn := 0
@@ -1021,7 +1021,7 @@ func TestResultIncludesPerTurnUsageAndContextTokens(t *testing.T) {
 }
 
 func TestTurnEndEventCarriesUsage(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	llm := &callbackProvider{
 		fn: func(_ context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
 			return &ChatCompletionResponse{

@@ -14,7 +14,7 @@ import (
 	inboxpkg "github.com/chainreactors/aiscan/pkg/agent/inbox"
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/app"
-	cmdpkg "github.com/chainreactors/aiscan/pkg/command"
+	cmdpkg "github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"

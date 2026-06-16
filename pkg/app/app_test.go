@@ -5,7 +5,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
 	"github.com/chainreactors/sdk/gogo"
@@ -62,8 +62,8 @@ func TestInitCommandRegistryRegistersCoreTools(t *testing.T) {
 }
 
 func TestCommandRegistryOnlyExposesCoreTrueTools(t *testing.T) {
-	reg := command.NewRegistry()
-	command.BuildAll(&command.Deps{
+	reg := commands.NewRegistry()
+	commands.BuildAll(&commands.Deps{
 		WorkDir:     "/tmp",
 		BashTimeout: 30,
 	}, reg)
@@ -78,7 +78,7 @@ func TestCommandRegistryOnlyExposesCoreTrueTools(t *testing.T) {
 }
 
 func TestAppCloseClosesPseudoCommands(t *testing.T) {
-	reg := command.NewRegistry()
+	reg := commands.NewRegistry()
 	closed := false
 	reg.Register(&closeRecordingCommand{closed: &closed}, "tools")
 

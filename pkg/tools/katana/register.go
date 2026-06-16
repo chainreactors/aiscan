@@ -2,12 +2,12 @@
 
 package katana
 
-import "github.com/chainreactors/aiscan/pkg/command"
+import "github.com/chainreactors/aiscan/pkg/commands"
 
 func init() {
-	command.RegisterFactory(command.Factory{
+	commands.RegisterFactory(commands.Factory{
 		Group: "scanner",
-		Build: func(_ *command.Deps, reg *command.CommandRegistry) {
+		Build: func(_ *commands.Deps, reg *commands.CommandRegistry) {
 			reg.Register(New(), "scanner")
 		},
 	})

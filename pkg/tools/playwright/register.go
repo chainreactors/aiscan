@@ -2,12 +2,12 @@
 
 package playwright
 
-import "github.com/chainreactors/aiscan/pkg/command"
+import "github.com/chainreactors/aiscan/pkg/commands"
 
 func init() {
-	command.RegisterFactory(command.Factory{
+	commands.RegisterFactory(commands.Factory{
 		Group: "tools",
-		Build: func(deps *command.Deps, reg *command.CommandRegistry) {
+		Build: func(deps *commands.Deps, reg *commands.CommandRegistry) {
 			reg.Register(New(deps.WorkDir), "tools")
 		},
 	})

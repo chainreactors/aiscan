@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/agent/truncate"
 )
@@ -17,7 +17,7 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		return nil, fmt.Errorf("agent provider is nil")
 	}
 	if cfg.Tools == nil {
-		cfg.Tools = command.NewRegistry()
+		cfg.Tools = commands.NewRegistry()
 	}
 
 	fallbacks := cfg.Fallbacks
@@ -254,9 +254,9 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 			Arguments:  tc.Function.Arguments,
 		})
 
-		mode := command.ExecSequential
+		mode := commands.ExecSequential
 		if tool, ok := cfg.Tools.GetTool(tc.Function.Name); ok {
-			if pa, ok := tool.(command.ParallelSafe); ok {
+			if pa, ok := tool.(commands.ParallelSafe); ok {
 				mode = pa.ExecutionMode()
 			}
 		}
@@ -267,7 +267,7 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 	// Phase 2: execute tools — parallel-safe tools run concurrently, sequential tools run in order
 	hasParallel := false
 	for _, s := range slots {
-		if s.mode == command.ExecParallel {
+		if s.mode == commands.ExecParallel {
 			hasParallel = true
 			break
 		}
@@ -276,7 +276,7 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 	if hasParallel {
 		var wg sync.WaitGroup
 		for i := range slots {
-			if slots[i].mode == command.ExecParallel {
+			if slots[i].mode == commands.ExecParallel {
 				wg.Add(1)
 				go func(idx int) {
 					defer wg.Done()
@@ -286,7 +286,7 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 		}
 		wg.Wait()
 		for i := range slots {
-			if slots[i].mode == command.ExecSequential {
+			if slots[i].mode == commands.ExecSequential {
 				slots[i].result = runToolCall(ctx, cfg, assistantMsg, slots[i].tc, turn)
 			}
 		}
@@ -326,14 +326,14 @@ func executeToolCalls(ctx context.Context, cfg Config, bus emitter, assistantMsg
 
 type toolCallSlot struct {
 	tc     ToolCall
-	mode   command.ExecutionMode
+	mode   commands.ExecutionMode
 	result toolExecution
 }
 
 type toolExecution struct {
 	result     string
 	rawResult  string
-	fullResult *command.ToolResult
+	fullResult *commands.ToolResult
 	isError    bool
 	err        error
 	flow       ToolFlowDecision

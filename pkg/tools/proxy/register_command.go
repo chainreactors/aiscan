@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/proxyclient"
 
 	// Register extra proxy protocols so proxyclient.NewClient can handle them.
@@ -18,15 +18,15 @@ import (
 )
 
 func init() {
-	command.RegisterFactory(command.Factory{
+	commands.RegisterFactory(commands.Factory{
 		Group: "proxy",
-		Build: func(deps *command.Deps, reg *command.CommandRegistry) {
+		Build: func(deps *commands.Deps, reg *commands.CommandRegistry) {
 			state := NewState(deps.ScannerProxy)
 			cmd := New(state)
 			cmd.SetOnProxyChange(func(newProxy string) {
 				// 1. update BashTool scanner proxy env (for shell commands)
 				if bt, ok := reg.GetTool("bash"); ok {
-					if bash, ok := bt.(*command.BashTool); ok {
+					if bash, ok := bt.(*commands.BashTool); ok {
 						bash.SetScannerProxy(newProxy)
 					}
 				}

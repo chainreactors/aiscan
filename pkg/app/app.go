@@ -9,7 +9,7 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/agent/truncate"
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/resources"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
@@ -75,7 +75,7 @@ type App struct {
 	Provider           agent.Provider
 	ProviderConfig     agent.ProviderConfig
 	ProviderFallbacks  []agent.ProviderEntry
-	Commands           *command.CommandRegistry
+	Commands           *commands.CommandRegistry
 	Engines            *engine.Set
 	Skills             *skills.Store
 	SkillDiagnostics   []skills.Diagnostic
@@ -190,8 +190,8 @@ func initEngines(ctx context.Context, cfg ScannerConfig, logger telemetry.Logger
 	return engineSet
 }
 
-func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg ToolConfig, llmProvider agent.Provider, model string, skillStore *skills.Store, logger telemetry.Logger) *command.CommandRegistry {
-	cmdReg := command.NewRegistry()
+func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg ToolConfig, llmProvider agent.Provider, model string, skillStore *skills.Store, logger telemetry.Logger) *commands.CommandRegistry {
+	cmdReg := commands.NewRegistry()
 
 	workDir, _ := os.Getwd()
 
@@ -209,7 +209,7 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 	}
 	scanOpts = append(scanOpts, scan.WithLogger(logger))
 
-	deps := &command.Deps{
+	deps := &commands.Deps{
 		WorkDir:      workDir,
 		BashTimeout:  toolCfg.BashTimeout,
 		SkillStore:   skillStore,
@@ -224,14 +224,14 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 		deps.Resources = engineSet.Resources
 	}
 
-	command.BuildAll(deps, cmdReg)
+	commands.BuildAll(deps, cmdReg)
 
 	logger.Infof("commands=%s", fmt.Sprintf("%v", cmdReg.Names()))
 	return cmdReg
 }
 
 
-func collectDeepBrowserArtifacts(ctx context.Context, reg *command.CommandRegistry, targetURL string, logger telemetry.Logger) (string, error) {
+func collectDeepBrowserArtifacts(ctx context.Context, reg *commands.CommandRegistry, targetURL string, logger telemetry.Logger) (string, error) {
 	if reg == nil || !reg.Has("playwright") {
 		return "", fmt.Errorf("playwright command unavailable; rebuild web with browser tag")
 	}
@@ -304,7 +304,7 @@ func collectDeepBrowserArtifacts(ctx context.Context, reg *command.CommandRegist
 	return artifact, nil
 }
 
-func executeRegistryCommand(ctx context.Context, reg *command.CommandRegistry, commandLine string, timeout time.Duration) (string, error) {
+func executeRegistryCommand(ctx context.Context, reg *commands.CommandRegistry, commandLine string, timeout time.Duration) (string, error) {
 	if timeout <= 0 {
 		return reg.Execute(ctx, commandLine)
 	}
@@ -377,12 +377,12 @@ func (a *App) InitIOA(ctx context.Context, cfg IOAConfig) error {
 		a.IOAStreamClient = streamClient
 	}
 	if cfg.RegisterTools && a.Commands != nil {
-		deps := &command.Deps{
+		deps := &commands.Deps{
 			IOAClient: client,
 			NodeName:  cfg.NodeName,
 			NodeMeta:  cfg.NodeMeta,
 		}
-		command.BuildGroup("ioa", deps, a.Commands)
+		commands.BuildGroup("ioa", deps, a.Commands)
 	}
 	if cfg.AutoRegister && client != nil && client.NodeID() == "" {
 		_, err := client.RegisterNode(ctx, cfg.NodeName, "", cfg.NodeMeta)

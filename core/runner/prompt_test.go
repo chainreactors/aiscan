@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/skills"
 )
 
 func TestBuildSystemPromptIncludesSkills(t *testing.T) {
-	tools := command.NewRegistry()
+	tools := commands.NewRegistry()
 	loaded, diagnostics := skills.LoadEmbedded()
 	if len(diagnostics) != 0 {
 		t.Fatalf("diagnostics = %#v", diagnostics)

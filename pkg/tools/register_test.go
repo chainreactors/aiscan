@@ -3,7 +3,7 @@ package tools
 import (
 	"testing"
 
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/resources"
 	_ "github.com/chainreactors/aiscan/pkg/tools/search"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
@@ -13,13 +13,13 @@ import (
 	"github.com/chainreactors/sdk/spray"
 )
 
-func buildRegistry(engineSet *engine.Set) *command.CommandRegistry {
-	reg := command.NewRegistry()
-	deps := &command.Deps{
+func buildRegistry(engineSet *engine.Set) *commands.CommandRegistry {
+	reg := commands.NewRegistry()
+	deps := &commands.Deps{
 		EngineSet: engineSet,
 		Resources: engineSet.Resources,
 	}
-	command.BuildAll(deps, reg)
+	commands.BuildAll(deps, reg)
 	return reg
 }
 

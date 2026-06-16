@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/command"
+	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/skills"
 )
 
 type PromptConfig struct {
-	Tools            *command.CommandRegistry
+	Tools            *commands.CommandRegistry
 	ScannerDocs      string
 	CustomPreamble   string
 	Skills           []skills.Skill
@@ -180,7 +180,7 @@ func BuildSystemPrompt(cfg *PromptConfig, agentCfg *agent.Config) string {
 		tools = agentCfg.Tools
 	}
 	if tools == nil {
-		tools = command.NewRegistry()
+		tools = commands.NewRegistry()
 	}
 
 	hostname, _ := os.Hostname()

@@ -1,4 +1,4 @@
-package command
+package commands
 
 type ContentBlock struct {
 	Type       string `json:"type"`

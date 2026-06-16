@@ -1,4 +1,4 @@
-package command
+package commands
 
 import "github.com/chainreactors/aiscan/pkg/agent/tmux"
 
