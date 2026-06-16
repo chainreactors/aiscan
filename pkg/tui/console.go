@@ -18,8 +18,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/app"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	outputpkg "github.com/chainreactors/aiscan/pkg/output"
-	"github.com/chainreactors/aiscan/pkg/repl"
-	ioaclient "github.com/chainreactors/ioa/client"
+ioaclient "github.com/chainreactors/ioa/client"
 	"github.com/reeflective/console"
 	"github.com/reeflective/readline/inputrc"
 	"github.com/spf13/cobra"
@@ -627,8 +626,8 @@ func (r *AgentConsole) skillSlashNames() string {
 	return strings.Join(names, "  ")
 }
 
-func (r *AgentConsole) replSession() *repl.Session {
-	s := &repl.Session{
+func (r *AgentConsole) replSession() *Session {
+	s := &Session{
 		Ctx:          r.ctx,
 		Option:       r.option,
 		App:          r.application,
@@ -656,14 +655,14 @@ func (r *AgentConsole) rootCommand() *cobra.Command {
 	root.AddCommand(&cobra.Command{
 		Use: agentPromptCommandName, Hidden: true, Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return repl.RunPrompt(r.replSession(), "prompt", args[0])
+			return RunPrompt(r.replSession(), "prompt", args[0])
 		},
 	})
 
-	for _, cmd := range repl.BuiltinCommands() {
+	for _, cmd := range BuiltinCommands() {
 		root.AddCommand(r.wrapCommand(cmd))
 	}
-	for _, cmd := range repl.SkillCommands(r.replSession()) {
+	for _, cmd := range SkillCommands(r.replSession()) {
 		root.AddCommand(r.wrapCommand(cmd))
 	}
 	root.AddCommand(r.providerCommand())
@@ -671,7 +670,7 @@ func (r *AgentConsole) rootCommand() *cobra.Command {
 	return root
 }
 
-func (r *AgentConsole) wrapCommand(cmd repl.Command) *cobra.Command {
+func (r *AgentConsole) wrapCommand(cmd Command) *cobra.Command {
 	cc := &cobra.Command{
 		Use:   cmd.Name,
 		Short: cmd.Description,
@@ -683,12 +682,12 @@ func (r *AgentConsole) wrapCommand(cmd repl.Command) *cobra.Command {
 		cc.Hidden = true
 	}
 	switch cmd.Args {
-	case repl.ArgsNone:
+	case ArgsNone:
 		cc.Args = cobra.NoArgs
-	case repl.ArgsExact1:
+	case ArgsExact1:
 		cc.Args = cobra.ExactArgs(1)
 		cc.DisableFlagParsing = true
-	case repl.ArgsOptional:
+	case ArgsOptional:
 		cc.DisableFlagParsing = true
 	}
 
@@ -738,7 +737,7 @@ func (r *AgentConsole) wrapCommand(cmd repl.Command) *cobra.Command {
 
 func (r *AgentConsole) renderHelp() string {
 	colorEnabled := r.output != nil && r.output.color.Enabled
-	cmds := repl.BuiltinCommands()
+	cmds := BuiltinCommands()
 	rows := make([]helpRow, 0, len(cmds)+4)
 	for _, c := range cmds {
 		rows = append(rows, helpRow{Command: c.Name, Detail: c.Description})
@@ -753,7 +752,7 @@ func (r *AgentConsole) renderHelp() string {
 
 func (r *AgentConsole) renderStatus() string {
 	colorEnabled := r.output != nil && r.output.color.Enabled
-	info := repl.CollectStatus(r.replSession(), r.sessionSummary(), agentConsoleHistoryPath())
+	info := CollectStatus(r.replSession(), r.sessionSummary(), agentConsoleHistoryPath())
 	rows := []helpRow{
 		{Command: "model", Detail: info.Provider + " / " + info.Model},
 		{Command: "render", Detail: info.Mode},
@@ -906,7 +905,7 @@ func (r *AgentConsole) providerCommand() *cobra.Command {
 
 func (r *AgentConsole) renderProviders() string {
 	colorEnabled := r.output != nil && r.output.color.Enabled
-	info := repl.CollectStatus(r.replSession(), "", "")
+	info := CollectStatus(r.replSession(), "", "")
 	if len(info.Providers) == 0 {
 		return "\n  No providers configured.\n\n"
 	}
