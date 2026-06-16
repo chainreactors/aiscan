@@ -142,7 +142,7 @@ jobs:
         run: |
           go test -race -count=1 -timeout 5m -v \
             -run 'Tmux|BashProxy' \
-            ./pkg/command/
+            ./pkg/commands/
 
       - name: Run PTY interactive session tests
         run: |
@@ -175,12 +175,12 @@ jobs:
           cache: true
 
       - name: Run go generate for templates
-        run: go generate ./pkg/resources/...
+        run: go generate ./core/resources/...
 
       - name: Run resources tests
         run: |
           go test -race -count=1 -timeout 5m \
-            ./pkg/resources/...
+            ./core/resources/...
 
   # ── E2E tests (depends on test) ───────────────────────────────
 
