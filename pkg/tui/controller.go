@@ -9,7 +9,7 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/agent/evaluator"
-	"github.com/chainreactors/aiscan/pkg/eventbus"
+	"github.com/chainreactors/aiscan/core/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 

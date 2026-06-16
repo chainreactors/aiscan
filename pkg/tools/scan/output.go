@@ -1,7 +1,7 @@
 package scan
 
 import (
-	"github.com/chainreactors/aiscan/pkg/output"
+	"github.com/chainreactors/aiscan/core/output"
 	"github.com/chainreactors/parsers"
 )
 

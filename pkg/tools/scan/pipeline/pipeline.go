@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/chainreactors/aiscan/pkg/eventbus"
+	"github.com/chainreactors/aiscan/core/eventbus"
 )
 
 type Event interface {

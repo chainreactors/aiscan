@@ -13,7 +13,7 @@ import (
 
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/core/runner"
-	"github.com/chainreactors/aiscan/pkg/output"
+	"github.com/chainreactors/aiscan/core/output"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	goflags "github.com/jessevdk/go-flags"
 )

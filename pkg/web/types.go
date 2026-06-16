@@ -3,7 +3,7 @@ package web
 import (
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/output"
+	"github.com/chainreactors/aiscan/core/output"
 )
 
 type ScanStatus string

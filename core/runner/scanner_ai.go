@@ -9,7 +9,7 @@ import (
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/app"
-	"github.com/chainreactors/aiscan/pkg/pidlock"
+	"github.com/chainreactors/aiscan/core/pidlock"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
 	"github.com/chainreactors/aiscan/skills"

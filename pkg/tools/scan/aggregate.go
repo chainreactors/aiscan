@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/output"
+	"github.com/chainreactors/aiscan/core/output"
 	"github.com/chainreactors/parsers"
 	sdktypes "github.com/chainreactors/sdk/pkg/types"
 )

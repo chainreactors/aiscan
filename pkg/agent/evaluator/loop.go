@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/eventbus"
+	"github.com/chainreactors/aiscan/core/eventbus"
 )
 
 const defaultMaxEvalRounds = 3

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/output"
+	"github.com/chainreactors/aiscan/core/output"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
 	"github.com/chainreactors/parsers"
 	sdktypes "github.com/chainreactors/sdk/pkg/types"

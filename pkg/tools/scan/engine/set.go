@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"sync"
 
-	"github.com/chainreactors/aiscan/pkg/resources"
+	"github.com/chainreactors/aiscan/core/resources"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/fingers/alias"
 	fingersLib "github.com/chainreactors/fingers/fingers"

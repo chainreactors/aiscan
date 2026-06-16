@@ -15,7 +15,7 @@ import (
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/app"
 	cmdpkg "github.com/chainreactors/aiscan/pkg/commands"
-	"github.com/chainreactors/aiscan/pkg/eventbus"
+	"github.com/chainreactors/aiscan/core/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
 	"github.com/chainreactors/aiscan/pkg/tui"
@@ -376,6 +376,9 @@ func RunDirectScannerMode(ctx context.Context, option *cfg.Option, rest []string
 		return fmt.Errorf("init app: %w", err)
 	}
 	defer application.Close()
+	if err := application.WaitEngines(ctx); err != nil {
+		return fmt.Errorf("engine init: %w", err)
+	}
 	cfg.ApplyResolvedProviderOptions(option, application.ProviderConfig)
 
 	if !application.Commands.Has(scannerArgs[0]) {

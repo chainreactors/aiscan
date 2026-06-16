@@ -2,7 +2,7 @@ package runner
 
 import (
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/output"
+	"github.com/chainreactors/aiscan/core/output"
 )
 
 type eventsFileSubscriber struct {

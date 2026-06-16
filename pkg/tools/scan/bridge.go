@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/chainreactors/aiscan/pkg/eventbus"
+	"github.com/chainreactors/aiscan/core/eventbus"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/pipeline"
 )
 

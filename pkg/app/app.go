@@ -10,7 +10,7 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/agent/truncate"
 	"github.com/chainreactors/aiscan/pkg/commands"
-	"github.com/chainreactors/aiscan/pkg/resources"
+	"github.com/chainreactors/aiscan/core/resources"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/scan"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
@@ -81,6 +81,7 @@ type App struct {
 	SkillDiagnostics   []skills.Diagnostic
 	IOAClient          protocols.ClientAPI
 	IOAStreamClient    ioaclient.StreamAPI
+	enginesReady       chan struct{}
 }
 
 func New(ctx context.Context, cfg Config) (*App, error) {
@@ -119,9 +120,17 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		}
 	}
 
-	app.Engines = initEngines(ctx, cfg.Scanner, logger)
+	// Build core tools (bash, read, write, fetch, web_search) immediately.
+	app.Commands = initCoreCommands(cfg, app.Provider, app.Skills, logger)
 
-	app.Commands = initCommandRegistry(app.Engines, cfg.Scanner, cfg.Tools, app.Provider, app.ProviderConfig.Model, app.Skills, logger)
+	// Load engines and scanner tools in the background so the REPL starts instantly.
+	app.enginesReady = make(chan struct{})
+	go func() {
+		es := initEngines(ctx, cfg.Scanner, logger)
+		app.Engines = es
+		registerScannerCommands(app.Commands, es, cfg.Scanner, cfg.Tools, app.Provider, app.ProviderConfig.Model, app.Skills, logger)
+		close(app.enginesReady)
+	}()
 
 	if cfg.IOA != nil {
 		if err := app.InitIOA(ctx, *cfg.IOA); err != nil {
@@ -131,6 +140,15 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 	}
 
 	return app, nil
+}
+
+func (a *App) WaitEngines(ctx context.Context) error {
+	select {
+	case <-a.enginesReady:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (a *App) Close() {
@@ -190,11 +208,29 @@ func initEngines(ctx context.Context, cfg ScannerConfig, logger telemetry.Logger
 	return engineSet
 }
 
-func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg ToolConfig, llmProvider agent.Provider, model string, skillStore *skills.Store, logger telemetry.Logger) *commands.CommandRegistry {
+// initCoreCommands registers bash, read, write, glob, fetch, web_search —
+// everything that doesn't need scanner engines.
+func initCoreCommands(cfg Config, llmProvider agent.Provider, skillStore *skills.Store, logger telemetry.Logger) *commands.CommandRegistry {
 	cmdReg := commands.NewRegistry()
-
 	workDir, _ := os.Getwd()
+	deps := &commands.Deps{
+		WorkDir:     workDir,
+		BashTimeout: cfg.Tools.BashTimeout,
+		SkillStore:  skillStore,
+		Provider:    llmProvider,
+		Model:       cfg.Provider.Config.Model,
+		Logger:      logger,
+		TavilyKeys:  cfg.Tools.TavilyKeys,
+	}
+	commands.BuildGroup("core", deps, cmdReg)
+	commands.BuildGroup("tools", deps, cmdReg)
+	return cmdReg
+}
 
+// registerScannerCommands adds scanner tools (gogo, spray, neutron, cyberhub, etc.)
+// after engines finish loading. Safe to call from a goroutine — CommandRegistry is
+// thread-safe.
+func registerScannerCommands(cmdReg *commands.CommandRegistry, engineSet *engine.Set, scanCfg ScannerConfig, toolCfg ToolConfig, llmProvider agent.Provider, model string, skillStore *skills.Store, logger telemetry.Logger) {
 	var scanOpts []any
 	if scanCfg.AIEnabled && llmProvider != nil {
 		scanOpts = append(scanOpts, scan.WithParent(agent.NewAgent(agent.Config{
@@ -209,6 +245,7 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 	}
 	scanOpts = append(scanOpts, scan.WithLogger(logger))
 
+	workDir, _ := os.Getwd()
 	deps := &commands.Deps{
 		WorkDir:      workDir,
 		BashTimeout:  toolCfg.BashTimeout,
@@ -223,11 +260,10 @@ func initCommandRegistry(engineSet *engine.Set, scanCfg ScannerConfig, toolCfg T
 	if engineSet != nil {
 		deps.Resources = engineSet.Resources
 	}
-
-	commands.BuildAll(deps, cmdReg)
-
-	logger.Infof("commands=%s", fmt.Sprintf("%v", cmdReg.Names()))
-	return cmdReg
+	commands.BuildGroup("scanner", deps, cmdReg)
+	commands.BuildGroup("proxy", deps, cmdReg)
+	commands.BuildGroup("ioa", deps, cmdReg)
+	logger.Infof("scanner commands ready: %v", cmdReg.GroupNames("scanner"))
 }
 
 
