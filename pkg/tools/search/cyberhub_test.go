@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
@@ -13,10 +14,10 @@ import (
 )
 
 func TestCyberhubSearchesFingerprints(t *testing.T) {
-	cmd := newTestSearchCommand()
+	cmd := newTestCyberhub()
 
 	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"cyberhub", "search", "finger", "nginx"}, &buf)
+	err := cmd.Execute(context.Background(), []string{"search", "finger", "nginx"}, &buf)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -30,10 +31,10 @@ func TestCyberhubSearchesFingerprints(t *testing.T) {
 }
 
 func TestCyberhubListsPOCsWithFilters(t *testing.T) {
-	cmd := newTestSearchCommand()
+	cmd := newTestCyberhub()
 
 	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"cyberhub", "list", "poc", "--severity", "critical,high", "--limit", "0"}, &buf)
+	err := cmd.Execute(context.Background(), []string{"list", "poc", "--severity", "critical,high", "--limit", "0"}, &buf)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -47,10 +48,10 @@ func TestCyberhubListsPOCsWithFilters(t *testing.T) {
 }
 
 func TestCyberhubSearchJSONLines(t *testing.T) {
-	cmd := newTestSearchCommand()
+	cmd := newTestCyberhub()
 
 	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"cyberhub", "search", "poc", "spring", "--json"}, &buf)
+	err := cmd.Execute(context.Background(), []string{"search", "poc", "spring", "--json"}, &buf)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -69,10 +70,10 @@ func TestCyberhubSearchJSONLines(t *testing.T) {
 }
 
 func TestCyberhubFingerAssociation(t *testing.T) {
-	cmd := newTestSearchCommand()
+	cmd := newTestCyberhub()
 
 	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"cyberhub", "search", "--finger", "spring"}, &buf)
+	err := cmd.Execute(context.Background(), []string{"search", "--finger", "spring"}, &buf)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -83,10 +84,10 @@ func TestCyberhubFingerAssociation(t *testing.T) {
 }
 
 func TestCyberhubID(t *testing.T) {
-	cmd := newTestSearchCommand()
+	cmd := newTestCyberhub()
 
 	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"cyberhub", "id", "nginx"}, &buf)
+	err := cmd.Execute(context.Background(), []string{"id", "nginx"}, &buf)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -96,58 +97,66 @@ func TestCyberhubID(t *testing.T) {
 	}
 }
 
-func newTestSearchCommand() *Command {
-	fingers := fingerslib.Fingers{
-		{
-			Name:     "nginx",
-			Protocol: "http",
-			Tags:     []string{"web", "server"},
-			Focus:    true,
-			IsActive: true,
-			Level:    1,
-			Attributes: common.Attributes{
-				Vendor:  "nginx",
-				Product: "nginx",
-			},
-		},
-		{
-			Name:     "spring",
-			Protocol: "http",
-			Tags:     []string{"framework"},
-			Focus:    true,
-			Attributes: common.Attributes{
-				Vendor:  "pivotal",
-				Product: "spring",
-			},
-		},
-		{
-			Name:     "redis",
-			Protocol: "tcp",
-			Tags:     []string{"database"},
-		},
-	}
-	tpls := []*templates.Template{
-		{
-			Id:      "spring-rce",
-			Fingers: []string{"spring"},
-			Info: templates.Info{
-				Name:     "Spring RCE",
-				Severity: "critical",
-				Tags:     "spring,rce",
-			},
-		},
-		{
-			Id:      "tomcat-leak",
-			Fingers: []string{"tomcat"},
-			Info: templates.Info{
-				Name:     "Tomcat Leak",
-				Severity: "low",
-				Tags:     "tomcat,exposure",
-			},
-		},
-	}
+func newTestCyberhub() *CyberhubSearch {
 	idx := association.NewIndex()
-	idx.BuildWithFingers(fingers, nil, tpls)
-
-	return New(Opts{Index: idx})
+	idx.BuildWithFingers(
+		fingerslib.Fingers{
+			{
+				Name:     "nginx",
+				Protocol: "http",
+				Tags:     []string{"web", "server"},
+				Focus:    true,
+				IsActive: true,
+				Level:    1,
+				Attributes: common.Attributes{
+					Vendor:  "nginx",
+					Product: "nginx",
+				},
+			},
+			{
+				Name:     "spring",
+				Protocol: "http",
+				Tags:     []string{"framework"},
+				Focus:    true,
+				Attributes: common.Attributes{
+					Vendor:  "pivotal",
+					Product: "spring",
+				},
+			},
+			{
+				Name:     "redis",
+				Protocol: "tcp",
+				Tags:     []string{"database"},
+			},
+		},
+		nil,
+		[]*templates.Template{
+			{
+				Id:      "spring-rce",
+				Fingers: []string{"spring"},
+				Info: templates.Info{
+					Name:     "Spring RCE",
+					Severity: "critical",
+					Tags:     "spring,rce",
+				},
+			},
+			{
+				Id:      "tomcat-leak",
+				Fingers: []string{"tomcat"},
+				Info: templates.Info{
+					Name:     "Tomcat Leak",
+					Severity: "low",
+					Tags:     "tomcat,exposure",
+				},
+			},
+		},
+	)
+	return NewCyberhubSearch(idx)
 }
+
+// noopWriter discards output.
+type noopWriter struct{}
+
+func (noopWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+var _ io.Writer = noopWriter{}

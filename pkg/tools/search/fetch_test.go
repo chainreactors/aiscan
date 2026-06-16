@@ -16,13 +16,11 @@ func TestFetchExecutePreservesExplicitHTTPURL(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf)
+	cmd := NewFetchCommand()
+	out, err := cmd.Execute(context.Background(), []string{server.URL})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
 	if !strings.Contains(out, "Fetched: "+server.URL) {
 		t.Fatalf("output = %q, want explicit http URL", out)
 	}
@@ -40,21 +38,17 @@ func TestFetchCacheHitReturnsCachedContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
+	cmd := NewFetchCommand()
 
-	var buf1 strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf1)
+	out1, err := cmd.Execute(context.Background(), []string{server.URL})
 	if err != nil {
 		t.Fatalf("first Execute() error = %v", err)
 	}
-	out1 := buf1.String()
 
-	var buf2 strings.Builder
-	err = cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf2)
+	out2, err := cmd.Execute(context.Background(), []string{server.URL})
 	if err != nil {
 		t.Fatalf("second Execute() error = %v", err)
 	}
-	out2 := buf2.String()
 
 	if callCount != 1 {
 		t.Fatalf("expected 1 HTTP call, got %d (cache miss)", callCount)
@@ -73,14 +67,12 @@ func TestFetchClearCacheInvalidatesEntries(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	if err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf); err != nil {
+	cmd := NewFetchCommand()
+	if _, err := cmd.Execute(context.Background(), []string{server.URL}); err != nil {
 		t.Fatal(err)
 	}
-	cmd.ClearFetchCache()
-	var buf2 strings.Builder
-	if err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf2); err != nil {
+	cmd.ClearCache()
+	if _, err := cmd.Execute(context.Background(), []string{server.URL}); err != nil {
 		t.Fatal(err)
 	}
 	if callCount != 2 {
@@ -120,13 +112,11 @@ func TestFetchSameHostRedirectIsFollowed(t *testing.T) {
 	serverURL = server.URL
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL + "/old"}, &buf)
+	cmd := NewFetchCommand()
+	out, err := cmd.Execute(context.Background(), []string{server.URL + "/old"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
 	if !strings.Contains(out, "landed") {
 		t.Fatalf("output = %q, expected content from /new", out)
 	}
@@ -146,13 +136,11 @@ func TestFetchSeeOtherRedirectIsFollowed(t *testing.T) {
 	serverURL = server.URL
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL + "/old"}, &buf)
+	cmd := NewFetchCommand()
+	out, err := cmd.Execute(context.Background(), []string{server.URL + "/old"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
 	if !strings.Contains(out, "see other landed") {
 		t.Fatalf("output = %q, expected content from /new", out)
 	}
@@ -164,13 +152,11 @@ func TestFetchCrossHostRedirectReportsToAgent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf)
+	cmd := NewFetchCommand()
+	out, err := cmd.Execute(context.Background(), []string{server.URL})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
 	if !strings.Contains(out, "REDIRECT DETECTED") {
 		t.Fatalf("output = %q, want redirect message", out)
 	}
@@ -240,13 +226,11 @@ func TestFetchBinaryContentReturnsDescription(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf)
+	cmd := NewFetchCommand()
+	out, err := cmd.Execute(context.Background(), []string{server.URL})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
 	if !strings.Contains(out, "Binary content") {
 		t.Fatalf("output = %q, want binary content notice", out)
 	}
@@ -264,19 +248,15 @@ func TestFetchBinaryContentIsCached(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf1 strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf1)
+	cmd := NewFetchCommand()
+	out1, err := cmd.Execute(context.Background(), []string{server.URL})
 	if err != nil {
 		t.Fatalf("first Execute() error = %v", err)
 	}
-	out1 := buf1.String()
-	var buf2 strings.Builder
-	err = cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf2)
+	out2, err := cmd.Execute(context.Background(), []string{server.URL})
 	if err != nil {
 		t.Fatalf("second Execute() error = %v", err)
 	}
-	out2 := buf2.String()
 	if callCount != 1 {
 		t.Fatalf("expected 1 HTTP call, got %d", callCount)
 	}
@@ -313,13 +293,11 @@ func TestFetchOutputIncludesContentType(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL}, &buf)
+	cmd := NewFetchCommand()
+	out, err := cmd.Execute(context.Background(), []string{server.URL})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
 	if !strings.Contains(out, "Content-Type: application/json") {
 		t.Fatalf("output = %q, want Content-Type header", out)
 	}
@@ -332,13 +310,11 @@ func TestFetchExtractHintFiltersContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	cmd := New(Opts{})
-	var buf strings.Builder
-	err := cmd.Execute(context.Background(), []string{"fetch", server.URL, "--extract", "CVSS"}, &buf)
+	cmd := NewFetchCommand()
+	out, err := cmd.Execute(context.Background(), []string{server.URL, "--extract", "CVSS"})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	out := buf.String()
 	if !strings.Contains(out, "CVSS 9.8") {
 		t.Fatalf("output = %q, want CVSS section", out)
 	}

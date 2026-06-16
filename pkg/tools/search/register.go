@@ -30,15 +30,8 @@ func init() {
 			if es, ok := deps.EngineSet.(*engine.Set); ok && es != nil {
 				idx = es.Index
 			}
-
-			cmd := New(Opts{
-				TavilyKeys:   deps.TavilyKeys,
-				ScannerProxy: deps.ScannerProxy,
-				Index:        idx,
-			})
-			reg.Register(cmd, "tools")
-			if cmd.cyberhub != nil {
-				reg.Register(cmd.cyberhub, "tools")
+			if idx != nil {
+				reg.Register(NewCyberhubSearch(idx), "tools")
 			}
 		},
 	})
