@@ -12,7 +12,7 @@ import (
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/core/runner"
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/app"
+	
 	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tui"
@@ -465,7 +465,7 @@ func TestAgentConsoleRegistersSkillsAsSlashCommands(t *testing.T) {
 	if len(diagnostics) != 0 {
 		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
-	repl := tui.NewAgentConsole(context.Background(), &cfg.Option{}, &app.App{Skills: store}, nil, nil)
+	repl := tui.NewAgentConsole(context.Background(), &cfg.Option{}, tui.AppInfo{Skills: store}, nil, nil)
 	_ = repl // console created successfully
 }
 
@@ -476,7 +476,7 @@ func TestAgentConsolePromptCommandRunsAgent(t *testing.T) {
 	}
 	llm := &fakeConsoleProvider{}
 	session := agent.NewAgent(agent.Config{Provider: llm, Tools: commands.NewRegistry()})
-	repl := tui.NewAgentConsole(context.Background(), &cfg.Option{}, &app.App{Skills: store}, session, nil)
+	repl := tui.NewAgentConsole(context.Background(), &cfg.Option{}, tui.AppInfo{Skills: store}, session, nil)
 	_ = repl // console created successfully — full REPL test requires readline
 }
 
