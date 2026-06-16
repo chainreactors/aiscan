@@ -192,6 +192,8 @@ github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3 h1
 github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3/go.mod h1:4BG8xIxTebn0VoOTEwQ2pmYIB3K2qwGINxnRHALBNZg=
 github.com/chainreactors/sdk v0.3.4-0.20260616122655-98280dbe8cb9 h1:0vQXrefEwr4M2C0JiF4mA3RdY7FOVWqqb9mLDKgIR1Q=
 github.com/chainreactors/sdk v0.3.4-0.20260616122655-98280dbe8cb9/go.mod h1:jYBNpeeDFljN/3z1vSQGc1K5uUzlkUwEPWz45oRUO20=
+github.com/chainreactors/sdk v0.3.4-0.20260616124448-4dee008baf5e h1:zdiBiBCwyVRagCbjotiHIjaWjs3ClZxPcSd1iRzUSI4=
+github.com/chainreactors/sdk v0.3.4-0.20260616124448-4dee008baf5e/go.mod h1:yeXckJkuO8sl/FXhEYlQ6lq1RaWIei3VzrPEAF6pA9A=
 github.com/chainreactors/spray v1.3.1-0.20260616101714-a52580bd9040 h1:azWxO/71klGMcfZcmGHHYAI/0qq2qbRi68Sv/byJ3Ms=
 github.com/chainreactors/spray v1.3.1-0.20260616101714-a52580bd9040/go.mod h1:lWxsw+RHzAUKp78rkatxBereXqNunBe22hSpRGrfbo0=
 github.com/chainreactors/utils v0.0.0-20240716182459-e85f2b01ee16/go.mod h1:LajXuvESQwP+qCMAvlcoSXppQCjuLlBrnQpu9XQ1HtU=
