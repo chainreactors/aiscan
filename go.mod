@@ -1,17 +1,17 @@
 module github.com/chainreactors/aiscan
 
-go 1.26.1
+go 1.25.7
 
 require (
 	github.com/chainreactors/fingers v1.2.2-0.20260615064219-7e07a99c93e0
-	github.com/chainreactors/gogo/v2 v2.14.2-0.20260529142124-907a45a1456c
+	github.com/chainreactors/gogo/v2 v2.14.2-0.20260616085031-a755d215ba6d
 	github.com/chainreactors/ioa v0.0.0-20260609170545-7ec2ed23664d
 	github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c
 	github.com/chainreactors/neutron v0.0.0-20260615055126-a9bbe4fc3e95
 	github.com/chainreactors/parsers v0.0.0-20260608085142-3d2c51baa8fe
 	github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593
 	github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3
-	github.com/chainreactors/sdk v0.3.2
+	github.com/chainreactors/sdk v0.3.3
 	github.com/chainreactors/spray v1.3.1-0.20260608085629-66dafe7eab4f
 	github.com/chainreactors/utils v0.0.0-20260529172343-6465cb8568b2
 	github.com/chainreactors/zombie v1.2.3-0.20260611172539-bdd2cdfd5a21
@@ -22,6 +22,7 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/muesli/termenv v0.16.0
+	github.com/projectdiscovery/goflags v0.1.74
 	github.com/projectdiscovery/gologger v1.1.68
 	github.com/projectdiscovery/katana v1.6.1
 	github.com/projectdiscovery/uncover v1.2.1
@@ -50,6 +51,7 @@ require (
 	github.com/STARRY-S/zip v0.2.3 // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
+	github.com/adrianbrad/queue v1.3.0 // indirect
 	github.com/akrylysov/pogreb v0.10.1 // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
 	github.com/andybalholm/brotli v1.2.1 // indirect
@@ -95,6 +97,7 @@ require (
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
+	github.com/dominikbraun/graph v0.23.0 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/eclipse/paho.mqtt.golang v1.5.1 // indirect
@@ -150,6 +153,7 @@ require (
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/knadh/go-pop3 v1.0.2 // indirect
 	github.com/lib/pq v1.12.3 // indirect
+	github.com/lmittmann/tint v1.0.6 // indirect
 	github.com/logrusorgru/aurora v2.0.3+incompatible // indirect
 	github.com/logrusorgru/aurora/v4 v4.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
@@ -159,6 +163,7 @@ require (
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/metacubex/utls v1.7.3 // indirect
+	github.com/mfonda/simhash v0.0.0-20151007195837-79f94a1100d6 // indirect
 	github.com/mholt/archiver v3.1.1+incompatible // indirect
 	github.com/mholt/archives v0.1.5 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
@@ -185,7 +190,6 @@ require (
 	github.com/projectdiscovery/blackrock v0.0.1 // indirect
 	github.com/projectdiscovery/dsl v0.8.17 // indirect
 	github.com/projectdiscovery/fastdialer v0.5.6 // indirect
-	github.com/projectdiscovery/goflags v0.1.74 // indirect
 	github.com/projectdiscovery/gostruct v0.0.2 // indirect
 	github.com/projectdiscovery/hmap v0.0.100 // indirect
 	github.com/projectdiscovery/mapcidr v1.1.97 // indirect
@@ -276,8 +280,6 @@ require (
 )
 
 replace (
-	github.com/chainreactors/gogo/v2 => /mnt/chainreactors/gogo/v2
-	github.com/chainreactors/sdk => /mnt/chainreactors/sdk
 	github.com/reeflective/console => github.com/chainreactors/malice-network/external/console v0.0.0-20260422184128-e856ed004d32
 	github.com/reeflective/readline => github.com/chainreactors/malice-network/external/readline v0.0.0-20260422184128-e856ed004d32
 )

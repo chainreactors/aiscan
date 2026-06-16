@@ -17,6 +17,9 @@ import (
 	"github.com/projectdiscovery/goflags"
 	"github.com/projectdiscovery/gologger"
 	"github.com/projectdiscovery/gologger/levels"
+	"github.com/projectdiscovery/katana/pkg/engine"
+	"github.com/projectdiscovery/katana/pkg/engine/headless"
+	"github.com/projectdiscovery/katana/pkg/engine/hybrid"
 	"github.com/projectdiscovery/katana/pkg/engine/standard"
 	katanaoutput "github.com/projectdiscovery/katana/pkg/output"
 	katanatypes "github.com/projectdiscovery/katana/pkg/types"
@@ -148,27 +151,12 @@ func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) (err 
 		defer cancel()
 	}
 
-	// Collect results via OnResult callback.
-	var mu sync.Mutex
-	var lines [][]byte
+	// Collect results via a custom output writer that captures all results,
+	// including those from the headless engine which bypasses OnResult.
+	collector := &resultCollector{jsonMode: options.JSON}
 
 	options.OnResult = func(r katanaoutput.Result) {
-		if r.Request == nil || r.Request.URL == "" {
-			return
-		}
-		var line []byte
-		if options.JSON {
-			data, jsonErr := json.Marshal(r)
-			if jsonErr != nil {
-				return
-			}
-			line = data
-		} else {
-			line = []byte(r.Request.URL)
-		}
-		mu.Lock()
-		lines = append(lines, line)
-		mu.Unlock()
+		collector.collect(&r)
 	}
 
 	// Suppress gologger during crawl.
@@ -178,13 +166,23 @@ func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) (err 
 		gologger.DefaultLogger.SetMaxLevel(levels.LevelWarning)
 		return fmt.Errorf("katana: init: %w", err)
 	}
-	crawlerOptions.OutputWriter = &silentWriter{}
+	crawlerOptions.OutputWriter = collector
 	defer func() {
 		crawlerOptions.Close()
 		gologger.DefaultLogger.SetMaxLevel(levels.LevelWarning)
 	}()
 
-	crawler, err := standard.New(crawlerOptions)
+	var crawler engine.Engine
+	switch {
+	case options.ChromeWSUrl != "":
+		crawler, err = headless.New(crawlerOptions)
+	case options.Headless:
+		crawler, err = headless.New(crawlerOptions)
+	case options.HeadlessHybrid:
+		crawler, err = hybrid.New(crawlerOptions)
+	default:
+		crawler, err = standard.New(crawlerOptions)
+	}
 	if err != nil {
 		return fmt.Errorf("katana: create crawler: %w", err)
 	}
@@ -205,9 +203,7 @@ func (c *Command) Execute(ctx context.Context, args []string, w io.Writer) (err 
 	}
 
 	// Write collected results.
-	mu.Lock()
-	defer mu.Unlock()
-	for _, line := range lines {
+	for _, line := range collector.lines() {
 		_, _ = w.Write(line)
 		_, _ = w.Write([]byte("\n"))
 	}
@@ -226,6 +222,7 @@ func readFlags(args []string) (*katanatypes.Options, error) {
 	// Input
 	flagSet.CreateGroup("input", "Input",
 		flagSet.StringSliceVarP(&options.URLs, "list", "u", nil, "target url / list to crawl", goflags.FileCommaSeparatedStringSliceOptions),
+		flagSet.StringVar(&options.Resume, "resume", "", "resume scan using resume.cfg"),
 		flagSet.StringSliceVarP(&options.Exclude, "exclude", "e", nil, "exclude host matching specified filter", goflags.CommaSeparatedStringSliceOptions),
 	)
 
@@ -236,14 +233,23 @@ func readFlags(args []string) (*katanatypes.Options, error) {
 		flagSet.BoolVarP(&options.ScrapeJSResponses, "js-crawl", "jc", false, "enable endpoint parsing / crawling in javascript file"),
 		flagSet.BoolVarP(&options.ScrapeJSLuiceResponses, "jsluice", "jsl", false, "enable jsluice parsing in javascript file"),
 		flagSet.DurationVarP(&options.CrawlDuration, "crawl-duration", "ct", 0, "maximum duration to crawl the target for"),
+		flagSet.EnumVarP(&options.KnownFiles, "known-files", "kf", goflags.EnumVariable(0), "enable crawling of known files (all,robotstxt,sitemapxml)", goflags.AllowdTypes{
+			"":           goflags.EnumVariable(0),
+			"all":        goflags.EnumVariable(1),
+			"robotstxt":  goflags.EnumVariable(2),
+			"sitemapxml": goflags.EnumVariable(3),
+		}),
 		flagSet.IntVarP(&options.BodyReadSize, "max-response-size", "mrs", defaultBodyReadSize, "maximum response size to read"),
 		flagSet.IntVar(&options.Timeout, "timeout", 10, "time to wait for request in seconds"),
+		flagSet.IntVar(&options.TimeStable, "time-stable", 1, "time to wait until page is stable in seconds"),
 		flagSet.BoolVarP(&options.AutomaticFormFill, "automatic-form-fill", "aff", false, "enable automatic form filling"),
 		flagSet.BoolVarP(&options.FormExtraction, "form-extraction", "fx", false, "extract form elements in jsonl output"),
 		flagSet.IntVar(&options.Retries, "retry", 1, "number of times to retry the request"),
 		flagSet.StringVar(&options.Proxy, "proxy", "", "http/socks5 proxy to use"),
 		flagSet.BoolVarP(&options.TechDetect, "tech-detect", "td", false, "enable technology detection"),
 		flagSet.StringSliceVarP(&options.CustomHeaders, "headers", "H", nil, "custom header/cookie in header:value format", goflags.FileStringSliceOptions),
+		flagSet.StringVarP(&options.FormConfig, "form-config", "fc", "", "path to custom form configuration file"),
+		flagSet.StringVarP(&options.FieldConfig, "field-config", "flc", "", "path to custom field configuration file"),
 		flagSet.StringVarP(&options.Strategy, "strategy", "s", "depth-first", "Visit strategy (depth-first, breadth-first)"),
 		flagSet.BoolVarP(&options.IgnoreQueryParams, "ignore-query-params", "iqp", false, "ignore crawling same path with different query-param values"),
 		flagSet.BoolVarP(&options.FilterSimilar, "filter-similar", "fsu", false, "filter crawling of similar looking URLs"),
@@ -253,6 +259,26 @@ func readFlags(args []string) (*katanatypes.Options, error) {
 		flagSet.BoolVarP(&options.PathClimb, "path-climb", "pc", false, "enable path climb"),
 		flagSet.BoolVarP(&options.KnowledgeBase, "knowledge-base", "kb", false, "enable knowledge base classification"),
 		flagSet.IntVarP(&options.MaxDomainPages, "max-domain-pages", "mdp", 0, "max pages per domain"),
+	)
+
+	// Headless
+	flagSet.CreateGroup("headless", "Headless",
+		flagSet.BoolVarP(&options.Headless, "headless", "hl", false, "enable headless crawling (experimental)"),
+		flagSet.BoolVarP(&options.HeadlessHybrid, "hybrid", "hh", false, "enable headless hybrid crawling (experimental)"),
+		flagSet.BoolVarP(&options.UseInstalledChrome, "system-chrome", "sc", false, "use local installed chrome browser"),
+		flagSet.BoolVarP(&options.ShowBrowser, "show-browser", "sb", false, "show the browser on the screen"),
+		flagSet.StringSliceVarP(&options.HeadlessOptionalArguments, "headless-options", "ho", nil, "start headless chrome with additional options", goflags.FileCommaSeparatedStringSliceOptions),
+		flagSet.BoolVarP(&options.HeadlessNoSandbox, "no-sandbox", "nos", false, "start headless chrome in --no-sandbox mode"),
+		flagSet.StringVarP(&options.ChromeDataDir, "chrome-data-dir", "cdd", "", "path to store chrome browser data"),
+		flagSet.StringVarP(&options.SystemChromePath, "system-chrome-path", "scp", "", "use specified chrome browser for headless crawling"),
+		flagSet.BoolVarP(&options.HeadlessNoIncognito, "no-incognito", "noi", false, "start headless chrome without incognito mode"),
+		flagSet.StringVarP(&options.ChromeWSUrl, "chrome-ws-url", "cwu", "", "use chrome browser instance at this debugger URL"),
+		flagSet.BoolVarP(&options.XhrExtraction, "xhr-extraction", "xhr", false, "extract xhr request url,method in jsonl output"),
+		flagSet.IntVarP(&options.MaxFailureCount, "max-failure-count", "mfc", 10, "maximum consecutive action failures before stopping"),
+		flagSet.BoolVarP(&options.EnableDiagnostics, "enable-diagnostics", "ed", false, "enable diagnostics"),
+		flagSet.StringVarP(&options.PageLoadStrategy, "page-load-strategy", "pls", "heuristic", "page load strategy (heuristic, load, domcontentloaded, networkidle, none)"),
+		flagSet.IntVarP(&options.DOMWaitTime, "dom-wait-time", "dwt", 5, "time in seconds to wait after domcontentloaded strategy"),
+		flagSet.StringVarP(&options.AuthCredentials, "auto-login", "al", "", "automatic login with username:password (headless only)"),
 	)
 
 	// Scope
@@ -401,8 +427,57 @@ func addSchemeIfNotExists(inputURL string) string {
 	return "https://" + inputURL
 }
 
-type silentWriter struct{}
 
-func (w *silentWriter) Close() error                               { return nil }
-func (w *silentWriter) Write(_ *katanaoutput.Result) error         { return nil }
-func (w *silentWriter) WriteErr(_ *katanaoutput.Error) error       { return nil }
+// resultCollector implements katana's output.Writer interface.
+// It captures all results from both standard engine (via OnResult callback)
+// and headless engine (via OutputWriter.Write), deduplicating by URL.
+type resultCollector struct {
+	mu       sync.Mutex
+	seen     map[string]struct{}
+	results  [][]byte
+	jsonMode bool
+}
+
+func (c *resultCollector) Close() error { return nil }
+
+func (c *resultCollector) Write(r *katanaoutput.Result) error {
+	if r != nil {
+		c.collect(r)
+	}
+	return nil
+}
+
+func (c *resultCollector) WriteErr(_ *katanaoutput.Error) error { return nil }
+
+func (c *resultCollector) collect(r *katanaoutput.Result) {
+	if r.Request == nil || r.Request.URL == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.seen == nil {
+		c.seen = make(map[string]struct{})
+	}
+	if _, dup := c.seen[r.Request.URL]; dup {
+		return
+	}
+	c.seen[r.Request.URL] = struct{}{}
+
+	var line []byte
+	if c.jsonMode {
+		data, err := json.Marshal(r)
+		if err != nil {
+			return
+		}
+		line = data
+	} else {
+		line = []byte(r.Request.URL)
+	}
+	c.results = append(c.results, line)
+}
+
+func (c *resultCollector) lines() [][]byte {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.results
+}

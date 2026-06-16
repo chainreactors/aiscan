@@ -81,6 +81,8 @@ github.com/VividCortex/ewma v1.2.0 h1:f58SaIzcDXrSy3kWaHNvuJgJ3Nmz59Zji6XoJR/q1o
 github.com/VividCortex/ewma v1.2.0/go.mod h1:nz4BbCtbLyFDeC9SUHbtcT5644juEuWfUAUnGx7j5l4=
 github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d h1:licZJFw2RwpHMqeKTCYkitsPqHNxTmd4SNR5r94FGM8=
 github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d/go.mod h1:asat636LX7Bqt5lYEZ27JNDcqxfjdBQuJ/MM4CN/Lzo=
+github.com/adrianbrad/queue v1.3.0 h1:8FH1N+93HXbqta5+URa1AL+diV7MP3VDXAEnP+DNp48=
+github.com/adrianbrad/queue v1.3.0/go.mod h1:wYiPC/3MPbyT45QHLrPR4zcqJWPePubM1oEP/xTwhUs=
 github.com/akrylysov/pogreb v0.10.1 h1:FqlR8VR7uCbJdfUob916tPM+idpKgeESDXOA1K0DK4w=
 github.com/akrylysov/pogreb v0.10.1/go.mod h1:pNs6QmpQ1UlTJKDezuRWmaqkgUE2TuU0YTWyqJZ7+lI=
 github.com/alecthomas/assert/v2 v2.7.0 h1:QtqSACNS3tF7oasA8CU6A6sXZSBDqnm7RfpLl9bZqbE=
@@ -166,6 +168,8 @@ github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0 h1:cU3sGEODXZs
 github.com/chainreactors/files v0.0.0-20240716182835-7884ee1e77f0/go.mod h1:NSxGNMRWryAyrDzZpVwmujI22wbGw6c52bQOd5zEvyU=
 github.com/chainreactors/fingers v1.2.2-0.20260615064219-7e07a99c93e0 h1:jXqNI3BlhMV8IVxF0C7CkPYZ8iYMC6wlTwbtN3hrS1U=
 github.com/chainreactors/fingers v1.2.2-0.20260615064219-7e07a99c93e0/go.mod h1:qqatuXqS6kcC5TFTMGJ5V4VtGD1HZBDW1MOFXnNBWfA=
+github.com/chainreactors/gogo/v2 v2.14.2-0.20260616085031-a755d215ba6d h1:ViiHYulCp9JB9WUuFIzHHr/Kbpj4gxmE24o2wRCvooA=
+github.com/chainreactors/gogo/v2 v2.14.2-0.20260616085031-a755d215ba6d/go.mod h1:PWgWQ3eqfz3474PscYtDAVJDn+ksi2ijL2wJ6Rz0qYY=
 github.com/chainreactors/ioa v0.0.0-20260609170545-7ec2ed23664d h1:bwagpFfRhSMbatA8dZaDwkoalcPrRIXbRfCH8N5PI2Q=
 github.com/chainreactors/ioa v0.0.0-20260609170545-7ec2ed23664d/go.mod h1:IqHyULc67RKEmr9qsyPpJzgSGJRK8JeRXXXVthQu5Z8=
 github.com/chainreactors/logs v0.0.0-20260508055944-c678762ed15c h1:6Net2Mgo/qo6ADFBZJWWScKuMfZ0rbzLqSCVDuLKFdc=
@@ -186,6 +190,8 @@ github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593 h1:tnX
 github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593/go.mod h1:xSNRChMYF8en5O5ZQVmCOmNTTyQhvsrk0D0vluh/JKk=
 github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3 h1:WVEb3Bjq3AC67oa9pNjHJfIH+mX6PozJO3S5ccVZJYQ=
 github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3/go.mod h1:4BG8xIxTebn0VoOTEwQ2pmYIB3K2qwGINxnRHALBNZg=
+github.com/chainreactors/sdk v0.3.3 h1:gBqoYB2ZqYRCTY44kKljIsIPOVyIXKdK8ihtCHk13Oo=
+github.com/chainreactors/sdk v0.3.3/go.mod h1:NNesmUsFPnwKUEm2mANbMDqYTUrtyxBSlQZf8SSyxNE=
 github.com/chainreactors/spray v1.3.1-0.20260608085629-66dafe7eab4f h1:bacmQyBkv9YybjTSPLrv3nwVybHJkstLz6ImxmvF4Z8=
 github.com/chainreactors/spray v1.3.1-0.20260608085629-66dafe7eab4f/go.mod h1:lWxsw+RHzAUKp78rkatxBereXqNunBe22hSpRGrfbo0=
 github.com/chainreactors/utils v0.0.0-20240716182459-e85f2b01ee16/go.mod h1:LajXuvESQwP+qCMAvlcoSXppQCjuLlBrnQpu9XQ1HtU=
@@ -260,6 +266,8 @@ github.com/dlclark/regexp2 v1.12.0/go.mod h1:DHkYz0B9wPfa6wondMfaivmHpzrQ3v9q8cn
 github.com/dnaeon/go-vcr v1.2.0/go.mod h1:R4UdLID7HZT3taECzJs4YgbbH6PIGXB6W/sc5OLb6RQ=
 github.com/docker/go-units v0.5.0 h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4=
 github.com/docker/go-units v0.5.0/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
+github.com/dominikbraun/graph v0.23.0 h1:TdZB4pPqCLFxYhdyMFb1TBdFxp8XLcJfTTBQucVPgCo=
+github.com/dominikbraun/graph v0.23.0/go.mod h1:yOjYyogZLY1LSG9E33JWZJiq5k83Qy2C6POAuiViluc=
 github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 h1:2tV76y6Q9BB+NEBasnqvs7e49aEBFI8ejC89PSnWH+4=
 github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707/go.mod h1:qssHWj60/X5sZFNxpG4HBPDHVqxNm4DfnCKgrbZOT+s=
 github.com/dsnet/golib v0.0.0-20171103203638-1ea166775780/go.mod h1:Lj+Z9rebOhdfkVLjJ8T6VcRQv3SXugXy999NBtR9aFY=
@@ -578,6 +586,8 @@ github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
 github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
 github.com/lib/pq v1.12.3 h1:tTWxr2YLKwIvK90ZXEw8GP7UFHtcbTtty8zsI+YjrfQ=
 github.com/lib/pq v1.12.3/go.mod h1:/p+8NSbOcwzAEI7wiMXFlgydTwcgTr3OSKMsD2BitpA=
+github.com/lmittmann/tint v1.0.6 h1:vkkuDAZXc0EFGNzYjWcV0h7eEX+uujH48f/ifSkJWgc=
+github.com/lmittmann/tint v1.0.6/go.mod h1:HIS3gSy7qNwGCj+5oRjAutErFBl4BzdQP6cJZ0NfMwE=
 github.com/logrusorgru/aurora v2.0.3+incompatible h1:tOpm7WcpBTn4fjmVfgpQq0EfczGlG91VSDkswnjF5A8=
 github.com/logrusorgru/aurora v2.0.3+incompatible/go.mod h1:7rIyQOR62GCctdiQpZ/zOJlFyk6y+94wXzv6RNZgaR4=
 github.com/logrusorgru/aurora/v4 v4.0.0 h1:sRjfPpun/63iADiSvGGjgA1cAYegEWMPCJdUpJYn9JA=
@@ -611,6 +621,8 @@ github.com/mattn/go-runewidth v0.0.23/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhg
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
 github.com/metacubex/utls v1.7.3 h1:yDcMEWojFh+t8rU9X0HPcZDPAoFze/rIIyssqivzj8A=
 github.com/metacubex/utls v1.7.3/go.mod h1:oknYT0qTOwE4hjPmZOEpzVdefnW7bAdGLvZcqmk4TLU=
+github.com/mfonda/simhash v0.0.0-20151007195837-79f94a1100d6 h1:bjfMeqxWEJ6IRUvGkiTkSwx0a6UdQJsbirRSoXogteY=
+github.com/mfonda/simhash v0.0.0-20151007195837-79f94a1100d6/go.mod h1:WVJJvUw/pIOcwu2O8ZzHEhmigq2jzwRNfJVRMJB7bR8=
 github.com/mholt/archiver v3.1.1+incompatible h1:1dCVxuqs0dJseYEhi5pl7MYPH9zDa1wBi7mF09cbNkU=
 github.com/mholt/archiver v3.1.1+incompatible/go.mod h1:Dh2dOXnSdiLxRiPoVfIr/fI1TwETms9B8CTWfeh7ROU=
 github.com/mholt/archives v0.1.5 h1:Fh2hl1j7VEhc6DZs2DLMgiBNChUux154a1G+2esNvzQ=
