@@ -26,6 +26,7 @@ ioaclient "github.com/chainreactors/ioa/client"
 )
 
 const agentPromptCommandName = "__prompt"
+const bashDirectCommandName = "__bash"
 const agentConsoleInterruptCommandName = "aiscan-interrupt"
 const agentConsoleEscapeSequenceWait = 10 * time.Millisecond
 
@@ -658,19 +659,200 @@ func (r *AgentConsole) rootCommand() *cobra.Command {
 			return RunPrompt(r.replSession(), "prompt", args[0])
 		},
 	})
+	root.AddCommand(&cobra.Command{
+		Use: bashDirectCommandName, Hidden: true, Args: cobra.ExactArgs(1),
+		DisableFlagParsing: true,
+		RunE: func(c *cobra.Command, args []string) error {
+			return r.executeBashDirect(c.Context(), args[0])
+		},
+	})
 
-	for _, cmd := range BuiltinCommands() {
-		root.AddCommand(r.wrapCommand(cmd))
+	for _, cmd := range r.allCommands() {
+		root.AddCommand(wrapCommand(cmd, r.replSession()))
 	}
-	for _, cmd := range SkillCommands(r.replSession()) {
-		root.AddCommand(r.wrapCommand(cmd))
-	}
-	root.AddCommand(r.providerCommand())
-	root.AddCommand(r.ioaCommands()...)
 	return root
 }
 
-func (r *AgentConsole) wrapCommand(cmd Command) *cobra.Command {
+func (r *AgentConsole) allCommands() []Command {
+	s := r.replSession()
+	var cmds []Command
+	cmds = append(cmds, r.builtinCommands()...)
+	cmds = append(cmds, SkillCommands(s)...)
+	cmds = append(cmds, r.providerCommands()...)
+	cmds = append(cmds, r.ioaCommands()...)
+	return cmds
+}
+
+func (r *AgentConsole) builtinCommands() []Command {
+	return []Command{
+		{
+			Name: "/help", Description: "查看命令面板",
+			Args: ArgsNone,
+			Run: func(_ context.Context, _ *Session, _ []string) error {
+				fmt.Fprint(os.Stdout, r.renderHelp())
+				return nil
+			},
+		},
+		{
+			Name: "/status", Description: "查看模型、渲染模式、IOA 和 skills",
+			Args: ArgsNone,
+			Run: func(_ context.Context, _ *Session, _ []string) error {
+				fmt.Fprint(os.Stdout, r.renderStatus())
+				return nil
+			},
+		},
+		{
+			Name: "/reset", Description: "清空当前会话上下文",
+			Args: ArgsNone,
+			Run: func(_ context.Context, s *Session, _ []string) error {
+				if s.Controller != nil && s.Controller.Running() {
+					return fmt.Errorf("task is running — use /stop first")
+				}
+				s.Agent.Reset()
+				fmt.Fprintln(os.Stdout, "Context reset.")
+				return nil
+			},
+		},
+		{
+			Name: "/continue", Description: "不追加输入，继续上一轮任务",
+			Args: ArgsNone,
+			Run: func(_ context.Context, s *Session, _ []string) error {
+				return s.Controller.Continue()
+			},
+		},
+		{
+			Name: "/stop", Description: "停止当前正在运行的任务",
+			Args: ArgsNone,
+			Run: func(_ context.Context, _ *Session, _ []string) error {
+				if !r.stopCurrentRun() {
+					fmt.Fprintln(os.Stderr, "No running task.")
+				}
+				return nil
+			},
+		},
+		{
+			Name: "/followup", Description: "排队到当前任务结束后再发送",
+			Args: ArgsExact1,
+			Run: func(ctx context.Context, s *Session, args []string) error {
+				return RunPrompt(s, "follow-up", args[0])
+			},
+		},
+		{
+			Name: "/eval", Description: "设置/查看/关闭 goal evaluation (/eval off 关闭)",
+			Args: ArgsOptional,
+			Run: func(_ context.Context, s *Session, args []string) error {
+				text := strings.TrimSpace(strings.Join(args, " "))
+				switch text {
+				case "":
+					if s.EvalCriteria == "" {
+						fmt.Println("Goal evaluation: off")
+					} else {
+						fmt.Printf("Goal evaluation: on\n  criteria: %s\n", s.EvalCriteria)
+					}
+				case "off":
+					s.EvalCriteria = ""
+					if s.OnEvalChange != nil {
+						s.OnEvalChange("")
+					}
+					fmt.Println("Goal evaluation disabled.")
+				default:
+					s.EvalCriteria = text
+					if s.OnEvalChange != nil {
+						s.OnEvalChange(text)
+					}
+					fmt.Printf("Goal evaluation enabled: %s\n", text)
+				}
+				return nil
+			},
+		},
+		{
+			Name: "/exit", Aliases: []string{"/quit"}, Description: "退出交互模式",
+			Args: ArgsNone,
+			Run: func(_ context.Context, _ *Session, _ []string) error {
+				return errAgentConsoleExit
+			},
+		},
+	}
+}
+
+func (r *AgentConsole) providerCommands() []Command {
+	return []Command{
+		{
+			Name:        "/provider",
+			Description: "查看/管理 LLM provider 链",
+			Args:        ArgsOptional,
+			Run: func(_ context.Context, _ *Session, args []string) error {
+				if len(args) == 0 || (len(args) == 1 && args[0] == "list") {
+					fmt.Fprint(os.Stdout, r.renderProviders())
+					return nil
+				}
+				fmt.Fprintf(os.Stderr, "unknown subcommand: %s (use: list)\n", args[0])
+				return nil
+			},
+		},
+	}
+}
+
+func (r *AgentConsole) ioaCommands() []Command {
+	return []Command{
+		{
+			Name: "/spaces", Description: "List all IOA spaces",
+			Args: ArgsNone,
+			Run: func(ctx context.Context, _ *Session, _ []string) error {
+				client, err := r.ioaClient()
+				if err != nil {
+					return err
+				}
+				return RunIOASpaces(ctx, client, r.option)
+			},
+		},
+		{
+			Name: "/messages", Description: "List start messages in a space",
+			Args: ArgsExact1,
+			Run: func(ctx context.Context, _ *Session, args []string) error {
+				client, err := r.ioaClient()
+				if err != nil {
+					return err
+				}
+				return RunIOAMessages(ctx, client, r.option, cfg.IOAClientArgs{Space: args[0]})
+			},
+		},
+		{
+			Name: "/context", Description: "View message thread/context",
+			Args: ArgsOptional,
+			Run: func(ctx context.Context, _ *Session, args []string) error {
+				fields := splitArgs(args)
+				if len(fields) < 2 {
+					return fmt.Errorf("usage: /context <space> <message-id>")
+				}
+				client, err := r.ioaClient()
+				if err != nil {
+					return err
+				}
+				return RunIOAContext(ctx, client, r.option, cfg.IOAClientArgs{Space: fields[0], MessageID: fields[1]})
+			},
+		},
+		{
+			Name: "/nodes", Description: "List nodes (optionally scoped to a space)",
+			Args: ArgsOptional,
+			Run: func(ctx context.Context, _ *Session, args []string) error {
+				client, err := r.ioaClient()
+				if err != nil {
+					return err
+				}
+				var a cfg.IOAClientArgs
+				if len(args) > 0 {
+					a.Space = args[0]
+				}
+				return RunIOANodes(ctx, client, r.option, a)
+			},
+		},
+	}
+}
+
+// wrapCommand converts a Command into a cobra.Command. No special-case logic —
+// every Command's Run is self-contained.
+func wrapCommand(cmd Command, s *Session) *cobra.Command {
 	cc := &cobra.Command{
 		Use:   cmd.Name,
 		Short: cmd.Description,
@@ -678,9 +860,7 @@ func (r *AgentConsole) wrapCommand(cmd Command) *cobra.Command {
 	if len(cmd.Aliases) > 0 {
 		cc.Aliases = cmd.Aliases
 	}
-	if cmd.Hidden {
-		cc.Hidden = true
-	}
+	cc.Hidden = cmd.Hidden
 	switch cmd.Args {
 	case ArgsNone:
 		cc.Args = cobra.NoArgs
@@ -690,42 +870,10 @@ func (r *AgentConsole) wrapCommand(cmd Command) *cobra.Command {
 	case ArgsOptional:
 		cc.DisableFlagParsing = true
 	}
-
-	switch cmd.Name {
-	case "/help":
-		cc.RunE = func(_ *cobra.Command, _ []string) error {
-			fmt.Fprint(os.Stdout, r.renderHelp())
-			return nil
-		}
-	case "/status":
-		cc.Run = func(_ *cobra.Command, _ []string) {
-			fmt.Fprint(os.Stdout, r.renderStatus())
-		}
-	case "/stop":
-		cc.Run = func(_ *cobra.Command, _ []string) {
-			if !r.stopCurrentRun() {
-				fmt.Fprintln(os.Stderr, "No running task.")
-			}
-		}
-	case "/reset":
-		run := cmd.Run
-		cc.RunE = func(c *cobra.Command, _ []string) error {
-			if err := run(c.Context(), r.replSession(), nil); err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				return nil
-			}
-			fmt.Fprintln(os.Stdout, "Context reset.")
-			return nil
-		}
-	case "/exit":
-		cc.RunE = func(_ *cobra.Command, _ []string) error { return errAgentConsoleExit }
-	default:
-		if cmd.Run == nil {
-			break
-		}
+	if cmd.Run != nil {
 		run := cmd.Run
 		cc.RunE = func(c *cobra.Command, args []string) error {
-			return run(c.Context(), r.replSession(), args)
+			return run(c.Context(), s, args)
 		}
 	}
 	return cc
@@ -737,16 +885,17 @@ func (r *AgentConsole) wrapCommand(cmd Command) *cobra.Command {
 
 func (r *AgentConsole) renderHelp() string {
 	colorEnabled := r.output != nil && r.output.color.Enabled
-	cmds := BuiltinCommands()
-	rows := make([]helpRow, 0, len(cmds)+4)
+	cmds := r.allCommands()
+	rows := make([]helpRow, 0, len(cmds)+3)
 	for _, c := range cmds {
+		if c.Hidden {
+			continue
+		}
 		rows = append(rows, helpRow{Command: c.Name, Detail: c.Description})
 	}
 	rows = append(rows, helpRow{})
 	rows = append(rows, helpRow{Command: "普通文本", Detail: "直接发送自然语言任务"})
-	rows = append(rows, helpRow{Command: "/<skill> 任务", Detail: "用指定 skill 处理后面的任务"})
-	rows = append(rows, helpRow{Command: "/provider", Detail: "查看/管理 LLM provider 链"})
-	rows = append(rows, helpRow{Command: "/spaces /nodes", Detail: "配置 IOA 时查看协作状态"})
+	rows = append(rows, helpRow{Command: "! <命令>", Detail: "直接执行 bash/伪命令（跳过 LLM）"})
 	return r.renderPanel("commands", renderHelpRows(rows, colorEnabled), colorEnabled)
 }
 
@@ -922,65 +1071,30 @@ func (r *AgentConsole) renderProviders() string {
 	return r.renderPanel("providers", renderHelpRows(rows, colorEnabled), colorEnabled)
 }
 
-func (r *AgentConsole) ioaCommands() []*cobra.Command {
-	return []*cobra.Command{
-		{
-			Use:   "/spaces",
-			Short: "List all IOA spaces",
-			Args:  cobra.NoArgs,
-			RunE: func(cmd *cobra.Command, _ []string) error {
-				client, err := r.ioaClient()
-				if err != nil {
-					return err
-				}
-				return RunIOASpaces(cmd.Context(), client, r.option)
-			},
-		},
-		{
-			Use:   "/messages <space>",
-			Short: "List start messages in a space",
-			Args:  cobra.ExactArgs(1),
-			RunE: func(cmd *cobra.Command, args []string) error {
-				client, err := r.ioaClient()
-				if err != nil {
-					return err
-				}
-				return RunIOAMessages(cmd.Context(), client, r.option, cfg.IOAClientArgs{Space: args[0]})
-			},
-		},
-		{
-			Use:   "/context <space> <message-id>",
-			Short: "View message thread/context",
-			Args:  cobra.ExactArgs(2),
-			RunE: func(cmd *cobra.Command, args []string) error {
-				client, err := r.ioaClient()
-				if err != nil {
-					return err
-				}
-				return RunIOAContext(cmd.Context(), client, r.option, cfg.IOAClientArgs{Space: args[0], MessageID: args[1]})
-			},
-		},
-		{
-			Use:   "/nodes [space]",
-			Short: "List nodes (optionally scoped to a space)",
-			Args:  cobra.MaximumNArgs(1),
-			RunE: func(cmd *cobra.Command, args []string) error {
-				client, err := r.ioaClient()
-				if err != nil {
-					return err
-				}
-				var a cfg.IOAClientArgs
-				if len(args) > 0 {
-					a.Space = args[0]
-				}
-				return RunIOANodes(cmd.Context(), client, r.option, a)
-			},
-		},
+// executeBashDirect runs a command line directly through the command registry,
+// bypassing the LLM agent. Pseudo-commands (gogo, cyberhub, etc.) and shell
+// commands are both supported, matching the "! command" REPL prefix.
+func (r *AgentConsole) executeBashDirect(ctx context.Context, cmdLine string) error {
+	reg := r.application.Commands
+	if reg == nil {
+		return fmt.Errorf("command registry not available")
 	}
+	result, err := reg.Execute(ctx, cmdLine)
+	if err != nil {
+		return err
+	}
+	if result != "" {
+		fmt.Fprint(os.Stdout, result)
+	}
+	return nil
 }
 
-var ioaConsoleCommands = map[string]bool{
-	"/spaces": true, "/messages": true, "/context": true, "/nodes": true,
+// splitArgs splits a single-element args slice (from DisableFlagParsing) into fields.
+func splitArgs(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	return strings.Fields(strings.Join(args, " "))
 }
 
 func AgentConsoleArgsForLine(line string) ([]string, error) {
@@ -991,17 +1105,19 @@ func AgentConsoleArgsForLine(line string) ([]string, error) {
 	if text == "/" {
 		return []string{"/help"}, nil
 	}
+	if strings.HasPrefix(text, "!") {
+		cmdLine := strings.TrimSpace(text[1:])
+		if cmdLine == "" {
+			return nil, nil
+		}
+		return []string{bashDirectCommandName, cmdLine}, nil
+	}
 	if !strings.HasPrefix(text, "/") || strings.HasPrefix(text, "/skill:") {
 		return []string{agentPromptCommandName, text}, nil
 	}
 	command, rest, ok := strings.Cut(text, " ")
 	if !ok {
 		return []string{text}, nil
-	}
-	if ioaConsoleCommands[command] {
-		result := []string{command}
-		result = append(result, strings.Fields(rest)...)
-		return result, nil
 	}
 	return []string{command, strings.TrimSpace(rest)}, nil
 }

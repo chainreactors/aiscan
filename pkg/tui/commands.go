@@ -13,13 +13,13 @@ import (
 
 // Session holds the dependencies commands need to operate on.
 type Session struct {
-	Ctx            context.Context
-	Option         *cfg.Option
-	App            *app.App
-	Agent          *agent.Agent
-	Controller     Controller
-	EvalCriteria   string
-	OnEvalChange   func(string)
+	Ctx          context.Context
+	Option       *cfg.Option
+	App          *app.App
+	Agent        *agent.Agent
+	Controller   Controller
+	EvalCriteria string
+	OnEvalChange func(string)
 }
 
 // Controller is the async execution interface that tui implements.
@@ -43,93 +43,10 @@ type Command struct {
 type ArgSpec int
 
 const (
-	ArgsNone    ArgSpec = iota
+	ArgsNone ArgSpec = iota
 	ArgsExact1
 	ArgsOptional
 )
-
-// BuiltinCommands returns the standard REPL commands.
-func BuiltinCommands() []Command {
-	return []Command{
-		{
-			Name: "/help", Description: "查看命令面板",
-			Args: ArgsNone,
-			Run:  func(_ context.Context, _ *Session, _ []string) error { return nil },
-		},
-		{
-			Name: "/status", Description: "查看模型、渲染模式、IOA 和 skills",
-			Args: ArgsNone,
-			Run:  func(_ context.Context, _ *Session, _ []string) error { return nil },
-		},
-		{
-			Name: "/reset", Description: "清空当前会话上下文",
-			Args: ArgsNone,
-			Run: func(_ context.Context, s *Session, _ []string) error {
-				if s.Controller != nil && s.Controller.Running() {
-					return fmt.Errorf("task is running — use /stop first")
-				}
-				s.Agent.Reset()
-				return nil
-			},
-		},
-		{
-			Name: "/continue", Description: "不追加输入，继续上一轮任务",
-			Args: ArgsNone,
-			Run: func(_ context.Context, s *Session, _ []string) error {
-				return s.Controller.Continue()
-			},
-		},
-		{
-			Name: "/stop", Description: "停止当前正在运行的任务",
-			Args: ArgsNone,
-			Run: func(_ context.Context, s *Session, _ []string) error {
-				if !s.Controller.Stop() {
-					return fmt.Errorf("no running task")
-				}
-				return nil
-			},
-		},
-		{
-			Name: "/followup", Description: "排队到当前任务结束后再发送",
-			Args: ArgsExact1,
-			Run: func(ctx context.Context, s *Session, args []string) error {
-				return RunPrompt(s, "follow-up", args[0])
-			},
-		},
-		{
-			Name: "/eval", Description: "设置/查看/关闭 goal evaluation (/eval off 关闭)",
-			Args: ArgsOptional,
-			Run: func(_ context.Context, s *Session, args []string) error {
-				text := strings.TrimSpace(strings.Join(args, " "))
-				switch text {
-				case "":
-					if s.EvalCriteria == "" {
-						fmt.Println("Goal evaluation: off")
-					} else {
-						fmt.Printf("Goal evaluation: on\n  criteria: %s\n", s.EvalCriteria)
-					}
-				case "off":
-					s.EvalCriteria = ""
-					if s.OnEvalChange != nil {
-						s.OnEvalChange("")
-					}
-					fmt.Println("Goal evaluation disabled.")
-				default:
-					s.EvalCriteria = text
-					if s.OnEvalChange != nil {
-						s.OnEvalChange(text)
-					}
-					fmt.Printf("Goal evaluation enabled: %s\n", text)
-				}
-				return nil
-			},
-		},
-		{
-			Name: "/exit", Aliases: []string{"/quit"}, Description: "退出交互模式",
-			Args: ArgsNone,
-		},
-	}
-}
 
 // SkillCommands generates commands for each non-internal skill.
 func SkillCommands(s *Session) []Command {
@@ -153,17 +70,6 @@ func SkillCommands(s *Session) []Command {
 		})
 	}
 	return cmds
-}
-
-// ProviderCommands returns the /provider command group.
-func ProviderCommands() []Command {
-	return []Command{
-		{
-			Name:        "/provider",
-			Description: "查看/管理 LLM provider 链",
-			Args:        ArgsOptional,
-		},
-	}
 }
 
 // RunPrompt expands skills and submits a prompt to the controller.
