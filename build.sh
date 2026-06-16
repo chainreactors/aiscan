@@ -269,7 +269,7 @@ echo "tags:     $TAGS"
 
 if [ "$EMBED_RESOURCES" = true ]; then
     echo "生成嵌入资源..."
-    go generate ./pkg/resources
+    go generate ./core/resources
 fi
 
 # ─── 目标平台 ────────────────────────────────────────────────────
