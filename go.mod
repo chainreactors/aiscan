@@ -26,7 +26,7 @@ require (
 	github.com/projectdiscovery/gologger v1.1.68
 	github.com/projectdiscovery/katana v1.6.1
 	github.com/projectdiscovery/uncover v1.2.1
-	github.com/projectdiscovery/utils v0.10.1
+	github.com/projectdiscovery/utils v0.11.1
 	github.com/reeflective/console v0.0.0-00010101000000-000000000000
 	github.com/reeflective/readline v1.1.3
 	github.com/spf13/cobra v1.10.2
@@ -189,14 +189,14 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/projectdiscovery/blackrock v0.0.1 // indirect
 	github.com/projectdiscovery/dsl v0.8.17 // indirect
-	github.com/projectdiscovery/fastdialer v0.5.6 // indirect
+	github.com/projectdiscovery/fastdialer v0.5.7 // indirect
 	github.com/projectdiscovery/gostruct v0.0.2 // indirect
 	github.com/projectdiscovery/hmap v0.0.100 // indirect
 	github.com/projectdiscovery/mapcidr v1.1.97 // indirect
-	github.com/projectdiscovery/networkpolicy v0.1.37 // indirect
+	github.com/projectdiscovery/networkpolicy v0.1.38 // indirect
 	github.com/projectdiscovery/ratelimit v0.0.86 // indirect
 	github.com/projectdiscovery/retryabledns v1.0.114 // indirect
-	github.com/projectdiscovery/retryablehttp-go v1.3.10 // indirect
+	github.com/projectdiscovery/retryablehttp-go v1.3.11 // indirect
 	github.com/projectdiscovery/wappalyzergo v0.2.79 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/refraction-networking/utls v1.8.2 // indirect
