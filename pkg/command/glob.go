@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/truncate"
+	"github.com/chainreactors/aiscan/pkg/agent/truncate"
 )
 
 const maxGlobResults = truncate.MaxGlobResults

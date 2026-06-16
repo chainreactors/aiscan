@@ -9,7 +9,7 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
-	"github.com/chainreactors/aiscan/pkg/truncate"
+	"github.com/chainreactors/aiscan/pkg/agent/truncate"
 )
 
 const (

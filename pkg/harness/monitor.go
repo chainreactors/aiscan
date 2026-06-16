@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chainreactors/aiscan/pkg/truncate"
+	"github.com/chainreactors/aiscan/pkg/agent/truncate"
 )
 
 // Monitor tails the agent events JSONL file in real-time, rendering a

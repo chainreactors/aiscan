@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/truncate"
+	"github.com/chainreactors/aiscan/pkg/agent/truncate"
 )
 
 var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)

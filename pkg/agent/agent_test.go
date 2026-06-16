@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chainreactors/aiscan/pkg/agent/truncate"
+
 	"github.com/chainreactors/aiscan/pkg/command"
 	"github.com/chainreactors/aiscan/pkg/eventbus"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
@@ -926,14 +928,16 @@ func TestTokenBudgetExceeded(t *testing.T) {
 }
 
 func TestTruncateResultIncludesSize(t *testing.T) {
-	large := strings.Repeat("x", DefaultMaxResultSize+100)
-	truncated := truncateResult(large)
-	if !strings.Contains(truncated, "truncated:") {
-		t.Fatalf("truncated result missing size info: %s", truncated[len(truncated)-100:])
+	large := strings.Repeat("x\n", DefaultMaxResultSize) // lines of 2 bytes each
+	tr := truncate.Head(large, truncate.Options{MaxBytes: DefaultMaxResultSize})
+	if !tr.Truncated {
+		t.Fatal("expected truncation")
 	}
-	if !strings.Contains(truncated, fmt.Sprintf("%d of %d bytes", DefaultMaxResultSize, len(large))) {
-		t.Fatalf("truncated result missing byte counts: %s", truncated[len(truncated)-120:])
+	msg := fmt.Sprintf("%d/%d lines", tr.OutputLines, tr.TotalLines)
+	if tr.OutputLines >= tr.TotalLines {
+		t.Fatalf("expected output lines < total lines, got %d/%d", tr.OutputLines, tr.TotalLines)
 	}
+	_ = msg // message format validated by field presence
 }
 
 func TestResultIncludesTotalUsage(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/chainreactors/aiscan/pkg/truncate"
+	"github.com/chainreactors/aiscan/pkg/agent/truncate"
 )
 
 type WriteTool struct {

@@ -1,6 +1,6 @@
 package agent
 
-import "github.com/chainreactors/aiscan/pkg/truncate"
+import "github.com/chainreactors/aiscan/pkg/agent/truncate"
 
 const (
 	DefaultMaxResultSize         = truncate.DefaultMaxBytes

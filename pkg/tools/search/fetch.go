@@ -12,7 +12,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/chainreactors/aiscan/pkg/truncate"
+	"github.com/chainreactors/aiscan/pkg/agent/truncate"
 )
 
 const (
