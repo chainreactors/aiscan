@@ -28,15 +28,31 @@ func RunWithGoalEval(ctx context.Context, a *agent.Agent, cfg GoalLoopConfig) (*
 		return result, nil, err
 	}
 
+	// runningSummary accumulates confirmed work across all rounds (pi-mono
+	// UPDATE pattern). The evaluator judges against this cumulative view, so a
+	// round where the agent only replies without tool calls cannot erase the
+	// progress earlier rounds already established.
+	var runningSummary string
+
 	for attempt := 0; attempt < cfg.MaxEvalRounds; attempt++ {
 		if result.Stop != agent.StopReasonTerminated && result.Stop != agent.StopReasonCompleted {
 			return result, nil, nil
 		}
 
+		// Fold this round into the cumulative summary before judging.
+		if summary, sErr := cfg.Evaluator.Summarize(
+			ctx, cfg.Goal, runningSummary,
+			result.NewMessages, result.Output, result.Turns,
+		); sErr != nil {
+			cfg.Evaluator.cfg.Logger.Warnf("goal eval summarize error (round %d): %s", attempt+1, sErr)
+		} else {
+			runningSummary = summary
+		}
+
 		emitEvalEvent(cfg.Bus, agent.EventGoalEvalStart, attempt, nil)
 
 		verdict, evalErr := cfg.Evaluator.Evaluate(
-			ctx, cfg.Goal, cfg.Criteria,
+			ctx, cfg.Goal, cfg.Criteria, runningSummary,
 			result.NewMessages, result.Output, result.Turns,
 		)
 
@@ -60,8 +76,9 @@ func RunWithGoalEval(ctx context.Context, a *agent.Agent, cfg GoalLoopConfig) (*
 
 		feedback := verdict.Feedback
 		if feedback == "" {
-			feedback = fmt.Sprintf("Goal not achieved: %s. Please continue.", verdict.Reason)
+			feedback = fmt.Sprintf("Goal not achieved: %s.", verdict.Reason)
 		}
+		feedback += "\n\nContinue the work now by actually CALLING TOOLS (scan/curl/etc.) against the remaining targets. Do not just describe a plan or reply with text — perform the concrete next steps. The goal is not yet met."
 		cfg.Evaluator.cfg.Logger.Importantf("goal eval: injecting feedback (round %d): %s", attempt+1, feedback)
 
 		result, err = a.Run(ctx, feedback)
