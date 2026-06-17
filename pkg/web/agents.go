@@ -6,40 +6,16 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
-// AgentCommand is a command sent from web to agent via SSE.
-type AgentCommand struct {
-	Type    string `json:"type"`
-	TaskID  string `json:"task_id,omitempty"`
-	Command string `json:"command,omitempty"`
-}
-
-// AgentRegisterRequest is sent by the agent to register itself.
-type AgentRegisterRequest struct {
-	Name     string   `json:"name"`
-	Commands []string `json:"commands,omitempty"`
-}
-
-// AgentRegisterResponse is returned after registration.
-type AgentRegisterResponse struct {
-	AgentID string `json:"agent_id"`
-}
-
-// AgentOutputMsg is sent by the agent to report streaming output.
-type AgentOutputMsg struct {
-	AgentID string `json:"agent_id"`
-	TaskID  string `json:"task_id"`
-	Data    string `json:"data"`
-}
-
-// AgentCompleteMsg is sent by the agent when a task finishes.
-type AgentCompleteMsg struct {
-	AgentID    string          `json:"agent_id"`
-	TaskID     string          `json:"task_id"`
-	Output     string          `json:"output,omitempty"`
-	Result     json.RawMessage `json:"result,omitempty"`
-	Error      string          `json:"error,omitempty"`
+// WSMessage is the single message type for all agent↔web communication.
+type WSMessage struct {
+	Type    string          `json:"type"`
+	TaskID  string          `json:"task_id,omitempty"`
+	Data    string          `json:"data,omitempty"`
+	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
 // AgentInfo is the public view of a connected agent.
@@ -61,12 +37,13 @@ type remoteAgent struct {
 	id        string
 	name      string
 	commands  []string
+	conn      *websocket.Conn
+	sendCh    chan WSMessage
 	connectAt time.Time
 
 	mu    sync.Mutex
-	busy  bool
-	cmdCh chan AgentCommand
 	tasks map[string]chan taskResult
+	done  chan struct{}
 }
 
 func (a *remoteAgent) info() AgentInfo {
@@ -76,12 +53,12 @@ func (a *remoteAgent) info() AgentInfo {
 		ID:        a.id,
 		Name:      a.name,
 		Commands:  a.commands,
-		Busy:      a.busy,
+		Busy:      len(a.tasks) > 0,
 		ConnectAt: a.connectAt,
 	}
 }
 
-// AgentPool manages connected remote aiscan agents via SSE+POST.
+// AgentPool manages connected remote aiscan agents via WebSocket.
 type AgentPool struct {
 	mu     sync.RWMutex
 	agents map[string]*remoteAgent
@@ -95,33 +72,24 @@ func NewAgentPool(hub *Hub) *AgentPool {
 	}
 }
 
-func (p *AgentPool) Register(name string, commands []string) string {
-	agent := &remoteAgent{
-		id:        generateID(),
-		name:      name,
-		commands:  commands,
-		connectAt: time.Now(),
-		cmdCh:     make(chan AgentCommand, 16),
-		tasks:     make(map[string]chan taskResult),
-	}
+func (p *AgentPool) register(a *remoteAgent) {
 	p.mu.Lock()
-	p.agents[agent.id] = agent
+	p.agents[a.id] = a
 	p.mu.Unlock()
-	return agent.id
 }
 
-func (p *AgentPool) Unregister(id string) {
+func (p *AgentPool) unregister(id string) {
 	p.mu.Lock()
-	agent, ok := p.agents[id]
+	a, ok := p.agents[id]
 	delete(p.agents, id)
 	p.mu.Unlock()
 	if ok {
-		agent.mu.Lock()
-		for _, ch := range agent.tasks {
+		a.mu.Lock()
+		for _, ch := range a.tasks {
 			close(ch)
 		}
-		agent.tasks = nil
-		agent.mu.Unlock()
+		a.tasks = nil
+		a.mu.Unlock()
 	}
 }
 
@@ -134,11 +102,11 @@ func (p *AgentPool) get(id string) *remoteAgent {
 func (p *AgentPool) List() []AgentInfo {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	infos := make([]AgentInfo, 0, len(p.agents))
+	out := make([]AgentInfo, 0, len(p.agents))
 	for _, a := range p.agents {
-		infos = append(infos, a.info())
+		out = append(out, a.info())
 	}
-	return infos
+	return out
 }
 
 func (p *AgentPool) Count() int {
@@ -154,7 +122,7 @@ func (p *AgentPool) Pick() *remoteAgent {
 	var fallback *remoteAgent
 	for _, a := range p.agents {
 		a.mu.Lock()
-		busy := a.busy
+		busy := len(a.tasks) > 0
 		a.mu.Unlock()
 		if !busy {
 			return a
@@ -166,117 +134,166 @@ func (p *AgentPool) Pick() *remoteAgent {
 	return fallback
 }
 
-// DispatchCommand sends a command to an agent and returns a channel that
-// receives the result when the task completes.
+// DispatchCommand sends a command to an agent and returns a channel for the result.
 func (p *AgentPool) DispatchCommand(agentID, taskID, command string) (<-chan taskResult, error) {
-	agent := p.get(agentID)
-	if agent == nil {
+	a := p.get(agentID)
+	if a == nil {
 		return nil, fmt.Errorf("agent %s not connected", agentID)
 	}
-
 	ch := make(chan taskResult, 1)
-	agent.mu.Lock()
-	agent.tasks[taskID] = ch
-	agent.busy = true
-	agent.mu.Unlock()
+	a.mu.Lock()
+	a.tasks[taskID] = ch
+	a.mu.Unlock()
 
 	select {
-	case agent.cmdCh <- AgentCommand{Type: "exec", TaskID: taskID, Command: command}:
+	case a.sendCh <- WSMessage{Type: "exec", TaskID: taskID, Data: command}:
 	default:
-		agent.mu.Lock()
-		delete(agent.tasks, taskID)
-		agent.busy = len(agent.tasks) > 0
-		agent.mu.Unlock()
+		a.mu.Lock()
+		delete(a.tasks, taskID)
+		a.mu.Unlock()
 		close(ch)
-		return nil, fmt.Errorf("agent %s command channel full", agentID)
+		return nil, fmt.Errorf("agent %s send channel full", agentID)
 	}
 	return ch, nil
 }
 
 func (p *AgentPool) CancelTask(agentID, taskID string) {
-	agent := p.get(agentID)
-	if agent == nil {
+	a := p.get(agentID)
+	if a == nil {
 		return
 	}
 	select {
-	case agent.cmdCh <- AgentCommand{Type: "cancel", TaskID: taskID}:
+	case a.sendCh <- WSMessage{Type: "cancel", TaskID: taskID}:
 	default:
 	}
 }
 
-// HandleOutput processes streaming output from an agent and forwards it to
-// the SSE hub for the frontend.
-func (p *AgentPool) HandleOutput(agentID, taskID, data string) {
-	if p.hub != nil {
-		p.hub.Broadcast(taskID, ScanEvent{
-			Type:   "progress",
-			ScanID: taskID,
-			Data:   data,
-		})
-	}
+// --- WebSocket handler ---
+
+var wsUpgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-// HandleComplete processes a task completion from an agent.
-func (p *AgentPool) HandleComplete(agentID, taskID, output string, result json.RawMessage, errMsg string) {
-	agent := p.get(agentID)
-	if agent == nil {
-		return
-	}
-	agent.mu.Lock()
-	ch, ok := agent.tasks[taskID]
-	if ok {
-		delete(agent.tasks, taskID)
-	}
-	agent.busy = len(agent.tasks) > 0
-	agent.mu.Unlock()
-
-	if ok && ch != nil {
-		ch <- taskResult{Output: output, Result: result, Err: errMsg}
-		close(ch)
-	}
-}
-
-// ServeAgentSSE handles the SSE stream from web to agent. The agent opens
-// GET /api/agent/stream?agent_id=xxx and receives commands as SSE events.
-func (p *AgentPool) ServeAgentSSE(w http.ResponseWriter, r *http.Request) {
-	agentID := r.URL.Query().Get("agent_id")
-	agent := p.get(agentID)
-	if agent == nil {
-		writeError(w, http.StatusNotFound, "agent not found")
+// HandleWS upgrades to WebSocket and manages the agent lifecycle.
+// This single endpoint replaces register + stream + output + complete.
+func (p *AgentPool) HandleWS(w http.ResponseWriter, r *http.Request) {
+	conn, err := wsUpgrader.Upgrade(w, r, nil)
+	if err != nil {
 		return
 	}
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+	// First message must be register.
+	var reg WSMessage
+	if err := conn.ReadJSON(&reg); err != nil || reg.Type != "register" {
+		conn.Close()
 		return
 	}
+	var info struct {
+		Name     string   `json:"name"`
+		Commands []string `json:"commands"`
+	}
+	if reg.Payload != nil {
+		_ = json.Unmarshal(reg.Payload, &info)
+	}
+	if info.Name == "" {
+		info.Name = "agent"
+	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	flusher.Flush()
+	agent := &remoteAgent{
+		id:        generateID(),
+		name:      info.Name,
+		commands:  info.Commands,
+		conn:      conn,
+		sendCh:    make(chan WSMessage, 32),
+		connectAt: time.Now(),
+		tasks:     make(map[string]chan taskResult),
+		done:      make(chan struct{}),
+	}
+	p.register(agent)
+	defer func() {
+		p.unregister(agent.id)
+		conn.Close()
+		close(agent.done)
+	}()
 
-	ticker := time.NewTicker(15 * time.Second)
-	defer ticker.Stop()
+	// Send connected ack.
+	ack, _ := json.Marshal(map[string]string{"agent_id": agent.id, "name": agent.name})
+	_ = conn.WriteJSON(WSMessage{Type: "connected", Payload: ack})
 
-	for {
-		select {
-		case <-r.Context().Done():
-			p.Unregister(agentID)
-			return
-		case <-ticker.C:
-			fmt.Fprint(w, ": keepalive\n\n")
-			flusher.Flush()
-		case cmd := <-agent.cmdCh:
-			data, err := json.Marshal(cmd)
-			if err != nil {
-				continue
+	// Write goroutine: sendCh → WebSocket.
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case msg, ok := <-agent.sendCh:
+				if !ok {
+					return
+				}
+				if err := conn.WriteJSON(msg); err != nil {
+					return
+				}
+			case <-ticker.C:
+				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					return
+				}
+			case <-agent.done:
+				return
 			}
-			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", cmd.Type, data)
-			flusher.Flush()
+		}
+	}()
+
+	// Read loop: WebSocket → dispatch.
+	for {
+		var msg WSMessage
+		if err := conn.ReadJSON(&msg); err != nil {
+			return
+		}
+		p.handleAgentMessage(agent, msg)
+	}
+}
+
+func (p *AgentPool) handleAgentMessage(a *remoteAgent, msg WSMessage) {
+	switch msg.Type {
+	case "output":
+		if p.hub != nil && msg.TaskID != "" {
+			raw, _ := json.Marshal(msg)
+			p.hub.Broadcast(msg.TaskID, HubEvent{Type: "output", Data: raw})
+		}
+
+	case "complete":
+		a.mu.Lock()
+		ch, ok := a.tasks[msg.TaskID]
+		if ok {
+			delete(a.tasks, msg.TaskID)
+		}
+		a.mu.Unlock()
+		if ok && ch != nil {
+			res := taskResult{Output: msg.Data, Result: msg.Payload}
+			ch <- res
+			close(ch)
+		}
+
+	case "error":
+		a.mu.Lock()
+		ch, ok := a.tasks[msg.TaskID]
+		if ok {
+			delete(a.tasks, msg.TaskID)
+		}
+		a.mu.Unlock()
+		if ok && ch != nil {
+			ch <- taskResult{Err: msg.Data}
+			close(ch)
+		}
+
+	default:
+		// Agent events (agent.*, log.*, scanner.*) — forward raw payload to hub.
+		if p.hub != nil && msg.TaskID != "" {
+			data := msg.Payload
+			if data == nil {
+				data, _ = json.Marshal(msg)
+			}
+			p.hub.Broadcast(msg.TaskID, HubEvent{Type: msg.Type, Data: data})
 		}
 	}
 }

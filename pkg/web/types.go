@@ -72,11 +72,3 @@ type LLMConfig struct {
 	Proxy            string `json:"proxy"`
 }
 
-type ScanEvent struct {
-	Type   string         `json:"type"`
-	ScanID string         `json:"scan_id"`
-	Data   string         `json:"data,omitempty"`
-	Status string         `json:"status,omitempty"`
-	Error  string         `json:"error,omitempty"`
-	Result *output.Result `json:"result,omitempty"`
-}

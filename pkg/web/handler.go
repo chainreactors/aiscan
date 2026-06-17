@@ -59,8 +59,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if segments[0] == "api" && len(segments) >= 2 && segments[1] == "agent" {
-		h.serveAgent(w, r, segments[2:])
+	if segments[0] == "api" && len(segments) == 3 && segments[1] == "agent" && segments[2] == "ws" {
+		if h.agents != nil {
+			h.agents.HandleWS(w, r)
+		} else {
+			writeError(w, http.StatusServiceUnavailable, "agent pool not configured")
+		}
 		return
 	}
 
@@ -140,66 +144,6 @@ func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.agents.List())
 }
 
-func (h *Handler) serveAgent(w http.ResponseWriter, r *http.Request, segments []string) {
-	if h.agents == nil {
-		writeError(w, http.StatusServiceUnavailable, "agent pool not configured")
-		return
-	}
-	if len(segments) == 0 {
-		writeError(w, http.StatusNotFound, "not found")
-		return
-	}
-	switch segments[0] {
-	case "register":
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		var req AgentRegisterRequest
-		if err := decodeJSON(r.Body, &req); err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		id := h.agents.Register(req.Name, req.Commands)
-		writeJSON(w, http.StatusOK, AgentRegisterResponse{AgentID: id})
-
-	case "stream":
-		if r.Method != http.MethodGet {
-			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		h.agents.ServeAgentSSE(w, r)
-
-	case "output":
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		var msg AgentOutputMsg
-		if err := decodeJSON(r.Body, &msg); err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		h.agents.HandleOutput(msg.AgentID, msg.TaskID, msg.Data)
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-
-	case "complete":
-		if r.Method != http.MethodPost {
-			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		var msg AgentCompleteMsg
-		if err := decodeJSON(r.Body, &msg); err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		h.agents.HandleComplete(msg.AgentID, msg.TaskID, msg.Output, msg.Result, msg.Error)
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-
-	default:
-		writeError(w, http.StatusNotFound, "not found")
-	}
-}
 
 func (h *Handler) serveConfig(w http.ResponseWriter, r *http.Request, segments []string) {
 	if len(segments) != 1 || segments[0] != "llm" {

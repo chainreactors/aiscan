@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -24,10 +25,11 @@ type LogConfig struct {
 }
 
 type logsLogger struct {
-	base *logs.Logger
+	base   *logs.Logger
+	bridge *Bridge
 }
 
-func NewLogger(cfg LogConfig) Logger {
+func NewLogger(cfg LogConfig, bridge ...*Bridge) Logger {
 	level := logs.WarnLevel
 	if cfg.Debug {
 		level = logs.DebugLevel
@@ -48,7 +50,11 @@ func NewLogger(cfg LogConfig) Logger {
 		logs.ImportantLevel: "[info] %s\n",
 	})
 	base.SetColor(cfg.Color)
-	return logsLogger{base: base}
+	l := logsLogger{base: base}
+	if len(bridge) > 0 && bridge[0] != nil {
+		l.bridge = bridge[0]
+	}
+	return l
 }
 
 func GlobalLogger(cfg LogConfig) Logger {
@@ -149,20 +155,32 @@ func (errorOnlyLogger) Importantf(string, ...any) {}
 
 func (l logsLogger) Debugf(format string, args ...any) {
 	l.base.Debugf(format, args...)
+	l.emit("debug", format, args...)
 }
 
 func (l logsLogger) Infof(format string, args ...any) {
 	l.base.Infof(format, args...)
+	l.emit("info", format, args...)
 }
 
 func (l logsLogger) Warnf(format string, args ...any) {
 	l.base.Warnf(format, args...)
+	l.emit("warn", format, args...)
 }
 
 func (l logsLogger) Errorf(format string, args ...any) {
 	l.base.Errorf(format, args...)
+	l.emit("error", format, args...)
 }
 
 func (l logsLogger) Importantf(format string, args ...any) {
 	l.base.Importantf(format, args...)
+	l.emit("info", format, args...)
+}
+
+func (l logsLogger) emit(level, format string, args ...any) {
+	if l.bridge == nil {
+		return
+	}
+	l.bridge.Send(Envelope{Source: "log", Type: level, Data: fmt.Sprintf(format, args...)})
 }

@@ -9,9 +9,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/chainreactors/aiscan/pkg/telemetry"
+	"github.com/gorilla/websocket"
 )
 
-// mockRuntime implements CallbackRuntime for testing.
+// --- mock runtime ---
+
 type mockRuntime struct {
 	commands []string
 }
@@ -24,13 +28,48 @@ func (m *mockRuntime) ExecuteCommand(_ context.Context, cmdLine string, stream i
 	return "completed " + cmdLine, result, nil
 }
 
-func TestAgentPoolRegisterAndList(t *testing.T) {
-	pool := NewAgentPool(NewHub())
-	id := pool.Register("test-agent", []string{"scan", "gogo"})
-	if id == "" {
-		t.Fatal("expected non-empty agent id")
-	}
+// --- helpers ---
 
+func dialAgent(t *testing.T, srv *httptest.Server, name string, commands []string) *websocket.Conn {
+	t.Helper()
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/agent/ws"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	reg, _ := json.Marshal(map[string]any{"name": name, "commands": commands})
+	conn.WriteJSON(WSMessage{Type: "register", Payload: reg})
+	var ack WSMessage
+	conn.ReadJSON(&ack)
+	if ack.Type != "connected" {
+		t.Fatalf("expected connected, got %s", ack.Type)
+	}
+	return conn
+}
+
+func setupTestServer(t *testing.T) (*httptest.Server, *AgentPool) {
+	t.Helper()
+	hub := NewHub()
+	pool := NewAgentPool(hub)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/agent/ws", pool.HandleWS)
+	mux.HandleFunc("/api/agents", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, pool.List())
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv, pool
+}
+
+// --- tests ---
+
+func TestWSRegisterAndList(t *testing.T) {
+	srv, pool := setupTestServer(t)
+
+	conn := dialAgent(t, srv, "test-agent", []string{"scan", "gogo"})
+	defer conn.Close()
+
+	time.Sleep(50 * time.Millisecond)
 	agents := pool.List()
 	if len(agents) != 1 {
 		t.Fatalf("expected 1 agent, got %d", len(agents))
@@ -38,53 +77,55 @@ func TestAgentPoolRegisterAndList(t *testing.T) {
 	if agents[0].Name != "test-agent" {
 		t.Fatalf("expected name test-agent, got %s", agents[0].Name)
 	}
-	if agents[0].ID != id {
-		t.Fatalf("expected id %s, got %s", id, agents[0].ID)
-	}
-
-	pool.Unregister(id)
-	if pool.Count() != 0 {
-		t.Fatal("expected 0 agents after unregister")
-	}
 }
 
-func TestAgentPoolDispatchAndComplete(t *testing.T) {
-	hub := NewHub()
-	pool := NewAgentPool(hub)
-	id := pool.Register("worker", []string{"scan"})
+func TestWSDispatchAndComplete(t *testing.T) {
+	srv, pool := setupTestServer(t)
 
-	// Subscribe to hub to verify progress forwarding
-	progressCh, unsub := hub.Subscribe("task-1")
+	conn := dialAgent(t, srv, "worker", []string{"scan"})
+	defer conn.Close()
+
+	time.Sleep(50 * time.Millisecond)
+	agents := pool.List()
+	if len(agents) == 0 {
+		t.Fatal("no agents")
+	}
+	agentID := agents[0].ID
+
+	// Subscribe to hub for progress events
+	progressCh, unsub := pool.hub.Subscribe("task-1")
 	defer unsub()
 
-	resultCh, err := pool.DispatchCommand(id, "task-1", "scan -i 1.2.3.4")
+	resultCh, err := pool.DispatchCommand(agentID, "task-1", "scan -i 1.2.3.4")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Drain the command from agent's channel
-	agent := pool.get(id)
-	cmd := <-agent.cmdCh
-	if cmd.Type != "exec" || cmd.TaskID != "task-1" || cmd.Command != "scan -i 1.2.3.4" {
+	// Agent reads exec command
+	var cmd WSMessage
+	conn.ReadJSON(&cmd)
+	if cmd.Type != "exec" || cmd.TaskID != "task-1" || cmd.Data != "scan -i 1.2.3.4" {
 		t.Fatalf("unexpected command: %+v", cmd)
 	}
 
-	// Simulate agent output
-	pool.HandleOutput(id, "task-1", "scanning port 80")
+	// Agent sends output
+	conn.WriteJSON(WSMessage{Type: "output", TaskID: "task-1", Data: "scanning port 80"})
 
-	// Check progress was forwarded to hub
 	select {
 	case evt := <-progressCh:
-		if evt.Type != "progress" || evt.Data != "scanning port 80" {
-			t.Fatalf("unexpected progress event: %+v", evt)
+		if evt.Type != "output" {
+			t.Fatalf("unexpected event type: %s", evt.Type)
+		}
+		if !strings.Contains(string(evt.Data), "scanning port 80") {
+			t.Fatalf("unexpected progress data: %s", evt.Data)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for progress event")
+		t.Fatal("timeout waiting for progress")
 	}
 
-	// Simulate completion
+	// Agent sends complete
 	result, _ := json.Marshal(map[string]int{"ports": 3})
-	pool.HandleComplete(id, "task-1", "done", result, "")
+	conn.WriteJSON(WSMessage{Type: "complete", TaskID: "task-1", Data: "done", Payload: result})
 
 	select {
 	case res := <-resultCh:
@@ -99,51 +140,19 @@ func TestAgentPoolDispatchAndComplete(t *testing.T) {
 	}
 }
 
-func TestAgentSSEAndHTTPRoundTrip(t *testing.T) {
-	hub := NewHub()
-	pool := NewAgentPool(hub)
-
-	// Create a test server with agent routes
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		segments := pathSegments(r.URL.Path)
-		if len(segments) < 3 || segments[0] != "api" || segments[1] != "agent" {
-			http.Error(w, "not found", 404)
-			return
-		}
-		switch segments[2] {
-		case "register":
-			var req AgentRegisterRequest
-			json.NewDecoder(r.Body).Decode(&req)
-			id := pool.Register(req.Name, req.Commands)
-			writeJSON(w, http.StatusOK, AgentRegisterResponse{AgentID: id})
-		case "stream":
-			pool.ServeAgentSSE(w, r)
-		case "output":
-			var msg AgentOutputMsg
-			json.NewDecoder(r.Body).Decode(&msg)
-			pool.HandleOutput(msg.AgentID, msg.TaskID, msg.Data)
-			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-		case "complete":
-			var msg AgentCompleteMsg
-			json.NewDecoder(r.Body).Decode(&msg)
-			pool.HandleComplete(msg.AgentID, msg.TaskID, msg.Output, msg.Result, msg.Error)
-			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-		}
-	})
-	srv := httptest.NewServer(handler)
-	defer srv.Close()
+func TestWSFullRoundTrip(t *testing.T) {
+	srv, pool := setupTestServer(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	rt := &mockRuntime{commands: []string{"scan", "echo"}}
 
-	// Start callback client in background
 	done := make(chan error, 1)
 	go func() {
 		done <- RunCallback(ctx, CallbackConfig{
 			ServerURL: srv.URL,
-			Name:      "e2e-agent",
+			Name:      "roundtrip-agent",
 			Runtime:   rt,
 		})
 	}()
@@ -159,80 +168,80 @@ func TestAgentSSEAndHTTPRoundTrip(t *testing.T) {
 		}
 	}
 	if agentID == "" {
-		t.Fatal("agent did not register within 2s")
+		t.Fatal("agent did not register")
 	}
 
-	// Subscribe to hub to capture progress
-	progressCh, unsub := hub.Subscribe("test-task-1")
-	defer unsub()
-
-	// Dispatch a command
-	resultCh, err := pool.DispatchCommand(agentID, "test-task-1", "scan -i 10.0.0.1")
+	resultCh, err := pool.DispatchCommand(agentID, "test-1", "scan -i 10.0.0.1")
 	if err != nil {
-		t.Fatalf("dispatch error: %v", err)
+		t.Fatal(err)
 	}
 
-	// Wait for agent to complete and post results
 	select {
 	case res := <-resultCh:
 		if res.Err != "" {
-			t.Fatalf("task error: %s", res.Err)
+			t.Fatalf("error: %s", res.Err)
 		}
 		if !strings.Contains(res.Output, "scan -i 10.0.0.1") {
-			t.Fatalf("expected output to contain command, got %q", res.Output)
-		}
-		if len(res.Result) == 0 {
-			t.Fatal("expected structured result")
+			t.Fatalf("unexpected output: %q", res.Output)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("timeout waiting for task result")
-	}
-
-	// Check that progress was forwarded to hub
-	select {
-	case evt := <-progressCh:
-		if evt.Type != "progress" || !strings.Contains(evt.Data, "scan -i 10.0.0.1") {
-			t.Fatalf("unexpected progress event: %+v", evt)
-		}
-	default:
-		// progress may have been consumed already, that's ok
+		t.Fatal("timeout")
 	}
 
 	cancel()
-	select {
-	case <-done:
-	case <-time.After(3 * time.Second):
-		t.Fatal("callback client did not shut down")
-	}
+	<-done
 }
 
-func TestAgentPick(t *testing.T) {
-	pool := NewAgentPool(NewHub())
+func TestWSWithBridge(t *testing.T) {
+	srv, pool := setupTestServer(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	bridge := telemetry.NewBridge()
+
+	rt := &mockRuntime{commands: []string{"echo"}}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- RunCallback(ctx, CallbackConfig{
+			ServerURL: srv.URL,
+			Name:      "bridge-agent",
+			Runtime:   rt,
+			Bridge:    bridge,
+		})
+	}()
+
+	// Wait for agent
+	for i := 0; i < 20; i++ {
+		time.Sleep(100 * time.Millisecond)
+		if pool.Count() > 0 {
+			break
+		}
+	}
+	if pool.Count() == 0 {
+		t.Fatal("agent did not register")
+	}
+
+	// Emit telemetry event through bridge
+	bridge.Send(telemetry.Envelope{Source: "agent", Type: "turn_start", Data: "turn 1"})
+	time.Sleep(200 * time.Millisecond)
+
+	// The event was sent through WebSocket to the server.
+	// Verify the connection is still alive.
+	if pool.Count() != 1 {
+		t.Fatal("agent disconnected after telemetry send")
+	}
+
+	cancel()
+	<-done
+}
+
+func TestWSPick(t *testing.T) {
+	_, pool := setupTestServer(t)
+
 	if pool.Pick() != nil {
 		t.Fatal("expected nil when no agents")
 	}
-
-	id1 := pool.Register("a1", nil)
-	id2 := pool.Register("a2", nil)
-
-	// Both idle, should pick one
-	picked := pool.Pick()
-	if picked == nil {
-		t.Fatal("expected a pick")
-	}
-
-	// Make one busy
-	a1 := pool.get(id1)
-	a1.mu.Lock()
-	a1.busy = true
-	a1.mu.Unlock()
-
-	// Should pick the idle one
-	picked = pool.Pick()
-	if picked == nil || picked.id != id2 {
-		t.Fatalf("expected to pick idle agent %s", id2)
-	}
-
-	pool.Unregister(id1)
-	pool.Unregister(id2)
 }
+

@@ -243,10 +243,9 @@ func (s *Service) runScan(jobID string) {
 	job.UpdatedAt = time.Now()
 	_ = s.store.Update(ctx, job)
 
-	s.hub.Broadcast(jobID, ScanEvent{
-		Type:   "status",
-		ScanID: jobID,
-		Status: string(StatusRunning),
+	s.hub.Broadcast(jobID, HubEvent{
+		Type: "status",
+		Data: mustJSON(map[string]string{"scan_id": jobID, "status": string(StatusRunning)}),
 	})
 
 	// Try agent dispatch first, fall back to local execution.
@@ -296,11 +295,9 @@ func (s *Service) runScanViaAgent(ctx context.Context, job *ScanJob) {
 	job.UpdatedAt = time.Now()
 	_ = s.store.Update(ctx, job)
 
-	s.hub.Broadcast(job.ID, ScanEvent{
-		Type:   "complete",
-		ScanID: job.ID,
-		Status: string(StatusCompleted),
-		Result: result,
+	s.hub.Broadcast(job.ID, HubEvent{
+		Type: "complete",
+		Data: mustJSON(map[string]any{"scan_id": job.ID, "status": "completed", "result": result}),
 	})
 }
 
@@ -327,11 +324,9 @@ func (s *Service) runScanLocally(ctx context.Context, job *ScanJob) {
 	job.UpdatedAt = time.Now()
 	_ = s.store.Update(ctx, job)
 
-	s.hub.Broadcast(job.ID, ScanEvent{
-		Type:   "complete",
-		ScanID: job.ID,
-		Status: string(StatusCompleted),
-		Result: result,
+	s.hub.Broadcast(job.ID, HubEvent{
+		Type: "complete",
+		Data: mustJSON(map[string]any{"scan_id": job.ID, "status": "completed", "result": result}),
 	})
 }
 
@@ -340,10 +335,9 @@ func (s *Service) failJob(job *ScanJob, errMsg string) {
 	job.Error = errMsg
 	job.UpdatedAt = time.Now()
 	_ = s.store.Update(context.Background(), job)
-	s.hub.Broadcast(job.ID, ScanEvent{
-		Type:   "error",
-		ScanID: job.ID,
-		Error:  errMsg,
+	s.hub.Broadcast(job.ID, HubEvent{
+		Type: "error",
+		Data: mustJSON(map[string]string{"scan_id": job.ID, "error": errMsg}),
 	})
 }
 
@@ -455,10 +449,9 @@ func (w *sseStreamWriter) Write(p []byte) (int, error) {
 		}
 		w.job = current
 
-		w.hub.Broadcast(w.scanID, ScanEvent{
-			Type:   "progress",
-			ScanID: w.scanID,
-			Data:   line,
+		w.hub.Broadcast(w.scanID, HubEvent{
+			Type: "output",
+			Data: mustJSON(map[string]string{"scan_id": w.scanID, "data": line}),
 		})
 	}
 	return len(p), nil
