@@ -13,9 +13,9 @@ import (
 	"github.com/chainreactors/aiscan/pkg/agent/evaluator"
 	inboxpkg "github.com/chainreactors/aiscan/pkg/agent/inbox"
 	tmuxpkg "github.com/chainreactors/aiscan/pkg/agent/tmux"
-	
-	cmdpkg "github.com/chainreactors/aiscan/pkg/commands"
+
 	"github.com/chainreactors/aiscan/core/eventbus"
+	cmdpkg "github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
 	"github.com/chainreactors/aiscan/pkg/tui"
@@ -70,9 +70,11 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		}
 
 		if rc == nil || rc.IOA == nil {
-			if err := registerIOATools(ctx, application, option); err != nil {
-				application.Close()
-				return nil, fmt.Errorf("init ioa tools: %w", err)
+			ioaCtx, cancelIOA := context.WithTimeout(ctx, 5*time.Second)
+			err := registerIOATools(ioaCtx, application, option)
+			cancelIOA()
+			if err != nil {
+				logger.Warnf("ioa tools unavailable: %s; continuing without IOA coordination", err)
 			}
 		}
 	}
@@ -211,7 +213,6 @@ func (rt *AgentRuntime) Close() {
 	}
 }
 
-
 // ---------------------------------------------------------------------------
 // Mode dispatch
 // ---------------------------------------------------------------------------
@@ -279,6 +280,9 @@ func runOneShotMode(ctx context.Context, option *cfg.Option, logger telemetry.Lo
 // ---------------------------------------------------------------------------
 
 func runInteractiveMode(ctx context.Context, option *cfg.Option, logger telemetry.Logger, setInterrupt func(func() bool)) error {
+	if !cfg.StdinIsTerminal() {
+		return fmt.Errorf("no task provided and stdin is not a terminal: pass -p/--prompt, --task-file, -i/--input, or pipe a task via stdin (interactive REPL needs a TTY)")
+	}
 	rt, err := NewAgentRuntime(ctx, option, logger, nil)
 	if err != nil {
 		return err
