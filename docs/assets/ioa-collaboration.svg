@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="600" viewBox="0 0 1120 600" role="img" aria-labelledby="title desc">
+  <title id="title">IOA collaboration model</title>
+  <desc id="desc">A coordinator, recon workers, verifier workers, and report writer collaborate through an IOA space.</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="7" flood-color="#111827" flood-opacity="0.16"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+    </marker>
+  </defs>
+  <rect width="1120" height="600" fill="#f8fafc"/>
+  <text x="48" y="58" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="30" font-weight="700" fill="#0f172a">IOA：让协作有上下文</text>
+  <text x="48" y="92" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="16" fill="#475569">space 里流动的是任务、线索、证据和去重决策；扫描产物仍要落盘保存。</text>
+
+  <rect x="420" y="178" width="280" height="180" rx="12" fill="#0f172a" filter="url(#shadow)"/>
+  <text x="468" y="222" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="25" font-weight="700" fill="#ffffff">IOA Space</text>
+  <text x="468" y="256" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="16" fill="#cbd5e1">redhaze-review</text>
+  <text x="468" y="286" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#cbd5e1">messages / refs / nodes</text>
+  <text x="468" y="316" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#cbd5e1">focus list / claims / evidence</text>
+
+  <rect x="70" y="150" width="220" height="92" rx="8" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="96" y="184" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#1e3a8a">recon worker</text>
+  <text x="96" y="212" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#334155">quick 建图 / 指纹 / sitemap</text>
+  <line x1="290" y1="196" x2="420" y2="240" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="70" y="340" width="220" height="92" rx="8" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="96" y="374" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#1e3a8a">recon worker</text>
+  <text x="96" y="402" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#334155">分片扫描 / 异常状态码</text>
+  <line x1="290" y1="386" x2="420" y2="300" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="830" y="150" width="220" height="92" rx="8" fill="#dcfce7" stroke="#86efac"/>
+  <text x="856" y="184" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#166534">verify worker</text>
+  <text x="856" y="212" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#334155">低影响验证 / 误报排除</text>
+  <line x1="830" y1="196" x2="700" y2="240" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="830" y="340" width="220" height="92" rx="8" fill="#fef3c7" stroke="#fbbf24"/>
+  <text x="856" y="374" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#92400e">coordinator</text>
+  <text x="856" y="402" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#334155">派单 / 去重 / 攻击链</text>
+  <line x1="830" y1="386" x2="700" y2="300" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="420" y="460" width="280" height="76" rx="8" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="452" y="492" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">reports/</text>
+  <text x="452" y="518" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#475569">events.txt / assets.txt / markdown report</text>
+  <line x1="560" y1="358" x2="560" y2="460" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+</svg>

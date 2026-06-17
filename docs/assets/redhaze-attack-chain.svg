@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="640" viewBox="0 0 1120 640" role="img" aria-labelledby="title desc">
+  <title id="title">RedHaze attack chains</title>
+  <desc id="desc">Three high-level RedHaze chains: data boundary, URL fetch, and authorization boundary.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="1120" height="640" fill="#f8fafc"/>
+  <text x="48" y="58" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="30" font-weight="700" fill="#0f172a">高危不是单点，是链路</text>
+  <text x="48" y="92" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="16" fill="#475569">同一类根因要合并，同一条影响链要讲清楚。</text>
+
+  <rect x="60" y="140" width="220" height="82" rx="8" fill="#e0f2fe" stroke="#7dd3fc"/>
+  <text x="86" y="174" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="19" font-weight="700" fill="#075985">搜索接口异常</text>
+  <text x="86" y="200" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="14" fill="#334155">真假分支响应差异</text>
+  <line x1="280" y1="181" x2="360" y2="181" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="360" y="140" width="220" height="82" rx="8" fill="#e0f2fe" stroke="#7dd3fc"/>
+  <text x="386" y="174" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="19" font-weight="700" fill="#075985">数据边界突破</text>
+  <text x="386" y="200" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="14" fill="#334155">schema / 表级影响</text>
+  <line x1="580" y1="181" x2="660" y2="181" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="660" y="140" width="220" height="82" rx="8" fill="#e0f2fe" stroke="#7dd3fc"/>
+  <text x="686" y="174" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="19" font-weight="700" fill="#075985">凭据与会话风险</text>
+  <text x="686" y="200" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="14" fill="#334155">明文存储放大影响</text>
+  <line x1="880" y1="181" x2="960" y2="181" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="960" y="140" width="110" height="82" rx="8" fill="#fee2e2" stroke="#fca5a5"/>
+  <text x="982" y="174" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="18" font-weight="700" fill="#991b1b">接管链</text>
+  <text x="982" y="200" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="14" fill="#334155">Critical</text>
+
+  <rect x="60" y="290" width="220" height="82" rx="8" fill="#dcfce7" stroke="#86efac"/>
+  <text x="86" y="324" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="19" font-weight="700" fill="#166534">URL 拉取功能</text>
+  <text x="86" y="350" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="14" fill="#334155">webhook / preview / attachment</text>
+  <line x1="280" y1="331" x2="360" y2="331" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="360" y="290" width="220" height="82" rx="8" fill="#dcfce7" stroke="#86efac"/>
+  <text x="386" y="324" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="19" font-weight="700" fill="#166534">协议与地址未限制</text>
+  <text x="386" y="350" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="14" fill="#334155">内网 / 本地资源风险</text>
+  <line x1="580" y1="331" x2="660" y2="331" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="660" y="290" width="220" height="82" rx="8" fill="#dcfce7" stroke="#86efac"/>
+  <text x="686" y="324" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="19" font-weight="700" fill="#166534">响应回显</text>
+  <text x="686" y="350" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="14" fill="#334155">从探测变成泄露</text>
+  <line x1="880" y1="331" x2="960" y2="331" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="960" y="290" width="110" height="82" rx="8" fill="#fee2e2" stroke="#fca5a5"/>
+  <text x="982" y="324" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="18" font-weight="700" fill="#991b1b">SSRF</text>
+  <text x="982" y="350" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="14" fill="#334155">Critical</text>
+
+  <rect x="60" y="440" width="220" height="82" rx="8" fill="#fef3c7" stroke="#fbbf24"/>
+  <text x="86" y="474" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="19" font-weight="700" fill="#92400e">guest 访问过宽</text>
+  <text x="86" y="500" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="14" fill="#334155">后台 / 工单 / 频道 / CMS</text>
+  <line x1="280" y1="481" x2="360" y2="481" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="360" y="440" width="220" height="82" rx="8" fill="#fef3c7" stroke="#fbbf24"/>
+  <text x="386" y="474" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="19" font-weight="700" fill="#92400e">角色和租户未绑定</text>
+  <text x="386" y="500" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="14" fill="#334155">owner / tenant / channel</text>
+  <line x1="580" y1="481" x2="660" y2="481" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="660" y="440" width="220" height="82" rx="8" fill="#fef3c7" stroke="#fbbf24"/>
+  <text x="686" y="474" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="19" font-weight="700" fill="#92400e">跨资源读写</text>
+  <text x="686" y="500" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="14" fill="#334155">IDOR / 越权 / 字段泄露</text>
+  <line x1="880" y1="481" x2="960" y2="481" stroke="#475569" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="960" y="440" width="110" height="82" rx="8" fill="#fee2e2" stroke="#fca5a5"/>
+  <text x="982" y="474" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="18" font-weight="700" fill="#991b1b">系统性</text>
+  <text x="982" y="500" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="14" fill="#334155">High+</text>
+
+  <text x="62" y="585" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#475569">公开文章讲链路、根因和证据形态，不公开可复制利用细节。</text>
+</svg>

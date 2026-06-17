@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="620" viewBox="0 0 1120 620" role="img" aria-labelledby="title desc">
+  <title id="title">RedHaze early discovery map</title>
+  <desc id="desc">A diagram showing six RedHaze lab surfaces and the early signals that guided the assessment.</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.16"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+    </marker>
+  </defs>
+  <rect width="1120" height="620" fill="#f8fafc"/>
+  <text x="48" y="58" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="30" font-weight="700" fill="#0f172a">RedHaze 靶场：早期信号不是漏洞结论</text>
+  <text x="48" y="92" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="16" fill="#475569">aiscan 先把资产、路径、指纹和异常状态码铺开，研究员再把线索收敛成验证假设。</text>
+
+  <rect x="48" y="132" width="220" height="116" rx="8" fill="#ffffff" stroke="#cbd5e1" filter="url(#shadow)"/>
+  <text x="70" y="166" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">id / portal</text>
+  <text x="70" y="196" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#475569">统一登录入口</text>
+  <text x="70" y="222" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#b45309">subsystems / JS 目录</text>
+
+  <rect x="320" y="132" width="220" height="116" rx="8" fill="#ffffff" stroke="#cbd5e1" filter="url(#shadow)"/>
+  <text x="342" y="166" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">desk</text>
+  <text x="342" y="196" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#475569">工单与后台页面</text>
+  <text x="342" y="222" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#b45309">admin 200 / internal 字段</text>
+
+  <rect x="592" y="132" width="220" height="116" rx="8" fill="#ffffff" stroke="#cbd5e1" filter="url(#shadow)"/>
+  <text x="614" y="166" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">mall</text>
+  <text x="614" y="196" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#475569">商品、订单、支付</text>
+  <text x="614" y="222" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#b45309">search / callback / checkout</text>
+
+  <rect x="864" y="132" width="208" height="116" rx="8" fill="#ffffff" stroke="#cbd5e1" filter="url(#shadow)"/>
+  <text x="886" y="166" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">ads</text>
+  <text x="886" y="196" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#475569">广告投放与预览</text>
+  <text x="886" y="222" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#b45309">campaign / preview</text>
+
+  <rect x="184" y="320" width="220" height="116" rx="8" fill="#ffffff" stroke="#cbd5e1" filter="url(#shadow)"/>
+  <text x="206" y="354" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">chat</text>
+  <text x="206" y="384" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#475569">频道与消息 API</text>
+  <text x="206" y="410" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#b45309">private channel / messages</text>
+
+  <rect x="456" y="320" width="220" height="116" rx="8" fill="#ffffff" stroke="#cbd5e1" filter="url(#shadow)"/>
+  <text x="478" y="354" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">bbs / cms</text>
+  <text x="478" y="384" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#475569">内容中心</text>
+  <text x="478" y="410" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#b45309">post / section / body_html</text>
+
+  <rect x="728" y="320" width="220" height="116" rx="8" fill="#ffffff" stroke="#cbd5e1" filter="url(#shadow)"/>
+  <text x="750" y="354" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="20" font-weight="700" fill="#0f172a">shared clues</text>
+  <text x="750" y="384" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#475569">身份、租户、URL 拉取</text>
+  <text x="750" y="410" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#b45309">authz / SSRF / data boundary</text>
+
+  <line x1="158" y1="248" x2="292" y2="320" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="430" y1="248" x2="565" y2="320" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="702" y1="248" x2="837" y2="320" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="968" y1="248" x2="850" y2="320" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="404" y1="378" x2="456" y2="378" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="676" y1="378" x2="728" y2="378" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="260" y="500" width="600" height="70" rx="8" fill="#0f172a"/>
+  <text x="292" y="530" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="18" font-weight="700" fill="#ffffff">输出不是“已打穿”，而是 focus list</text>
+  <text x="292" y="556" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#cbd5e1">哪些资产值得 full、sniper、低影响验证和人工复核</text>
+</svg>

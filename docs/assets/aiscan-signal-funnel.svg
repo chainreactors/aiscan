@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="560" viewBox="0 0 1120 560" role="img" aria-labelledby="title desc">
+  <title id="title">aiscan signal funnel</title>
+  <desc id="desc">A funnel from scan output to clues, hypotheses, verification, and report-ready evidence.</desc>
+  <rect width="1120" height="560" fill="#fbfdf8"/>
+  <text x="48" y="58" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="30" font-weight="700" fill="#111827">从扫描输出到可交付证据</text>
+  <text x="48" y="92" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="16" fill="#4b5563">aiscan 负责把信号收集和聚合，人负责判断、验证和写清楚。</text>
+
+  <polygon points="110,140 1010,140 930,214 190,214" fill="#dbeafe" stroke="#93c5fd"/>
+  <polygon points="190,232 930,232 840,306 280,306" fill="#dcfce7" stroke="#86efac"/>
+  <polygon points="280,324 840,324 742,398 378,398" fill="#fef3c7" stroke="#fbbf24"/>
+  <polygon points="378,416 742,416 668,490 452,490" fill="#fee2e2" stroke="#fca5a5"/>
+
+  <text x="170" y="183" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#1e3a8a">scan 输出</text>
+  <text x="350" y="177" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#1f2937">web / service / fingerprint / sitemap / loot / error / summary</text>
+  <text x="350" y="200" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#1f2937">第一轮只回答：目标长什么样，哪里异常</text>
+
+  <text x="250" y="275" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#166534">线索</text>
+  <text x="410" y="269" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#1f2937">admin 200 / JS 目录 / debug 字段 / URL 拉取 / 搜索异常</text>
+  <text x="410" y="292" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#1f2937">先合并同类项，避免被零散输出带偏</text>
+
+  <text x="342" y="367" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#92400e">验证假设</text>
+  <text x="500" y="361" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#1f2937">认证绕过？字段级权限？SSRF？查询拼接？业务完整性？</text>
+  <text x="500" y="384" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#1f2937">每个假设都要有基线、对照和误报排除</text>
+
+  <text x="446" y="459" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="22" font-weight="700" fill="#991b1b">报告证据</text>
+  <text x="570" y="453" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#1f2937">影响、范围、复现边界、清理记录、修复建议</text>
+  <text x="570" y="476" font-family="'Noto Sans CJK SC', 'Noto Sans CJK', 'Droid Sans Fallback', Inter, Arial, sans-serif" font-size="15" fill="#1f2937">结论由证据支撑，不由工具标签支撑</text>
+</svg>

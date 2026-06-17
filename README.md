@@ -110,6 +110,8 @@ aiscan agent
 | [Quick Start](docs/quickstart.md) | 安装、环境准备、第一次扫描 |
 | [配置指南](docs/configuration.md) | LLM Provider、配置文件、环境变量、Cyberhub 资源 |
 | [使用指南](docs/usage.md) | 命令详解、扫描模式、Agent、输出格式 |
+| [实战文章：一次高危链路是怎么被 aiscan 带出来的](docs/best-practices.md) | 从 RedHaze/K3Cloud case 出发，讲 aiscan 的建图、抢占式发现、分片执行和 IOA 协作 |
+| [IOA 群狼战术实践](docs/ioa-fieldbook.md) | 从历史稿“群狼战术/狼组 RedC”抽象出的 IOA 多 worker、Cyberhub 和云端抢占式集群实践 |
 | [IOA 协作](docs/ioa.md) | 多 Agent 协作架构、Space/Node/Message 模型、Loop Worker、Heartbeat |
 
 ## Supported Platforms
