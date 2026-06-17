@@ -8,6 +8,7 @@
   <a href="https://github.com/chainreactors/aiscan/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/chainreactors/aiscan/ci.yml?branch=master&style=flat-square&label=CI" alt="CI"></a>
   <a href="https://github.com/chainreactors/aiscan/releases"><img src="https://img.shields.io/github/downloads/chainreactors/aiscan/total?style=flat-square" alt="Downloads"></a>
   <a href="https://github.com/chainreactors/aiscan/blob/master/LICENSE"><img src="https://img.shields.io/github/license/chainreactors/aiscan?style=flat-square" alt="License"></a>
+  <a href="https://github.com/chainreactors/aiscan/stargazers"><img src="https://img.shields.io/github/stars/chainreactors/aiscan?style=flat-square" alt="Stars"></a>
 </p>
 
 ---
@@ -15,6 +16,54 @@
 **aiscan** 是一个融合 LLM agent 与传统安全扫描引擎的自动化安全扫描器。提供三种使用模式：**Scan**（确定性流水线扫描，AI 可选辅助）、**Agent**（自然语言驱动的自主安全评估）、**IOA**（多 agent 分布式协作）。
 
 > **请只在明确授权的目标上使用。**
+
+## Quick Start
+
+```bash
+# 无需 LLM，一行启动扫描
+aiscan scan -i 192.168.1.0/24
+
+# 有 LLM，一行启动 agent
+aiscan agent --base-url "https://api.deepseek.com" --api-key "sk-..." --model deepseek-chat \
+  -p "扫描目标并检查高风险漏洞" -i 192.168.1.0/24
+```
+
+## 安装
+
+### 下载二进制
+
+从 [GitHub Releases](https://github.com/chainreactors/aiscan/releases/latest) 下载：
+
+- **aiscan** — 基础版，包含 scan/agent/gogo/spray/zombie/neutron
+- **aiscan-full** — 完整版，额外包含 playwright 浏览器、passive recon、katana 爬虫
+
+```bash
+# Linux
+curl -L -o aiscan https://github.com/chainreactors/aiscan/releases/latest/download/aiscan_linux_amd64
+chmod +x aiscan && sudo mv aiscan /usr/local/bin/
+
+# macOS
+curl -L -o aiscan https://github.com/chainreactors/aiscan/releases/latest/download/aiscan_darwin_arm64
+chmod +x aiscan && sudo mv aiscan /usr/local/bin/
+
+# Windows (PowerShell)
+Invoke-WebRequest "https://github.com/chainreactors/aiscan/releases/latest/download/aiscan_windows_amd64.exe" -OutFile aiscan.exe
+```
+
+### 从源码构建
+
+```bash
+git clone https://github.com/chainreactors/aiscan.git
+cd aiscan
+
+# 基础版
+go build -o aiscan ./cmd/aiscan
+
+# 完整版（含 playwright/katana/passive）
+go build -tags full -o aiscan-full ./cmd/aiscan
+```
+
+---
 
 ## Features
 
@@ -51,19 +100,6 @@
 └─────────────────────────────────────┴─────────────────────────┘
 ```
 
-## Quick Start
-
-```bash
-# 无需 LLM，一行启动扫描
-aiscan scan -i 192.168.1.0/24
-
-# 有 LLM，一行启动 agent
-aiscan agent --base-url "https://api.deepseek.com" --api-key "sk-..." --model deepseek-chat \
-  -p "扫描目标并检查高风险漏洞" -i 192.168.1.0/24
-```
-
-安装：从 [GitHub Releases](https://github.com/chainreactors/aiscan/releases/latest) 下载二进制文件（**aiscan** 基础版 / **aiscan-full** 完整版含 playwright + katana + passive）。
-
 ---
 
 ## Mode 1: Scan — 确定性扫描流水线
@@ -90,18 +126,14 @@ aiscan scan -i http://target.example --mode full --deep
 aiscan scan -i http://target.example --mode full --verify=high --sniper --report
 ```
 
-**扫描模式说明：**
-
 | 模式 | 说明 |
 | --- | --- |
 | `quick`（默认） | 快速暴露面发现，HTTP 基础弱口令，指纹匹配 POC |
 | `full` | 更多端口，crawl depth=2，常见备份/目录探测，默认字典 |
 
-**AI 增强标志（需要 LLM 配置）：**
-
-| 标志 | 说明 |
+| AI 标志 | 说明 |
 | --- | --- |
-| `--verify=<level>` | LLM 主动验证扫描发现，减少误报（auto/low/medium/high/critical） |
+| `--verify=<level>` | LLM 主动验证扫描发现（auto/low/medium/high/critical） |
 | `--sniper` | 对每个指纹搜索公开 CVE/exploit |
 | `--deep` | 对发现的 Web 资产进行 AI 驱动的动态测试 |
 
@@ -154,25 +186,18 @@ aiscan agent
 
 通过 [IOA（Internet of Agents）](docs/ioa.md) 架构，多个 aiscan agent 实例通过消息空间协同工作。
 
-### 启动 IOA Server
-
 ```bash
+# 启动 IOA Server
 aiscan ioa serve --ioa-url http://0.0.0.0:8765
-```
 
-### 启动 Loop Worker
-
-```bash
+# 启动 Loop Worker
 aiscan agent --loop \
   --ioa-url http://127.0.0.1:8765 \
   --ioa-node-name worker-1 \
   --space pentest-project \
   -p "scan assigned targets and report findings"
-```
 
-### 查询 IOA 状态
-
-```bash
+# 查询 IOA 状态
 aiscan ioa spaces --ioa-url http://127.0.0.1:8765
 aiscan ioa messages <space-name> --ioa-url http://127.0.0.1:8765
 aiscan ioa nodes --ioa-url http://127.0.0.1:8765
@@ -182,13 +207,14 @@ aiscan ioa nodes --ioa-url http://127.0.0.1:8765
 
 ## LLM 配置
 
-Agent 和 AI 增强功能需要 LLM。通过环境变量或配置文件设置：
+Agent 和 AI 增强功能需要 LLM。通过 CLI 参数、环境变量或配置文件设置：
 
 ```bash
+# 环境变量
 export OPENAI_API_KEY="sk-..."
 
-# 或指定 provider
-aiscan agent --provider deepseek --base-url https://api.deepseek.com --api-key sk-... --model deepseek-v4-pro
+# CLI 参数
+aiscan agent --provider deepseek --base-url https://api.deepseek.com --api-key sk-... --model deepseek-chat
 ```
 
 配置文件 `~/.config/aiscan/config.yaml`：
@@ -204,17 +230,22 @@ llm:
     - provider: deepseek
       base_url: https://api.deepseek.com
       api_key: sk-...
-      model: deepseek-v4-pro
+      model: deepseek-chat
 ```
+
+支持的 Provider：OpenAI、DeepSeek、Anthropic、OpenRouter、Groq、Moonshot、Ollama，以及任意 OpenAI 兼容 API。详见 [参考手册](docs/reference.md)。
+
+---
 
 ## Documentation
 
 | 文档 | 说明 |
 | --- | --- |
 | [Scan 模式详解](docs/scan.md) | 扫描流水线、AI 增强、输出格式 |
-| [Agent 模式详解](docs/agent.md) | Agent 工具集、Goal Evaluation、REPL、信号处理 |
+| [Agent 模式详解](docs/agent.md) | Agent 工具集、Goal Evaluation、REPL、工具详解 |
 | [IOA 协作](docs/ioa.md) | 多 Agent 协作架构、Space/Node/Message 模型 |
 | [参考手册](docs/reference.md) | 配置、LLM Provider、全局参数、扫描器用法、FAQ |
+| [Changelog](docs/changelog.md) | 版本变更记录 |
 
 ## Supported Platforms
 
@@ -223,6 +254,16 @@ llm:
 | Linux | amd64 / arm64 | `aiscan_linux_amd64` | `aiscan-full_linux_amd64` |
 | macOS | Intel / Apple Silicon | `aiscan_darwin_amd64` | `aiscan-full_darwin_arm64` |
 | Windows | amd64 | `aiscan_windows_amd64.exe` | `aiscan-full_windows_amd64.exe` |
+
+## Contributing
+
+欢迎提交 Issue 和 Pull Request。
+
+1. Fork 本仓库
+2. 创建功能分支 (`git checkout -b feature/xxx`)
+3. 提交更改 (`git commit -m 'feat: add xxx'`)
+4. 推送分支 (`git push origin feature/xxx`)
+5. 创建 Pull Request
 
 ## License
 
@@ -235,3 +276,11 @@ See [LICENSE](LICENSE) for details.
 - [spray](https://github.com/chainreactors/spray) — Web probing & fingerprinting
 - [zombie](https://github.com/chainreactors/zombie) — Credential testing
 - [neutron](https://github.com/chainreactors/neutron) — Template-based POC engine
+
+---
+
+<p align="center">
+  <a href="https://star-history.com/#chainreactors/aiscan&Date">
+    <img src="https://api.star-history.com/svg?repos=chainreactors/aiscan&type=Date" alt="Star History" width="600">
+  </a>
+</p>
