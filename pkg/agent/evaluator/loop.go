@@ -37,7 +37,7 @@ func RunWithGoalEval(ctx context.Context, a *agent.Agent, cfg GoalLoopConfig) (*
 
 		verdict, evalErr := cfg.Evaluator.Evaluate(
 			ctx, cfg.Goal, cfg.Criteria,
-			result.NewMessages, result.Output, result.Turns,
+			result.Messages, result.Output, result.Turns,
 		)
 
 		if evalErr != nil {
