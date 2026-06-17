@@ -152,7 +152,6 @@ aiscan neutron -h
 | `--ioa-url` | IOA server URL |
 | `--ioa-node-id` | 已有 IOA 节点 ID |
 | `--ioa-node-name` | 注册时使用的节点名（默认自动生成） |
-| `--ioa-db` | IOA SQLite 数据库路径（默认 `./ioa.db`） |
 | `--space` | IOA 空间名（默认 `default`） |
 | `--json` | IOA 查询结果以 JSON 输出 |
 
@@ -283,8 +282,8 @@ aiscan scan -l targets.txt --mode full
 
 | 模式 | 说明 |
 | --- | --- |
-| `quick` | **默认模式**。gogo 端口扫描（ports=all）、spray check（含 finger）/plugins(common,bak,active)/crawl（depth 1）、弱口令、基于指纹的 POC |
-| `full` | 在 quick 基础上增加 spray brute（默认字典探测）和更深的 crawl（depth 2） |
+| `quick` | **默认模式**。gogo 端口扫描（ports=all）、spray check（含 finger）、crawl（depth 2）、弱口令、基于指纹的 POC |
+| `full` | 在 quick 基础上增加 spray plugins（common/bak/active）和 spray brute（默认字典探测）；crawl depth 仍为 2 |
 
 quick 模式的 capability：
 
@@ -293,7 +292,6 @@ quick 模式的 capability：
 | `gogo_portscan` | 端口扫描，默认 ports=all |
 | `spray_check` | Web 基础探测和 HTTP 指纹识别 |
 | `core_web` | Web 结果关联分析 |
-| `spray_plugins` | 合并执行 common、bak、active 插件探测 |
 | `spray_crawl` | 网页爬取（depth 2） |
 | `zombie_weakpass` | 弱口令检测 |
 | `neutron_poc` | 基于指纹的 POC 检测 |
@@ -302,6 +300,7 @@ full 模式额外增加：
 
 | Capability | 说明 |
 | --- | --- |
+| `spray_plugins` | 合并执行 common、bak、active 插件探测 |
 | `spray_brute` | 默认字典路径爆破 |
 
 ### scan 参数
@@ -714,7 +713,7 @@ aiscan cyberhub search poc spring --tag rce -j
 
 ## IOA：协作模式
 
-IOA 是 aiscan 的协作层。`ioa serve` 启动本地 HTTP server 和 SQLite store；`agent --loop` 连接 server 注册 worker 并监听任务。
+IOA 是 aiscan 的协作层。`ioa serve` 启动本地 HTTP server；当前 CLI 路径使用默认内存 store。`agent --loop` 连接 server 注册 worker 并监听任务。
 
 ### 启动 IOA server
 
@@ -724,10 +723,10 @@ IOA 是 aiscan 的协作层。`ioa serve` 启动本地 HTTP server 和 SQLite st
 aiscan ioa serve
 ```
 
-指定地址和数据库：
+指定地址：
 
 ```bash
-aiscan ioa serve --ioa-url http://127.0.0.1:8765 --ioa-db ./ioa.db
+aiscan ioa serve --ioa-url http://127.0.0.1:8765
 ```
 
 ### 启动 loop worker

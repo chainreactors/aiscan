@@ -313,11 +313,11 @@ aiscan agent --ioa-url http://127.0.0.1:8765 \
 ### 启动 IOA Server
 
 ```bash
-# 默认 http://127.0.0.1:8765，数据库 ./ioa.db
+# 默认 http://127.0.0.1:8765
 aiscan ioa serve
 
 # 自定义
-aiscan ioa serve --ioa-url http://0.0.0.0:8765 --ioa-db /data/ioa.db
+aiscan ioa serve --ioa-url http://0.0.0.0:8765
 ```
 
 ### 启动 Loop Worker
@@ -381,7 +381,6 @@ aiscan> /nodes pentest-001
 | `--ioa-url` | IOA Server URL |
 | `--ioa-node-id` | 已有节点 ID |
 | `--ioa-node-name` | 注册节点名 |
-| `--ioa-db` | SQLite 数据库路径（仅 `ioa serve`） |
 | `--space` | Space 名称 |
 | `--json` | IOA 查询 JSON 输出 |
 | `--loop` | 启用 Loop Worker 模式 |
@@ -392,7 +391,6 @@ aiscan> /nodes pentest-001
 ```yaml
 ioa:
   url: "http://127.0.0.1:8765"
-  db: "./ioa.db"
   node_name: "my-scanner"
   space: "default"
 ```

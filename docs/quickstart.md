@@ -89,8 +89,8 @@ aiscan scan -l targets.txt
 
 | 模式 | 说明 |
 | --- | --- |
-| `quick`（默认） | 端口扫描、Web 探测/指纹、常见插件探测、爬取（depth 1）、弱口令、POC |
-| `full` | quick 基础上增加路径爆破和更深爬取（depth 2） |
+| `quick`（默认） | 端口扫描、Web 探测/指纹、爬取（depth 2）、弱口令、基于指纹的 POC |
+| `full` | quick 基础上增加 common/bak/active Web 插件探测和默认字典路径爆破；爬取 depth 仍为 2 |
 
 ```bash
 # 默认 quick 模式
@@ -203,3 +203,5 @@ aiscan neutron -u http://target.example -s critical,high
 
 - [配置指南](configuration.md) — LLM Provider 详细配置、配置文件、Cyberhub 资源服务
 - [使用指南](usage.md) — 完整命令参考、Agent 高级用法、IOA 协作模式
+- [实战文章：一次高危链路是怎么被 aiscan 带出来的](best-practices.md) — 从 RedHaze/K3Cloud case 出发，讲 aiscan 的建图、抢占式发现、分片执行和 IOA 协作
+- [IOA 群狼战术实践](ioa-fieldbook.md) — 从历史稿“群狼战术/狼组 RedC”抽象出的多 worker、Cyberhub 和云端抢占式集群实践
