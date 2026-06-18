@@ -112,7 +112,7 @@ type cacheControlMarker struct {
 }
 
 type anthropicTool struct {
-	Type         string                 `json:"type"`
+	Type         string                 `json:"type,omitempty"`
 	Name         string                 `json:"name"`
 	Description  string                 `json:"description,omitempty"`
 	InputSchema  map[string]interface{} `json:"input_schema"`
@@ -123,17 +123,21 @@ func (p *AnthropicProvider) marshalRequest(req *ChatCompletionRequest) ([]byte, 
 	cacheEnabled := req.CacheRetention != CacheNone
 
 	var tools []anthropicTool
+	official := strings.Contains(p.config.BaseURL, "anthropic.com")
 	for _, t := range req.Tools {
 		inputSchema := t.Function.Parameters
 		if inputSchema == nil {
 			inputSchema = map[string]interface{}{"type": "object", "properties": map[string]interface{}{}}
 		}
-		tools = append(tools, anthropicTool{
-			Type:        "custom",
+		at := anthropicTool{
 			Name:        t.Function.Name,
 			Description: t.Function.Description,
 			InputSchema: inputSchema,
-		})
+		}
+		if official {
+			at.Type = "custom"
+		}
+		tools = append(tools, at)
 	}
 	if cacheEnabled && len(tools) > 0 {
 		tools[len(tools)-1].CacheControl = &cacheControlMarker{Type: "ephemeral"}

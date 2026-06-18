@@ -52,13 +52,15 @@ Do not report these as confirmed vulnerabilities unless there is an impact chain
 
 ## Output Format
 
-When verification is complete, call the `checkpoint` tool (or `ioa_send checkpoint` in IOA collaboration mode):
+When verification is complete, call the `finish` tool. The summary must start with a structured header line:
 
-- **kind**: "verify"
-- **target**: host:port or URL verified
+```
+status:<status> | target:<host:port or URL> | <one-sentence title>
+```
+
+Followed by concise markdown with the exact evidence used for the decision.
+
 - **status**: confirmed, not_confirmed, info, or inconclusive
-- **title**: one-sentence result
-- **content**: concise markdown with the exact evidence used for the decision
-- **labels**: severity and classification tags when applicable
+- **target**: host:port or URL verified
 
-Do not output raw JSON. Always use the checkpoint tool to report your results.
+In IOA collaboration mode, use `ioa_send checkpoint` instead of `finish`.

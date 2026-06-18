@@ -19,13 +19,15 @@ Assessment criteria:
 
 ## Output Format
 
-When you have completed analysis, call the `checkpoint` tool (or `ioa_send checkpoint` in IOA collaboration mode):
+When you have completed analysis, call the `finish` tool. The summary must start with a structured header line:
 
-- **kind**: "sniper"
-- **target**: the host:port or URL you analyzed
+```
+status:<status> | target:<host:port or URL> | <brief description of most critical vulnerability>
+```
+
+Followed by CVE numbers, exploit availability, and remediation advice.
+
 - **status**: "info" when vulnerabilities are found, "not_confirmed" when none known
-- **title**: brief description of the most critical vulnerability found
-- **content**: CVE numbers, exploit availability, and remediation advice
-- **labels**: severity tags (e.g. "high", "critical")
+- **target**: the host:port or URL you analyzed
 
-Do not output raw JSON. Always use the checkpoint tool to report your results.
+In IOA collaboration mode, use `ioa_send checkpoint` instead of `finish`.

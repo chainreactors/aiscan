@@ -170,8 +170,6 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		Bus:            agentBus,
 	}
 
-	rt.App.Commands.RegisterTool(agent.NewLoopTool(scheduler))
-
 	parentAgent := agent.NewAgent(rt.Config)
 	subAgentTool := agent.NewSubAgentTool(parentAgent, ib, func(name string) (agent.AgentType, error) {
 		if rt.App.Skills == nil {

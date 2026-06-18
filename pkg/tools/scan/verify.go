@@ -7,7 +7,6 @@ import (
 
 	"github.com/chainreactors/aiscan/core/output"
 	"github.com/chainreactors/aiscan/pkg/agent"
-	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
@@ -86,36 +85,42 @@ func runSniperPass(ctx context.Context, parent *agent.Agent, readSkill SkillRead
 	}
 }
 
-func runVerifyAgent(ctx context.Context, parent *agent.Agent, skillPrompt string, loot output.Loot, logger telemetry.Logger) *commands.CheckpointResult {
+type verifyResult struct {
+	Status string
+}
+
+func runVerifyAgent(ctx context.Context, parent *agent.Agent, skillPrompt string, loot output.Loot, logger telemetry.Logger) *verifyResult {
 	sub := parent.Derive()
-	checkpoint := commands.NewCheckpointTool()
-	tools := sub.Cfg.Tools.CloneTools()
-	tools.RegisterTool(checkpoint)
-	sub.Cfg = sub.Cfg.WithTools(tools).WithSystemPrompt(skillPrompt).WithStream(false)
+	sub.Cfg = sub.Cfg.WithSystemPrompt(skillPrompt).WithStream(false)
 
 	prompt := formatVerifyPrompt(loot)
-	_, err := sub.Run(ctx, prompt)
+	r, err := sub.Run(ctx, prompt)
 	if err != nil {
 		logger.Debugf("verify agent error: %s", err)
 		return nil
 	}
-	return checkpoint.Result()
+	status := parseVerifyStatus(r.Output)
+	if status == "" {
+		return nil
+	}
+	return &verifyResult{Status: status}
 }
 
-func runSniperAgent(ctx context.Context, parent *agent.Agent, skillPrompt string, loot output.Loot, logger telemetry.Logger) *commands.CheckpointResult {
+func runSniperAgent(ctx context.Context, parent *agent.Agent, skillPrompt string, loot output.Loot, logger telemetry.Logger) *verifyResult {
 	sub := parent.Derive()
-	checkpoint := commands.NewCheckpointTool()
-	tools := sub.Cfg.Tools.CloneTools()
-	tools.RegisterTool(checkpoint)
-	sub.Cfg = sub.Cfg.WithTools(tools).WithSystemPrompt(skillPrompt).WithStream(false)
+	sub.Cfg = sub.Cfg.WithSystemPrompt(skillPrompt).WithStream(false)
 
 	prompt := formatSniperPrompt(loot)
-	_, err := sub.Run(ctx, prompt)
+	r, err := sub.Run(ctx, prompt)
 	if err != nil {
 		logger.Debugf("sniper agent error: %s", err)
 		return nil
 	}
-	return checkpoint.Result()
+	status := parseVerifyStatus(r.Output)
+	if status == "" {
+		return nil
+	}
+	return &verifyResult{Status: status}
 }
 
 func filterLootsByPriority(loots []output.Loot, min priority) []indexedLoot {
@@ -145,7 +150,42 @@ func annotateLoot(loot *output.Loot, status string) {
 	if loot.Data == nil {
 		loot.Data = make(map[string]any)
 	}
-	loot.Data["verification_status"] = commands.NormalizeStatus(status)
+	loot.Data["verification_status"] = normalizeStatus(status)
+}
+
+func normalizeStatus(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "confirmed":
+		return "confirmed"
+	case "not_confirmed", "not confirmed", "false_positive":
+		return "not_confirmed"
+	case "info", "informational":
+		return "info"
+	case "inconclusive":
+		return "inconclusive"
+	default:
+		return ""
+	}
+}
+
+func parseVerifyStatus(output string) string {
+	if i := strings.Index(output, "status:"); i >= 0 {
+		rest := output[i+len("status:"):]
+		end := strings.IndexAny(rest, " |\t\n\r")
+		if end < 0 {
+			end = len(rest)
+		}
+		if s := normalizeStatus(rest[:end]); s != "" {
+			return s
+		}
+	}
+	lower := strings.ToLower(output)
+	for _, candidate := range []string{"not_confirmed", "confirmed", "inconclusive", "info"} {
+		if strings.Contains(lower, candidate) {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func formatVerifyPrompt(loot output.Loot) string {

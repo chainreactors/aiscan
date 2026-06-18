@@ -122,8 +122,8 @@ func TestAnthropicProviderChatCompletion(t *testing.T) {
 		if body.MaxTokens != defaultAnthropicMaxToken {
 			t.Fatalf("max_tokens = %d, want %d", body.MaxTokens, defaultAnthropicMaxToken)
 		}
-		if len(body.Tools) != 1 || body.Tools[0].Type != "custom" || body.Tools[0].Name != "bash" {
-			t.Fatalf("tools = %#v, want custom bash tool", body.Tools)
+		if len(body.Tools) != 1 || body.Tools[0].Name != "bash" {
+			t.Fatalf("tools = %#v, want bash tool", body.Tools)
 		}
 		if len(body.Messages) != 1 || body.Messages[0].Role != "user" {
 			t.Fatalf("messages = %#v, want one user message", body.Messages)
