@@ -5,7 +5,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -96,8 +95,8 @@ func TestKillCascadesToGrandchild(t *testing.T) {
 		return false
 	})
 
-	if err := syscall.Kill(childPID, 0); err != nil {
-		t.Fatalf("grandchild %d already dead: %v", childPID, err)
+	if !processAlive(childPID) {
+		t.Fatalf("grandchild %d already dead", childPID)
 	}
 
 	if err := mgr.Kill(info.ID); err != nil {
@@ -114,7 +113,7 @@ func TestKillCascadesToGrandchild(t *testing.T) {
 	}
 
 	waitUntil(t, 3*time.Second, func() bool {
-		return syscall.Kill(childPID, 0) != nil
+		return !processAlive(childPID)
 	})
 }
 
@@ -188,14 +187,14 @@ func TestShutdownKillsRunning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if syscall.Kill(info.PID, 0) != nil {
+	if !processAlive(info.PID) {
 		t.Fatal("process not alive after Create")
 	}
 
 	mgr.Shutdown()
 
 	waitUntil(t, 3*time.Second, func() bool {
-		return syscall.Kill(info.PID, 0) != nil
+		return !processAlive(info.PID)
 	})
 }
 

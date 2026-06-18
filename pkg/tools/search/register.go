@@ -1,6 +1,7 @@
 package search
 
 import (
+	"github.com/chainreactors/aiscan/core/resources"
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
 	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/tools/scan/engine"
@@ -29,6 +30,13 @@ func init() {
 			var idx *association.Index
 			if es, ok := deps.EngineSet.(*engine.Set); ok && es != nil {
 				idx = es.Index
+			}
+			if idx == nil {
+				if rs, ok := deps.Resources.(*resources.Set); ok && rs != nil && rs.FingersConfig != nil {
+					full := rs.FingersConfig.FullFingers
+					idx = association.NewIndex()
+					idx.BuildWithFingers(full.Fingers(), full.Aliases(), nil)
+				}
 			}
 			if idx != nil {
 				reg.Register(NewCyberhubSearch(idx), "tools")
