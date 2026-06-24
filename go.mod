@@ -8,7 +8,7 @@ require (
 	github.com/chainreactors/crtm v0.0.3-0.20260618163257-073207497076
 	github.com/chainreactors/fingers v1.2.2-0.20260615064219-7e07a99c93e0
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260616122548-b8e5ed3b1b40
-	github.com/chainreactors/ioa v0.1.1-0.20260618070057-ec99736bed74
+	github.com/chainreactors/ioa v0.1.1
 	github.com/chainreactors/logs v0.0.0-20260624034259-9aaea4aa52cc
 	github.com/chainreactors/neutron v0.0.0-20260615055126-a9bbe4fc3e95
 	github.com/chainreactors/parsers v0.0.0-20260608085142-3d2c51baa8fe
