@@ -8,7 +8,7 @@ require (
 	github.com/chainreactors/crtm v0.0.3-0.20260618163257-073207497076
 	github.com/chainreactors/fingers v1.2.2-0.20260615064219-7e07a99c93e0
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260616122548-b8e5ed3b1b40
-	github.com/chainreactors/ioa v0.1.1-0.20260618070057-ec99736bed74
+	github.com/chainreactors/ioa v0.1.1
 	github.com/chainreactors/logs v0.0.0-20260624034259-9aaea4aa52cc
 	github.com/chainreactors/neutron v0.0.0-20260615055126-a9bbe4fc3e95
 	github.com/chainreactors/parsers v0.0.0-20260608085142-3d2c51baa8fe
@@ -16,7 +16,7 @@ require (
 	github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593
 	github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3
 	github.com/chainreactors/sdk v0.3.4-0.20260624031614-b16da9a87441
-	github.com/chainreactors/spray v1.3.1-0.20260622112616-712e89f96158
+	github.com/chainreactors/spray v1.3.1
 	github.com/chainreactors/utils v0.0.0-20260623065725-737b33d61c6b
 	github.com/chainreactors/utils/pty v0.0.0-20260624031611-9aadeae3fb0e
 	github.com/chainreactors/zombie v1.2.3-0.20260616102212-9bcfed7622ab
