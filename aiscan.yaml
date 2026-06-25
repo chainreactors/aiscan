@@ -37,6 +37,9 @@ llm:
   model: ""
   # Proxy for LLM API requests
   proxy: ""
+  # Custom HTTP headers for LLM API requests
+  # headers:
+  #   User-Agent: "Version: 5.10.0 openwarp"
   # Additional LLM providers for fallback or multi-model routing
   # providers:
   #   - provider: ""
@@ -44,6 +47,7 @@ llm:
   #     api_key: ""
   #     model: ""
   #     proxy: ""
+  #     headers: {}
   #     timeout: 0
   #     images: ""
 

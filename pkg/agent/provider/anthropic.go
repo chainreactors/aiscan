@@ -21,6 +21,10 @@ type AnthropicProvider struct {
 }
 
 func NewAnthropicProvider(cfg *ProviderConfig) (*AnthropicProvider, error) {
+	cfg, err := cloneConfigWithNormalizedHeaders(cfg)
+	if err != nil {
+		return nil, err
+	}
 	client, err := newHTTPClient(cfg)
 	if err != nil {
 		return nil, err
@@ -106,6 +110,11 @@ func (p *AnthropicProvider) completionEndpoint() string {
 }
 
 func (p *AnthropicProvider) setAuthHeaders(req *http.Request) {
+	p.setProviderHeaders(req)
+	applyCustomHeaders(req, p.config.Headers)
+}
+
+func (p *AnthropicProvider) setProviderHeaders(req *http.Request) {
 	if p.config.APIKey != "" {
 		req.Header.Set("x-api-key", p.config.APIKey)
 	}
@@ -638,8 +647,9 @@ func (p *AnthropicProvider) WebSearch(ctx context.Context, query string, maxResu
 			"messages": []map[string]string{{"role": "user", "content": "Search the web for: " + query}},
 		},
 		func(req *http.Request) {
-			p.setAuthHeaders(req)
+			p.setProviderHeaders(req)
 			req.Header.Set("anthropic-beta", "web-search-2025-03-05")
+			applyCustomHeaders(req, p.config.Headers)
 		},
 	)
 	if err != nil {

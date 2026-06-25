@@ -138,6 +138,48 @@ func TestParseCLIAgentAcceptsLLMFlags(t *testing.T) {
 	}
 }
 
+func TestParseCLIAcceptsLLMHeaderFlags(t *testing.T) {
+	parsed, err := parseCLI([]string{
+		"agent",
+		"--llm-header", "User-Agent=Version: 5.10.0 openwarp",
+		"--llm-header", "X-Test=yes",
+	})
+	if err != nil {
+		t.Fatalf("parseCLI() error = %v", err)
+	}
+	if got := parsed.Option.Headers["User-Agent"]; got != "Version: 5.10.0 openwarp" {
+		t.Fatalf("User-Agent header = %q", got)
+	}
+	if got := parsed.Option.Headers["X-Test"]; got != "yes" {
+		t.Fatalf("X-Test header = %q", got)
+	}
+}
+
+func TestParseCLIScanExtractsLLMHeaderFlag(t *testing.T) {
+	parsed, err := parseCLI([]string{
+		"scan",
+		"-i", "127.0.0.1",
+		"--llm-header", "User-Agent=Version: 5.10.0 openwarp",
+		"--verify=high",
+	})
+	if err != nil {
+		t.Fatalf("parseCLI() error = %v", err)
+	}
+	wantArgs := []string{"scan", "-i", "127.0.0.1", "--verify=high"}
+	if !reflect.DeepEqual(parsed.ScannerArgs, wantArgs) {
+		t.Fatalf("scanner args = %#v, want %#v", parsed.ScannerArgs, wantArgs)
+	}
+	if got := parsed.Option.Headers["User-Agent"]; got != "Version: 5.10.0 openwarp" {
+		t.Fatalf("User-Agent header = %q", got)
+	}
+}
+
+func TestParseCLIRejectsInvalidLLMHeaderFlag(t *testing.T) {
+	if _, err := parseCLI([]string{"agent", "--llm-header", "User Agent=value"}); err == nil {
+		t.Fatal("parseCLI() error = nil, want invalid header error")
+	}
+}
+
 func TestParseCLIScanExtractsLLMFlags(t *testing.T) {
 	parsed, err := parseCLI([]string{
 		"scan",

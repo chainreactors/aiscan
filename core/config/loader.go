@@ -116,6 +116,7 @@ func mergeOption(dst, src *Option) {
 	dst.APIKey = ResolveString(dst.APIKey, src.APIKey)
 	dst.Model = ResolveString(dst.Model, src.Model)
 	dst.LLMProxy = ResolveString(dst.LLMProxy, src.LLMProxy)
+	mergeOptionHeaders(dst, src)
 	dst.CyberhubURL = ResolveString(dst.CyberhubURL, src.CyberhubURL)
 	dst.CyberhubKey = ResolveString(dst.CyberhubKey, src.CyberhubKey)
 	dst.CyberhubMode = ResolveString(dst.CyberhubMode, src.CyberhubMode)

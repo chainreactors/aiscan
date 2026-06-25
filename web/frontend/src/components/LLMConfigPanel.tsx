@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { CheckCircle, Loader2, Settings, X } from 'lucide-react'
+import { CheckCircle, Loader2, Plus, Settings, Trash2, X } from 'lucide-react'
 import { getLLMConfig, saveLLMConfig } from '../api'
 import type { LLMConfig, ServerStatus } from '../api'
 import { Button } from './ui/button'
@@ -20,10 +20,42 @@ const emptyConfig: LLMConfig = {
   api_key_configured: false,
   model: '',
   proxy: '',
+  headers: {},
+}
+
+type HeaderRow = {
+  id: string
+  key: string
+  value: string
+}
+
+let headerRowSeq = 0
+
+function createHeaderRow(key = '', value = ''): HeaderRow {
+  headerRowSeq += 1
+  return { id: `header-${headerRowSeq}`, key, value }
+}
+
+function rowsFromHeaders(headers?: Record<string, string>): HeaderRow[] {
+  return Object.entries(headers || {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => createHeaderRow(key, value))
+}
+
+function headersFromRows(rows: HeaderRow[]): Record<string, string> {
+  const headers: Record<string, string> = {}
+  for (const row of rows) {
+    const key = row.key.trim()
+    const value = row.value.trim()
+    if (!key || !value) continue
+    headers[key] = value
+  }
+  return headers
 }
 
 export default function LLMConfigPanel({ open, status, onClose, onSaved }: LLMConfigPanelProps) {
   const [config, setConfig] = useState<LLMConfig>(emptyConfig)
+  const [headerRows, setHeaderRows] = useState<HeaderRow[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -35,7 +67,10 @@ export default function LLMConfigPanel({ open, status, onClose, onSaved }: LLMCo
     setError('')
     setSaved(false)
     getLLMConfig()
-      .then((cfg) => setConfig({ ...cfg, api_key: '' }))
+      .then((cfg) => {
+        setConfig({ ...cfg, api_key: '', headers: cfg.headers || {} })
+        setHeaderRows(rowsFromHeaders(cfg.headers))
+      })
       .catch((err: Error) => setError(err.message || 'Failed to load LLM config'))
       .finally(() => setLoading(false))
   }, [open])
@@ -46,14 +81,27 @@ export default function LLMConfigPanel({ open, status, onClose, onSaved }: LLMCo
     setConfig((current) => ({ ...current, [key]: value }))
   }
 
+  const updateHeaderRow = (id: string, key: keyof Omit<HeaderRow, 'id'>, value: string) => {
+    setHeaderRows((rows) => rows.map((row) => (row.id === id ? { ...row, [key]: value } : row)))
+  }
+
+  const addHeaderRow = () => {
+    setHeaderRows((rows) => [...rows, createHeaderRow()])
+  }
+
+  const removeHeaderRow = (id: string) => {
+    setHeaderRows((rows) => rows.filter((row) => row.id !== id))
+  }
+
   const handleSave = async (event: FormEvent) => {
     event.preventDefault()
     setSaving(true)
     setError('')
     setSaved(false)
     try {
-      const next = await saveLLMConfig(config)
-      setConfig({ ...next, api_key: '' })
+      const next = await saveLLMConfig({ ...config, headers: headersFromRows(headerRows) })
+      setConfig({ ...next, api_key: '', headers: next.headers || {} })
+      setHeaderRows(rowsFromHeaders(next.headers))
       setSaved(true)
       onSaved()
     } catch (err: any) {
@@ -152,6 +200,48 @@ export default function LLMConfigPanel({ open, status, onClose, onSaved }: LLMCo
                     placeholder={config.api_key_configured ? 'configured; leave blank to keep current key' : 'required unless provider is ollama'}
                   />
                 </Field>
+              </div>
+
+              <div className="sm:col-span-2">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">Custom Headers</span>
+                    <Button type="button" variant="outline" size="sm" onClick={addHeaderRow}>
+                      <Plus className="h-3.5 w-3.5" />
+                      Add
+                    </Button>
+                  </div>
+                  {headerRows.length > 0 && (
+                    <div className="space-y-2">
+                      {headerRows.map((row) => (
+                        <div
+                          key={row.id}
+                          className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_2.25rem]"
+                        >
+                          <Input
+                            value={row.key}
+                            onChange={(event) => updateHeaderRow(row.id, 'key', event.target.value)}
+                            placeholder="User-Agent"
+                          />
+                          <Input
+                            value={row.value}
+                            onChange={(event) => updateHeaderRow(row.id, 'value', event.target.value)}
+                            placeholder="Version: 5.10.0 openwarp"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => removeHeaderRow(row.id)}
+                            aria-label="Remove header"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}

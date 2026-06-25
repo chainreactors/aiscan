@@ -62,13 +62,13 @@ type ServiceStatus struct {
 }
 
 type LLMConfig struct {
-	ConfigPath       string `json:"config_path,omitempty"`
-	ConfigLoaded     bool   `json:"config_loaded"`
-	Provider         string `json:"provider"`
-	BaseURL          string `json:"base_url"`
-	APIKey           string `json:"api_key,omitempty"`
-	APIKeyConfigured bool   `json:"api_key_configured"`
-	Model            string `json:"model"`
-	Proxy            string `json:"proxy"`
+	ConfigPath       string            `json:"config_path,omitempty"`
+	ConfigLoaded     bool              `json:"config_loaded"`
+	Provider         string            `json:"provider"`
+	BaseURL          string            `json:"base_url"`
+	APIKey           string            `json:"api_key,omitempty"`
+	APIKeyConfigured bool              `json:"api_key_configured"`
+	Model            string            `json:"model"`
+	Proxy            string            `json:"proxy"`
+	Headers          map[string]string `json:"headers,omitempty"`
 }
-

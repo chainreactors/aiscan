@@ -45,6 +45,7 @@ func entryToProviderConfig(entry LLMProviderEntry) agent.ProviderConfig {
 		APIKey:   entry.APIKey,
 		Model:    entry.Model,
 		Proxy:    entry.Proxy,
+		Headers:  entry.Headers,
 		Timeout:  entry.Timeout,
 		Images:   entry.Images,
 	}
@@ -55,8 +56,11 @@ func entryToProviderConfig(entry LLMProviderEntry) agent.ProviderConfig {
 }
 
 func ProviderConfig(option *Option) agent.ProviderConfig {
+	topLevelHeaders := option.Headers
 	if !hasSingleProviderFields(option) && len(option.Providers) > 0 {
-		return entryToProviderConfig(option.Providers[0])
+		cfg := entryToProviderConfig(option.Providers[0])
+		cfg.Headers = mergeHeaderMaps(cfg.Headers, topLevelHeaders)
+		return cfg
 	}
 	cfg := defaultProviderConfig()
 	if option.Provider != "" {
@@ -77,6 +81,7 @@ func ProviderConfig(option *Option) agent.ProviderConfig {
 	if option.LLMProxy != "" {
 		cfg.Proxy = option.LLMProxy
 	}
+	cfg.Headers = topLevelHeaders
 	cfg.Timeout = 120
 	return cfg
 }
@@ -101,4 +106,5 @@ func ApplyResolvedProviderOptions(option *Option, cfg agent.ProviderConfig) {
 	option.BaseURL = cfg.BaseURL
 	option.APIKey = cfg.APIKey
 	option.Model = cfg.Model
+	option.Headers = cfg.Headers
 }

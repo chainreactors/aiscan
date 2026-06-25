@@ -15,6 +15,10 @@ type OpenAIProvider struct {
 }
 
 func NewOpenAIProvider(cfg *ProviderConfig) (*OpenAIProvider, error) {
+	cfg, err := cloneConfigWithNormalizedHeaders(cfg)
+	if err != nil {
+		return nil, err
+	}
 	client, err := newHTTPClient(cfg)
 	if err != nil {
 		return nil, err
@@ -100,6 +104,7 @@ func (p *OpenAIProvider) setAuthHeaders(req *http.Request) {
 	if p.config.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+p.config.APIKey)
 	}
+	applyCustomHeaders(req, p.config.Headers)
 }
 
 func marshalOpenAIRequest(req *ChatCompletionRequest) ([]byte, error) {

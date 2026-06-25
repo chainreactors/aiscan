@@ -110,6 +110,64 @@ ioa:
 	}
 }
 
+func TestLoadConfigLLMHeaders(t *testing.T) {
+	dir := t.TempDir()
+	writeTestConfig(t, dir, `
+llm:
+  headers:
+    User-Agent: "Version: 5.10.0 openwarp"
+  providers:
+    - provider: deepseek
+      api_key: dk-111
+      model: deepseek-chat
+      headers:
+        X-Primary: primary
+    - provider: openai
+      api_key: sk-222
+      model: gpt-4o
+      headers:
+        X-Fallback: fallback
+`)
+
+	var opt Option
+	if err := LoadConfig(filepath.Join(dir, "aiscan.yaml"), &opt); err != nil {
+		t.Fatal(err)
+	}
+	if got := opt.Headers["User-Agent"]; got != "Version: 5.10.0 openwarp" {
+		t.Fatalf("top-level User-Agent header = %q", got)
+	}
+	if len(opt.Providers) != 2 {
+		t.Fatalf("providers = %d, want 2", len(opt.Providers))
+	}
+	if got := opt.Providers[0].Headers["X-Primary"]; got != "primary" {
+		t.Fatalf("primary header = %q", got)
+	}
+	if got := opt.Providers[1].Headers["X-Fallback"]; got != "fallback" {
+		t.Fatalf("fallback header = %q", got)
+	}
+}
+
+func TestMergeOptionHeadersCLIWins(t *testing.T) {
+	dst := Option{LLMOptions: LLMOptions{
+		Headers: map[string]string{"User-Agent": "cli-agent"},
+	}}
+	src := Option{LLMOptions: LLMOptions{
+		Headers: map[string]string{"user-agent": "config-agent", "X-Config": "yes"},
+	}}
+
+	mergeOption(&dst, &src)
+
+	if got := dst.Headers["User-Agent"]; got != "cli-agent" {
+		t.Fatalf("User-Agent = %q, want CLI value", got)
+	}
+	if got := dst.Headers["X-Config"]; got != "yes" {
+		t.Fatalf("X-Config = %q, want config value", got)
+	}
+	if _, ok := dst.Headers["user-agent"]; ok {
+		t.Fatalf("config user-agent key should be replaced by CLI override: %#v", dst.Headers)
+	}
+}
+
 func TestLoadConfigReconNumericZeroIsExplicit(t *testing.T) {
 	dir := t.TempDir()
 	writeTestConfig(t, dir, `
@@ -617,6 +675,31 @@ func TestProvidersListOnly(t *testing.T) {
 	fallbacks := FallbackProviderConfigs(&option)
 	if len(fallbacks) != 1 || fallbacks[0].Provider != "openai" || fallbacks[0].Model != "gpt-4o" {
 		t.Errorf("fallback should be providers[1:], got %+v", fallbacks)
+	}
+}
+
+func TestProvidersListPrimaryUsesTopLevelHeaders(t *testing.T) {
+	option := Option{}
+	option.Headers = map[string]string{"User-Agent": "top-agent"}
+	option.Providers = []LLMProviderEntry{
+		{Provider: "deepseek", APIKey: "key1", Model: "deepseek-chat", Headers: map[string]string{"X-Primary": "yes"}},
+		{Provider: "openai", APIKey: "key2", Model: "gpt-4o", Headers: map[string]string{"X-Fallback": "yes"}},
+	}
+
+	primary := ProviderConfig(&option)
+	if primary.Headers["User-Agent"] != "top-agent" || primary.Headers["X-Primary"] != "yes" {
+		t.Fatalf("primary headers = %#v, want top-level and primary entry headers", primary.Headers)
+	}
+
+	fallbacks := FallbackProviderConfigs(&option)
+	if len(fallbacks) != 1 {
+		t.Fatalf("fallbacks = %d, want 1", len(fallbacks))
+	}
+	if _, ok := fallbacks[0].Headers["User-Agent"]; ok {
+		t.Fatalf("fallback should not inherit top-level headers: %#v", fallbacks[0].Headers)
+	}
+	if got := fallbacks[0].Headers["X-Fallback"]; got != "yes" {
+		t.Fatalf("fallback X-Fallback = %q", got)
 	}
 }
 

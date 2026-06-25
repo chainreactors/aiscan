@@ -155,11 +155,12 @@ func initWebApp(ctx context.Context, configFile string, logger telemetry.Logger)
 
 type webYAMLConfig struct {
 	LLM struct {
-		Provider string `yaml:"provider"`
-		BaseURL  string `yaml:"base_url"`
-		APIKey   string `yaml:"api_key"`
-		Model    string `yaml:"model"`
-		Proxy    string `yaml:"proxy"`
+		Provider string            `yaml:"provider"`
+		BaseURL  string            `yaml:"base_url"`
+		APIKey   string            `yaml:"api_key"`
+		Model    string            `yaml:"model"`
+		Proxy    string            `yaml:"proxy"`
+		Headers  map[string]string `yaml:"headers,omitempty"`
 	} `yaml:"llm"`
 	Cyberhub struct {
 		URL   string `yaml:"url"`
@@ -198,6 +199,7 @@ func (s *webConfigStore) GetLLMConfig(ctx context.Context) (web.LLMConfig, error
 		APIKeyConfigured: strings.TrimSpace(c.LLM.APIKey) != "",
 		Model:            c.LLM.Model,
 		Proxy:            c.LLM.Proxy,
+		Headers:          c.LLM.Headers,
 	}, nil
 }
 
@@ -226,12 +228,21 @@ func (s *webConfigStore) SaveLLMConfig(ctx context.Context, llmCfg web.LLMConfig
 	if apiKey == "" {
 		apiKey = current.LLM.APIKey
 	}
+	headers := current.LLM.Headers
+	if llmCfg.Headers != nil {
+		var err error
+		headers, err = cfg.NormalizeHeaderMap(llmCfg.Headers)
+		if err != nil {
+			return web.LLMConfig{}, err
+		}
+	}
 
 	current.LLM.Provider = strings.TrimSpace(llmCfg.Provider)
 	current.LLM.BaseURL = strings.TrimSpace(llmCfg.BaseURL)
 	current.LLM.APIKey = apiKey
 	current.LLM.Model = strings.TrimSpace(llmCfg.Model)
 	current.LLM.Proxy = strings.TrimSpace(llmCfg.Proxy)
+	current.LLM.Headers = headers
 	next, _ := yaml.Marshal(&current)
 	if dir := filepath.Dir(p); dir != "." && dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -250,6 +261,7 @@ func (s *webConfigStore) SaveLLMConfig(ctx context.Context, llmCfg web.LLMConfig
 		APIKeyConfigured: strings.TrimSpace(saved.LLM.APIKey) != "",
 		Model:            saved.LLM.Model,
 		Proxy:            saved.LLM.Proxy,
+		Headers:          saved.LLM.Headers,
 	}, nil
 }
 

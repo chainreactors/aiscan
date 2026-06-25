@@ -39,6 +39,39 @@ func TestResolvePreservesExplicitBaseURL(t *testing.T) {
 	}
 }
 
+func TestResolveNormalizesCustomHeaders(t *testing.T) {
+	cfg, err := Resolve(&ProviderConfig{
+		Provider: "openai",
+		APIKey:   "test-key",
+		Headers: map[string]string{
+			"user-agent": "Version: 5.10.0 openwarp",
+			"X-Empty":    "",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if got := cfg.Headers["User-Agent"]; got != "Version: 5.10.0 openwarp" {
+		t.Fatalf("User-Agent = %q", got)
+	}
+	if _, ok := cfg.Headers["X-Empty"]; ok {
+		t.Fatalf("empty header should be ignored: %#v", cfg.Headers)
+	}
+}
+
+func TestResolveRejectsInvalidCustomHeaders(t *testing.T) {
+	tests := []map[string]string{
+		{"User Agent": "bad"},
+		{"X-Test": "bad\nvalue"},
+		{"User-Agent": "one", "user-agent": "two"},
+	}
+	for _, headers := range tests {
+		if _, err := Resolve(&ProviderConfig{Provider: "openai", APIKey: "test-key", Headers: headers}); err == nil {
+			t.Fatalf("Resolve() error = nil for headers %#v", headers)
+		}
+	}
+}
+
 func TestInferFromBaseURLDefaultsToOpenAI(t *testing.T) {
 	for _, baseURL := range []string{
 		"https://api.openai.com/v1",
@@ -269,6 +302,72 @@ func TestOpenAIProviderChatCompletionStream(t *testing.T) {
 	}
 }
 
+func TestOpenAIProviderCustomHeadersForAllRequests(t *testing.T) {
+	const userAgent = "Version: 5.10.0 openwarp"
+	seen := map[string]bool{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("User-Agent"); got != userAgent {
+			t.Fatalf("User-Agent = %q, want %q", got, userAgent)
+		}
+		if got := r.Header.Get("X-Test"); got != "yes" {
+			t.Fatalf("X-Test = %q, want yes", got)
+		}
+
+		switch {
+		case r.URL.Path == "/v1/chat/completions" && r.Header.Get("Accept") == "text/event-stream":
+			seen["stream"] = true
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprintln(w, `data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`)
+			fmt.Fprintln(w, `data: [DONE]`)
+		case r.URL.Path == "/v1/chat/completions":
+			seen["chat"] = true
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`)
+		case r.URL.Path == "/v1/responses":
+			seen["websearch"] = true
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}]}`)
+		default:
+			t.Fatalf("unexpected request path %q", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	p, err := NewOpenAIProvider(&ProviderConfig{
+		Provider: "openai",
+		BaseURL:  server.URL + "/v1",
+		Headers: map[string]string{
+			"User-Agent": userAgent,
+			"X-Test":     "yes",
+		},
+		Timeout: 5,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenAIProvider() error = %v", err)
+	}
+
+	if _, err := p.ChatCompletion(context.Background(), &ChatCompletionRequest{Model: "test"}); err != nil {
+		t.Fatalf("ChatCompletion() error = %v", err)
+	}
+	ch, err := p.ChatCompletionStream(context.Background(), &ChatCompletionRequest{Model: "test"})
+	if err != nil {
+		t.Fatalf("ChatCompletionStream() error = %v", err)
+	}
+	for event := range ch {
+		if event.Err != nil {
+			t.Fatalf("stream error = %v", event.Err)
+		}
+	}
+	if _, err := p.WebSearch(context.Background(), "query", 1); err != nil {
+		t.Fatalf("WebSearch() error = %v", err)
+	}
+	for _, name := range []string{"chat", "stream", "websearch"} {
+		if !seen[name] {
+			t.Fatalf("missing %s request", name)
+		}
+	}
+}
+
 func TestAnthropicProviderChatCompletionStream(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/messages" {
@@ -386,6 +485,64 @@ func TestAnthropicProviderChatCompletionStream(t *testing.T) {
 	}
 	if !done {
 		t.Fatal("missing done event")
+	}
+}
+
+func TestAnthropicProviderCustomHeadersPreserveProviderHeaders(t *testing.T) {
+	const userAgent = "Version: 5.10.0 openwarp"
+	seen := map[string]bool{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("User-Agent"); got != userAgent {
+			t.Fatalf("User-Agent = %q, want %q", got, userAgent)
+		}
+		if got := r.Header.Get("X-Test"); got != "yes" {
+			t.Fatalf("X-Test = %q, want yes", got)
+		}
+		if got := r.Header.Get("x-api-key"); got != "test-key" {
+			t.Fatalf("x-api-key = %q, want test-key", got)
+		}
+		if got := r.Header.Get("anthropic-version"); got != anthropicVersion {
+			t.Fatalf("anthropic-version = %q, want %q", got, anthropicVersion)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("anthropic-beta") != "" {
+			seen["websearch"] = true
+			fmt.Fprint(w, `{"content":[{"type":"text","text":"ok"}]}`)
+			return
+		}
+		seen["chat"] = true
+		fmt.Fprint(w, `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`)
+	}))
+	defer server.Close()
+
+	p, err := NewAnthropicProvider(&ProviderConfig{
+		Provider: "anthropic",
+		BaseURL:  server.URL + "/v1",
+		APIKey:   "test-key",
+		Headers: map[string]string{
+			"User-Agent": userAgent,
+			"X-Test":     "yes",
+		},
+		Timeout: 5,
+	})
+	if err != nil {
+		t.Fatalf("NewAnthropicProvider() error = %v", err)
+	}
+
+	if _, err := p.ChatCompletion(context.Background(), &ChatCompletionRequest{
+		Model:    "claude-test",
+		Messages: []ChatMessage{NewTextMessage("user", "hello")},
+	}); err != nil {
+		t.Fatalf("ChatCompletion() error = %v", err)
+	}
+	if _, err := p.WebSearch(context.Background(), "query", 1); err != nil {
+		t.Fatalf("WebSearch() error = %v", err)
+	}
+	for _, name := range []string{"chat", "websearch"} {
+		if !seen[name] {
+			t.Fatalf("missing %s request", name)
+		}
 	}
 }
 

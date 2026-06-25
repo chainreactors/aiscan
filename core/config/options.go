@@ -27,23 +27,26 @@ type ScanConfigOptions struct {
 }
 
 type LLMOptions struct {
-	Provider  string             `long:"provider" config:"provider" description:"LLM provider: openai (default), anthropic, deepseek, openrouter, ollama, groq, moonshot"`
-	BaseURL   string             `long:"base-url" config:"base_url" description:"LLM API base URL (leave empty to use provider default)"`
-	APIKey    string             `long:"api-key" config:"api_key" description:"LLM API key (or env: OPENAI_API_KEY, ANTHROPIC_API_KEY, AISCAN_API_KEY)"`
-	Model     string             `long:"model" config:"model" description:"LLM model name"`
-	LLMProxy  string             `long:"llm-proxy" config:"proxy" description:"Proxy for LLM API requests"`
-	Providers []LLMProviderEntry `no-flag:"true" config:"providers" description:"Additional LLM providers for fallback or multi-model routing"`
-	AI        bool               `long:"ai" description:"Analyze direct scanner output with an LLM"`
+	Provider       string             `long:"provider" config:"provider" description:"LLM provider: openai (default), anthropic, deepseek, openrouter, ollama, groq, moonshot"`
+	BaseURL        string             `long:"base-url" config:"base_url" description:"LLM API base URL (leave empty to use provider default)"`
+	APIKey         string             `long:"api-key" config:"api_key" description:"LLM API key (or env: OPENAI_API_KEY, ANTHROPIC_API_KEY, AISCAN_API_KEY)"`
+	Model          string             `long:"model" config:"model" description:"LLM model name"`
+	LLMProxy       string             `long:"llm-proxy" config:"proxy" description:"Proxy for LLM API requests"`
+	Headers        map[string]string  `no-flag:"true" config:"headers" description:"Custom HTTP headers for LLM API requests"`
+	LLMHeaderFlags HeaderFlags        `long:"llm-header" description:"Custom LLM HTTP header in KEY=VALUE format. Can be specified multiple times"`
+	Providers      []LLMProviderEntry `no-flag:"true" config:"providers" description:"Additional LLM providers for fallback or multi-model routing"`
+	AI             bool               `long:"ai" description:"Analyze direct scanner output with an LLM"`
 }
 
 type LLMProviderEntry struct {
-	Provider string `config:"provider" yaml:"provider"`
-	BaseURL  string `config:"base_url" yaml:"base_url"`
-	APIKey   string `config:"api_key" yaml:"api_key"`
-	Model    string `config:"model" yaml:"model"`
-	Proxy    string `config:"proxy" yaml:"proxy"`
-	Timeout  int    `config:"timeout" yaml:"timeout"`
-	Images   *bool  `config:"images" yaml:"images,omitempty"`
+	Provider string            `config:"provider" yaml:"provider"`
+	BaseURL  string            `config:"base_url" yaml:"base_url"`
+	APIKey   string            `config:"api_key" yaml:"api_key"`
+	Model    string            `config:"model" yaml:"model"`
+	Proxy    string            `config:"proxy" yaml:"proxy"`
+	Headers  map[string]string `config:"headers" yaml:"headers,omitempty"`
+	Timeout  int               `config:"timeout" yaml:"timeout"`
+	Images   *bool             `config:"images" yaml:"images,omitempty"`
 }
 
 type ScannerOptions struct {

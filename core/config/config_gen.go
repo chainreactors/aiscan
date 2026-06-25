@@ -100,6 +100,9 @@ func generateFromStruct(t reflect.Type, v reflect.Value, indent int) string {
 		case fieldType.Kind() == reflect.Slice:
 			b.WriteString(generateSliceComment(prefix, configTag, descTag, fieldType))
 
+		case fieldType.Kind() == reflect.Map:
+			b.WriteString(generateMapComment(prefix, configTag, descTag))
+
 		default:
 			if descTag != "" {
 				b.WriteString(fmt.Sprintf("%s# %s\n", prefix, descTag))
@@ -146,6 +149,15 @@ func generateSliceComment(prefix, configTag, descTag string, t reflect.Type) str
 	return b.String()
 }
 
+func generateMapComment(prefix, configTag, descTag string) string {
+	var b strings.Builder
+	if descTag != "" {
+		b.WriteString(fmt.Sprintf("%s# %s\n", prefix, descTag))
+	}
+	b.WriteString(fmt.Sprintf("%s# %s: {}\n", prefix, configTag))
+	return b.String()
+}
+
 func formatValue(kind reflect.Kind, defaultVal string) string {
 	if defaultVal != "" {
 		switch kind {
@@ -164,6 +176,8 @@ func formatValue(kind reflect.Kind, defaultVal string) string {
 		return "0.0"
 	case reflect.String:
 		return `""`
+	case reflect.Map:
+		return `{}`
 	default:
 		return `""`
 	}

@@ -153,6 +153,7 @@ export interface LLMConfig {
   api_key_configured: boolean;
   model: string;
   proxy: string;
+  headers?: Record<string, string>;
 }
 
 export interface TerminalMessage {

@@ -31,13 +31,14 @@ type WebSearchResponse struct {
 }
 
 type ProviderConfig struct {
-	Provider string `yaml:"provider" config:"provider"`
-	BaseURL  string `yaml:"base_url" config:"base_url"`
-	APIKey   string `yaml:"api_key"  config:"api_key"`
-	Model    string `yaml:"model"    config:"model"`
-	Proxy    string `yaml:"proxy"    config:"proxy"`
-	Timeout  int    `yaml:"timeout"  config:"timeout"`
-	Images   *bool  `yaml:"images,omitempty" config:"images"`
+	Provider string            `yaml:"provider" config:"provider"`
+	BaseURL  string            `yaml:"base_url" config:"base_url"`
+	APIKey   string            `yaml:"api_key"  config:"api_key"`
+	Model    string            `yaml:"model"    config:"model"`
+	Proxy    string            `yaml:"proxy"    config:"proxy"`
+	Headers  map[string]string `yaml:"headers,omitempty" config:"headers"`
+	Timeout  int               `yaml:"timeout"  config:"timeout"`
+	Images   *bool             `yaml:"images,omitempty" config:"images"`
 }
 
 func NormalizeProvider(name string) string {
@@ -75,6 +76,12 @@ func Resolve(cfg *ProviderConfig) (*ProviderConfig, error) {
 	if resolved.Timeout <= 0 {
 		resolved.Timeout = 120
 	}
+
+	headers, err := normalizeHeaders(resolved.Headers)
+	if err != nil {
+		return nil, err
+	}
+	resolved.Headers = headers
 
 	if resolved.Images == nil {
 		v := inferImageSupport(resolved.Provider, resolved.Model)

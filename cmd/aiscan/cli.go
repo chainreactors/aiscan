@@ -201,12 +201,12 @@ func parseCLI(args []string) (parsedCLI, error) {
 
 	option := cli.Option
 	if cli.Version {
-		return parsedCLI{Option: option, Mode: cfg.RunModeNoCommand}, nil
+		return finalizeParsedCLI(parsedCLI{Option: option, Mode: cfg.RunModeNoCommand})
 	}
 
 	mode := selectedMode(parser)
 	if mode == cfg.RunModeNoCommand {
-		return parsedCLI{Option: option, Mode: cfg.RunModeNoCommand}, nil
+		return finalizeParsedCLI(parsedCLI{Option: option, Mode: cfg.RunModeNoCommand})
 	}
 
 	if mode == cfg.RunModeScanner {
@@ -217,15 +217,15 @@ func parseCLI(args []string) (parsedCLI, error) {
 			return parsedCLI{}, err
 		}
 		scannerArgs := append([]string{scannerName}, scannerRest...)
-		return parsedCLI{Option: option, Mode: mode, ScannerArgs: scannerArgs}, nil
+		return finalizeParsedCLI(parsedCLI{Option: option, Mode: mode, ScannerArgs: scannerArgs})
 	}
 
 	if mode == runModeWeb {
-		return parsedCLI{Option: option, Mode: runModeWeb, WebOpts: cli.Web}, nil
+		return finalizeParsedCLI(parsedCLI{Option: option, Mode: runModeWeb, WebOpts: cli.Web})
 	}
 
 	ioaArgs := extractIOAArgs(&cli, mode)
-	return parsedCLI{Option: option, Mode: mode, IOAArgs: ioaArgs}, nil
+	return finalizeParsedCLI(parsedCLI{Option: option, Mode: mode, IOAArgs: ioaArgs})
 }
 
 func parseScannerCLI(scannerName string, rootArgs, scannerRest []string) (parsedCLI, error) {
@@ -250,7 +250,7 @@ func parseScannerCLI(scannerName string, rootArgs, scannerRest []string) (parsed
 	option := cli.Option
 	mergeManualScannerOptions(&option, manual)
 	if cli.Version {
-		return parsedCLI{Option: option, Mode: cfg.RunModeNoCommand}, nil
+		return finalizeParsedCLI(parsedCLI{Option: option, Mode: cfg.RunModeNoCommand})
 	}
 	option.Timeout = 3600
 
@@ -264,11 +264,35 @@ func parseScannerCLI(scannerName string, rootArgs, scannerRest []string) (parsed
 	if boolFlagEnabled(scannerArgs, "--debug") {
 		option.Debug = true
 	}
-	return parsedCLI{
+	return finalizeParsedCLI(parsedCLI{
 		Option:      option,
 		Mode:        cfg.RunModeScanner,
 		ScannerArgs: append([]string{scannerName}, scannerArgs...),
-	}, nil
+	})
+}
+
+func finalizeParsedCLI(parsed parsedCLI) (parsedCLI, error) {
+	headers, err := cfg.ParseHeaderFlags(parsed.Option.LLMHeaderFlags)
+	if err != nil {
+		return parsedCLI{}, err
+	}
+	parsed.Option.Headers = cfgMergeHeaders(parsed.Option.Headers, headers)
+	parsed.Option.LLMHeaderFlags = nil
+	return parsed, nil
+}
+
+func cfgMergeHeaders(base, override map[string]string) map[string]string {
+	if len(base) == 0 && len(override) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(base)+len(override))
+	for key, value := range base {
+		out[key] = value
+	}
+	for key, value := range override {
+		out[key] = value
+	}
+	return out
 }
 
 func mergeManualScannerOptions(option *cfg.Option, manual cfg.Option) {
@@ -277,6 +301,9 @@ func mergeManualScannerOptions(option *cfg.Option, manual cfg.Option) {
 	option.APIKey = cfg.ResolveString(manual.APIKey, option.APIKey)
 	option.Model = cfg.ResolveString(manual.Model, option.Model)
 	option.LLMProxy = cfg.ResolveString(manual.LLMProxy, option.LLMProxy)
+	if len(manual.LLMHeaderFlags) > 0 {
+		option.LLMHeaderFlags = append(option.LLMHeaderFlags, manual.LLMHeaderFlags...)
+	}
 	if manual.AI {
 		option.AI = true
 	}
@@ -413,6 +440,7 @@ var scannerKnownFlags = []knownFlag{
 	{names: []string{"--model"}, arity: 1, apply: func(o *cfg.Option, v string) { o.Model = v }},
 	{names: []string{"--proxy"}, arity: 1, apply: func(o *cfg.Option, v string) { o.Proxy = v }},
 	{names: []string{"--llm-proxy"}, arity: 1, apply: func(o *cfg.Option, v string) { o.LLMProxy = v }},
+	{names: []string{"--llm-header"}, arity: 1, apply: func(o *cfg.Option, v string) { o.LLMHeaderFlags = append(o.LLMHeaderFlags, v) }},
 	{names: []string{"--fofa-email"}, arity: 1, apply: func(o *cfg.Option, v string) { o.FofaEmail = v }},
 	{names: []string{"--fofa-key"}, arity: 1, apply: func(o *cfg.Option, v string) { o.FofaKey = v }},
 	{names: []string{"--hunter-token"}, arity: 1, apply: func(o *cfg.Option, v string) { o.HunterToken = v }},
