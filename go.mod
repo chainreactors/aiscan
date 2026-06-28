@@ -8,21 +8,21 @@ require (
 	github.com/chainreactors/crtm v0.0.3-0.20260618163257-073207497076
 	github.com/chainreactors/fingers v1.2.2-0.20260615064219-7e07a99c93e0
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260616122548-b8e5ed3b1b40
-	github.com/chainreactors/ioa v0.1.1-0.20260618070057-ec99736bed74
+	github.com/chainreactors/ioa v0.1.1
 	github.com/chainreactors/logs v0.0.0-20260624034259-9aaea4aa52cc
-	github.com/chainreactors/neutron v0.0.0-20260615055126-a9bbe4fc3e95
+	github.com/chainreactors/neutron v0.1.0
 	github.com/chainreactors/parsers v0.0.0-20260608085142-3d2c51baa8fe
 	github.com/chainreactors/proton v0.3.1-0.20260611174627-89c10c8c27e5
 	github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593
 	github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3
 	github.com/chainreactors/sdk v0.3.4-0.20260624031614-b16da9a87441
-	github.com/chainreactors/spray v1.3.2-0.20260624034433-890630649b2b
+	github.com/chainreactors/spray v1.3.2
 	github.com/chainreactors/tui/console v0.0.0-00010101000000-000000000000
 	github.com/chainreactors/tui/readline v1.2.2
-	github.com/chainreactors/utils v0.0.0-20260623065725-737b33d61c6b
+	github.com/chainreactors/utils v0.0.0-20260626175554-d3e25e531450
 	github.com/chainreactors/utils/mitmproxy v0.0.0-20260624182357-8d5cad72d8f2
 	github.com/chainreactors/utils/pty v0.0.0-20260624031611-9aadeae3fb0e
-	github.com/chainreactors/zombie v1.2.3-0.20260624041317-6bf4579de29d
+	github.com/chainreactors/zombie v1.3.0
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/glamour v0.8.0
 	github.com/go-rod/rod v0.116.2
