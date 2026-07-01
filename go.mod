@@ -4,7 +4,7 @@ go 1.25.7
 
 require (
 	github.com/alecthomas/chroma/v2 v2.14.0
-	github.com/carapace-sh/carapace v1.11.6
+	github.com/carapace-sh/carapace v1.13.0
 	github.com/chainreactors/crtm v0.0.3-0.20260618163257-073207497076
 	github.com/chainreactors/fingers v1.2.2-0.20260629103336-467eef72e53e
 	github.com/chainreactors/gogo/v2 v2.14.2-0.20260629062248-238b8dcab915
