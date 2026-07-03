@@ -1,0 +1,61 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: 1 agent
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e53]:
+      - generic [ref=e54]:
+        - button "aiscan-80f4bd3e idle openai/deepseek-v4-pro" [ref=e55] [cursor=pointer]:
+          - img [ref=e56]
+          - generic [ref=e58]:
+            - generic [ref=e59]:
+              - generic [ref=e60]: aiscan-80f4bd3e
+              - generic [ref=e61]: idle
+            - generic [ref=e62]: openai/deepseek-v4-pro
+          - img [ref=e63]
+        - generic [ref=e65]:
+          - button "Terminal" [ref=e66] [cursor=pointer]:
+            - img [ref=e67]
+            - text: Terminal
+          - button "New" [active] [ref=e69] [cursor=pointer]:
+            - img [ref=e70]
+            - text: New
+          - generic [ref=e71]: 1 sessions
+      - button "New session 6月27日" [ref=e74] [cursor=pointer]:
+        - generic [ref=e75]:
+          - img [ref=e76]
+          - generic [ref=e78]: New session
+        - generic [ref=e79]: 6月27日
+  - generic [ref=e21]:
+    - generic [ref=e22]:
+      - generic [ref=e23]:
+        - img [ref=e24]
+        - text: Chat
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - img [ref=e28]
+          - generic [ref=e30]: "1"
+        - button "Open scan workspace" [ref=e31] [cursor=pointer]:
+          - img [ref=e32]
+        - button "LLM Config" [ref=e34] [cursor=pointer]:
+          - img [ref=e35]
+        - button "Switch to dark theme" [ref=e38] [cursor=pointer]:
+          - img [ref=e39]
+        - button "Show detail panel" [ref=e41] [cursor=pointer]:
+          - img [ref=e42]
+    - main [ref=e44]:
+      - generic [ref=e81]:
+        - img [ref=e82]
+        - paragraph [ref=e84]: Ready
+        - paragraph [ref=e85]:
+          - text: Type a message or use
+          - code [ref=e86]: /scan <target>
+          - text: to start scanning
+      - generic [ref=e89]:
+        - textbox "Type a message... (/ for commands)" [ref=e90]
+        - button "Send message" [disabled]:
+          - img

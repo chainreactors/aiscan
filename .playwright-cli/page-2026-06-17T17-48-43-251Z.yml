@@ -1,0 +1,105 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Web console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - heading "History" [level=2] [ref=e17]
+      - generic [ref=e18]:
+        - img
+        - textbox "Search scan targets" [ref=e19]:
+          - /placeholder: Search targets
+      - generic [ref=e20]:
+        - button "example.com, completed, quick, 13 assets, 0 loots" [ref=e112] [cursor=pointer]:
+          - generic [ref=e113]:
+            - generic [ref=e114]: example.com
+            - generic "completed" [ref=e115]
+          - generic [ref=e116]:
+            - generic [ref=e117]: quick
+            - generic "13 assets" [ref=e118]:
+              - img [ref=e119]
+              - generic [ref=e123]: "13"
+            - generic "0 loots" [ref=e124]:
+              - img [ref=e125]
+              - generic [ref=e127]: "0"
+            - generic [ref=e128]: 6月6日 01:29
+        - button "127.0.0.1, completed, quick, 8 assets, 0 loots" [ref=e129] [cursor=pointer]:
+          - generic [ref=e130]:
+            - generic [ref=e131]: 127.0.0.1
+            - generic "completed" [ref=e132]
+          - generic [ref=e133]:
+            - generic [ref=e134]: quick
+            - generic "8 assets" [ref=e135]:
+              - img [ref=e136]
+              - generic [ref=e140]: "8"
+            - generic "0 loots" [ref=e141]:
+              - img [ref=e142]
+              - generic [ref=e144]: "0"
+            - generic [ref=e145]: Verify
+            - generic [ref=e146]: Sniper
+            - generic [ref=e147]: Deep
+            - generic [ref=e148]: 6月6日 01:27
+  - main [ref=e21]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - img [ref=e25]
+        - textbox "Scan target" [ref=e28]:
+          - /placeholder: Target — IP, hostname, or URL
+      - generic [ref=e29]:
+        - group "Scan mode" [ref=e30]:
+          - button "Quick" [ref=e31] [cursor=pointer]
+          - button "Full" [ref=e32] [cursor=pointer]
+        - generic [ref=e33]:
+          - button "Verify analysis" [disabled] [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e45]: Verify
+          - button "Sniper analysis" [disabled] [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e49]: Sniper
+          - button "Deep analysis" [disabled] [ref=e50]:
+            - img [ref=e51]
+            - generic [ref=e58]: Deep
+        - button "Start scan" [disabled]:
+          - img
+          - generic: Scan
+      - generic [ref=e59]:
+        - generic "LLM Offline" [ref=e60]:
+          - img [ref=e61]
+          - text: LLM Offline
+        - button "Agents 0" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+          - generic [ref=e66]: Agents
+          - generic [ref=e67]: "0"
+        - button "Open LLM configuration" [ref=e68] [cursor=pointer]:
+          - img [ref=e69]
+          - generic [ref=e72]: LLM
+        - generic [ref=e73]:
+          - button "Switch to dark theme" [active] [ref=e203] [cursor=pointer]:
+            - img [ref=e204]
+          - generic [ref=e206]: Switch to dark theme
+    - generic [ref=e82]:
+      - img [ref=e83]
+      - generic [ref=e85]:
+        - paragraph [ref=e86]: No active scan
+        - paragraph [ref=e87]: Ready for a target
+      - generic [ref=e88]:
+        - generic [ref=e89]:
+          - img [ref=e90]
+          - generic [ref=e94]: History
+          - generic [ref=e95]: "2"
+        - generic [ref=e96]:
+          - img [ref=e97]
+          - generic [ref=e99]: Agents
+          - generic [ref=e100]: "0"
+        - generic [ref=e101]:
+          - img [ref=e102]
+          - generic [ref=e104]: LLM
+          - generic [ref=e105]: Offline
+        - generic [ref=e106]:
+          - img [ref=e107]
+          - generic [ref=e110]: Config
+          - generic [ref=e111]: Loaded

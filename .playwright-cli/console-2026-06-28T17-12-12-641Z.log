@@ -1,0 +1,22 @@
+[  173143ms] [ERROR] ReferenceError: displayContent is not defined
+    at Ti (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:473:22562)
+    at ym (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:38:17649)
+    at u1 (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:40:44742)
+    at o1 (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:40:40333)
+    at q3 (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:40:40261)
+    at yd (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:40:40114)
+    at Vm (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:40:36399)
+    at n1 (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:40:35347)
+    at D (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:25:1590)
+    at MessagePort.L (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:25:1952) @ http://127.0.0.1:18082/assets/index-Aj19z2x8.js:39
+[  173146ms] ReferenceError: displayContent is not defined
+    at Ti (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:473:22562)
+    at ym (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:38:17649)
+    at u1 (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:40:44742)
+    at o1 (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:40:40333)
+    at q3 (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:40:40261)
+    at yd (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:40:40114)
+    at Vm (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:40:36399)
+    at n1 (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:40:35347)
+    at D (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:25:1590)
+    at MessagePort.L (http://127.0.0.1:18082/assets/index-Aj19z2x8.js:25:1952)

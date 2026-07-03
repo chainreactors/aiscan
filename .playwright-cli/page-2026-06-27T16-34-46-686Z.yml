@@ -1,0 +1,77 @@
+- generic [ref=e3]:
+  - complementary [ref=e439]:
+    - generic [ref=e440]:
+      - img [ref=e441]
+      - generic [ref=e443]:
+        - heading "AIScan" [level=1] [ref=e444]
+        - generic [ref=e445]: Web console
+      - button "Collapse sidebar" [ref=e446] [cursor=pointer]:
+        - img [ref=e447]
+    - generic [ref=e450]:
+      - heading "History" [level=2] [ref=e452]
+      - generic [ref=e453]:
+        - img
+        - textbox "Search scan targets" [ref=e454]:
+          - /placeholder: Search targets
+      - generic [ref=e455]: No scans yet.
+  - main [ref=e456]:
+    - generic [ref=e458]:
+      - generic [ref=e459]:
+        - img [ref=e460]
+        - textbox "Scan target" [active] [ref=e463]:
+          - /placeholder: Target — IP, hostname, or URL
+      - generic [ref=e464]:
+        - group "Scan mode" [ref=e465]:
+          - button "Quick" [pressed] [ref=e466] [cursor=pointer]
+          - button "Full" [ref=e467] [cursor=pointer]
+        - generic [ref=e468]:
+          - button "Verify analysis" [ref=e469] [cursor=pointer]:
+            - img [ref=e470]
+            - generic [ref=e480]: Verify
+          - button "Sniper analysis" [ref=e481] [cursor=pointer]:
+            - img [ref=e482]
+            - generic [ref=e484]: Sniper
+          - button "Deep analysis" [ref=e485] [cursor=pointer]:
+            - img [ref=e486]
+            - generic [ref=e493]: Deep
+        - button "Start scan" [disabled]:
+          - img
+          - generic: Scan
+      - generic [ref=e494]:
+        - generic "LLM Ready" [ref=e495]:
+          - img [ref=e496]
+          - text: LLM Ready
+        - button "Open chat workspace" [ref=e499] [cursor=pointer]:
+          - img [ref=e500]
+          - generic [ref=e502]: Chat
+        - button "Agents 1" [ref=e503] [cursor=pointer]:
+          - img [ref=e504]
+          - generic [ref=e506]: Agents
+          - generic [ref=e507]: "1"
+        - button "Open LLM configuration" [ref=e508] [cursor=pointer]:
+          - img [ref=e509]
+          - generic [ref=e512]: LLM
+        - button "Switch to dark theme" [ref=e513] [cursor=pointer]:
+          - img [ref=e514]
+    - generic [ref=e517]:
+      - img [ref=e518]
+      - generic [ref=e520]:
+        - paragraph [ref=e521]: No active scan
+        - paragraph [ref=e522]: Ready for a target
+      - generic [ref=e523]:
+        - generic [ref=e524]:
+          - img [ref=e525]
+          - generic [ref=e529]: History
+          - generic [ref=e530]: "0"
+        - generic [ref=e531]:
+          - img [ref=e532]
+          - generic [ref=e534]: Agents
+          - generic [ref=e535]: "1"
+        - generic [ref=e536]:
+          - img [ref=e537]
+          - generic [ref=e540]: LLM
+          - generic [ref=e541]: Ready
+        - generic [ref=e542]:
+          - img [ref=e543]
+          - generic [ref=e546]: Config
+          - generic [ref=e547]: Loaded

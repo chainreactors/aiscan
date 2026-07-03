@@ -1,0 +1,74 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Web console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - heading "History" [level=2] [ref=e17]
+      - generic [ref=e18]:
+        - img
+        - textbox "Search scan targets" [ref=e19]:
+          - /placeholder: Search targets
+      - generic [ref=e20]: No scans yet.
+  - main [ref=e21]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - img [ref=e25]
+        - textbox "Scan target" [active] [ref=e28]:
+          - /placeholder: Target — IP, hostname, or URL
+      - generic [ref=e29]:
+        - group "Scan mode" [ref=e30]:
+          - button "Quick" [ref=e31] [cursor=pointer]
+          - button "Full" [ref=e32] [cursor=pointer]
+        - generic [ref=e33]:
+          - button "Verify analysis" [ref=e34] [cursor=pointer]:
+            - img [ref=e35]
+            - generic [ref=e45]: Verify
+          - button "Sniper analysis" [ref=e46] [cursor=pointer]:
+            - img [ref=e47]
+            - generic [ref=e49]: Sniper
+          - button "Deep analysis" [ref=e50] [cursor=pointer]:
+            - img [ref=e51]
+            - generic [ref=e58]: Deep
+        - button "Start scan" [disabled]:
+          - img
+          - generic: Scan
+      - generic [ref=e59]:
+        - generic "LLM Ready" [ref=e60]:
+          - img [ref=e61]
+          - text: LLM Ready
+        - button "Agents 0" [ref=e64] [cursor=pointer]:
+          - img [ref=e65]
+          - generic [ref=e67]: Agents
+          - generic [ref=e68]: "0"
+        - button "Open LLM configuration" [ref=e69] [cursor=pointer]:
+          - img [ref=e70]
+          - generic [ref=e73]: LLM
+        - button "Switch to dark theme" [ref=e75] [cursor=pointer]:
+          - img [ref=e76]
+    - generic [ref=e79]:
+      - img [ref=e80]
+      - generic [ref=e82]:
+        - paragraph [ref=e83]: No active scan
+        - paragraph [ref=e84]: Ready for a target
+      - generic [ref=e85]:
+        - generic [ref=e86]:
+          - img [ref=e87]
+          - generic [ref=e91]: History
+          - generic [ref=e92]: "0"
+        - generic [ref=e93]:
+          - img [ref=e94]
+          - generic [ref=e96]: Agents
+          - generic [ref=e97]: "0"
+        - generic [ref=e98]:
+          - img [ref=e99]
+          - generic [ref=e102]: LLM
+          - generic [ref=e103]: Ready
+        - generic [ref=e104]:
+          - img [ref=e105]
+          - generic [ref=e108]: Config
+          - generic [ref=e109]: Default

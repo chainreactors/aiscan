@@ -1,0 +1,420 @@
+[  325430ms] ReferenceError: useState is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570266385:69:43)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14630:28)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15972:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3739:39)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+[  325432ms] ReferenceError: useState is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570266385:69:43)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14630:28)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15972:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3739:39)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+[  325433ms] [ERROR] The above error occurred in the <ChatPanel> component:
+
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570266385:49:3)
+    at div
+    at TooltipProvider (http://127.0.0.1:5173/src/components/ui/index.tsx:304:35)
+    at App (http://127.0.0.1:5173/src/App.tsx?t=1782570259763:39:16)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14079
+[  325434ms] ReferenceError: useState is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570266385:69:43)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14630:28)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15972:22)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19806:22)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+    at renderRootSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19169:15)
+    at recoverFromConcurrentError (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:18786:28)
+    at performSyncWorkOnRoot (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:18932:28)
+[  331018ms] ReferenceError: useState is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570272028:68:43)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3739:39)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+[  331019ms] ReferenceError: useState is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570272028:68:43)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3739:39)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+[  331020ms] [ERROR] The above error occurred in the <ChatPanel> component:
+
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570272028:48:3)
+    at div
+    at TooltipProvider (http://127.0.0.1:5173/src/components/ui/index.tsx:304:35)
+    at App (http://127.0.0.1:5173/src/App.tsx?t=1782570259763:39:16)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14079
+[  331020ms] ReferenceError: useState is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570272028:68:43)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19806:22)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+    at renderRootSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19169:15)
+    at recoverFromConcurrentError (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:18786:28)
+    at performSyncWorkOnRoot (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:18932:28)
+[  336978ms] ReferenceError: useState is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570277947:67:43)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3739:39)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+[  336979ms] ReferenceError: useState is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570277947:67:43)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3739:39)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+[  336980ms] [ERROR] The above error occurred in the <ChatPanel> component:
+
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570277947:47:3)
+    at div
+    at TooltipProvider (http://127.0.0.1:5173/src/components/ui/index.tsx:304:35)
+    at App (http://127.0.0.1:5173/src/App.tsx?t=1782570259763:39:16)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14079
+[  336980ms] ReferenceError: useState is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570277947:67:43)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19806:22)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+    at renderRootSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19169:15)
+    at recoverFromConcurrentError (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:18786:28)
+    at performSyncWorkOnRoot (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:18932:28)
+[  344034ms] ReferenceError: useState is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570285008:67:43)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3739:39)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+[  344034ms] ReferenceError: useState is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570285008:67:43)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3739:39)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+[  344035ms] [ERROR] The above error occurred in the <ChatPanel> component:
+
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570285008:47:3)
+    at div
+    at TooltipProvider (http://127.0.0.1:5173/src/components/ui/index.tsx:304:35)
+    at App (http://127.0.0.1:5173/src/App.tsx?t=1782570259763:39:16)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14079
+[  344035ms] ReferenceError: useState is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570285008:67:43)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19806:22)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+    at renderRootSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19169:15)
+    at recoverFromConcurrentError (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:18786:28)
+    at performSyncWorkOnRoot (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:18932:28)
+[  350657ms] ReferenceError: terminalOpen is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570291658:342:5)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3739:39)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+[  350661ms] ReferenceError: terminalOpen is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570291658:342:5)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3739:39)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+[  350661ms] [ERROR] The above error occurred in the <ChatPanel> component:
+
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570291658:47:3)
+    at div
+    at TooltipProvider (http://127.0.0.1:5173/src/components/ui/index.tsx:304:35)
+    at App (http://127.0.0.1:5173/src/App.tsx?t=1782570259763:39:16)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14079
+[  350662ms] ReferenceError: terminalOpen is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570291658:342:5)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19806:22)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+    at renderRootSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19169:15)
+    at recoverFromConcurrentError (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:18786:28)
+    at performSyncWorkOnRoot (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:18932:28)
+[  353419ms] ReferenceError: terminalOpen is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570291658:342:5)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3739:39)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+[  353421ms] ReferenceError: terminalOpen is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570291658:342:5)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:3739:39)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+[  353421ms] [ERROR] The above error occurred in the <ChatPanel> component:
+
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570291658:47:3)
+    at div
+    at TooltipProvider (http://127.0.0.1:5173/src/components/ui/index.tsx:304:35)
+    at App (http://127.0.0.1:5173/src/App.tsx?t=1782570294437:39:16)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14079
+[  353421ms] ReferenceError: terminalOpen is not defined
+    at ChatPanel (http://127.0.0.1:5173/src/components/ChatPanel.tsx?t=1782570291658:342:5)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:14974:21)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:15962:22)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19806:22)
+    at performUnitOfWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19251:20)
+    at workLoopSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19190:13)
+    at renderRootSync (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:19169:15)
+    at recoverFromConcurrentError (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:18786:28)
+    at performSyncWorkOnRoot (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=1736041e:18932:28)
+[  366026ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/src/hooks/useChatSession.ts?t=1782570307089:0
+[  366026ms] [ERROR] [vite] Failed to reload /src/App.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[  394545ms] [ERROR] [vite] Failed to reload /src/App.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[  406576ms] [ERROR] [vite] Failed to reload /src/App.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[  416568ms] [ERROR] [vite] Failed to reload /src/App.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[ 1344779ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:5173/src/components/chat/MessageBubble.tsx?t=1782571285765:0
+[ 1344780ms] [ERROR] [vite] Failed to reload /src/components/chat/MessageBubble.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[ 1344782ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:5173/src/components/chat/ThinkingIndicator.tsx?t=1782571285765:0
+[ 1344782ms] [ERROR] [vite] Failed to reload /src/components/chat/ThinkingIndicator.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[ 1344783ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:5173/src/components/chat/ToolCallCard.tsx?t=1782571285765:0
+[ 1344784ms] [ERROR] [vite] Failed to reload /src/components/chat/ToolCallCard.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:5173/@vite/client:881
+[ 2024415ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2026433ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2026825ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2029469ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2029500ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2031837ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2032565ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2034526ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2035617ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2036835ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2038667ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2039580ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2039842ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2041734ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2044618ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2044809ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2044897ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2047866ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2049683ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2049933ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2050929ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2054006ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2054753ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2055014ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2057084ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2059808ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2060070ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2060285ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2063612ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2064872ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2065122ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2067262ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2069935ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2070199ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2070651ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2074983ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2075248ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2075931ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2080034ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2080298ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2083221ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2085075ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2085340ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2087972ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2090112ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2090395ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2094527ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2095177ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2095443ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2100229ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2100493ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2102469ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2105282ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2105545ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2109657ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2110343ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2110610ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2114973ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2115406ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2115671ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2120455ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2120719ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2121512ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2125512ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2125776ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2126290ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2130566ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2130830ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2131888ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2135635ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2135885ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2137718ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2140688ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2140945ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2144488ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2145733ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2146012ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2149696ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2150786ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2151051ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2155853ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2156117ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2157110ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2160912ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2161159ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2162498ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2165955ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2166219ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2168081ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2171010ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2171273ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2174817ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2176076ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2176326ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2181086ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2181148ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2181396ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2186210ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2186474ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2188680ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2191259ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2191523ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2194745ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2196295ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2196576ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2200283ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2201357ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2201621ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2206405ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2206670ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2207180ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2211475ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2211725ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2213016ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2216521ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2216798ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2218172ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2221588ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2221837ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2225797ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2226651ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2226837ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2231699ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2231851ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2231990ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2236342ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2236750ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2236842ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2241206ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2241803ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2241848ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2246855ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2246856ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2247197ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2251853ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2251915ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2254443ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2256848ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2256971ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2258994ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2261842ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2262029ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2266849ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2267068ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2267083ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2271854ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2272118ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2273441ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2276843ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2277124ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2279575ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[ 2281844ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0
+[ 2282109ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/chat/sessions/1782569965244232200/events:0
+[ 2432217ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/api/agents:0
+[ 2437222ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/api/agents:0
+[ 2442226ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/api/agents:0
+[ 2447211ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/api/agents:0

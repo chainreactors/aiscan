@@ -155,6 +155,7 @@ type ChatSession struct {
 	AgentName string    `json:"agent_name,omitempty"`
 	Title     string    `json:"title"`
 	Status    string    `json:"status"`
+	TopicID   string    `json:"topic_id,omitempty"`
 	ScanIDs   []string  `json:"scan_ids,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

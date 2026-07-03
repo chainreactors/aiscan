@@ -1,0 +1,35 @@
+- generic [ref=e4]:
+  - complementary [ref=e5]:
+    - generic [ref=e6]:
+      - img [ref=e7]
+      - generic [ref=e9]:
+        - heading "AIScan" [level=1] [ref=e10]
+        - generic [ref=e11]: 0 agents
+      - button "Collapse sidebar" [ref=e12] [cursor=pointer]:
+        - img [ref=e13]
+    - generic [ref=e17]:
+      - img [ref=e18]
+      - paragraph [ref=e20]: No agents connected
+      - paragraph [ref=e21]: Start an aiscan agent to begin
+  - generic [ref=e22]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - img [ref=e25]
+        - text: Chat
+      - generic [ref=e27]:
+        - generic [ref=e28]:
+          - img [ref=e29]
+          - generic [ref=e31]: "0"
+        - button "Open scan workspace" [ref=e32] [cursor=pointer]:
+          - img [ref=e33]
+        - button "LLM Config" [ref=e35] [cursor=pointer]:
+          - img [ref=e36]
+        - button "Switch to light theme" [ref=e39] [cursor=pointer]:
+          - img [ref=e40]
+        - button "Show detail panel" [ref=e46] [cursor=pointer]:
+          - img [ref=e47]
+    - main [ref=e49]:
+      - generic [ref=e53]:
+        - img [ref=e54]
+        - paragraph [ref=e56]: Start a conversation
+        - paragraph [ref=e57]: Create a new session to begin chatting

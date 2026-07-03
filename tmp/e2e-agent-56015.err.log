@@ -1,0 +1,10 @@
+loaded config: config.yaml
+[debug] provider not configured: no API key: set --api-key, llm.api_key, or AISCAN_API_KEY
+[debug] system prompt length: 3181 chars
+[warn] no LLM provider configured; remote REPL and PTY are available, autonomous agent loop is disabled
+[info] engine=fingers status=ready templates=4314
+[info] engine=neutron status=ready templates=83
+[info] index=finger_poc status=ready fingers=4314 aliases=0 templates=83
+[info] resources type=neutron source=custom templates=193 categories=155
+[info] engine=gogo status=ready
+[info] resources type=fingers source=custom favicon:530 fingers:4314

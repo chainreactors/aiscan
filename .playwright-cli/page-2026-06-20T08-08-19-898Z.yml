@@ -1,0 +1,186 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Web console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - heading "History" [level=2] [ref=e17]
+      - generic [ref=e18]:
+        - img
+        - textbox "Search scan targets" [ref=e19]:
+          - /placeholder: Search targets
+      - generic [ref=e20]: No scans yet.
+  - main [ref=e21]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - img [ref=e25]
+        - textbox "Scan target" [ref=e28]:
+          - /placeholder: Target — IP, hostname, or URL
+      - generic [ref=e29]:
+        - group "Scan mode" [ref=e30]:
+          - button "Quick" [ref=e31] [cursor=pointer]
+          - button "Full" [ref=e32] [cursor=pointer]
+        - generic [ref=e33]:
+          - button "Verify analysis" [disabled] [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e45]: Verify
+          - button "Sniper analysis" [disabled] [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e49]: Sniper
+          - button "Deep analysis" [disabled] [ref=e50]:
+            - img [ref=e51]
+            - generic [ref=e58]: Deep
+        - button "Start scan" [disabled]:
+          - img
+          - generic: Scan
+      - generic [ref=e59]:
+        - generic "LLM Offline" [ref=e60]:
+          - img [ref=e61]
+          - text: LLM Offline
+        - button "Agents 1" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+          - generic [ref=e66]: Agents
+          - generic [ref=e67]: "1"
+        - button "Open LLM configuration" [ref=e68] [cursor=pointer]:
+          - img [ref=e69]
+          - generic [ref=e72]: LLM
+        - button "Switch to light theme" [ref=e74] [cursor=pointer]:
+          - img [ref=e75]
+    - generic [ref=e82]:
+      - img [ref=e83]
+      - generic [ref=e85]:
+        - paragraph [ref=e86]: No active scan
+        - paragraph [ref=e87]: Ready for a target
+      - generic [ref=e88]:
+        - generic [ref=e89]:
+          - img [ref=e90]
+          - generic [ref=e94]: History
+          - generic [ref=e95]: "0"
+        - generic [ref=e96]:
+          - img [ref=e97]
+          - generic [ref=e99]: Agents
+          - generic [ref=e100]: "1"
+        - generic [ref=e101]:
+          - img [ref=e102]
+          - generic [ref=e104]: LLM
+          - generic [ref=e105]: Offline
+        - generic [ref=e106]:
+          - img [ref=e107]
+          - generic [ref=e110]: Config
+          - generic [ref=e111]: Loaded
+  - generic [ref=e113]:
+    - generic [ref=e114]:
+      - generic [ref=e115]:
+        - img [ref=e116]
+        - generic [ref=e118]:
+          - generic [ref=e119]: Connected Agents
+          - generic [ref=e120]: 1 agent online
+      - button [ref=e121] [cursor=pointer]:
+        - img [ref=e122]
+    - generic [ref=e126]:
+      - complementary [ref=e127]:
+        - generic [ref=e128]:
+          - generic [ref=e129]: Agents
+          - button "Refresh agents" [ref=e130] [cursor=pointer]:
+            - img [ref=e131]
+        - button "e2e-agent-weburl idle · 1m ago" [ref=e205] [cursor=pointer]:
+          - img [ref=e138]
+          - generic [ref=e140]:
+            - generic [ref=e141]: e2e-agent-weburl
+            - generic [ref=e142]: idle · 1m ago
+      - generic [ref=e143]:
+        - generic [ref=e144]:
+          - generic [ref=e145]:
+            - generic [ref=e146]:
+              - generic [ref=e147]: e2e-agent-weburl
+              - generic [ref=e148]: "1781942801256983500"
+            - generic [ref=e149]:
+              - img [ref=e150]
+              - generic [ref=e152]: idle
+              - generic [ref=e153]: 1m ago
+          - generic [ref=e154]:
+            - generic [ref=e155]: tmux
+            - generic [ref=e156]: scan
+            - generic [ref=e157]: gogo
+            - generic [ref=e158]: spray
+            - generic [ref=e159]: zombie
+            - generic [ref=e160]: neutron
+            - generic [ref=e161]: proxy
+        - generic [ref=e162]:
+          - generic [ref=e163]:
+            - generic [ref=e164]:
+              - img [ref=e165]
+              - generic [ref=e167]:
+                - generic [ref=e168]: e2e-agent-weburl
+                - generic [ref=e169]: connected · 738b11ef
+            - generic [ref=e170]:
+              - button "REPL" [ref=e171] [cursor=pointer]:
+                - img [ref=e172]
+                - generic [ref=e174]: REPL
+              - button "Shell" [ref=e175] [cursor=pointer]:
+                - img [ref=e176]
+                - generic [ref=e178]: Shell
+              - button "Refresh sessions" [ref=e179] [cursor=pointer]:
+                - img [ref=e180]
+              - button "Stop session" [ref=e185] [cursor=pointer]:
+                - img [ref=e186]
+          - generic [ref=e188]:
+            - generic [ref=e192]:
+              - textbox "Terminal input" [active] [ref=e193]
+              - generic:
+                - generic:
+                  - generic: ╭────────────────────────────────────────────────────────────────────────────╮
+                - generic:
+                  - generic: │ aiscan v0.1.0 │
+                - generic:
+                  - generic: "│ model not configured - run `aiscan --init` │"
+                - generic:
+                  - generic: │ mode pty · stream · space default │
+                - generic:
+                  - generic: │ help /help /status /exit │
+                - generic:
+                  - generic: ╰────────────────────────────────────────────────────────────────────────────╯
+                - generic:
+                  - generic: 输入目标或任务即可
+                  - generic: ；
+                  - generic: 例如
+                  - generic: ：
+                  - generic: 扫描
+                  - generic: 192.168.1.10
+                  - generic: 的
+                  - generic: Web
+                  - generic: 风险
+                - generic:
+                  - generic: aiscan>
+                - generic:
+                  - generic: aiscan>
+                - generic:
+                  - generic: ╭────────────────────────────────────────────────────────────────────────────╮
+                - generic:
+                  - generic: │ status │
+                - generic:
+                  - generic: │ model not configured / - │
+                - generic:
+                  - generic: │ render pty · stream · space default │
+                - generic:
+                  - generic: │ task idle │
+                - generic:
+                  - generic: │ ioa disabled │
+                - generic:
+                  - generic: │ history C:\Users\John\AppData\Roaming\aiscan\agent_history │
+                - generic:
+                  - generic: │ skills /aiscan │
+                - generic:
+                  - generic: ╰────────────────────────────────────────────────────────────────────────────╯
+                - generic:
+                  - generic: aiscan>
+            - complementary [ref=e194]:
+              - generic [ref=e195]:
+                - generic [ref=e196]: Task PTYs
+                - button "Refresh sessions" [ref=e197] [cursor=pointer]:
+                  - img [ref=e198]
+              - generic [ref=e204]: No sessions

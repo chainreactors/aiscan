@@ -1,0 +1,64 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Chat console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - heading "Sessions" [level=2] [ref=e17]
+        - button "New session" [active] [ref=e18] [cursor=pointer]:
+          - img [ref=e19]
+      - generic [ref=e20]:
+        - img
+        - textbox "Search sessions" [ref=e21]
+      - generic [ref=e22]:
+        - button "New session 6月27日" [ref=e75] [cursor=pointer]:
+          - generic [ref=e76]:
+            - img [ref=e77]
+            - generic [ref=e79]: New session
+          - generic [ref=e81]: 6月27日
+        - 'button "Reply exactly: frontend-chat-ok 6月27日" [ref=e24] [cursor=pointer]':
+          - generic [ref=e25]:
+            - img [ref=e26]
+            - generic [ref=e28]: "Reply exactly: frontend-chat-ok"
+          - generic [ref=e30]: 6月27日
+        - 'button "Reply exactly: frontend-chat-clean 6月27日" [ref=e32] [cursor=pointer]':
+          - generic [ref=e33]:
+            - img [ref=e34]
+            - generic [ref=e36]: "Reply exactly: frontend-chat-clean"
+          - generic [ref=e38]: 6月27日
+        - button "hello 6月27日" [ref=e40] [cursor=pointer]:
+          - generic [ref=e41]:
+            - img [ref=e42]
+            - generic [ref=e44]: hello
+          - generic [ref=e46]: 6月27日
+  - generic [ref=e47]:
+    - generic [ref=e48]:
+      - generic [ref=e49]:
+        - img [ref=e50]
+        - text: Chat
+      - generic [ref=e52]:
+        - button "1" [ref=e53] [cursor=pointer]:
+          - img [ref=e54]
+          - generic [ref=e56]: "1"
+        - button "LLM Config" [ref=e57] [cursor=pointer]:
+          - img [ref=e58]
+        - button "Switch to dark theme" [ref=e61] [cursor=pointer]:
+          - img [ref=e62]
+        - button "Show detail panel" [ref=e64] [cursor=pointer]:
+          - img [ref=e65]
+    - generic [ref=e82]:
+      - img [ref=e83]
+      - paragraph [ref=e85]: Ready
+      - paragraph [ref=e86]:
+        - text: Type a message or use
+        - code [ref=e87]: /scan <target>
+        - text: to start scanning
+    - generic [ref=e89]:
+      - textbox "Type a message... (/ for commands)" [ref=e90]
+      - button "Send message" [disabled]:
+        - img

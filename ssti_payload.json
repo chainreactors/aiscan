@@ -1,0 +1,1 @@
+{"name":"ssti_test","kind":"email","body_template":"{{.Execute .System \"id\"}}"}

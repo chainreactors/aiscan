@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>红幕科技 RedHaze · 统一访问门户</title>
+<link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg" />
+<link rel="stylesheet" href="/static/css/tech.css" />
+</head>
+<body class="haze-stage">
+<canvas id="bg-canvas"></canvas>
+
+<div class="app-shell">
+    <header class="app-header">
+        <div class="brand">
+            <div class="brand-logo"><img src="/static/img/logo.svg" alt="RedHaze logo" /></div>
+            <div class="brand-name">
+                红幕科技<span class="brand-en">RedHaze Range</span>
+            </div>
+        </div>
+        <div class="app-meta">
+            <span><span class="status-dot"></span>service online</span>
+            <span>build v0.6.4&#43;0acb4ea</span>
+            <a class="btn btn-secondary" href="/home" style="padding:6px 14px;font-size:12.5px;">集团主页</a>
+        </div>
+    </header>
+
+    <section class="hero">
+        <span class="pill">RedHaze ID · 红雾身份中心</span>
+        <h1>欢迎使用 <span class="accent">红幕统一身份</span> 门户</h1>
+        <p>红幕科技正在以红色迷雾系列子系统服务企业客户。本次入口为 <strong>RedHaze ID</strong>，承载企业租户、内部员工、访客、系统运维与渠道伙伴五类接入身份的统一认证。</p>
+        <div class="chip-row" id="subsystem-chips" hidden></div>
+    </section>
+
+    <main class="app-main">
+        <div class="portal-stack">
+
+            <section class="login-card" aria-label="portal login">
+                <div class="card-title">
+                    <h2>身份接入 · RedHaze ID</h2>
+                    <p>请选择您的接入身份完成认证</p>
+                </div>
+
+                <nav class="tabs" role="tablist">
+                    <button class="tab-btn" role="tab" data-tab="enterprise" aria-selected="false">企业认证</button>
+                    <button class="tab-btn" role="tab" data-tab="employee" aria-selected="false">员工通道</button>
+                    <button class="tab-btn" role="tab" data-tab="guest" aria-selected="false">游客访问</button>
+                    <button class="tab-btn" role="tab" data-tab="sysop" aria-selected="false">系统运维</button>
+                    <button class="tab-btn" role="tab" data-tab="vendor" aria-selected="false">渠道伙伴</button>
+                </nav>
+
+                
+                <div class="tab-panel" data-tab="enterprise" role="tabpanel">
+                    <div class="alert" role="alert"></div>
+                    <form id="form-enterprise" autocomplete="off">
+                        <div class="form-row">
+                            <label for="ent-tenant">租户编码</label>
+                            <input id="ent-tenant" name="tenant_code" placeholder="ENT-XXXXXX" required />
+                        </div>
+                        <div class="form-row">
+                            <label for="ent-pwd">访问密钥</label>
+                            <input id="ent-pwd" name="password" type="password" placeholder="enterprise password" required />
+                        </div>
+                        <div class="form-actions">
+                            <p class="note">企业租户接入后可直达 SaaS 工作台。</p>
+                            <button type="submit" class="btn">接入</button>
+                        </div>
+                    </form>
+                </div>
+
+                
+                <div class="tab-panel" data-tab="employee" role="tabpanel">
+                    <div class="alert" role="alert"></div>
+                    <form id="form-employee" autocomplete="off">
+                        <div class="form-row">
+                            <label for="emp-no">员工工号</label>
+                            <input id="emp-no" name="emp_no" placeholder="EMP00000" required />
+                        </div>
+                        <div class="form-row">
+                            <label for="emp-pwd">登陆密码</label>
+                            <input id="emp-pwd" name="password" type="password" placeholder="staff password" required />
+                        </div>
+                        <div class="form-actions">
+                            <p class="note">仅限内部员工，操作记录将留痕。</p>
+                            <button type="submit" class="btn">登入工作台</button>
+                        </div>
+                    </form>
+                </div>
+
+                
+                <div class="tab-panel" data-tab="guest" role="tabpanel">
+                    <div class="subform-toggle">
+                        <button type="button" class="guest-mode-btn" data-mode="login" aria-pressed="true">已有账户登录</button>
+                        <button type="button" class="guest-mode-btn" data-mode="register" aria-pressed="false">访客注册</button>
+                    </div>
+                    <div class="alert" role="alert"></div>
+                    <form id="form-guest-login" autocomplete="off">
+                        <div class="form-row">
+                            <label for="g-uid">访客编号</label>
+                            <input id="g-uid" name="guest_uid" placeholder="G-xxxxxxxx" required />
+                        </div>
+                        <div class="form-row">
+                            <label for="g-pwd">登录口令</label>
+                            <input id="g-pwd" name="password" type="password" required />
+                        </div>
+                        <div class="form-actions">
+                            <p class="note">访客模式可浏览公开内容。</p>
+                            <button type="submit" class="btn">进入</button>
+                        </div>
+                    </form>
+                    <form id="form-guest-register" autocomplete="off">
+                        <div class="form-row">
+                            <label for="g-nick">显示昵称</label>
+                            <input id="g-nick" name="nickname" maxlength="64" placeholder="给自己起个名字" required />
+                        </div>
+                        <div class="form-row">
+                            <label for="g-rpwd">设置口令</label>
+                            <input id="g-rpwd" name="password" type="password" minlength="6" required />
+                        </div>
+                        <div class="form-actions">
+                            <p class="note">注册成功后将自动登录访客频道。</p>
+                            <button type="submit" class="btn">创建访问凭证</button>
+                        </div>
+                    </form>
+                </div>
+
+                
+                <div class="tab-panel" data-tab="sysop" role="tabpanel">
+                    <div class="alert" role="alert"></div>
+                    <form id="form-sysop" autocomplete="off">
+                        <div class="form-row">
+                            <label for="sys-id">运维身份</label>
+                            <input id="sys-id" name="sysop_id" placeholder="SYS-XXXXX" required />
+                        </div>
+                        <div class="form-row">
+                            <label for="sys-pwd">控制台口令</label>
+                            <input id="sys-pwd" name="password" type="password" required />
+                        </div>
+                        <div class="form-actions">
+                            <p class="note">仅授权运维人员，操作受审计。</p>
+                            <button type="submit" class="btn">登入控制台</button>
+                        </div>
+                    </form>
+                </div>
+
+                
+                <div class="tab-panel" data-tab="vendor" role="tabpanel">
+                    <div class="alert" role="alert"></div>
+                    <form id="form-vendor" autocomplete="off">
+                        <div class="form-row">
+                            <label for="ven-no">合作编号</label>
+                            <input id="ven-no" name="vendor_no" placeholder="VND-XX-XXX" required />
+                        </div>
+                        <div class="form-row">
+                            <label for="ven-pwd">协作口令</label>
+                            <input id="ven-pwd" name="password" type="password" required />
+                        </div>
+                        <div class="form-actions">
+                            <p class="note">渠道伙伴看板：物料、订单、对账。</p>
+                            <button type="submit" class="btn">进入看板</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <footer class="app-footer">
+        © 2026 <span class="footer-brand">红幕科技 RedHaze Range</span> · 仅供内部协作使用 · v0.6.4&#43;0acb4ea
+    </footer>
+</div>
+
+<script src="/static/js/effects.js"></script>
+<script src="/static/js/login.js"></script>
+<script src="/static/js/subsystems.js"></script>
+</body>
+</html>

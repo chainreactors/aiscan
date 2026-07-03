@@ -1,0 +1,446 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Web console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - heading "History" [level=2] [ref=e17]
+      - generic [ref=e18]:
+        - img
+        - textbox "Search scan targets" [ref=e19]:
+          - /placeholder: Search targets
+          - text: example
+        - button "Clear target search" [ref=e207] [cursor=pointer]:
+          - img [ref=e208]
+      - button "example.com, completed, quick, 13 assets, 0 loots" [ref=e112] [cursor=pointer]:
+        - generic [ref=e113]:
+          - generic [ref=e114]: example.com
+          - generic "completed" [ref=e115]
+        - generic [ref=e116]:
+          - generic [ref=e117]: quick
+          - generic "13 assets" [ref=e118]:
+            - img [ref=e119]
+            - generic [ref=e123]: "13"
+          - generic "0 loots" [ref=e124]:
+            - img [ref=e125]
+            - generic [ref=e127]: "0"
+          - generic [ref=e128]: 6月6日 01:29
+  - main [ref=e21]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - img [ref=e25]
+        - textbox "Scan target" [ref=e28]:
+          - /placeholder: Target — IP, hostname, or URL
+      - generic [ref=e29]:
+        - group "Scan mode" [ref=e30]:
+          - button "Quick" [ref=e31] [cursor=pointer]
+          - button "Full" [ref=e32] [cursor=pointer]
+        - generic [ref=e33]:
+          - button "Verify analysis" [disabled] [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e45]: Verify
+          - button "Sniper analysis" [disabled] [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e49]: Sniper
+          - button "Deep analysis" [disabled] [ref=e50]:
+            - img [ref=e51]
+            - generic [ref=e58]: Deep
+        - button "Start scan" [disabled]:
+          - img
+          - generic: Scan
+      - generic [ref=e59]:
+        - generic "LLM Offline" [ref=e60]:
+          - img [ref=e61]
+          - text: LLM Offline
+        - button "Agents 0" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+          - generic [ref=e66]: Agents
+          - generic [ref=e67]: "0"
+        - button "Open LLM configuration" [ref=e68] [cursor=pointer]:
+          - img [ref=e69]
+          - generic [ref=e72]: LLM
+        - button "Switch to dark theme" [ref=e203] [cursor=pointer]:
+          - img [ref=e204]
+    - generic [ref=e211]:
+      - generic [ref=e212]:
+        - generic [ref=e213]: example.com
+        - generic [ref=e214]: quick
+        - generic [ref=e215]: Completed
+      - generic [ref=e216]:
+        - generic [ref=e217]:
+          - button "Assets" [ref=e218] [cursor=pointer]:
+            - img [ref=e219]
+            - generic [ref=e221]: Assets
+          - button "Markdown" [active] [ref=e222] [cursor=pointer]:
+            - img [ref=e223]
+            - generic [ref=e226]: Markdown
+        - generic [ref=e844]:
+          - heading "Penetration Test Report Link to Penetration Test Report" [level=1] [ref=e845]:
+            - text: Penetration Test Report
+            - link "Link to Penetration Test Report" [ref=e846] [cursor=pointer]:
+              - /url: "#penetration-test-report-2"
+              - img [ref=e847]
+          - paragraph [ref=e850]:
+            - strong [ref=e851]: "Target:"
+            - code [ref=e852]: example.com
+            - strong [ref=e853]: "Mode:"
+            - text: quick
+            - strong [ref=e854]: "Date:"
+            - text: 2026/6/6 01:31:12
+          - separator [ref=e855]
+          - heading "Summary Link to Summary" [level=2] [ref=e856]:
+            - text: Summary
+            - link "Link to Summary" [ref=e857] [cursor=pointer]:
+              - /url: "#summary-2"
+              - img [ref=e858]
+          - table [ref=e862]:
+            - rowgroup [ref=e863]:
+              - row "Metric Value" [ref=e864]:
+                - columnheader "Metric" [ref=e865]
+                - columnheader "Value" [ref=e866]
+            - rowgroup [ref=e867]:
+              - row "Targets 1" [ref=e868]:
+                - cell "Targets" [ref=e869]
+                - cell "1" [ref=e870]
+              - row "Services 13" [ref=e871]:
+                - cell "Services" [ref=e872]
+                - cell "13" [ref=e873]
+              - row "Web 13" [ref=e874]:
+                - cell "Web" [ref=e875]
+                - cell "13" [ref=e876]
+              - row "Probes 13" [ref=e877]:
+                - cell "Probes" [ref=e878]
+                - cell "13" [ref=e879]
+              - row "Fingerprints 1" [ref=e880]:
+                - cell "Fingerprints" [ref=e881]
+                - cell "1" [ref=e882]
+              - row "Loots 0" [ref=e883]:
+                - cell "Loots" [ref=e884]
+                - cell "0" [ref=e885]
+              - row "Errors 0" [ref=e886]:
+                - cell "Errors" [ref=e887]
+                - cell "0" [ref=e888]
+              - row "Duration 1m23.726s" [ref=e889]:
+                - cell "Duration" [ref=e890]
+                - cell "1m23.726s" [ref=e891]
+          - heading "Assets Link to Assets" [level=2] [ref=e892]:
+            - text: Assets
+            - link "Link to Assets" [ref=e893] [cursor=pointer]:
+              - /url: "#assets-2"
+              - img [ref=e894]
+          - heading "txt data Link to txt data" [level=3] [ref=e897]:
+            - text: txt data
+            - link "Link to txt data" [ref=e898] [cursor=pointer]:
+              - /url: "#txt-data-2"
+              - img [ref=e899]
+          - list [ref=e902]:
+            - listitem [ref=e903]:
+              - strong [ref=e904]: "Target:"
+              - code [ref=e905]: http://[2606:4700:10::6814:179a]:2052
+            - listitem [ref=e906]:
+              - strong [ref=e907]: "Services:"
+              - code [ref=e908]: http 2052
+            - listitem [ref=e909]:
+              - strong [ref=e910]: "HTTP:"
+              - code [ref=e911]: "403"
+            - listitem [ref=e912]:
+              - strong [ref=e913]: "Fingers:"
+              - code [ref=e914]: cloudflare
+            - listitem [ref=e915]:
+              - strong [ref=e916]: "Sources:"
+              - code [ref=e917]: gogo_portscan
+            - listitem [ref=e918]:
+              - strong [ref=e919]: "Paths:"
+              - text: "1"
+          - heading "400 The plain HTTP request was sent to HTTPS port Link to 400 The plain HTTP request was sent to HTTPS port" [level=3] [ref=e920]:
+            - text: 400 The plain HTTP request was sent to HTTPS port
+            - link "Link to 400 The plain HTTP request was sent to HTTPS port" [ref=e921] [cursor=pointer]:
+              - /url: "#400-the-plain-http-request-was-sent-to-https-port-2"
+              - img [ref=e922]
+          - list [ref=e925]:
+            - listitem [ref=e926]:
+              - strong [ref=e927]: "Target:"
+              - code [ref=e928]: http://[2606:4700:10::6814:179a]:2053
+            - listitem [ref=e929]:
+              - strong [ref=e930]: "Services:"
+              - code [ref=e931]: http 2053
+            - listitem [ref=e932]:
+              - strong [ref=e933]: "HTTP:"
+              - code [ref=e934]: "400"
+            - listitem [ref=e935]:
+              - strong [ref=e936]: "Fingers:"
+              - code [ref=e937]: cloudflare
+            - listitem [ref=e938]:
+              - strong [ref=e939]: "Sources:"
+              - code [ref=e940]: gogo_portscan
+            - listitem [ref=e941]:
+              - strong [ref=e942]: "Paths:"
+              - text: "1"
+          - heading "txt data Link to txt data" [level=3] [ref=e943]:
+            - text: txt data
+            - link "Link to txt data" [ref=e944] [cursor=pointer]:
+              - /url: "#txt-data-4"
+              - img [ref=e945]
+          - list [ref=e948]:
+            - listitem [ref=e949]:
+              - strong [ref=e950]: "Target:"
+              - code [ref=e951]: http://[2606:4700:10::6814:179a]:2082
+            - listitem [ref=e952]:
+              - strong [ref=e953]: "Services:"
+              - code [ref=e954]: http 2082
+            - listitem [ref=e955]:
+              - strong [ref=e956]: "HTTP:"
+              - code [ref=e957]: "403"
+            - listitem [ref=e958]:
+              - strong [ref=e959]: "Fingers:"
+              - code [ref=e960]: cloudflare
+            - listitem [ref=e961]:
+              - strong [ref=e962]: "Sources:"
+              - code [ref=e963]: gogo_portscan
+            - listitem [ref=e964]:
+              - strong [ref=e965]: "Paths:"
+              - text: "1"
+          - heading "400 The plain HTTP request was sent to HTTPS port Link to 400 The plain HTTP request was sent to HTTPS port" [level=3] [ref=e966]:
+            - text: 400 The plain HTTP request was sent to HTTPS port
+            - link "Link to 400 The plain HTTP request was sent to HTTPS port" [ref=e967] [cursor=pointer]:
+              - /url: "#400-the-plain-http-request-was-sent-to-https-port-4"
+              - img [ref=e968]
+          - list [ref=e971]:
+            - listitem [ref=e972]:
+              - strong [ref=e973]: "Target:"
+              - code [ref=e974]: http://[2606:4700:10::6814:179a]:2083
+            - listitem [ref=e975]:
+              - strong [ref=e976]: "Services:"
+              - code [ref=e977]: http 2083
+            - listitem [ref=e978]:
+              - strong [ref=e979]: "HTTP:"
+              - code [ref=e980]: "400"
+            - listitem [ref=e981]:
+              - strong [ref=e982]: "Fingers:"
+              - code [ref=e983]: cloudflare
+            - listitem [ref=e984]:
+              - strong [ref=e985]: "Sources:"
+              - code [ref=e986]: gogo_portscan
+            - listitem [ref=e987]:
+              - strong [ref=e988]: "Paths:"
+              - text: "1"
+          - heading "txt data Link to txt data" [level=3] [ref=e989]:
+            - text: txt data
+            - link "Link to txt data" [ref=e990] [cursor=pointer]:
+              - /url: "#txt-data-6"
+              - img [ref=e991]
+          - list [ref=e994]:
+            - listitem [ref=e995]:
+              - strong [ref=e996]: "Target:"
+              - code [ref=e997]: http://[2606:4700:10::6814:179a]:2086
+            - listitem [ref=e998]:
+              - strong [ref=e999]: "Services:"
+              - code [ref=e1000]: http 2086
+            - listitem [ref=e1001]:
+              - strong [ref=e1002]: "HTTP:"
+              - code [ref=e1003]: "403"
+            - listitem [ref=e1004]:
+              - strong [ref=e1005]: "Fingers:"
+              - code [ref=e1006]: cloudflare
+            - listitem [ref=e1007]:
+              - strong [ref=e1008]: "Sources:"
+              - code [ref=e1009]: gogo_portscan
+            - listitem [ref=e1010]:
+              - strong [ref=e1011]: "Paths:"
+              - text: "1"
+          - heading "400 The plain HTTP request was sent to HTTPS port Link to 400 The plain HTTP request was sent to HTTPS port" [level=3] [ref=e1012]:
+            - text: 400 The plain HTTP request was sent to HTTPS port
+            - link "Link to 400 The plain HTTP request was sent to HTTPS port" [ref=e1013] [cursor=pointer]:
+              - /url: "#400-the-plain-http-request-was-sent-to-https-port-6"
+              - img [ref=e1014]
+          - list [ref=e1017]:
+            - listitem [ref=e1018]:
+              - strong [ref=e1019]: "Target:"
+              - code [ref=e1020]: http://[2606:4700:10::6814:179a]:2087
+            - listitem [ref=e1021]:
+              - strong [ref=e1022]: "Services:"
+              - code [ref=e1023]: http 2087
+            - listitem [ref=e1024]:
+              - strong [ref=e1025]: "HTTP:"
+              - code [ref=e1026]: "400"
+            - listitem [ref=e1027]:
+              - strong [ref=e1028]: "Fingers:"
+              - code [ref=e1029]: cloudflare
+            - listitem [ref=e1030]:
+              - strong [ref=e1031]: "Sources:"
+              - code [ref=e1032]: gogo_portscan
+            - listitem [ref=e1033]:
+              - strong [ref=e1034]: "Paths:"
+              - text: "1"
+          - heading "txt data Link to txt data" [level=3] [ref=e1035]:
+            - text: txt data
+            - link "Link to txt data" [ref=e1036] [cursor=pointer]:
+              - /url: "#txt-data-8"
+              - img [ref=e1037]
+          - list [ref=e1040]:
+            - listitem [ref=e1041]:
+              - strong [ref=e1042]: "Target:"
+              - code [ref=e1043]: http://[2606:4700:10::6814:179a]:2095
+            - listitem [ref=e1044]:
+              - strong [ref=e1045]: "Services:"
+              - code [ref=e1046]: http 2095
+            - listitem [ref=e1047]:
+              - strong [ref=e1048]: "HTTP:"
+              - code [ref=e1049]: "403"
+            - listitem [ref=e1050]:
+              - strong [ref=e1051]: "Fingers:"
+              - code [ref=e1052]: cloudflare
+            - listitem [ref=e1053]:
+              - strong [ref=e1054]: "Sources:"
+              - code [ref=e1055]: gogo_portscan
+            - listitem [ref=e1056]:
+              - strong [ref=e1057]: "Paths:"
+              - text: "1"
+          - heading "400 The plain HTTP request was sent to HTTPS port Link to 400 The plain HTTP request was sent to HTTPS port" [level=3] [ref=e1058]:
+            - text: 400 The plain HTTP request was sent to HTTPS port
+            - link "Link to 400 The plain HTTP request was sent to HTTPS port" [ref=e1059] [cursor=pointer]:
+              - /url: "#400-the-plain-http-request-was-sent-to-https-port-8"
+              - img [ref=e1060]
+          - list [ref=e1063]:
+            - listitem [ref=e1064]:
+              - strong [ref=e1065]: "Target:"
+              - code [ref=e1066]: http://[2606:4700:10::6814:179a]:2096
+            - listitem [ref=e1067]:
+              - strong [ref=e1068]: "Services:"
+              - code [ref=e1069]: http 2096
+            - listitem [ref=e1070]:
+              - strong [ref=e1071]: "HTTP:"
+              - code [ref=e1072]: "400"
+            - listitem [ref=e1073]:
+              - strong [ref=e1074]: "Fingers:"
+              - code [ref=e1075]: cloudflare
+            - listitem [ref=e1076]:
+              - strong [ref=e1077]: "Sources:"
+              - code [ref=e1078]: gogo_portscan
+            - listitem [ref=e1079]:
+              - strong [ref=e1080]: "Paths:"
+              - text: "1"
+          - heading "400 The plain HTTP request was sent to HTTPS port Link to 400 The plain HTTP request was sent to HTTPS port" [level=3] [ref=e1081]:
+            - text: 400 The plain HTTP request was sent to HTTPS port
+            - link "Link to 400 The plain HTTP request was sent to HTTPS port" [ref=e1082] [cursor=pointer]:
+              - /url: "#400-the-plain-http-request-was-sent-to-https-port-10"
+              - img [ref=e1083]
+          - list [ref=e1086]:
+            - listitem [ref=e1087]:
+              - strong [ref=e1088]: "Target:"
+              - code [ref=e1089]: http://[2606:4700:10::6814:179a]:443
+            - listitem [ref=e1090]:
+              - strong [ref=e1091]: "Services:"
+              - code [ref=e1092]: http 443
+            - listitem [ref=e1093]:
+              - strong [ref=e1094]: "HTTP:"
+              - code [ref=e1095]: "400"
+            - listitem [ref=e1096]:
+              - strong [ref=e1097]: "Fingers:"
+              - code [ref=e1098]: cloudflare
+            - listitem [ref=e1099]:
+              - strong [ref=e1100]: "Sources:"
+              - code [ref=e1101]: gogo_portscan
+            - listitem [ref=e1102]:
+              - strong [ref=e1103]: "Paths:"
+              - text: "1"
+          - heading "txt data Link to txt data" [level=3] [ref=e1104]:
+            - text: txt data
+            - link "Link to txt data" [ref=e1105] [cursor=pointer]:
+              - /url: "#txt-data-10"
+              - img [ref=e1106]
+          - list [ref=e1109]:
+            - listitem [ref=e1110]:
+              - strong [ref=e1111]: "Target:"
+              - code [ref=e1112]: http://[2606:4700:10::6814:179a]:80
+            - listitem [ref=e1113]:
+              - strong [ref=e1114]: "Services:"
+              - code [ref=e1115]: http 80
+            - listitem [ref=e1116]:
+              - strong [ref=e1117]: "HTTP:"
+              - code [ref=e1118]: "403"
+            - listitem [ref=e1119]:
+              - strong [ref=e1120]: "Fingers:"
+              - code [ref=e1121]: cloudflare
+            - listitem [ref=e1122]:
+              - strong [ref=e1123]: "Sources:"
+              - code [ref=e1124]: gogo_portscan
+            - listitem [ref=e1125]:
+              - strong [ref=e1126]: "Paths:"
+              - text: "1"
+          - heading "txt data Link to txt data" [level=3] [ref=e1127]:
+            - text: txt data
+            - link "Link to txt data" [ref=e1128] [cursor=pointer]:
+              - /url: "#txt-data-12"
+              - img [ref=e1129]
+          - list [ref=e1132]:
+            - listitem [ref=e1133]:
+              - strong [ref=e1134]: "Target:"
+              - code [ref=e1135]: http://[2606:4700:10::6814:179a]:8080
+            - listitem [ref=e1136]:
+              - strong [ref=e1137]: "Services:"
+              - code [ref=e1138]: http 8080
+            - listitem [ref=e1139]:
+              - strong [ref=e1140]: "HTTP:"
+              - code [ref=e1141]: "403"
+            - listitem [ref=e1142]:
+              - strong [ref=e1143]: "Fingers:"
+              - code [ref=e1144]: cloudflare
+            - listitem [ref=e1145]:
+              - strong [ref=e1146]: "Sources:"
+              - code [ref=e1147]: gogo_portscan
+            - listitem [ref=e1148]:
+              - strong [ref=e1149]: "Paths:"
+              - text: "1"
+          - heading "400 The plain HTTP request was sent to HTTPS port Link to 400 The plain HTTP request was sent to HTTPS port" [level=3] [ref=e1150]:
+            - text: 400 The plain HTTP request was sent to HTTPS port
+            - link "Link to 400 The plain HTTP request was sent to HTTPS port" [ref=e1151] [cursor=pointer]:
+              - /url: "#400-the-plain-http-request-was-sent-to-https-port-12"
+              - img [ref=e1152]
+          - list [ref=e1155]:
+            - listitem [ref=e1156]:
+              - strong [ref=e1157]: "Target:"
+              - code [ref=e1158]: http://[2606:4700:10::6814:179a]:8443
+            - listitem [ref=e1159]:
+              - strong [ref=e1160]: "Services:"
+              - code [ref=e1161]: http 8443
+            - listitem [ref=e1162]:
+              - strong [ref=e1163]: "HTTP:"
+              - code [ref=e1164]: "400"
+            - listitem [ref=e1165]:
+              - strong [ref=e1166]: "Fingers:"
+              - code [ref=e1167]: cloudflare
+            - listitem [ref=e1168]:
+              - strong [ref=e1169]: "Sources:"
+              - code [ref=e1170]: gogo_portscan
+            - listitem [ref=e1171]:
+              - strong [ref=e1172]: "Paths:"
+              - text: "1"
+          - heading "txt data Link to txt data" [level=3] [ref=e1173]:
+            - text: txt data
+            - link "Link to txt data" [ref=e1174] [cursor=pointer]:
+              - /url: "#txt-data-14"
+              - img [ref=e1175]
+          - list [ref=e1178]:
+            - listitem [ref=e1179]:
+              - strong [ref=e1180]: "Target:"
+              - code [ref=e1181]: http://[2606:4700:10::6814:179a]:8880
+            - listitem [ref=e1182]:
+              - strong [ref=e1183]: "Services:"
+              - code [ref=e1184]: http 8880
+            - listitem [ref=e1185]:
+              - strong [ref=e1186]: "HTTP:"
+              - code [ref=e1187]: "403"
+            - listitem [ref=e1188]:
+              - strong [ref=e1189]: "Fingers:"
+              - code [ref=e1190]: cloudflare
+            - listitem [ref=e1191]:
+              - strong [ref=e1192]: "Sources:"
+              - code [ref=e1193]: gogo_portscan
+            - listitem [ref=e1194]:
+              - strong [ref=e1195]: "Paths:"
+              - text: "1"

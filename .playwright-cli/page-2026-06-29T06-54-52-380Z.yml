@@ -1,0 +1,126 @@
+- generic [ref=e4]:
+  - complementary [ref=e5]:
+    - generic [ref=e6]:
+      - img [ref=e7]
+      - generic [ref=e9]:
+        - heading "AIScan" [level=1] [ref=e10]
+        - generic [ref=e11]: 1 agent
+      - button "Collapse sidebar" [ref=e12] [cursor=pointer]:
+        - img [ref=e13]
+    - generic [ref=e17]:
+      - button "Chat" [ref=e19] [cursor=pointer]:
+        - img [ref=e20]
+        - text: Chat
+      - button "Scan" [ref=e22] [cursor=pointer]:
+        - img [ref=e23]
+        - text: Scan
+    - generic [ref=e74]:
+      - generic [ref=e75]:
+        - button "chat-retest-agent idle openai/deepseek-v4-pro" [ref=e76] [cursor=pointer]:
+          - img [ref=e77]
+          - generic [ref=e79]:
+            - generic [ref=e80]:
+              - generic [ref=e81]: chat-retest-agent
+              - generic [ref=e82]: idle
+            - generic [ref=e83]: openai/deepseek-v4-pro
+          - img [ref=e84]
+        - generic [ref=e86]:
+          - button "Terminal" [ref=e87] [cursor=pointer]:
+            - img [ref=e88]
+            - text: Terminal
+          - button "New" [active] [ref=e90] [cursor=pointer]:
+            - img [ref=e91]
+            - text: New
+          - generic [ref=e93]: "1"
+      - button "New session 6月29日" [ref=e96] [cursor=pointer]:
+        - generic [ref=e97]:
+          - img [ref=e98]
+          - generic [ref=e100]: New session
+        - generic [ref=e101]: 6月29日
+  - generic [ref=e31]:
+    - generic [ref=e32]:
+      - generic [ref=e34]:
+        - button "Chat" [ref=e36] [cursor=pointer]:
+          - img [ref=e37]
+          - text: Chat
+        - button "Scan" [ref=e39] [cursor=pointer]:
+          - img [ref=e40]
+          - text: Scan
+      - generic [ref=e42]:
+        - generic "LLM Ready" [ref=e43]:
+          - img [ref=e44]
+          - text: LLM Ready
+        - button "1" [ref=e92] [cursor=pointer]:
+          - img [ref=e48]
+          - generic [ref=e50]: "1"
+        - button "Settings" [ref=e51] [cursor=pointer]:
+          - img [ref=e52]
+        - button "Switch to light theme" [ref=e55] [cursor=pointer]:
+          - img [ref=e56]
+    - generic [ref=e62]:
+      - main [ref=e65]:
+        - generic [ref=e103]:
+          - img [ref=e104]
+          - paragraph [ref=e106]: Ready
+          - paragraph [ref=e107]:
+            - text: Type a message or use
+            - code [ref=e108]: /scan <target>
+            - text: to start scanning
+        - generic [ref=e111]:
+          - button "Attach files" [ref=e112] [cursor=pointer]:
+            - img [ref=e113]
+          - textbox "Type a message or drop files..." [ref=e116]
+          - button "Send message" [disabled] [ref=e117]:
+            - img [ref=e118]
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - img
+                    - textbox "Scan target":
+                      - /placeholder: Target — IP, hostname, or URL
+                  - generic:
+                    - group "Scan mode":
+                      - button "Quick"
+                      - button "Full"
+                    - generic:
+                      - button "Verify analysis":
+                        - img
+                        - generic: Verify
+                      - button "Sniper analysis":
+                        - img
+                        - generic: Sniper
+                      - button "Deep analysis":
+                        - img
+                        - generic: Deep
+                    - button "Start scan" [disabled]:
+                      - img
+                      - generic: Scan
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - paragraph: No active scan
+                    - paragraph: Enter a target above to start scanning
+                  - generic:
+                    - generic:
+                      - img
+                      - generic: History
+                      - generic: "0"
+                    - generic:
+                      - img
+                      - generic: Running
+                      - generic: "0"
+                    - generic:
+                      - img
+                      - generic: Completed
+                      - generic: "0"
+                    - generic:
+                      - img
+                      - generic: LLM
+                      - generic: Ready

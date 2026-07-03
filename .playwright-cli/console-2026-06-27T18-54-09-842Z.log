@@ -1,0 +1,2 @@
+[   21195ms] [WARNING] WebSocket connection to 'ws://127.0.0.1:5173/api/agents/1782586412890087900/terminal/ws' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/components/terminal/AgentTerminal.tsx?t=1782586430589:188
+[   81984ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/api/agents/1782586412890087900/terminal/ws' failed: Connection closed before receiving a handshake response @ http://127.0.0.1:5173/src/components/terminal/AgentTerminal.tsx?t=1782586430589:98

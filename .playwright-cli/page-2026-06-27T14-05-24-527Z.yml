@@ -1,0 +1,44 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Chat console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - heading "Sessions" [level=2] [ref=e17]
+        - button "New session" [ref=e18] [cursor=pointer]:
+          - img [ref=e19]
+      - generic [ref=e20]:
+        - img
+        - textbox "Search sessions" [ref=e21]
+      - paragraph [ref=e23]: No sessions yet.
+  - generic [ref=e24]:
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - img [ref=e27]
+        - text: Chat
+      - generic [ref=e29]:
+        - button "0" [ref=e30] [cursor=pointer]:
+          - img [ref=e31]
+          - generic [ref=e33]: "0"
+        - button "LLM Config" [ref=e34] [cursor=pointer]:
+          - img [ref=e35]
+        - button "Switch to dark theme" [ref=e38] [cursor=pointer]:
+          - img [ref=e39]
+        - button "Show detail panel" [ref=e41] [cursor=pointer]:
+          - img [ref=e42]
+    - generic [ref=e45]:
+      - complementary [ref=e46]:
+        - generic [ref=e47]:
+          - img [ref=e48]
+          - text: Timeline
+        - paragraph [ref=e51]: No events yet.
+      - main [ref=e52]:
+        - generic [ref=e55]:
+          - img [ref=e56]
+          - paragraph [ref=e58]: Start a conversation
+          - paragraph [ref=e59]: Create a new session to begin chatting

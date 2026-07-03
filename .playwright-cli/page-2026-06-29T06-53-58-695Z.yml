@@ -1,0 +1,98 @@
+- generic [ref=e4]:
+  - complementary [ref=e5]:
+    - generic [ref=e6]:
+      - img [ref=e7]
+      - generic [ref=e9]:
+        - heading "AIScan" [level=1] [ref=e10]
+        - generic [ref=e11]: 0 agents
+      - button "Collapse sidebar" [ref=e12] [cursor=pointer]:
+        - img [ref=e13]
+    - generic [ref=e17]:
+      - button "Chat" [ref=e19] [cursor=pointer]:
+        - img [ref=e20]
+        - text: Chat
+      - button "Scan" [ref=e22] [cursor=pointer]:
+        - img [ref=e23]
+        - text: Scan
+    - generic [ref=e26]:
+      - img [ref=e27]
+      - paragraph [ref=e29]: No agents connected
+      - paragraph [ref=e30]: Start an aiscan agent to begin
+  - generic [ref=e31]:
+    - generic [ref=e32]:
+      - generic [ref=e34]:
+        - button "Chat" [ref=e36] [cursor=pointer]:
+          - img [ref=e37]
+          - text: Chat
+        - button "Scan" [ref=e39] [cursor=pointer]:
+          - img [ref=e40]
+          - text: Scan
+      - generic [ref=e42]:
+        - generic "LLM Ready" [ref=e43]:
+          - img [ref=e44]
+          - text: LLM Ready
+        - button "0" [ref=e47] [cursor=pointer]:
+          - img [ref=e48]
+          - generic [ref=e50]: "0"
+        - button "Settings" [ref=e51] [cursor=pointer]:
+          - img [ref=e52]
+        - button "Switch to light theme" [ref=e55] [cursor=pointer]:
+          - img [ref=e56]
+    - generic [ref=e62]:
+      - main [ref=e65]:
+        - generic [ref=e69]:
+          - img [ref=e70]
+          - paragraph [ref=e72]: Start a conversation
+          - paragraph [ref=e73]: Create a new session to begin chatting
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - img
+                    - textbox "Scan target" [active]:
+                      - /placeholder: Target — IP, hostname, or URL
+                  - generic:
+                    - group "Scan mode":
+                      - button "Quick"
+                      - button "Full"
+                    - generic:
+                      - button "Verify analysis":
+                        - img
+                        - generic: Verify
+                      - button "Sniper analysis":
+                        - img
+                        - generic: Sniper
+                      - button "Deep analysis":
+                        - img
+                        - generic: Deep
+                    - button "Start scan" [disabled]:
+                      - img
+                      - generic: Scan
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - paragraph: No active scan
+                    - paragraph: Enter a target above to start scanning
+                  - generic:
+                    - generic:
+                      - img
+                      - generic: History
+                      - generic: "0"
+                    - generic:
+                      - img
+                      - generic: Running
+                      - generic: "0"
+                    - generic:
+                      - img
+                      - generic: Completed
+                      - generic: "0"
+                    - generic:
+                      - img
+                      - generic: LLM
+                      - generic: Ready

@@ -1,0 +1,382 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Web console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - heading "History" [level=2] [ref=e17]
+      - generic [ref=e18]:
+        - img
+        - textbox "Search scan targets" [ref=e19]:
+          - /placeholder: Search targets
+      - generic [ref=e20]:
+        - button "127.0.0.1, completed, quick, 8 assets, 0 loots" [ref=e108] [cursor=pointer]:
+          - generic [ref=e109]:
+            - generic [ref=e110]: 127.0.0.1
+            - generic "completed" [ref=e111]
+          - generic [ref=e112]:
+            - generic [ref=e113]: quick
+            - generic "8 assets" [ref=e114]:
+              - img [ref=e115]
+              - generic [ref=e119]: "8"
+            - generic "0 loots" [ref=e120]:
+              - img [ref=e121]
+              - generic [ref=e123]: "0"
+            - generic [ref=e124]: 6月18日 01:57
+        - button "127.0.0.1, failed, quick, 0 assets, 0 loots" [ref=e125] [cursor=pointer]:
+          - generic [ref=e126]:
+            - generic [ref=e127]: 127.0.0.1
+            - generic "failed" [ref=e128]
+          - generic [ref=e129]:
+            - generic [ref=e130]: quick
+            - generic [ref=e131]: 6月18日 01:50
+        - button "example.com, completed, quick, 13 assets, 0 loots" [ref=e132] [cursor=pointer]:
+          - generic [ref=e133]:
+            - generic [ref=e134]: example.com
+            - generic "completed" [ref=e135]
+          - generic [ref=e136]:
+            - generic [ref=e137]: quick
+            - generic "13 assets" [ref=e138]:
+              - img [ref=e139]
+              - generic [ref=e143]: "13"
+            - generic "0 loots" [ref=e144]:
+              - img [ref=e145]
+              - generic [ref=e147]: "0"
+            - generic [ref=e148]: 6月6日 01:29
+        - button "127.0.0.1, completed, quick, 8 assets, 0 loots" [ref=e149] [cursor=pointer]:
+          - generic [ref=e150]:
+            - generic [ref=e151]: 127.0.0.1
+            - generic "completed" [ref=e152]
+          - generic [ref=e153]:
+            - generic [ref=e154]: quick
+            - generic "8 assets" [ref=e155]:
+              - img [ref=e156]
+              - generic [ref=e160]: "8"
+            - generic "0 loots" [ref=e161]:
+              - img [ref=e162]
+              - generic [ref=e164]: "0"
+            - generic [ref=e165]: Verify
+            - generic [ref=e166]: Sniper
+            - generic [ref=e167]: Deep
+            - generic [ref=e168]: 6月6日 01:27
+  - main [ref=e21]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - img [ref=e25]
+        - textbox "Scan target" [ref=e28]:
+          - /placeholder: Target — IP, hostname, or URL
+      - generic [ref=e29]:
+        - group "Scan mode" [ref=e30]:
+          - button "Quick" [ref=e31] [cursor=pointer]
+          - button "Full" [ref=e32] [cursor=pointer]
+        - generic [ref=e33]:
+          - button "Verify analysis" [disabled] [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e45]: Verify
+          - button "Sniper analysis" [disabled] [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e49]: Sniper
+          - button "Deep analysis" [disabled] [ref=e50]:
+            - img [ref=e51]
+            - generic [ref=e58]: Deep
+        - button "Start scan" [disabled]:
+          - img
+          - generic: Scan
+      - generic [ref=e59]:
+        - generic "LLM Offline" [ref=e60]:
+          - img [ref=e61]
+          - text: LLM Offline
+        - button "Agents 0" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+          - generic [ref=e66]: Agents
+          - generic [ref=e67]: "0"
+        - button "Open LLM configuration" [ref=e68] [cursor=pointer]:
+          - img [ref=e69]
+          - generic [ref=e72]: LLM
+        - button "Switch to dark theme" [ref=e74] [cursor=pointer]:
+          - img [ref=e75]
+    - generic [ref=e169]:
+      - generic [ref=e170]:
+        - generic [ref=e171]: 127.0.0.1
+        - generic [ref=e172]: quick
+        - generic [ref=e173]: Completed
+      - generic [ref=e174]:
+        - generic [ref=e175]:
+          - button "Assets" [ref=e176] [cursor=pointer]:
+            - img [ref=e177]
+            - generic [ref=e179]: Assets
+          - button "Markdown" [active] [ref=e180] [cursor=pointer]:
+            - img [ref=e181]
+            - generic [ref=e184]: Markdown
+        - generic [ref=e517]:
+          - heading "Penetration Test Report Link to Penetration Test Report" [level=1] [ref=e518]:
+            - text: Penetration Test Report
+            - link "Link to Penetration Test Report" [ref=e519] [cursor=pointer]:
+              - /url: "#penetration-test-report-2"
+              - img [ref=e520]
+          - paragraph [ref=e523]:
+            - strong [ref=e524]: "Target:"
+            - code [ref=e525]: 127.0.0.1
+            - strong [ref=e526]: "Mode:"
+            - text: quick
+            - strong [ref=e527]: "Date:"
+            - text: 2026/6/18 01:57:35
+          - separator [ref=e528]
+          - heading "Summary Link to Summary" [level=2] [ref=e529]:
+            - text: Summary
+            - link "Link to Summary" [ref=e530] [cursor=pointer]:
+              - /url: "#summary-2"
+              - img [ref=e531]
+          - table [ref=e535]:
+            - rowgroup [ref=e536]:
+              - row "Metric Value" [ref=e537]:
+                - columnheader "Metric" [ref=e538]
+                - columnheader "Value" [ref=e539]
+            - rowgroup [ref=e540]:
+              - row "Targets 1" [ref=e541]:
+                - cell "Targets" [ref=e542]
+                - cell "1" [ref=e543]
+              - row "Services 8" [ref=e544]:
+                - cell "Services" [ref=e545]
+                - cell "8" [ref=e546]
+              - row "Web 3" [ref=e547]:
+                - cell "Web" [ref=e548]
+                - cell "3" [ref=e549]
+              - row "Probes 5" [ref=e550]:
+                - cell "Probes" [ref=e551]
+                - cell "5" [ref=e552]
+              - row "Fingerprints 4" [ref=e553]:
+                - cell "Fingerprints" [ref=e554]
+                - cell "4" [ref=e555]
+              - row "Loots 5" [ref=e556]:
+                - cell "Loots" [ref=e557]
+                - cell "5" [ref=e558]
+              - row "Errors 0" [ref=e559]:
+                - cell "Errors" [ref=e560]
+                - cell "0" [ref=e561]
+              - row "Duration 28.265s" [ref=e562]:
+                - cell "Duration" [ref=e563]
+                - cell "28.265s" [ref=e564]
+          - heading "Loots Link to Loots" [level=2] [ref=e565]:
+            - text: Loots
+            - link "Link to Loots" [ref=e566] [cursor=pointer]:
+              - /url: "#loots-2"
+              - img [ref=e567]
+          - table [ref=e571]:
+            - rowgroup [ref=e572]:
+              - row "Kind Target Priority Description" [ref=e573]:
+                - columnheader "Kind" [ref=e574]
+                - columnheader "Target" [ref=e575]
+                - columnheader "Priority" [ref=e576]
+                - columnheader "Description" [ref=e577]
+            - rowgroup [ref=e578]:
+              - row "fingerprint 127.0.0.1:2222 low ssh" [ref=e579]:
+                - cell "fingerprint" [ref=e580]
+                - cell "127.0.0.1:2222" [ref=e581]
+                - cell "low" [ref=e582]
+                - cell "ssh" [ref=e583]
+              - row "fingerprint 127.0.0.1:135 low wmi" [ref=e584]:
+                - cell "fingerprint" [ref=e585]
+                - cell "127.0.0.1:135" [ref=e586]
+                - cell "low" [ref=e587]
+                - cell "wmi" [ref=e588]
+              - row "fingerprint 127.0.0.1:445 low smb" [ref=e589]:
+                - cell "fingerprint" [ref=e590]
+                - cell "127.0.0.1:445" [ref=e591]
+                - cell "low" [ref=e592]
+                - cell "smb" [ref=e593]
+              - row "fingerprint http://127.0.0.1:3000 low nginx" [ref=e594]:
+                - cell "fingerprint" [ref=e595]
+                - cell "http://127.0.0.1:3000" [ref=e596]:
+                  - link "http://127.0.0.1:3000" [ref=e597] [cursor=pointer]:
+                    - /url: http://127.0.0.1:3000
+                - cell "low" [ref=e598]
+                - cell "nginx" [ref=e599]
+              - row "fingerprint http://127.0.0.1:3000 low nginx" [ref=e600]:
+                - cell "fingerprint" [ref=e601]
+                - cell "http://127.0.0.1:3000" [ref=e602]:
+                  - link "http://127.0.0.1:3000" [ref=e603] [cursor=pointer]:
+                    - /url: http://127.0.0.1:3000
+                - cell "low" [ref=e604]
+                - cell "nginx" [ref=e605]
+          - heading "Assets Link to Assets" [level=2] [ref=e606]:
+            - text: Assets
+            - link "Link to Assets" [ref=e607] [cursor=pointer]:
+              - /url: "#assets-2"
+              - img [ref=e608]
+          - heading "wmi Link to wmi" [level=3] [ref=e611]:
+            - text: wmi
+            - link "Link to wmi" [ref=e612] [cursor=pointer]:
+              - /url: "#wmi-2"
+              - img [ref=e613]
+          - list [ref=e616]:
+            - listitem [ref=e617]:
+              - strong [ref=e618]: "Target:"
+              - code [ref=e619]: 127.0.0.1:135
+            - listitem [ref=e620]:
+              - strong [ref=e621]: "State:"
+              - code [ref=e622]: low
+            - listitem [ref=e623]:
+              - strong [ref=e624]: "Services:"
+              - code [ref=e625]: wmi 135
+            - listitem [ref=e626]:
+              - strong [ref=e627]: "Fingers:"
+              - code [ref=e628]: wmi
+            - listitem [ref=e629]:
+              - strong [ref=e630]: "Sources:"
+              - code [ref=e631]: gogo_portscan
+              - text: ","
+              - code [ref=e632]: fingerprint
+          - heading "127.0.0.1:135 (oxid) Link to 127.0.0.1:135 (oxid)" [level=3] [ref=e633]:
+            - text: 127.0.0.1:135 (oxid)
+            - link "Link to 127.0.0.1:135 (oxid)" [ref=e634] [cursor=pointer]:
+              - /url: "#127-0-0-1-135-oxid-2"
+              - img [ref=e635]
+          - list [ref=e638]:
+            - listitem [ref=e639]:
+              - strong [ref=e640]: "Services:"
+              - code [ref=e641]: wmi 135 (oxid)
+            - listitem [ref=e642]:
+              - strong [ref=e643]: "Sources:"
+              - code [ref=e644]: gogo_portscan
+          - heading "ssh Link to ssh" [level=3] [ref=e645]:
+            - text: ssh
+            - link "Link to ssh" [ref=e646] [cursor=pointer]:
+              - /url: "#ssh-2"
+              - img [ref=e647]
+          - list [ref=e650]:
+            - listitem [ref=e651]:
+              - strong [ref=e652]: "Target:"
+              - code [ref=e653]: 127.0.0.1:2222
+            - listitem [ref=e654]:
+              - strong [ref=e655]: "State:"
+              - code [ref=e656]: low
+            - listitem [ref=e657]:
+              - strong [ref=e658]: "Services:"
+              - code [ref=e659]: tcp 2222
+            - listitem [ref=e660]:
+              - strong [ref=e661]: "Fingers:"
+              - code [ref=e662]: ssh
+            - listitem [ref=e663]:
+              - strong [ref=e664]: "Sources:"
+              - code [ref=e665]: gogo_portscan
+              - text: ","
+              - code [ref=e666]: fingerprint
+          - heading "smb Link to smb" [level=3] [ref=e667]:
+            - text: smb
+            - link "Link to smb" [ref=e668] [cursor=pointer]:
+              - /url: "#smb-2"
+              - img [ref=e669]
+          - list [ref=e672]:
+            - listitem [ref=e673]:
+              - strong [ref=e674]: "Target:"
+              - code [ref=e675]: 127.0.0.1:445
+            - listitem [ref=e676]:
+              - strong [ref=e677]: "State:"
+              - code [ref=e678]: low
+            - listitem [ref=e679]:
+              - strong [ref=e680]: "Services:"
+              - code [ref=e681]: smb 445
+            - listitem [ref=e682]:
+              - strong [ref=e683]: "Fingers:"
+              - code [ref=e684]: smb
+            - listitem [ref=e685]:
+              - strong [ref=e686]: "Sources:"
+              - code [ref=e687]: gogo_portscan
+              - text: ","
+              - code [ref=e688]: fingerprint
+          - heading "127.0.0.1:icmp Link to 127.0.0.1:icmp" [level=3] [ref=e689]:
+            - text: 127.0.0.1:icmp
+            - link "Link to 127.0.0.1:icmp" [ref=e690] [cursor=pointer]:
+              - /url: "#127-0-0-1-icmp-2"
+              - img [ref=e691]
+          - list [ref=e694]:
+            - listitem [ref=e695]:
+              - strong [ref=e696]: "Services:"
+              - code [ref=e697]: icmp
+            - listitem [ref=e698]:
+              - strong [ref=e699]: "Sources:"
+              - code [ref=e700]: gogo_portscan
+          - heading "http://127.0.0.1:1080 Link to http://127.0.0.1:1080" [level=3] [ref=e701]:
+            - link "http://127.0.0.1:1080" [ref=e702] [cursor=pointer]:
+              - /url: http://127.0.0.1:1080
+            - link "Link to http://127.0.0.1:1080" [ref=e703] [cursor=pointer]:
+              - /url: "#http-127-0-0-1-1080-2"
+              - img [ref=e704]
+          - list [ref=e707]:
+            - listitem [ref=e708]:
+              - strong [ref=e709]: "Services:"
+              - code [ref=e710]: http 1080
+            - listitem [ref=e711]:
+              - strong [ref=e712]: "HTTP:"
+              - code [ref=e713]: "400"
+            - listitem [ref=e714]:
+              - strong [ref=e715]: "Sources:"
+              - code [ref=e716]: gogo_portscan
+              - text: ","
+              - code [ref=e717]: check
+            - listitem [ref=e718]:
+              - strong [ref=e719]: "Paths:"
+              - text: "1"
+          - heading "nginx Link to nginx" [level=3] [ref=e720]:
+            - text: nginx
+            - link "Link to nginx" [ref=e721] [cursor=pointer]:
+              - /url: "#nginx-2"
+              - img [ref=e722]
+          - list [ref=e725]:
+            - listitem [ref=e726]:
+              - strong [ref=e727]: "Target:"
+              - code [ref=e728]: http://127.0.0.1:3000
+            - listitem [ref=e729]:
+              - strong [ref=e730]: "State:"
+              - code [ref=e731]: low
+            - listitem [ref=e732]:
+              - strong [ref=e733]: "Services:"
+              - code [ref=e734]: http 3000
+            - listitem [ref=e735]:
+              - strong [ref=e736]: "HTTP:"
+              - code [ref=e737]: "200"
+            - listitem [ref=e738]:
+              - strong [ref=e739]: "Fingers:"
+              - code [ref=e740]: nginx
+            - listitem [ref=e741]:
+              - strong [ref=e742]: "Sources:"
+              - code [ref=e743]: gogo_portscan
+              - text: ","
+              - code [ref=e744]: check
+              - text: ","
+              - code [ref=e745]: fingerprint
+              - text: ","
+              - code [ref=e746]: crawl
+            - listitem [ref=e747]:
+              - strong [ref=e748]: "Paths:"
+              - text: "2"
+          - heading "js data Link to js data" [level=3] [ref=e749]:
+            - text: js data
+            - link "Link to js data" [ref=e750] [cursor=pointer]:
+              - /url: "#js-data-2"
+              - img [ref=e751]
+          - list [ref=e754]:
+            - listitem [ref=e755]:
+              - strong [ref=e756]: "Target:"
+              - code [ref=e757]: http://127.0.0.1:8080
+            - listitem [ref=e758]:
+              - strong [ref=e759]: "Services:"
+              - code [ref=e760]: http 8080
+            - listitem [ref=e761]:
+              - strong [ref=e762]: "HTTP:"
+              - code [ref=e763]: "200"
+            - listitem [ref=e764]:
+              - strong [ref=e765]: "Sources:"
+              - code [ref=e766]: gogo_portscan
+              - text: ","
+              - code [ref=e767]: crawl
+              - text: ","
+              - code [ref=e768]: check
+            - listitem [ref=e769]:
+              - strong [ref=e770]: "Paths:"
+              - text: "2"

@@ -1,0 +1,9 @@
+[0;36m[info] loaded config: aiscan.yaml
+[0m[0;36m[info] provider init provider=openai model=deepseek-v4-pro
+[0m[0;36m[info] engine=fingers status=ready templates=4314
+[0m[0;36m[info] engine=neutron status=ready templates=83
+[0m[0;36m[info] index=finger_poc status=ready fingers=4314 aliases=0 templates=83
+[0m[0;36m[info] resources type=neutron source=custom templates=193 categories=155
+[0m[0;36m[info] engine=gogo status=ready
+[0m[0;36m[info] resources type=fingers source=custom favicon:530 fingers:4314
+[0m

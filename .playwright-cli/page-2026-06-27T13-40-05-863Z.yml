@@ -1,0 +1,86 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Chat console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - heading "Sessions" [level=2] [ref=e17]
+        - button "New session" [ref=e18] [cursor=pointer]:
+          - img [ref=e19]
+      - generic [ref=e20]:
+        - img
+        - textbox "Search sessions" [ref=e21]
+      - generic [ref=e22]:
+        - 'button "Reply exactly: frontend-chat-ok 6月27日" [ref=e79] [cursor=pointer]':
+          - generic [ref=e60]:
+            - img [ref=e61]
+            - generic [ref=e63]: "Reply exactly: frontend-chat-ok"
+          - generic [ref=e65]: 6月27日
+        - button "hello 6月27日" [ref=e24] [cursor=pointer]:
+          - generic [ref=e25]:
+            - img [ref=e26]
+            - generic [ref=e28]: hello
+          - generic [ref=e30]: 6月27日
+  - generic [ref=e31]:
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - img [ref=e34]
+        - text: Chat
+      - generic [ref=e36]:
+        - button "1" [ref=e37] [cursor=pointer]:
+          - img [ref=e38]
+          - generic [ref=e40]: "1"
+        - button "LLM Config" [ref=e41] [cursor=pointer]:
+          - img [ref=e42]
+        - button "Switch to dark theme" [ref=e45] [cursor=pointer]:
+          - img [ref=e46]
+        - button "Show detail panel" [ref=e48] [cursor=pointer]:
+          - img [ref=e49]
+    - generic [ref=e52]:
+      - generic [ref=e81]:
+        - img [ref=e83]
+        - generic [ref=e86]:
+          - generic [ref=e87]:
+            - generic [ref=e88]: You
+            - generic [ref=e89]: 21:40:03
+          - paragraph [ref=e92]: "Reply exactly: frontend-chat-ok"
+      - generic [ref=e94]:
+        - img [ref=e96]
+        - generic [ref=e99]:
+          - generic [ref=e100]:
+            - generic [ref=e101]: System
+            - generic [ref=e102]: 21:40:04
+          - paragraph [ref=e105]: "Reply exactly: frontend-chat-ok"
+      - generic [ref=e108]:
+        - img [ref=e109]
+        - text: local-worker-1 joined
+      - generic [ref=e114]:
+        - img [ref=e116]
+        - generic [ref=e119]:
+          - generic [ref=e120]:
+            - generic [ref=e121]: local-worker-1
+            - generic [ref=e122]: 21:40:04
+          - paragraph [ref=e125]: "{\"ts\":\"2026-06-27T13:40:04.0016328Z\",\"type\":\"message_end\",\"session_id\":\"7775b3a31723585c\",\"turn\":1,\"message\":{\"role\":\"user\",\"content\":\"Reply exactly: frontend-chat-ok\"}}"
+      - generic [ref=e127]:
+        - img [ref=e129]
+        - generic [ref=e132]:
+          - generic [ref=e133]:
+            - generic [ref=e134]: local-worker-1
+            - generic [ref=e135]: 21:40:05
+          - paragraph [ref=e138]: "{\"ts\":\"2026-06-27T13:40:05.1428007Z\",\"type\":\"message_end\",\"session_id\":\"7775b3a31723585c\",\"turn\":1,\"message\":{\"role\":\"assistant\",\"content\":\"frontend-chat-ok\",\"reasoning_content\":\"The user is asking me to reply with exactly \"frontend-chat-ok\". This is a simple verification command.\"}}"
+      - generic [ref=e140]:
+        - img [ref=e142]
+        - generic [ref=e145]:
+          - generic [ref=e146]:
+            - generic [ref=e147]: local-worker-1
+            - generic [ref=e148]: 21:40:05
+          - paragraph [ref=e151]: frontend-chat-ok
+    - generic [ref=e73]:
+      - textbox "Type a message... (/ for commands)" [active] [ref=e74]
+      - button "Send message" [disabled]:
+        - img

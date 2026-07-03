@@ -1,0 +1,231 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Web console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - heading "History" [level=2] [ref=e17]
+      - generic [ref=e18]:
+        - img
+        - textbox "Search scan targets" [ref=e19]:
+          - /placeholder: Search targets
+      - generic [ref=e20]: No scans yet.
+  - main [ref=e21]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - img [ref=e25]
+        - textbox "Scan target" [ref=e28]:
+          - /placeholder: Target — IP, hostname, or URL
+      - generic [ref=e29]:
+        - group "Scan mode" [ref=e30]:
+          - button "Quick" [ref=e31] [cursor=pointer]
+          - button "Full" [ref=e32] [cursor=pointer]
+        - generic [ref=e33]:
+          - button "Verify analysis" [disabled] [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e45]: Verify
+          - button "Sniper analysis" [disabled] [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e49]: Sniper
+          - button "Deep analysis" [disabled] [ref=e50]:
+            - img [ref=e51]
+            - generic [ref=e58]: Deep
+        - button "Start scan" [disabled]:
+          - img
+          - generic: Scan
+      - generic [ref=e59]:
+        - button "Agents 1" [ref=e113] [cursor=pointer]:
+          - img [ref=e61]
+          - generic [ref=e63]: Agents
+          - generic [ref=e64]: "1"
+        - button "LLM Offline; open LLM configuration" [ref=e114] [cursor=pointer]:
+          - img [ref=e115]
+          - generic [ref=e69]: LLM Offline
+          - img [ref=e70]
+        - button "Switch to light theme" [ref=e74] [cursor=pointer]:
+          - img [ref=e75]
+    - generic [ref=e82]:
+      - img [ref=e83]
+      - generic [ref=e85]:
+        - paragraph [ref=e86]: No active scan
+        - paragraph [ref=e87]: Ready for a target
+      - generic [ref=e88]:
+        - button "Open scan history" [ref=e89] [cursor=pointer]:
+          - img [ref=e90]
+          - generic [ref=e94]: History
+          - generic [ref=e95]: "0"
+        - button "Open agent console" [ref=e96] [cursor=pointer]:
+          - img [ref=e97]
+          - generic [ref=e99]: Agents
+          - generic [ref=e100]: "1"
+        - button "Open LLM configuration" [ref=e101] [cursor=pointer]:
+          - img [ref=e117]
+          - generic [ref=e105]: LLM
+          - generic [ref=e106]: Offline
+        - button "Open LLM configuration" [ref=e107] [cursor=pointer]:
+          - img [ref=e108]
+          - generic [ref=e111]: Config
+          - generic [ref=e112]: Loaded
+  - generic [ref=e120]:
+    - generic [ref=e121]:
+      - generic [ref=e122]:
+        - img [ref=e123]
+        - generic [ref=e125]:
+          - generic [ref=e126]:
+            - generic [ref=e127]: Agent Console
+            - generic [ref=e128]: "1"
+          - 'generic "name: aiscan-d5151fae id: 1781981704134886100 state: idle connected: 2026/6/21 02:55:04 host: CodeMonkey user: CODEMONKEY\\John cwd: D:\\Programing\\go\\chainreactors\\aiscan runtime: windows/amd64 pid: 43928 commands: tmux, arsenal, scan, gogo, spray, zombie, neutron, proxy capabilities: repl, pty, tmux, ioa" [ref=e129]': aiscan-d5151fae · idle
+      - button "Close agents" [ref=e130] [cursor=pointer]:
+        - img [ref=e131]
+    - generic [ref=e137]:
+      - generic [ref=e138]:
+        - generic "Main REPL" [ref=e139]:
+          - img [ref=e140]
+          - generic [ref=e142]: Main REPL
+          - generic [ref=e143]: connected
+        - generic [ref=e144]:
+          - button "New shell PTY" [ref=e146] [cursor=pointer]:
+            - img [ref=e147]
+          - button "Refresh sessions" [ref=e149] [cursor=pointer]:
+            - img [ref=e150]
+          - button "Stop active task" [disabled] [ref=e156]:
+            - img [ref=e157]
+          - generic [ref=e159]:
+            - button "Hide details" [active] [ref=e186] [cursor=pointer]:
+              - img [ref=e161]
+            - generic [ref=e187]: Hide details
+      - generic [ref=e163]:
+        - complementary [ref=e164]:
+          - button "Main REPL running always on" [ref=e166] [cursor=pointer]:
+            - img [ref=e168]
+            - generic [ref=e170]:
+              - generic [ref=e171]:
+                - generic [ref=e172]: Main REPL
+                - generic [ref=e173]: running
+              - generic [ref=e174]: always on
+          - generic [ref=e175]:
+            - generic [ref=e176]: Tasks
+            - generic [ref=e177]: 0 running
+          - generic [ref=e179]: No tasks yet
+        - generic [ref=e184]:
+          - textbox "Terminal input" [ref=e185]
+          - generic:
+            - generic:
+              - generic: ╭────────────────────────────────────────────────────────────────────────────╮
+            - generic:
+              - generic: │ aiscan v0.1.0 │
+            - generic:
+              - generic: "│ model not configured - run `aiscan --init` │"
+            - generic:
+              - generic: │ mode pty · stream · space default │
+            - generic:
+              - generic: │ help /help /status /exit │
+            - generic:
+              - generic: ╰────────────────────────────────────────────────────────────────────────────╯
+            - generic:
+              - generic: 输入目标或任务即可
+              - generic: ；
+              - generic: 例如
+              - generic: ：
+              - generic: 扫描
+              - generic: 192.168.1.10
+              - generic: 的
+              - generic: Web
+              - generic: 风险
+            - generic:
+              - generic: aiscan>
+        - complementary [ref=e188]:
+          - generic [ref=e189]:
+            - generic [ref=e190]: Details
+            - button "Close details" [ref=e192] [cursor=pointer]:
+              - img [ref=e193]
+          - generic [ref=e196]:
+            - generic [ref=e197]:
+              - generic [ref=e198]: Agent
+              - generic [ref=e199]:
+                - generic [ref=e200]:
+                  - generic [ref=e201]: Name
+                  - generic [ref=e202]: aiscan-d5151fae
+                - generic [ref=e203]:
+                  - generic [ref=e204]: ID
+                  - generic [ref=e205]: "1781981704134886100"
+                - generic [ref=e206]:
+                  - generic [ref=e207]: State
+                  - generic [ref=e208]: idle
+                - generic [ref=e209]:
+                  - generic [ref=e210]: Connected
+                  - generic [ref=e211]: 2026/6/21 02:55:04
+                - generic [ref=e212]:
+                  - generic [ref=e213]: Host
+                  - generic [ref=e214]: CodeMonkey
+                - generic [ref=e215]:
+                  - generic [ref=e216]: User
+                  - generic [ref=e217]: CODEMONKEY\John
+                - generic [ref=e218]:
+                  - generic [ref=e219]: Runtime
+                  - generic [ref=e220]: windows/amd64
+                - generic [ref=e221]:
+                  - generic [ref=e222]: PID
+                  - generic [ref=e223]: "43928"
+                - generic [ref=e224]:
+                  - generic [ref=e225]: CWD
+                  - generic [ref=e226]: D:\Programing\go\chainreactors\aiscan
+                - generic [ref=e227]:
+                  - generic [ref=e228]: LLM
+                  - generic [ref=e229]: offline
+                - generic [ref=e230]:
+                  - generic [ref=e231]: Space
+                  - generic [ref=e232]: default
+            - generic [ref=e233]:
+              - generic [ref=e234]: Active Session
+              - generic [ref=e235]:
+                - generic [ref=e236]:
+                  - generic [ref=e237]: Console
+                  - generic [ref=e238]: connected
+                - generic [ref=e239]:
+                  - generic [ref=e240]: Title
+                  - generic [ref=e241]: Main REPL
+                - generic [ref=e242]:
+                  - generic [ref=e243]: ID
+                  - generic [ref=e244]: 166d372c
+                - generic [ref=e245]:
+                  - generic [ref=e246]: Kind
+                  - generic [ref=e247]: repl
+                - generic [ref=e248]:
+                  - generic [ref=e249]: State
+                  - generic [ref=e250]: running
+                - generic [ref=e251]:
+                  - generic [ref=e252]: Command
+                  - generic [ref=e253]: aiscan remote repl
+                - generic [ref=e254]:
+                  - generic [ref=e255]: Started
+                  - generic [ref=e256]: 2026/6/21 02:55:07
+                - generic [ref=e257]:
+                  - generic [ref=e258]: Activity
+                  - generic [ref=e259]: 2026/6/21 02:56:05
+                - generic [ref=e260]:
+                  - generic [ref=e261]: Output
+                  - generic [ref=e262]: 1.3 KB
+            - generic [ref=e263]:
+              - generic [ref=e264]: Tasks
+              - generic [ref=e265]:
+                - generic [ref=e266]:
+                  - generic [ref=e267]: Total
+                  - generic [ref=e268]: "0"
+                - generic [ref=e269]:
+                  - generic [ref=e270]: Running
+                  - generic [ref=e271]: "0"
+                - generic [ref=e272]:
+                  - generic [ref=e273]: Closed
+                  - generic [ref=e274]: "0"
+                - generic [ref=e275]:
+                  - generic [ref=e276]: Commands
+                  - generic [ref=e277]: tmux, arsenal, scan, gogo, spray, zombie, neutron, proxy
+                - generic [ref=e278]:
+                  - generic [ref=e279]: Capabilities
+                  - generic [ref=e280]: repl, pty, tmux, ioa
+            - generic [ref=e282]: Stats

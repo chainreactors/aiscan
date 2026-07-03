@@ -1,0 +1,14 @@
+- generic [ref=e3]:
+  - generic [ref=e4]: "[plugin:vite:import-analysis] Failed to resolve import \"@xyflow/react\" from \"cyber-ui/packages/viewer/src/components/ExecutionGraphView.tsx\". Does the file exist?"
+  - generic [ref=e5]: D:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/components/ExecutionGraphView.tsx:12:7
+  - generic [ref=e6]: "23 | Position, 24 | ReactFlow 25 | } from \"@xyflow/react\"; | ^ 26 | import \"@xyflow/react/dist/style.css\"; 27 | import {"
+  - generic [ref=e7]: at TransformPluginContext._formatLog (file:///D:/Programing/go/chainreactors/aiscan/web/frontend/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:42658:41) at TransformPluginContext.error (file:///D:/Programing/go/chainreactors/aiscan/web/frontend/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:42655:16) at normalizeUrl (file:///D:/Programing/go/chainreactors/aiscan/web/frontend/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:40634:23) at process.processTicksAndRejections (node:internal/process/task_queues:105:5) at async file:///D:/Programing/go/chainreactors/aiscan/web/frontend/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:40753:37 at async Promise.all (index 4) at async TransformPluginContext.transform (file:///D:/Programing/go/chainreactors/aiscan/web/frontend/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:40680:7) at async EnvironmentPluginContainer.transform (file:///D:/Programing/go/chainreactors/aiscan/web/frontend/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:42453:18) at async loadAndTransform (file:///D:/Programing/go/chainreactors/aiscan/web/frontend/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:35845:27) at async viteTransformMiddleware (file:///D:/Programing/go/chainreactors/aiscan/web/frontend/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:37369:24
+  - generic [ref=e8]:
+    - text: Click outside, press Esc key, or fix the code to dismiss.
+    - text: You can also disable this overlay by setting
+    - code [ref=e9]: server.hmr.overlay
+    - text: to
+    - code [ref=e10]: "false"
+    - text: in
+    - code [ref=e11]: vite.config.ts
+    - text: .

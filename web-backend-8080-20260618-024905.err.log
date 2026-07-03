@@ -1,0 +1,14 @@
+[0;36m[info] loaded config: config.yaml
+[0m[0;33m[debug] provider not configured: no API key for provider "deepseek": set --api-key, llm.api_key, DEEPSEEK_API_KEY, or AISCAN_API_KEY
+[0m[0;36m[info] engine=fingers status=ready templates=4314
+[0m[0;36m[info] engine=neutron status=ready templates=83
+[0m[0;36m[info] index=finger_poc status=ready fingers=4314 aliases=0 templates=83
+[0m[0;36m[info] resources type=neutron source=custom templates=193 categories=155
+[0m[0;36m[info] engine=gogo status=ready
+[0m[0;36m[info] resources type=fingers source=custom favicon:530 fingers:4314
+[0m[scan:1781722204641668900] [web] http://127.0.0.1:5173
+[scan:1781722204641668900] [web] http://127.0.0.1:5173 200 1339 15ms AIScan
+[scan:1781722204641668900] [web] http://127.0.0.1:5173/src/main.tsx 200 2124 16ms "js data" sim:14 "[ crawl:/src/App.tsx ]"
+[scan:1781722204641668900] [web] http://127.0.0.1:5173/src/App.tsx 200 42791 88ms "js data" sim:13
+[scan:1781722204641668900] [web] http://127.0.0.1:5173/package-lock.json 200 0 122ms "json data"
+exit status 0xffffffff

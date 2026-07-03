@@ -1,0 +1,176 @@
+[2m19:17:37[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/chat/sessions/1782645187965452100/events[39m
+Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+[2m19:17:37[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/chat/sessions/1782634296549096100/events[39m
+Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+[2m19:17:40[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m19:17:40[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m19:17:45[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m19:17:45[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m19:17:50[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m19:17:50[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m19:17:55[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m19:17:55[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m19:23:00[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/chat/sessions/1782645563086810700/events[39m
+Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+[2m19:23:00[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m19:23:00[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m19:23:01[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/lib/execution-history-graph.ts". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/lib/execution-history-graph.ts[39m:1:49
+[33m  1  |  import { MarkerType } from "@xyflow/react";
+     |                              ^
+  2  |  import {
+  3  |    formatTokenUsageLong,[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/lib/execution-graph.ts". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/lib/execution-graph.ts[39m:1:49
+[33m  1  |  import { MarkerType } from "@xyflow/react";
+     |                              ^
+  2  |  import { layoutDAG } from "./graph-layout";
+  3  |  function asObject(value) {[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/components/graph/LiveGraphView.tsx". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/components/graph/LiveGraphView.tsx[39m:12:7
+[33m  23 |    useNodesState,
+  24 |    useEdgesState
+  25 |  } from "@xyflow/react";
+     |          ^
+  26 |  import "@xyflow/react/dist/style.css";
+  27 |  import { useGraphState } from "../../providers/useGraphState";[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/components/graph/LiveGraphView.tsx". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/components/graph/LiveGraphView.tsx[39m:12:7
+[33m  23 |    useNodesState,
+  24 |    useEdgesState
+  25 |  } from "@xyflow/react";
+     |          ^
+  26 |  import "@xyflow/react/dist/style.css";
+  27 |  import { useGraphState } from "../../providers/useGraphState";[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/components/graph/LiveAPGNode.tsx". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/components/graph/LiveAPGNode.tsx[39m:2:49
+[33m  17 |  var _s = $RefreshSig$();
+  18 |  import { memo } from "react";
+  19 |  import { Handle, Position } from "@xyflow/react";
+     |                                    ^
+  20 |  import { CheckCircle, Package, XCircle, Circle, Play, Target, GitBranch } from "lucide-react";
+  21 |  import { useResolvedTheme } from "../../lib/use-resolved-theme";[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/components/graph/LiveAPGNode.tsx". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/components/graph/LiveAPGNode.tsx[39m:2:49
+[33m  17 |  var _s = $RefreshSig$();
+  18 |  import { memo } from "react";
+  19 |  import { Handle, Position } from "@xyflow/react";
+     |                                    ^
+  20 |  import { CheckCircle, Package, XCircle, Circle, Play, Target, GitBranch } from "lucide-react";
+  21 |  import { useResolvedTheme } from "../../lib/use-resolved-theme";[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/components/graph/StaticGraphView.tsx". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/components/graph/StaticGraphView.tsx[39m:12:7
+[33m  23 |    useNodesState,
+  24 |    useEdgesState
+  25 |  } from "@xyflow/react";
+     |          ^
+  26 |  import "@xyflow/react/dist/style.css";
+  27 |  import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/components/graph/StaticGraphView.tsx". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/components/graph/StaticGraphView.tsx[39m:12:7
+[33m  23 |    useNodesState,
+  24 |    useEdgesState
+  25 |  } from "@xyflow/react";
+     |          ^
+  26 |  import "@xyflow/react/dist/style.css";
+  27 |  import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/components/ExecutionGraphView.tsx". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/components/ExecutionGraphView.tsx[39m:12:7
+[33m  23 |    Position,
+  24 |    ReactFlow
+  25 |  } from "@xyflow/react";
+     |          ^
+  26 |  import "@xyflow/react/dist/style.css";
+  27 |  import {[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/components/ExecutionGraphView.tsx". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/components/ExecutionGraphView.tsx[39m:12:7
+[33m  23 |    Position,
+  24 |    ReactFlow
+  25 |  } from "@xyflow/react";
+     |          ^
+  26 |  import "@xyflow/react/dist/style.css";
+  27 |  import {[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/components/graph/StaticAPGNode.tsx". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/components/graph/StaticAPGNode.tsx[39m:2:49
+[33m  17 |  var _s = $RefreshSig$();
+  18 |  import { memo } from "react";
+  19 |  import { Handle, Position } from "@xyflow/react";
+     |                                    ^
+  20 |  import { Target, Play, GitBranch, Package } from "lucide-react";
+  21 |  import { useResolvedTheme } from "../../lib/use-resolved-theme";[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/components/graph/SelfLoopEdge.tsx". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/components/graph/SelfLoopEdge.tsx[39m:8:60
+[33m  15 |    window.$RefreshSig$ = RefreshRuntime.createSignatureFunctionForTransform;
+  16 |  }
+  17 |  import { BaseEdge, EdgeLabelRenderer } from "@xyflow/react";
+     |                                               ^
+  18 |  export function SelfLoopEdge({
+  19 |    sourceX,[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/components/graph/SelfLoopEdge.tsx". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/components/graph/SelfLoopEdge.tsx[39m:8:60
+[33m  15 |    window.$RefreshSig$ = RefreshRuntime.createSignatureFunctionForTransform;
+  16 |  }
+  17 |  import { BaseEdge, EdgeLabelRenderer } from "@xyflow/react";
+     |                                               ^
+  18 |  export function SelfLoopEdge({
+  19 |    sourceX,[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/lib/execution-history-graph.ts". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/lib/execution-history-graph.ts[39m:1:49
+[33m  1  |  import { MarkerType } from "@xyflow/react";
+     |                              ^
+  2  |  import {
+  3  |    formatTokenUsageLong,[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/lib/execution-history-graph.ts". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/lib/execution-history-graph.ts[39m:1:49
+[33m  1  |  import { MarkerType } from "@xyflow/react";
+     |                              ^
+  2  |  import {
+  3  |    formatTokenUsageLong,[39m
+[2m00:01:52[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to resolve import "@xyflow/react" from "cyber-ui/packages/viewer/src/lib/execution-graph.ts". Does the file exist?
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mD:/Programing/go/chainreactors/aiscan/web/frontend/cyber-ui/packages/viewer/src/lib/execution-graph.ts[39m:1:49
+[33m  1  |  import { MarkerType } from "@xyflow/react";
+     |                              ^
+  2  |  import { layoutDAG } from "./graph-layout";
+  3  |  function asObject(value) {[39m

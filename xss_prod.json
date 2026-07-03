@@ -1,0 +1,1 @@
+{"name":"XSS Product Test","price":1,"stock":1,"category":"xss","image_url":"https://x.com/x.jpg\" onerror=\"alert(1)"}

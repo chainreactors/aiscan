@@ -1,0 +1,5 @@
+registered
+message connected  
+message exec 1781722667667353900 scan -i http://127.0.0.1:5173 --mode quick
+message exec 1781722698341411000 scan -i http://127.0.0.1:5173 --mode quick
+message exec 1781722818081514400 scan -i http://127.0.0.1:5173 --mode quick

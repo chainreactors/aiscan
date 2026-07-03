@@ -1,0 +1,30 @@
+
+> aiscan-web-frontend@0.2.0 dev
+> vite --host 127.0.0.1 --port 5175
+
+[2m02:46:08[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m Re-optimizing dependencies because lockfile has changed
+
+  [32m[1mVITE[22m v6.4.3[39m  [2mready in [0m[1m389[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5175[22m/[39m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+[2m02:48:39[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/AgentTerminal.tsx, /src/index.css[22m
+[2m02:49:14[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m02:49:42[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/AgentPanel.tsx, /src/index.css[22m
+[2m02:50:39[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/AgentTerminal.tsx, /src/index.css[22m
+[2m02:50:58[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/AgentTerminal.tsx, /src/index.css[22m
+[2m02:54:24[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/AgentTerminal.tsx, /src/index.css[22m
+[2m20:11:17[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m20:11:17[22m [36m[1m[vite][22m[39m server restarted.
+[2m20:19:36[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m20:19:36[22m [36m[1m[vite][22m[39m server restarted.
+[2m20:19:45[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m20:19:45[22m [36m[1m[vite][22m[39m server restarted.
+[2m22:04:42[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m22:04:42[22m [36m[1m[vite][22m[39m server restarted.
+[2m22:04:55[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m22:04:55[22m [36m[1m[vite][22m[39m server restarted.
+[2m00:29:27[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m00:29:27[22m [36m[1m[vite][22m[39m server restarted.
+[2m00:29:32[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2m00:29:32[22m [36m[1m[vite][22m[39m server restarted.

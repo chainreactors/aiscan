@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -19,6 +20,8 @@ import (
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
 	"github.com/chainreactors/aiscan/pkg/tui"
 	"github.com/chainreactors/aiscan/skills"
+	ioaclient "github.com/chainreactors/ioa/client"
+	"github.com/chainreactors/ioa/protocols"
 )
 
 // ---------------------------------------------------------------------------
@@ -143,6 +146,22 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 
 	ib := inboxpkg.NewBuffered(agent.DefaultInboxCapacity)
 
+	var ioaCancel func()
+	if rt.App.IOAStreamClient != nil && option.Space != "" {
+		nodeID := ""
+		if rt.App.IOAClient != nil {
+			nodeID = rt.App.IOAClient.NodeID()
+		}
+		spaceInfo, err := rt.App.IOAStreamClient.Space(ctx, option.Space, "aiscan agent")
+		if err != nil {
+			logger.Warnf("ioa space resolve: %s", err)
+		} else {
+			ioaCtx, cancel := context.WithCancel(ctx)
+			ioaCancel = cancel
+			go subscribeIOASpace(ioaCtx, rt.App.IOAStreamClient, spaceInfo.ID, nodeID, ib, logger)
+		}
+	}
+
 	sessMgr, bashTool := bashToolAndManager(rt.App.Commands)
 	if bashTool != nil {
 		bashTool.SetInbox(ib)
@@ -237,6 +256,9 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 	}
 
 	rt.cleanup = func() {
+		if ioaCancel != nil {
+			ioaCancel()
+		}
 		scheduler.Stop()
 		if sessMgr != nil {
 			sessMgr.Shutdown()
@@ -475,6 +497,59 @@ func buildEvalConfig(option *cfg.Option, rt *AgentRuntime, logger telemetry.Logg
 		Criteria:      option.EvalCriteria,
 		Bus:           rt.Bus,
 	}
+}
+
+// ---------------------------------------------------------------------------
+// IOA inbox subscription
+// ---------------------------------------------------------------------------
+
+func subscribeIOASpace(ctx context.Context, stream ioaclient.StreamAPI, spaceID, nodeID string, ib *inboxpkg.Buffered, logger telemetry.Logger) {
+	for attempt := 0; ctx.Err() == nil; attempt++ {
+		msgs, errs, cancel, err := stream.Subscribe(ctx, spaceID)
+		if err != nil {
+			delay := agent.RetryDelay(attempt)
+			logger.Debugf("ioa subscribe: %s, retry in %s", err, delay)
+			select {
+			case <-time.After(delay):
+				continue
+			case <-ctx.Done():
+				return
+			}
+		}
+		attempt = 0
+		logger.Debugf("ioa subscribed to space %s", spaceID)
+		for {
+			select {
+			case msg, ok := <-msgs:
+				if !ok {
+					goto reconnect
+				}
+				if msg.Sender == nodeID {
+					continue
+				}
+				m := inboxpkg.NewMessage(inboxpkg.OriginPeer, "user", formatIOAMessage(msg))
+				m.Meta = map[string]any{"sender": msg.Sender, "message_id": msg.ID}
+				if err := ib.Push(m); err != nil {
+					logger.Warnf("inbox push ioa: %s", err)
+				}
+			case <-errs:
+				goto reconnect
+			case <-ctx.Done():
+				cancel()
+				return
+			}
+		}
+	reconnect:
+		cancel()
+	}
+}
+
+func formatIOAMessage(msg protocols.Message) string {
+	if text, ok := msg.Content["text"].(string); ok {
+		return text
+	}
+	data, _ := json.Marshal(msg.Content)
+	return string(data)
 }
 
 // ---------------------------------------------------------------------------

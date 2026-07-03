@@ -181,8 +181,10 @@ func runConnectionOnce(ctx context.Context, serverURL, name string, reg *command
 		}
 	}()
 
-	var taskMu sync.Mutex
-	tasks := make(map[string]context.CancelFunc)
+	var mu sync.Mutex
+	execTasks := make(map[string]context.CancelFunc)   // tmux-managed exec tasks
+	chatCancels := make(map[string]context.CancelFunc) // active chat messageID → cancel
+	eventRoute := make(map[string]string)              // agent SessionID → messageID for event routing
 	if bus != nil {
 		unsub := bus.Subscribe(func(e agent.Event) {
 			if next, ok := stats.Observe(e); ok {
@@ -195,16 +197,27 @@ func runConnectionOnce(ctx context.Context, serverURL, name string, reg *command
 			if data == "" {
 				data = string(payload)
 			}
-			taskMu.Lock()
-			taskIDs := make([]string, 0, len(tasks))
-			for taskID := range tasks {
-				taskIDs = append(taskIDs, taskID)
+			mu.Lock()
+			msgID := eventRoute[e.SessionID]
+			if msgID == "" && e.ParentSessionID != "" {
+				msgID = eventRoute[e.ParentSessionID]
+				if msgID != "" {
+					eventRoute[e.SessionID] = msgID
+				}
 			}
-			taskMu.Unlock()
-			for _, taskID := range taskIDs {
+			var targets []string
+			if msgID != "" {
+				targets = []string{msgID}
+			} else {
+				for tid := range execTasks {
+					targets = append(targets, tid)
+				}
+			}
+			mu.Unlock()
+			for _, id := range targets {
 				send(webproto.Message{
 					Type:    "agent." + string(e.Type),
-					TaskID:  taskID,
+					TaskID:  id,
 					Data:    data,
 					Payload: payload,
 				})
@@ -245,43 +258,76 @@ func runConnectionOnce(ctx context.Context, serverURL, name string, reg *command
 		switch msg.Type {
 		case "exec":
 			taskCtx, cancel := context.WithCancel(ctx)
-			taskMu.Lock()
-			tasks[msg.TaskID] = cancel
-			taskMu.Unlock()
+			mu.Lock()
+			execTasks[msg.TaskID] = cancel
+			mu.Unlock()
 			go func(m webproto.Message, tCtx context.Context, tCancel context.CancelFunc) {
 				defer tCancel()
 				defer func() {
-					taskMu.Lock()
-					delete(tasks, m.TaskID)
-					taskMu.Unlock()
+					mu.Lock()
+					delete(execTasks, m.TaskID)
+					mu.Unlock()
 				}()
 				execCommand(tCtx, m.TaskID, m.Data, reg, send)
 			}(msg, taskCtx, cancel)
 
 		case "chat":
-			taskCtx, cancel := context.WithCancel(ctx)
-			taskMu.Lock()
-			tasks[msg.TaskID] = cancel
-			taskMu.Unlock()
-			go func(m webproto.Message, tCtx context.Context, tCancel context.CancelFunc) {
-				defer tCancel()
+			webSessionID := chatSessionID(msg)
+			ag, agErr := chatRuntime.agentFor(webSessionID)
+			if agErr != nil {
+				send(webproto.Message{Type: "error", TaskID: msg.TaskID, Data: agErr.Error()})
+				continue
+			}
+
+			prompt := strings.TrimSpace(msg.Data)
+			if prompt == "" {
+				send(webproto.Message{Type: "error", TaskID: msg.TaskID, Data: "empty prompt"})
+				continue
+			}
+
+			// Always route future events to the latest message.
+			mu.Lock()
+			eventRoute[ag.Cfg.SessionID] = msg.TaskID
+			mu.Unlock()
+
+			if ag.IsRunning() {
+				// Agent is busy — append to inbox; the loop picks it up.
+				ag.SteerUserMessage(prompt)
+				send(webproto.Message{Type: "complete", TaskID: msg.TaskID})
+				continue
+			}
+
+			// Agent is idle — start a new run with this message.
+			chatCtx, chatCancel := context.WithCancel(ctx)
+			mu.Lock()
+			chatCancels[msg.TaskID] = chatCancel
+			mu.Unlock()
+			go func(m webproto.Message, cCtx context.Context, cCancel context.CancelFunc) {
+				defer cCancel()
 				defer func() {
-					taskMu.Lock()
-					delete(tasks, m.TaskID)
-					taskMu.Unlock()
+					mu.Lock()
+					delete(chatCancels, m.TaskID)
+					for sid, mid := range eventRoute {
+						if mid == m.TaskID {
+							delete(eventRoute, sid)
+						}
+					}
+					mu.Unlock()
 				}()
-				runChatPrompt(tCtx, m, rt, chatRuntime, send)
-			}(msg, taskCtx, cancel)
+				runChatWithAgent(cCtx, m, ag, rt, send)
+			}(msg, chatCtx, chatCancel)
 
 		case "upload":
 			go handleFileUpload(msg, send)
 
 		case "cancel":
-			taskMu.Lock()
-			if cancel, ok := tasks[msg.TaskID]; ok {
+			mu.Lock()
+			if cancel, ok := execTasks[msg.TaskID]; ok {
+				cancel()
+			} else if cancel, ok := chatCancels[msg.TaskID]; ok {
 				cancel()
 			}
-			taskMu.Unlock()
+			mu.Unlock()
 		}
 	}
 }
@@ -526,30 +572,22 @@ func (m *chatRuntimeManager) agentFor(sessionID string) (*agent.Agent, error) {
 	if ag := m.sessions[sessionID]; ag != nil {
 		return ag, nil
 	}
-	ag := agent.NewAgent(m.rt.Config.WithSystemPrompt(m.rt.SystemPrompt).WithStream(true))
+	ag := agent.NewAgent(m.rt.Config.
+		WithSystemPrompt(m.rt.SystemPrompt).
+		WithStream(true).
+		WithInbox(nil))
 	m.sessions[sessionID] = ag
 	return ag, nil
 }
 
-func runChatPrompt(ctx context.Context, msg webproto.Message, rt *runner.AgentRuntime, sessions *chatRuntimeManager, send func(webproto.Message)) {
+func runChatWithAgent(ctx context.Context, msg webproto.Message, ag *agent.Agent, rt *runner.AgentRuntime, send func(webproto.Message)) {
 	prompt := strings.TrimSpace(msg.Data)
-	if prompt == "" {
-		send(webproto.Message{Type: "error", TaskID: msg.TaskID, Data: "empty prompt"})
-		return
-	}
 	if rt == nil || rt.App == nil {
 		send(webproto.Message{
 			Type:   "error",
 			TaskID: msg.TaskID,
 			Data:   "LLM provider is not configured on this agent; configure aiscan.yaml and restart the agent, or prefix commands with !",
 		})
-		return
-	}
-
-	sessionID := chatSessionID(msg)
-	ag, err := sessions.agentFor(sessionID)
-	if err != nil {
-		send(webproto.Message{Type: "error", TaskID: msg.TaskID, Data: err.Error()})
 		return
 	}
 

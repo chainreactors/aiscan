@@ -1,0 +1,59 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - button "Expand sidebar" [ref=e7] [cursor=pointer]:
+      - img [ref=e8]
+    - generic [ref=e10]:
+      - button "4 scans in history" [ref=e12] [cursor=pointer]:
+        - img [ref=e13]
+        - generic [ref=e17]: "4"
+      - button "Expand sidebar" [ref=e19] [cursor=pointer]:
+        - img [ref=e20]
+  - main [ref=e22]:
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - img [ref=e26]
+        - textbox "Scan target" [active] [ref=e29]:
+          - /placeholder: Target — IP, hostname, or URL
+      - generic [ref=e30]:
+        - group "Scan mode" [ref=e31]:
+          - button "Quick" [ref=e32] [cursor=pointer]
+          - button "Full" [ref=e33] [cursor=pointer]
+        - generic [ref=e34]:
+          - button "Verify analysis" [disabled] [ref=e35]:
+            - img [ref=e36]
+          - button "Sniper analysis" [disabled] [ref=e46]:
+            - img [ref=e47]
+          - button "Deep analysis" [disabled] [ref=e49]:
+            - img [ref=e50]
+        - button "Start scan" [disabled]:
+          - img
+      - generic [ref=e57]:
+        - button "0" [ref=e58] [cursor=pointer]:
+          - img [ref=e59]
+          - generic [ref=e61]: "0"
+        - button "Open LLM configuration" [ref=e62] [cursor=pointer]:
+          - img [ref=e63]
+        - button "Switch to dark theme" [ref=e67] [cursor=pointer]:
+          - img [ref=e68]
+    - generic [ref=e71]:
+      - img [ref=e72]
+      - generic [ref=e74]:
+        - paragraph [ref=e75]: No active scan
+        - paragraph [ref=e76]: Ready for a target
+      - generic [ref=e77]:
+        - generic [ref=e78]:
+          - img [ref=e79]
+          - generic [ref=e83]: History
+          - generic [ref=e84]: "4"
+        - generic [ref=e85]:
+          - img [ref=e86]
+          - generic [ref=e88]: Agents
+          - generic [ref=e89]: "0"
+        - generic [ref=e90]:
+          - img [ref=e91]
+          - generic [ref=e93]: LLM
+          - generic [ref=e94]: Offline
+        - generic [ref=e95]:
+          - img [ref=e96]
+          - generic [ref=e99]: Config
+          - generic [ref=e100]: Loaded

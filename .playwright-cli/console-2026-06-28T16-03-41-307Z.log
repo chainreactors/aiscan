@@ -1,0 +1,6 @@
+[     311ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5174/cyber-ui/packages/viewer/src/lib/execution-graph.ts:0
+[     581ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5174/cyber-ui/packages/viewer/src/lib/execution-history-graph.ts:0
+[     608ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5174/cyber-ui/packages/viewer/src/components/graph/LiveGraphView.tsx:0
+[     614ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5174/cyber-ui/packages/viewer/src/components/graph/StaticGraphView.tsx:0
+[     948ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5174/cyber-ui/packages/viewer/src/components/graph/LiveAPGNode.tsx:0
+[     997ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5174/cyber-ui/packages/viewer/src/components/ExecutionGraphView.tsx:0

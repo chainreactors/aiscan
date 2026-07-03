@@ -1,0 +1,263 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - button "Expand sidebar" [ref=e524] [cursor=pointer]:
+      - img [ref=e525]
+    - generic [ref=e10]:
+      - button "4 scans in history" [ref=e528] [cursor=pointer]:
+        - img [ref=e529]
+        - generic [ref=e533]: "4"
+      - button "Expand sidebar" [ref=e535] [cursor=pointer]:
+        - img [ref=e536]
+  - main [ref=e22]:
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - img [ref=e26]
+        - textbox "Scan target" [ref=e29]:
+          - /placeholder: Target — IP, hostname, or URL
+      - generic [ref=e30]:
+        - group "Scan mode" [ref=e31]:
+          - button "Quick" [ref=e32] [cursor=pointer]
+          - button "Full" [ref=e33] [cursor=pointer]
+        - generic [ref=e34]:
+          - button "Verify analysis" [disabled] [ref=e35]:
+            - img [ref=e36]
+          - button "Sniper analysis" [disabled] [ref=e46]:
+            - img [ref=e47]
+          - button "Deep analysis" [disabled] [ref=e49]:
+            - img [ref=e50]
+        - button "Start scan" [disabled]:
+          - img
+      - generic [ref=e57]:
+        - button "0" [ref=e58] [cursor=pointer]:
+          - img [ref=e59]
+          - generic [ref=e61]: "0"
+        - button "Open LLM configuration" [ref=e62] [cursor=pointer]:
+          - img [ref=e63]
+        - generic [ref=e66]:
+          - button "Switch to dark theme" [ref=e67] [cursor=pointer]:
+            - img [ref=e68]
+          - generic [ref=e538]: Switch to dark theme
+    - generic [ref=e101]:
+      - generic [ref=e102]:
+        - generic [ref=e103]: 127.0.0.1
+        - generic [ref=e104]: quick
+        - generic [ref=e105]: Completed
+      - generic [ref=e106]:
+        - generic [ref=e107]:
+          - button "Assets" [ref=e108] [cursor=pointer]:
+            - img [ref=e109]
+            - generic [ref=e111]: Assets
+          - button "Markdown" [ref=e112] [cursor=pointer]:
+            - img [ref=e113]
+            - generic [ref=e116]: Markdown
+        - generic [ref=e117]:
+          - generic [ref=e119]:
+            - generic [ref=e120]:
+              - generic [ref=e121]: Hosts
+              - generic [ref=e122]: "1"
+            - generic [ref=e123]:
+              - generic [ref=e124]: Assets
+              - generic [ref=e125]: "8"
+            - generic [ref=e126]:
+              - generic [ref=e127]: Services
+              - generic [ref=e128]: "8"
+            - generic [ref=e129]:
+              - generic [ref=e130]: Web
+              - generic [ref=e131]: "3"
+            - generic [ref=e132]:
+              - generic [ref=e133]: Probes
+              - generic [ref=e134]: "5"
+            - generic [ref=e135]:
+              - generic [ref=e136]: Fingers
+              - generic [ref=e137]: "4"
+            - generic [ref=e138]:
+              - generic [ref=e139]: Loots
+              - generic [ref=e140]: "5"
+            - generic [ref=e141]:
+              - generic [ref=e142]: Errors
+              - generic [ref=e143]: "0"
+            - generic [ref=e144]:
+              - generic [ref=e145]: Duration
+              - generic [ref=e146]: 28.265s
+          - generic [ref=e147]:
+            - generic [ref=e148]: Hosts
+            - group [ref=e151]:
+              - generic "127.0.0.1 Link to 127.0.0.1 8 services 3 web" [ref=e152] [cursor=pointer]:
+                - img [ref=e153]
+                - img [ref=e155]
+                - generic [ref=e161]:
+                  - generic [ref=e162]: 127.0.0.1
+                  - link "Link to 127.0.0.1" [ref=e163]:
+                    - /url: "#asset-host-host-127-0-0-1"
+                    - img [ref=e164]
+                  - generic [ref=e167]: 8 services
+                  - generic [ref=e168]: 3 web
+              - generic [ref=e170]:
+                - generic [ref=e172]:
+                  - generic [ref=e173]:
+                    - generic [ref=e175]: 135 (oxid)
+                    - generic [ref=e176]:
+                      - generic [ref=e177]:
+                        - img [ref=e178]
+                        - generic [ref=e181]: wmi
+                        - link "Link to 127.0.0.1:135 (oxid)" [ref=e182] [cursor=pointer]:
+                          - /url: "#asset-service-asset-127-0-0-1-135-oxid"
+                          - img [ref=e183]
+                      - generic [ref=e187]: 127.0.0.1:135 (oxid)
+                  - generic "Sources" [ref=e188]:
+                    - img [ref=e189]
+                    - generic [ref=e192]: gogo_portscan
+                - generic [ref=e194]:
+                  - generic [ref=e195]:
+                    - generic [ref=e197]: "135"
+                    - generic [ref=e198]:
+                      - generic [ref=e199]:
+                        - img [ref=e200]
+                        - generic [ref=e209]: wmi
+                        - link "Link to 127.0.0.1:135" [ref=e210] [cursor=pointer]:
+                          - /url: "#asset-service-asset-127-0-0-1-135"
+                          - img [ref=e211]
+                      - generic [ref=e214]:
+                        - generic [ref=e215]: 127.0.0.1:135
+                        - generic [ref=e216]: low
+                        - generic [ref=e217]: low
+                        - generic "Fingerprints" [ref=e218]:
+                          - img [ref=e219]
+                          - generic [ref=e228]: wmi
+                  - generic "Sources" [ref=e229]:
+                    - img [ref=e230]
+                    - generic [ref=e233]: gogo_portscan
+                    - generic [ref=e234]: fingerprint
+                - generic [ref=e236]:
+                  - generic [ref=e237]:
+                    - generic [ref=e239]: "445"
+                    - generic [ref=e240]:
+                      - generic [ref=e241]:
+                        - img [ref=e242]
+                        - generic [ref=e251]: smb
+                        - link "Link to 127.0.0.1:445" [ref=e252] [cursor=pointer]:
+                          - /url: "#asset-service-asset-127-0-0-1-445"
+                          - img [ref=e253]
+                      - generic [ref=e256]:
+                        - generic [ref=e257]: 127.0.0.1:445
+                        - generic [ref=e258]: low
+                        - generic [ref=e259]: low
+                        - generic "Fingerprints" [ref=e260]:
+                          - img [ref=e261]
+                          - generic [ref=e270]: smb
+                  - generic "Sources" [ref=e271]:
+                    - img [ref=e272]
+                    - generic [ref=e275]: gogo_portscan
+                    - generic [ref=e276]: fingerprint
+                - group [ref=e277]:
+                  - generic "1080 http Link to 127.0.0.1:1080 1 web http://127.0.0.1:1080 400 gogo_portscan check Sitemap 1" [ref=e278] [cursor=pointer]:
+                    - generic [ref=e279]:
+                      - generic [ref=e280]:
+                        - img [ref=e281]
+                        - generic [ref=e283]: "1080"
+                        - generic [ref=e284]:
+                          - generic [ref=e285]:
+                            - img [ref=e286]
+                            - generic [ref=e289]: http
+                            - link "Link to 127.0.0.1:1080" [ref=e290]:
+                              - /url: "#asset-service-asset-http-127-0-0-1-1080"
+                              - img [ref=e291]
+                            - generic [ref=e294]: 1 web
+                          - generic [ref=e295]:
+                            - generic [ref=e296]: http://127.0.0.1:1080
+                            - generic [ref=e297]: "400"
+                      - generic "Sources" [ref=e298]:
+                        - img [ref=e299]
+                        - generic [ref=e302]: gogo_portscan
+                        - generic [ref=e303]: check
+                    - button "Sitemap 1" [ref=e305]
+                - generic [ref=e307]:
+                  - generic [ref=e308]:
+                    - generic [ref=e310]: "2222"
+                    - generic [ref=e311]:
+                      - generic [ref=e312]:
+                        - img [ref=e313]
+                        - generic [ref=e322]: tcp
+                        - link "Link to 127.0.0.1:2222" [ref=e323] [cursor=pointer]:
+                          - /url: "#asset-service-asset-127-0-0-1-2222"
+                          - img [ref=e324]
+                        - generic [ref=e327]: ssh
+                      - generic [ref=e328]:
+                        - generic [ref=e329]: 127.0.0.1:2222
+                        - generic [ref=e330]: low
+                        - generic [ref=e331]: low
+                        - generic "Fingerprints" [ref=e332]:
+                          - img [ref=e333]
+                          - generic [ref=e342]: ssh
+                  - generic "Sources" [ref=e343]:
+                    - img [ref=e344]
+                    - generic [ref=e347]: gogo_portscan
+                    - generic [ref=e348]: fingerprint
+                - group [ref=e349]:
+                  - generic "3000 http Link to 127.0.0.1:3000 2 web nginx http://127.0.0.1:3000 nginx/1.29.8 200 low nginx gogo_portscan check fingerprint crawl Sitemap 2" [ref=e350] [cursor=pointer]:
+                    - generic [ref=e351]:
+                      - generic [ref=e352]:
+                        - img [ref=e353]
+                        - generic [ref=e355]: "3000"
+                        - generic [ref=e356]:
+                          - generic [ref=e357]:
+                            - img [ref=e358]
+                            - generic [ref=e361]: http
+                            - link "Link to 127.0.0.1:3000" [ref=e362]:
+                              - /url: "#asset-service-asset-http-127-0-0-1-3000"
+                              - img [ref=e363]
+                            - generic [ref=e366]: 2 web
+                            - generic [ref=e367]: nginx
+                          - generic [ref=e368]:
+                            - generic [ref=e369]: http://127.0.0.1:3000
+                            - generic [ref=e370]: nginx/1.29.8
+                            - generic [ref=e371]: "200"
+                            - generic [ref=e372]: low
+                            - generic "Fingerprints" [ref=e373]:
+                              - img [ref=e374]
+                              - generic [ref=e383]: nginx
+                      - generic "Sources" [ref=e384]:
+                        - img [ref=e385]
+                        - generic [ref=e388]: gogo_portscan
+                        - generic [ref=e389]: check
+                        - generic [ref=e390]: fingerprint
+                        - generic [ref=e391]: crawl
+                    - button "Sitemap 2" [ref=e393]
+                - group [ref=e394]:
+                  - generic "8080 http Link to 127.0.0.1:8080 2 web js data http://127.0.0.1:8080 200 gogo_portscan crawl check Sitemap 2" [ref=e395] [cursor=pointer]:
+                    - generic [ref=e396]:
+                      - generic [ref=e397]:
+                        - img [ref=e398]
+                        - generic [ref=e400]: "8080"
+                        - generic [ref=e401]:
+                          - generic [ref=e402]:
+                            - img [ref=e403]
+                            - generic [ref=e406]: http
+                            - link "Link to 127.0.0.1:8080" [ref=e407]:
+                              - /url: "#asset-service-asset-http-127-0-0-1-8080"
+                              - img [ref=e408]
+                            - generic [ref=e411]: 2 web
+                            - generic [ref=e412]: js data
+                          - generic [ref=e413]:
+                            - generic [ref=e414]: http://127.0.0.1:8080
+                            - generic [ref=e415]: "200"
+                      - generic "Sources" [ref=e416]:
+                        - img [ref=e417]
+                        - generic [ref=e420]: gogo_portscan
+                        - generic [ref=e421]: crawl
+                        - generic [ref=e422]: check
+                    - button "Sitemap 2" [ref=e424]
+                - generic [ref=e426]:
+                  - generic [ref=e427]:
+                    - generic [ref=e429]: icmp
+                    - generic [ref=e430]:
+                      - generic [ref=e431]:
+                        - img [ref=e432]
+                        - generic [ref=e435]: icmp
+                        - link "Link to 127.0.0.1:icmp" [ref=e436] [cursor=pointer]:
+                          - /url: "#asset-service-asset-127-0-0-1-icmp"
+                          - img [ref=e437]
+                      - generic [ref=e441]: 127.0.0.1:icmp
+                  - generic "Sources" [ref=e442]:
+                    - img [ref=e443]
+                    - generic [ref=e446]: gogo_portscan

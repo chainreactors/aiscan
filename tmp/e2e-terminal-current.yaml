@@ -1,0 +1,98 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: 2 agents
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e16]:
+      - generic [ref=e18]:
+        - button "aiscan-4abd394b idle openai/deepseek-v4-pro" [ref=e19] [cursor=pointer]:
+          - img [ref=e20]
+          - generic [ref=e22]:
+            - generic [ref=e23]:
+              - generic [ref=e24]: aiscan-4abd394b
+              - generic [ref=e25]: idle
+            - generic [ref=e26]: openai/deepseek-v4-pro
+          - img [ref=e27]
+        - generic [ref=e29]:
+          - button "Terminal" [ref=e30] [cursor=pointer]:
+            - img [ref=e31]
+            - text: Terminal
+          - button "New" [ref=e33] [cursor=pointer]:
+            - img [ref=e34]
+            - text: New
+      - generic [ref=e68]:
+        - button "chat-render-e2e idle mock/chat-render-e2e" [ref=e69] [cursor=pointer]:
+          - img [ref=e70]
+          - generic [ref=e72]:
+            - generic [ref=e73]:
+              - generic [ref=e74]: chat-render-e2e
+              - generic [ref=e75]: idle
+            - generic [ref=e76]: mock/chat-render-e2e
+          - img [ref=e77]
+        - generic [ref=e79]:
+          - button "Terminal" [ref=e80] [cursor=pointer]:
+            - img [ref=e81]
+            - text: Terminal
+          - button "New" [ref=e83] [cursor=pointer]:
+            - img [ref=e84]
+            - text: New
+          - generic [ref=e100]: 1 sessions
+  - generic [ref=e244]:
+    - generic [ref=e245]:
+      - generic "shell-aiscan-4abd394b" [ref=e293]:
+        - img [ref=e247]
+        - generic [ref=e249]: shell-aiscan-4abd394b
+        - generic [ref=e250]: connected
+      - generic [ref=e251]:
+        - generic [ref=e252]:
+          - button "New shell PTY" [ref=e253] [cursor=pointer]:
+            - img [ref=e254]
+          - tooltip "New shell PTY"
+        - button "Refresh sessions" [ref=e256] [cursor=pointer]:
+          - img [ref=e257]
+        - button "Stop active task" [ref=e263] [cursor=pointer]:
+          - img [ref=e264]
+        - button "Show details" [ref=e267] [cursor=pointer]:
+          - img [ref=e268]
+    - generic [ref=e270]:
+      - complementary [ref=e271]:
+        - button "Main REPL running always on" [ref=e273] [cursor=pointer]:
+          - img [ref=e275]
+          - generic [ref=e277]:
+            - generic [ref=e278]:
+              - generic [ref=e279]: Main REPL
+              - generic [ref=e280]: running
+            - generic [ref=e281]: always on
+        - generic [ref=e282]:
+          - generic [ref=e283]: Tasks
+          - generic [ref=e284]: 1 running
+        - button "shell-aiscan-4abd394b running shell cmd" [ref=e294] [cursor=pointer]:
+          - img [ref=e296]
+          - generic [ref=e298]:
+            - generic [ref=e299]:
+              - generic [ref=e300]: shell-aiscan-4abd394b
+              - generic [ref=e301]: running
+            - generic [ref=e302]: shell
+            - generic [ref=e303]: cmd
+      - generic [ref=e291]:
+        - textbox "Terminal input" [active] [ref=e292]
+        - generic:
+          - generic:
+            - generic: Microsoft Windows [
+            - generic: 版本
+            - generic: 10.0.26200.8655]
+          - generic:
+            - generic: (c) Microsoft Corporation
+            - generic: 。
+            - generic: 保留所有权利
+            - generic: 。
+          - generic:
+            - generic: D:\Programing\go\chainreactors\aiscan>echo pty-shell-ok
+          - generic:
+            - generic: pty-shell-ok
+          - generic:
+            - generic: D:\Programing\go\chainreactors\aiscan>

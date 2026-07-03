@@ -1,0 +1,101 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: 1 agent
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e18]:
+      - button "aiscan-061d5f26 idle openai/deepseek-v4-pro" [ref=e19] [cursor=pointer]:
+        - img [ref=e20]
+        - generic [ref=e22]:
+          - generic [ref=e23]:
+            - generic [ref=e24]: aiscan-061d5f26
+            - generic [ref=e25]: idle
+          - generic [ref=e26]: openai/deepseek-v4-pro
+        - img [ref=e27]
+      - generic [ref=e29]:
+        - button "Terminal" [ref=e30] [cursor=pointer]:
+          - img [ref=e31]
+          - text: Terminal
+        - button "New" [ref=e33] [cursor=pointer]:
+          - img [ref=e34]
+          - text: New
+  - generic [ref=e69]:
+    - generic [ref=e70]:
+      - generic "Main REPL" [ref=e71]:
+        - img [ref=e72]
+        - generic [ref=e74]: Main REPL
+        - generic [ref=e75]: connected
+      - generic [ref=e76]:
+        - button "New shell PTY" [ref=e78] [cursor=pointer]:
+          - img [ref=e79]
+        - button "Refresh sessions" [ref=e81] [cursor=pointer]:
+          - img [ref=e82]
+        - button "Stop active task" [disabled] [ref=e88]:
+          - img [ref=e89]
+        - button "Show details" [ref=e92] [cursor=pointer]:
+          - img [ref=e93]
+    - generic [ref=e95]:
+      - complementary [ref=e96]:
+        - button "Main REPL running always on" [ref=e98] [cursor=pointer]:
+          - img [ref=e100]
+          - generic [ref=e102]:
+            - generic [ref=e103]:
+              - generic [ref=e104]: Main REPL
+              - generic [ref=e105]: running
+            - generic [ref=e106]: always on
+        - generic [ref=e107]:
+          - generic [ref=e108]: Tasks
+          - generic [ref=e109]: 0 running
+        - generic [ref=e111]: No tasks yet
+      - generic [ref=e116]:
+        - textbox "Terminal input" [active] [ref=e117]
+        - generic:
+          - generic:
+            - generic: ╭────────────────────────────────────────────────────────────────────────────╮
+          - generic:
+            - generic: │
+            - generic: aiscan
+            - generic: v0.1.0
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: model
+            - generic: openai / deepseek-v4-pro
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: mode pty · stream · space default
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: help
+            - generic: /help
+            - generic: /status
+            - generic: /exit
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: keys Esc
+            - generic: interrupt Ctrl+O
+            - generic: verbosity
+            - generic: │
+          - generic:
+            - generic: ╰────────────────────────────────────────────────────────────────────────────╯
+          - generic:
+            - generic: 输入目标或任务即可
+            - generic: ；
+            - generic: 例如
+            - generic: ：
+            - generic: 扫描
+            - generic: 192.168.1.10
+            - generic: 的
+            - generic: Web
+            - generic: 风险
+          - generic:
+            - generic: a
+            - generic: iscan
+            - generic: ❯

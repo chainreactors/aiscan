@@ -1,0 +1,145 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: 2 agents
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e16]:
+      - generic [ref=e18]:
+        - button "aiscan-4abd394b idle openai/deepseek-v4-pro" [ref=e19] [cursor=pointer]:
+          - img [ref=e20]
+          - generic [ref=e22]:
+            - generic [ref=e23]:
+              - generic [ref=e24]: aiscan-4abd394b
+              - generic [ref=e25]: idle
+            - generic [ref=e26]: openai/deepseek-v4-pro
+          - img [ref=e27]
+        - generic [ref=e29]:
+          - button "Terminal" [ref=e30] [cursor=pointer]:
+            - img [ref=e31]
+            - text: Terminal
+          - button "New" [ref=e33] [cursor=pointer]:
+            - img [ref=e34]
+            - text: New
+      - generic [ref=e68]:
+        - button "chat-render-e2e idle mock/chat-render-e2e" [ref=e69] [cursor=pointer]:
+          - img [ref=e70]
+          - generic [ref=e72]:
+            - generic [ref=e73]:
+              - generic [ref=e74]: chat-render-e2e
+              - generic [ref=e75]: idle
+            - generic [ref=e76]: mock/chat-render-e2e
+          - img [ref=e77]
+        - generic [ref=e79]:
+          - button "Terminal" [ref=e80] [cursor=pointer]:
+            - img [ref=e81]
+            - text: Terminal
+          - button "New" [ref=e83] [cursor=pointer]:
+            - img [ref=e84]
+            - text: New
+          - generic [ref=e100]: 1 sessions
+  - generic [ref=e35]:
+    - generic [ref=e36]:
+      - generic [ref=e37]:
+        - img [ref=e38]
+        - text: Chat
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - img [ref=e42]
+          - generic [ref=e44]: "2"
+        - button "Open scan workspace" [ref=e45] [cursor=pointer]:
+          - img [ref=e46]
+        - button "LLM Config" [ref=e48] [cursor=pointer]:
+          - img [ref=e49]
+        - button "Switch to dark theme" [ref=e52] [cursor=pointer]:
+          - img [ref=e53]
+        - button "Show detail panel" [ref=e55] [cursor=pointer]:
+          - img [ref=e56]
+    - main [ref=e58]:
+      - generic [ref=e60]:
+        - generic [ref=e101]:
+          - generic [ref=e103]:
+            - generic [ref=e105]:
+              - generic [ref=e106]: You
+              - img [ref=e107]
+            - generic [ref=e110]: 00:31
+          - generic [ref=e112]:
+            - img [ref=e114]
+            - generic [ref=e117]:
+              - generic [ref=e118]:
+                - generic [ref=e119]: You
+                - generic [ref=e120]: 00:31:33
+              - paragraph [ref=e123]: please render thinking tool and response
+        - generic [ref=e124]:
+          - generic [ref=e126]:
+            - generic [ref=e128]:
+              - generic [ref=e129]: chat-render-e2e
+              - img [ref=e130]
+            - generic [ref=e133]: 00:31
+          - generic [ref=e137]:
+            - img [ref=e138]
+            - text: chat-render-e2e joined
+        - generic [ref=e142]:
+          - generic [ref=e144]:
+            - generic [ref=e146]:
+              - generic [ref=e147]: chat-render-e2e
+              - img [ref=e148]
+            - generic [ref=e157]: 00:31
+          - generic [ref=e159]:
+            - img [ref=e161]
+            - generic [ref=e164]:
+              - generic [ref=e165]: chat-render-e2e
+              - paragraph [ref=e168]: "thinking-render-ok: planning tool call"
+        - generic [ref=e169]:
+          - generic [ref=e171]:
+            - generic [ref=e173]:
+              - generic [ref=e174]: bash
+              - img [ref=e175]
+            - generic [ref=e177]: 00:31
+          - generic [ref=e179]:
+            - button "bash echo tool-render-ok" [ref=e180] [cursor=pointer]:
+              - img [ref=e181]
+              - generic [ref=e183]: bash
+              - generic "echo tool-render-ok" [ref=e184]
+              - img [ref=e185]
+              - img [ref=e187]
+            - generic [ref=e189]:
+              - generic [ref=e190]:
+                - generic [ref=e191]: Arguments
+                - generic [ref=e192]: "{ \"command\": \"echo tool-render-ok\" }"
+              - generic [ref=e193]:
+                - generic [ref=e194]: Result
+                - generic [ref=e195]: tool-render-ok
+        - generic [ref=e196]:
+          - generic [ref=e198]:
+            - generic [ref=e200]:
+              - generic [ref=e201]: chat-render-e2e
+              - img [ref=e202]
+            - generic [ref=e205]: 00:31
+          - generic [ref=e207]:
+            - img [ref=e209]
+            - generic [ref=e212]:
+              - generic [ref=e213]:
+                - generic [ref=e214]: chat-render-e2e
+                - generic [ref=e215]: 00:31:34
+              - paragraph [ref=e218]: "response-render-ok: final answer"
+        - generic [ref=e219]:
+          - generic [ref=e221]:
+            - generic [ref=e223]:
+              - generic [ref=e224]: chat-render-e2e
+              - img [ref=e225]
+            - generic [ref=e228]: 00:31
+          - generic [ref=e230]:
+            - img [ref=e232]
+            - generic [ref=e235]:
+              - generic [ref=e236]:
+                - generic [ref=e237]: chat-render-e2e
+                - generic [ref=e238]: 00:31:34
+              - paragraph [ref=e241]: "response-render-ok: final persisted answer"
+      - generic [ref=e94]:
+        - textbox "Type a message... (/ for commands)" [active] [ref=e95]
+        - button "Send message" [disabled]:
+          - img

@@ -1,0 +1,225 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Web console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - heading "History" [level=2] [ref=e17]
+      - generic [ref=e18]:
+        - img
+        - textbox "Search scan targets" [ref=e19]:
+          - /placeholder: Search targets
+      - generic [ref=e20]: No scans yet.
+  - main [ref=e21]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - img [ref=e25]
+        - textbox "Scan target" [ref=e28]:
+          - /placeholder: Target — IP, hostname, or URL
+      - generic [ref=e29]:
+        - group "Scan mode" [ref=e30]:
+          - button "Quick" [ref=e31] [cursor=pointer]
+          - button "Full" [ref=e32] [cursor=pointer]
+        - generic [ref=e33]:
+          - button "Verify analysis" [disabled] [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e45]: Verify
+          - button "Sniper analysis" [disabled] [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e49]: Sniper
+          - button "Deep analysis" [disabled] [ref=e50]:
+            - img [ref=e51]
+            - generic [ref=e58]: Deep
+        - button "Start scan" [disabled]:
+          - img
+          - generic: Scan
+      - generic [ref=e59]:
+        - generic "LLM Offline" [ref=e60]:
+          - img [ref=e61]
+          - text: LLM Offline
+        - button "Agents 1" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+          - generic [ref=e66]: Agents
+          - generic [ref=e67]: "1"
+        - button "Open LLM configuration" [ref=e68] [cursor=pointer]:
+          - img [ref=e69]
+          - generic [ref=e72]: LLM
+        - button "Switch to light theme" [ref=e74] [cursor=pointer]:
+          - img [ref=e75]
+    - generic [ref=e82]:
+      - img [ref=e83]
+      - generic [ref=e85]:
+        - paragraph [ref=e86]: No active scan
+        - paragraph [ref=e87]: Ready for a target
+      - generic [ref=e88]:
+        - generic [ref=e89]:
+          - img [ref=e90]
+          - generic [ref=e94]: History
+          - generic [ref=e95]: "0"
+        - generic [ref=e96]:
+          - img [ref=e97]
+          - generic [ref=e99]: Agents
+          - generic [ref=e100]: "1"
+        - generic [ref=e101]:
+          - img [ref=e102]
+          - generic [ref=e104]: LLM
+          - generic [ref=e105]: Offline
+        - generic [ref=e106]:
+          - img [ref=e107]
+          - generic [ref=e110]: Config
+          - generic [ref=e111]: Loaded
+  - generic [ref=e113]:
+    - generic [ref=e114]:
+      - generic [ref=e115]:
+        - img [ref=e116]
+        - generic [ref=e118]:
+          - generic [ref=e119]: Connected Agents
+          - generic [ref=e120]: 1 agent online
+      - button [ref=e121] [cursor=pointer]:
+        - img [ref=e122]
+    - generic [ref=e126]:
+      - complementary [ref=e127]:
+        - generic [ref=e128]:
+          - generic [ref=e129]: Agents
+          - button "Refresh agents" [ref=e130] [cursor=pointer]:
+            - img [ref=e131]
+        - button "remote-pty-demo idle · 2m ago" [ref=e210] [cursor=pointer]:
+          - img [ref=e138]
+          - generic [ref=e140]:
+            - generic [ref=e141]: remote-pty-demo
+            - generic [ref=e142]: idle · 2m ago
+      - generic [ref=e143]:
+        - generic [ref=e144]:
+          - generic [ref=e145]:
+            - generic [ref=e146]:
+              - generic [ref=e147]: remote-pty-demo
+              - generic [ref=e148]: "1781937034657714200"
+            - generic [ref=e149]:
+              - img [ref=e150]
+              - generic [ref=e152]: idle
+              - generic [ref=e153]: 2m ago
+          - generic [ref=e154]:
+            - generic [ref=e155]: tmux
+            - generic [ref=e156]: arsenal
+            - generic [ref=e157]: ioa_space
+            - generic [ref=e158]: ioa_send
+            - generic [ref=e159]: ioa_read
+            - generic [ref=e160]: scan
+            - generic [ref=e161]: gogo
+            - generic [ref=e162]: spray
+            - generic [ref=e163]: zombie
+            - generic [ref=e164]: neutron
+            - generic [ref=e165]: proxy
+        - generic [ref=e166]:
+          - generic [ref=e167]:
+            - generic [ref=e168]:
+              - img [ref=e169]
+              - generic [ref=e171]:
+                - generic [ref=e172]: remote-pty-demo
+                - generic [ref=e173]: connected · f63b2d84
+            - generic [ref=e174]:
+              - button "REPL" [ref=e175] [cursor=pointer]:
+                - img [ref=e176]
+                - generic [ref=e178]: REPL
+              - button "Shell" [ref=e179] [cursor=pointer]:
+                - img [ref=e180]
+                - generic [ref=e182]: Shell
+              - button "Refresh sessions" [ref=e183] [cursor=pointer]:
+                - img [ref=e184]
+              - button "Stop session" [ref=e189] [cursor=pointer]:
+                - img [ref=e190]
+          - generic [ref=e192]:
+            - generic [ref=e196]:
+              - textbox "Terminal input" [active] [ref=e197]
+              - generic:
+                - generic:
+                  - generic: ╭────────────────────────────────────────────────────────────────────────────╮
+                - generic:
+                  - generic: │
+                  - generic: aiscan
+                  - generic: v0.1.0 │
+                - generic:
+                  - generic: │ model
+                  - generic: "not configured - run `aiscan --init`"
+                  - generic: │
+                - generic:
+                  - generic: │ mode pty · stream · space default │
+                - generic:
+                  - generic: │ help
+                  - generic: /help /status /exit
+                  - generic: │
+                - generic:
+                  - generic: ╰────────────────────────────────────────────────────────────────────────────╯
+                - generic:
+                  - generic: 输入目标或任务即可
+                  - generic: ；
+                  - generic: 例如
+                  - generic: ：
+                  - generic: 扫描
+                  - generic: 192.168.1.10
+                  - generic: 的
+                  - generic: Web
+                  - generic: 风险
+                - generic:
+                  - generic: aiscan
+                  - generic: ❯
+                  - generic: "[info] engine=fingers status=ready templates=4314"
+                - generic:
+                  - generic: "[info] engine=neutron status=ready templates=83"
+                - generic:
+                  - generic: "[info] index=finger_poc status=ready fingers=4314 aliases=0 templates=83"
+                - generic:
+                  - generic: "[info] resources type=neutron source=custom templates=193 categories=155"
+                - generic:
+                  - generic: "[info] engine=gogo status=ready"
+                - generic:
+                  - generic: "[info] resources type=fingers source=custom favicon:530 fingers:4314"
+                - generic:
+                  - generic: aiscan
+                  - generic: ❯
+                  - generic: /status
+                - generic:
+                  - generic: ╭────────────────────────────────────────────────────────────────────────────╮
+                - generic:
+                  - generic: │
+                  - generic: status
+                  - generic: │
+                - generic:
+                  - generic: │
+                  - generic: model
+                  - generic: not configured / - │
+                - generic:
+                  - generic: │
+                  - generic: render
+                  - generic: pty · stream · space default │
+                - generic:
+                  - generic: │
+                  - generic: task
+                  - generic: idle │
+                - generic:
+                  - generic: │
+                  - generic: ioa
+                  - generic: disabled │
+                - generic:
+                  - generic: │
+                  - generic: history
+                  - generic: C:\Users\John\AppData\Roaming\aiscan\agent_history │
+                - generic:
+                  - generic: │
+                  - generic: skills
+                  - generic: /aiscan │
+                - generic:
+                  - generic: ╰────────────────────────────────────────────────────────────────────────────╯
+                - generic:
+                  - generic: aiscan
+                  - generic: ❯
+            - complementary [ref=e198]:
+              - generic [ref=e199]:
+                - generic [ref=e200]: Task PTYs
+                - button "Refresh sessions" [ref=e201] [cursor=pointer]:
+                  - img [ref=e202]
+              - generic [ref=e208]: No sessions

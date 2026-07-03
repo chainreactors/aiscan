@@ -244,7 +244,7 @@ func (r *Request) processResults(executor *Page, actionData ActionData, target s
 	return matched, nil
 }
 
-func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []string) {
+func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher) (bool, []operators.MatchHit) {
 	itemStr := r.getMatchPart(matcher.Part, data)
 
 	switch matcher.GetType() {
@@ -268,9 +268,9 @@ func (r *Request) Match(data map[string]interface{}, matcher *operators.Matcher)
 	case operators.BinaryMatcher:
 		return matcher.ResultWithMatchedSnippet(matcher.MatchBinary(itemStr))
 	case operators.DSLMatcher:
-		return matcher.Result(matcher.MatchDSL(data)), []string{}
+		return matcher.Result(matcher.MatchDSL(data)), nil
 	}
-	return false, []string{}
+	return false, nil
 }
 
 func (r *Request) Extract(data map[string]interface{}, extractor *operators.Extractor) map[string]struct{} {
@@ -293,7 +293,7 @@ func (r *Request) MakeResultEventItem(wrapped *protocols.InternalWrappedEvent) *
 		Type:             common.ToString(wrapped.InternalEvent["type"]),
 		Host:             common.ToString(wrapped.InternalEvent["host"]),
 		Matched:          common.ToString(wrapped.InternalEvent["matched"]),
-		ExtractedResults: wrapped.OperatorsResult.OutputExtracts,
+		ExtractedResults: wrapped.OperatorsResult.OutputExtracts(),
 		Timestamp:        time.Now(),
 	}
 }

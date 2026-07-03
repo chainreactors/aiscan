@@ -1,0 +1,8 @@
+Total messages: 9 (Errors: 3, Warnings: 1)
+Returning 5 messages for level "info"
+
+[INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:21608
+[WARNING] WebSocket connection to 'ws://127.0.0.1:5173/api/agents/1782633180191133500/terminal/ws' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:5173/src/components/terminal/AgentTerminal.tsx:175
+[ERROR] Warning: Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render. @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:520
+[ERROR] Warning: Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render. @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:520
+[ERROR] Warning: Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render. @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:520

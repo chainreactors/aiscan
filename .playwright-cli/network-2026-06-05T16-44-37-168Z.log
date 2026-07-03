@@ -1,0 +1,10 @@
+[GET] http://127.0.0.1:5174/api/scans => [200] OK
+[GET] http://127.0.0.1:5174/api/status => [200] OK
+[GET] http://127.0.0.1:5174/api/scans => [200] OK
+[GET] http://127.0.0.1:5174/api/status => [200] OK
+[GET] http://127.0.0.1:5174/api/scans => [200] OK
+[GET] http://127.0.0.1:5174/api/scans/1780479675335889500 => [200] OK
+[GET] http://127.0.0.1:5174/api/status => [200] OK
+[GET] http://127.0.0.1:5174/api/scans => [200] OK
+[GET] http://127.0.0.1:5174/api/scans/1780479675335889500 => [200] OK
+[GET] http://127.0.0.1:5174/api/status => [200] OK

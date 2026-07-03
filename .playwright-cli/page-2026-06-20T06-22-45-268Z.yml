@@ -1,0 +1,141 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Web console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - heading "History" [level=2] [ref=e17]
+      - generic [ref=e18]:
+        - img
+        - textbox "Search scan targets" [ref=e19]:
+          - /placeholder: Search targets
+      - generic [ref=e20]: No scans yet.
+  - main [ref=e21]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - img [ref=e25]
+        - textbox "Scan target" [ref=e28]:
+          - /placeholder: Target — IP, hostname, or URL
+      - generic [ref=e29]:
+        - group "Scan mode" [ref=e30]:
+          - button "Quick" [ref=e31] [cursor=pointer]
+          - button "Full" [ref=e32] [cursor=pointer]
+        - generic [ref=e33]:
+          - button "Verify analysis" [disabled] [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e45]: Verify
+          - button "Sniper analysis" [disabled] [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e49]: Sniper
+          - button "Deep analysis" [disabled] [ref=e50]:
+            - img [ref=e51]
+            - generic [ref=e58]: Deep
+        - button "Start scan" [disabled]:
+          - img
+          - generic: Scan
+      - generic [ref=e59]:
+        - generic "LLM Offline" [ref=e60]:
+          - img [ref=e61]
+          - text: LLM Offline
+        - button "Agents 1" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+          - generic [ref=e66]: Agents
+          - generic [ref=e67]: "1"
+        - button "Open LLM configuration" [ref=e68] [cursor=pointer]:
+          - img [ref=e69]
+          - generic [ref=e72]: LLM
+        - button "Switch to light theme" [ref=e74] [cursor=pointer]:
+          - img [ref=e75]
+    - generic [ref=e82]:
+      - img [ref=e83]
+      - generic [ref=e85]:
+        - paragraph [ref=e86]: No active scan
+        - paragraph [ref=e87]: Ready for a target
+      - generic [ref=e88]:
+        - generic [ref=e89]:
+          - img [ref=e90]
+          - generic [ref=e94]: History
+          - generic [ref=e95]: "0"
+        - generic [ref=e96]:
+          - img [ref=e97]
+          - generic [ref=e99]: Agents
+          - generic [ref=e100]: "1"
+        - generic [ref=e101]:
+          - img [ref=e102]
+          - generic [ref=e104]: LLM
+          - generic [ref=e105]: Offline
+        - generic [ref=e106]:
+          - img [ref=e107]
+          - generic [ref=e110]: Config
+          - generic [ref=e111]: Loaded
+  - generic [ref=e113]:
+    - generic [ref=e114]:
+      - generic [ref=e115]:
+        - img [ref=e116]
+        - generic [ref=e118]:
+          - generic [ref=e119]: Connected Agents
+          - generic [ref=e120]: 1 agent online
+      - button [ref=e121] [cursor=pointer]:
+        - img [ref=e122]
+    - generic [ref=e127]:
+      - img [ref=e128]
+      - generic [ref=e130]:
+        - generic [ref=e131]:
+          - generic [ref=e132]: remote-pty-demo
+          - generic [ref=e133]: idle
+        - generic [ref=e134]:
+          - generic [ref=e135]: tmux
+          - generic [ref=e136]: arsenal
+          - generic [ref=e137]: ioa_space
+          - generic [ref=e138]: ioa_send
+          - generic [ref=e139]: ioa_read
+          - generic [ref=e140]: scan
+          - generic [ref=e141]: gogo
+          - generic [ref=e142]: spray
+          - generic [ref=e143]: zombie
+          - generic [ref=e144]: neutron
+          - generic [ref=e145]: proxy
+      - button "Open terminal for remote-pty-demo" [ref=e146] [cursor=pointer]:
+        - img [ref=e147]
+      - generic [ref=e149]: 1m ago
+  - generic [ref=e151]:
+    - generic [ref=e152]:
+      - generic [ref=e153]:
+        - img [ref=e154]
+        - generic [ref=e156]:
+          - generic [ref=e157]: remote-pty-demo
+          - generic [ref=e158]: closed · 148f6b99
+      - generic [ref=e159]:
+        - button "REPL" [ref=e160] [cursor=pointer]:
+          - img [ref=e161]
+          - generic [ref=e163]: REPL
+        - button "Shell" [ref=e164] [cursor=pointer]:
+          - img [ref=e165]
+          - generic [ref=e167]: Shell
+        - button "Refresh sessions" [ref=e168] [cursor=pointer]:
+          - img [ref=e169]
+        - button "Stop session" [disabled] [ref=e174]:
+          - img [ref=e175]
+        - button "Close terminal" [ref=e177] [cursor=pointer]:
+          - img [ref=e178]
+    - generic [ref=e181]:
+      - generic [ref=e185]:
+        - textbox "Terminal input" [active] [ref=e186]
+        - generic:
+          - generic:
+            - generic: "[error] agent failed: init app: no API key: set --api-key, llm.api_key, or AISCAN_API_KEY"
+          - generic:
+            - generic: "[session closed]"
+      - complementary [ref=e187]:
+        - generic [ref=e188]:
+          - generic [ref=e189]: Sessions
+          - button "Refresh sessions" [ref=e190] [cursor=pointer]:
+            - img [ref=e191]
+        - button "web-repl-remote-pty-demo failed · 148f6b99 D:\\Programing\\go\\chainreactors\\aiscan\\.tmp\\aiscan-cli-remote-pty.exe agent --timeout 86400" [ref=e197] [cursor=pointer]:
+          - generic [ref=e198]: web-repl-remote-pty-demo
+          - generic [ref=e199]: failed · 148f6b99
+          - generic [ref=e200]: D:\Programing\go\chainreactors\aiscan\.tmp\aiscan-cli-remote-pty.exe agent --timeout 86400

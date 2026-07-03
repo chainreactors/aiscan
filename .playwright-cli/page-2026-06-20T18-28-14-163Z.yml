@@ -1,0 +1,155 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Web console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - heading "History" [level=2] [ref=e17]
+      - generic [ref=e18]:
+        - img
+        - textbox "Search scan targets" [ref=e19]:
+          - /placeholder: Search targets
+      - generic [ref=e20]: No scans yet.
+  - main [ref=e21]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - img [ref=e25]
+        - textbox "Scan target" [ref=e28]:
+          - /placeholder: Target — IP, hostname, or URL
+      - generic [ref=e29]:
+        - group "Scan mode" [ref=e30]:
+          - button "Quick" [ref=e31] [cursor=pointer]
+          - button "Full" [ref=e32] [cursor=pointer]
+        - generic [ref=e33]:
+          - button "Verify analysis" [disabled] [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e45]: Verify
+          - button "Sniper analysis" [disabled] [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e49]: Sniper
+          - button "Deep analysis" [disabled] [ref=e50]:
+            - img [ref=e51]
+            - generic [ref=e58]: Deep
+        - button "Start scan" [disabled]:
+          - img
+          - generic: Scan
+      - generic [ref=e59]:
+        - generic "LLM Offline" [ref=e60]:
+          - img [ref=e61]
+          - text: LLM Offline
+        - button "Agents 1" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+          - generic [ref=e66]: Agents
+          - generic [ref=e67]: "1"
+        - button "Open LLM configuration" [ref=e68] [cursor=pointer]:
+          - img [ref=e69]
+          - generic [ref=e72]: LLM
+        - button "Switch to light theme" [ref=e74] [cursor=pointer]:
+          - img [ref=e75]
+    - generic [ref=e82]:
+      - img [ref=e83]
+      - generic [ref=e85]:
+        - paragraph [ref=e86]: No active scan
+        - paragraph [ref=e87]: Ready for a target
+      - generic [ref=e88]:
+        - generic [ref=e89]:
+          - img [ref=e90]
+          - generic [ref=e94]: History
+          - generic [ref=e95]: "0"
+        - generic [ref=e96]:
+          - img [ref=e97]
+          - generic [ref=e99]: Agents
+          - generic [ref=e100]: "1"
+        - generic [ref=e101]:
+          - img [ref=e102]
+          - generic [ref=e104]: LLM
+          - generic [ref=e105]: Offline
+        - generic [ref=e106]:
+          - img [ref=e107]
+          - generic [ref=e110]: Config
+          - generic [ref=e111]: Loaded
+  - generic [ref=e113]:
+    - generic [ref=e114]:
+      - generic [ref=e115]:
+        - img [ref=e116]
+        - generic [ref=e118]:
+          - generic [ref=e119]:
+            - generic [ref=e120]: Agents
+            - generic [ref=e121]: "1"
+          - generic [ref=e122]: aiscan-bfc0390a · idle
+      - button "Close agents" [ref=e123] [cursor=pointer]:
+        - img [ref=e124]
+    - generic [ref=e128]:
+      - complementary [ref=e129]:
+        - generic [ref=e130]:
+          - generic [ref=e131]: Agents
+          - button "Refresh agents" [ref=e132] [cursor=pointer]:
+            - img [ref=e133]
+        - button "aiscan-bfc0390a idle · 3m ago" [ref=e139] [cursor=pointer]:
+          - img [ref=e140]
+          - generic [ref=e142]:
+            - generic [ref=e143]: aiscan-bfc0390a
+            - generic [ref=e144]: idle · 3m ago
+      - generic [ref=e145]:
+        - generic [ref=e146]:
+          - generic [ref=e147]:
+            - img [ref=e148]
+            - generic [ref=e150]: aiscan-bfc0390a
+          - generic [ref=e151]: idle · windows/amd64 · LLM offline
+        - generic [ref=e152]:
+          - generic [ref=e153]:
+            - generic [ref=e154]:
+              - img [ref=e155]
+              - generic [ref=e157]: Main REPL
+              - generic [ref=e158]: connected
+            - generic [ref=e159]:
+              - button "New shell PTY" [ref=e160] [cursor=pointer]:
+                - img [ref=e161]
+              - button "Refresh sessions" [ref=e162] [cursor=pointer]:
+                - img [ref=e163]
+              - button "Stop active task" [disabled] [ref=e168]:
+                - img [ref=e169]
+          - generic [ref=e171]:
+            - complementary [ref=e172]:
+              - button "Main REPL running always on" [ref=e174] [cursor=pointer]:
+                - img [ref=e176]
+                - generic [ref=e178]:
+                  - generic [ref=e179]:
+                    - generic [ref=e180]: Main REPL
+                    - generic [ref=e181]: running
+                  - generic [ref=e182]: always on
+              - generic [ref=e183]:
+                - generic [ref=e184]: Tasks
+                - generic [ref=e185]: 0 running
+              - generic [ref=e187]: No tasks
+            - generic [ref=e192]:
+              - textbox "Terminal input" [active] [ref=e193]
+              - generic:
+                - generic:
+                  - generic: ╭────────────────────────────────────────────────────────────────────────────╮
+                - generic:
+                  - generic: │ aiscan v0.1.0 │
+                - generic:
+                  - generic: "│ model not configured - run `aiscan --init` │"
+                - generic:
+                  - generic: │ mode pty · stream · space default │
+                - generic:
+                  - generic: │ help /help /status /exit │
+                - generic:
+                  - generic: ╰────────────────────────────────────────────────────────────────────────────╯
+                - generic:
+                  - generic: 输入目标或任务即可
+                  - generic: ；
+                  - generic: 例如
+                  - generic: ：
+                  - generic: 扫描
+                  - generic: 192.168.1.10
+                  - generic: 的
+                  - generic: Web
+                  - generic: 风险
+                - generic:
+                  - generic: aiscan>

@@ -1,0 +1,66 @@
+
+> aiscan-web-frontend@0.2.0 dev
+> vite --host 127.0.0.1 --port 5173
+
+
+  [32m[1mVITE[22m v6.4.3[39m  [2mready in [0m[1m544[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5173[22m/[39m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+[2m19:27:02[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m19:27:26[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m23:18:46[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/cyber-ui/packages/ui/src/chat.tsx, /src/index.css[22m
+[2m23:18:52[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/cyber-ui/packages/markdown/src/MarkdownContent.tsx, /src/index.css[22m
+[2m23:18:52[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/cyber-ui/packages/ui/src/chat.tsx, /src/index.css[22m
+[2m23:18:52[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/ChatPanel.tsx, /src/components/DetailPanel.tsx, /src/components/FindingsPanel.tsx, /src/components/AssetResultView.tsx, /src/components/ReportView.tsx[22m
+[2m23:18:52[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css, /src/components/ChatPanel.tsx, /src/components/AgentPanel.tsx, /src/components/DetailPanel.tsx, /src/components/SessionList.tsx, /src/components/ScanWorkspace.tsx, /src/components/ConfigPanel.tsx, /src/components/ScanView.tsx, /src/components/ScanForm.tsx, /src/components/terminal/AgentTerminal.tsx, /src/components/chat/ChatInput.tsx[22m
+[2m23:18:52[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcyber-ui/packages/viewer/src/components/chat/LiveChatPanel.tsx[22m
+[2m23:18:52[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcyber-ui/packages/viewer/src/components/chat/MessageBubble.tsx[22m
+[2m23:18:52[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcyber-ui/packages/viewer/src/components/chat/MessageBubble.tsx[22m
+[2m23:18:52[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcyber-ui/packages/viewer/src/components/chat/MessageBubble.tsx[22m
+[2m23:18:52[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcyber-ui/packages/viewer/src/components/chat/ToolCallDisplay.tsx[22m
+[2m23:18:52[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcyber-ui/packages/viewer/src/index.ts[22m
+[2m23:19:16[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m23:19:32[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m23:19:41[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:/Programing/go/chainreactors/aiscan/web/frontend/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m23:37:15[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcyber-ui/packages/ioa/src/index.ts[22m
+[2m23:55:00[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css, /src/components/AgentPanel.tsx, /src/components/ConfigPanel.tsx, /src/components/terminal/AgentTerminal.tsx[22m
+[2m23:55:12[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m23:55:24[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m23:55:34[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m23:55:46[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m23:56:00[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m23:56:14[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m23:57:33[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcyber-ui/packages/viewer/src/components/chat/ChatInput.tsx[22m
+[2m23:57:33[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcyber-ui/packages/viewer/src/index.ts[22m
+[2m00:12:30[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/components/AppSidebar.tsx.tmp.702.d380cd7e77a6[22m
+[2m00:13:37[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m00:13:43[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m00:13:55[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m00:14:04[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m00:14:16[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m00:14:25[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m00:15:06[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ScanWorkspace.tsx, /src/index.css[22m
+[2m00:16:47[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m00:17:00[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m00:17:14[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m00:17:30[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m00:17:42[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m00:18:26[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ScanWorkspace.tsx, /src/index.css[22m
+[2m00:18:36[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m01:15:58[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/cyber-ui/packages/markdown/src/MarkdownContent.tsx, /src/index.css[22m
+[2m01:16:07[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/cyber-ui/packages/markdown/src/CodeBlock.tsx, /src/index.css[22m
+[2m10:39:19[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ new dependencies optimized: [33m@xyflow/react[32m[39m
+[2m10:39:19[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ optimized dependencies changed. reloading[39m
+[2m13:49:20[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/cyber-ui/packages/viewer/src/components/chat/ChatInput.tsx, /src/index.css[22m
+[2m13:49:20[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/ChatPanel.tsx[22m
+[2m13:51:05[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m13:51:33[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m13:51:41[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m13:51:53[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/ChatPanel.tsx, /src/index.css[22m
+[2m13:52:23[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/main.tsx[22m
+[2m14:45:53[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcyber-ui/packages/viewer/src/lib/timeline-adapter.ts[22m
+[2m14:46:20[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcyber-ui/packages/viewer/src/lib/timeline-adapter.ts[22m
+[2m15:37:12[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/cyber-ui/packages/viewer/src/components/chat/AssistantResponse.tsx, /src/index.css[22m
+[2m15:37:22[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/cyber-ui/packages/viewer/src/components/chat/MessageBubble.tsx, /src/index.css[22m
+[2m15:38:43[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mcyber-ui/packages/viewer/src/index.ts[22m

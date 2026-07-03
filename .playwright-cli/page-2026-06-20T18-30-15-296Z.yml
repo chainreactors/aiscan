@@ -1,0 +1,125 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Web console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - heading "History" [level=2] [ref=e17]
+      - generic [ref=e18]:
+        - img
+        - textbox "Search scan targets" [ref=e19]:
+          - /placeholder: Search targets
+      - generic [ref=e20]: No scans yet.
+  - main [ref=e21]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - img [ref=e25]
+        - textbox "Scan target" [ref=e28]:
+          - /placeholder: Target — IP, hostname, or URL
+      - generic [ref=e29]:
+        - group "Scan mode" [ref=e30]:
+          - button "Quick" [ref=e31] [cursor=pointer]
+          - button "Full" [ref=e32] [cursor=pointer]
+        - generic [ref=e33]:
+          - button "Verify analysis" [disabled] [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e45]: Verify
+          - button "Sniper analysis" [disabled] [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e49]: Sniper
+          - button "Deep analysis" [disabled] [ref=e50]:
+            - img [ref=e51]
+            - generic [ref=e58]: Deep
+        - button "Start scan" [disabled]:
+          - img
+          - generic: Scan
+      - generic [ref=e59]:
+        - generic "LLM Offline" [ref=e60]:
+          - img [ref=e61]
+          - text: LLM Offline
+        - button "Agents 1" [ref=e63] [cursor=pointer]:
+          - img [ref=e64]
+          - generic [ref=e66]: Agents
+          - generic [ref=e67]: "1"
+        - button "Open LLM configuration" [ref=e68] [cursor=pointer]:
+          - img [ref=e69]
+          - generic [ref=e72]: LLM
+        - button "Switch to light theme" [ref=e74] [cursor=pointer]:
+          - img [ref=e75]
+    - generic [ref=e82]:
+      - img [ref=e83]
+      - generic [ref=e85]:
+        - paragraph [ref=e86]: No active scan
+        - paragraph [ref=e87]: Ready for a target
+      - generic [ref=e88]:
+        - generic [ref=e89]:
+          - img [ref=e90]
+          - generic [ref=e94]: History
+          - generic [ref=e95]: "0"
+        - generic [ref=e96]:
+          - img [ref=e97]
+          - generic [ref=e99]: Agents
+          - generic [ref=e100]: "1"
+        - generic [ref=e101]:
+          - img [ref=e102]
+          - generic [ref=e104]: LLM
+          - generic [ref=e105]: Offline
+        - generic [ref=e106]:
+          - img [ref=e107]
+          - generic [ref=e110]: Config
+          - generic [ref=e111]: Loaded
+  - generic [ref=e113]:
+    - generic [ref=e114]:
+      - generic [ref=e115]:
+        - img [ref=e116]
+        - generic [ref=e118]:
+          - generic [ref=e119]:
+            - generic [ref=e120]: Agent Console
+            - generic [ref=e121]: "1"
+          - generic [ref=e122]: aiscan-dbfd80b0 · idle
+      - button "Close agents" [ref=e123] [cursor=pointer]:
+        - img [ref=e124]
+    - generic [ref=e130]:
+      - generic [ref=e131]:
+        - generic [ref=e132]:
+          - img [ref=e133]
+          - generic [ref=e135]: Main REPL
+          - generic [ref=e136]: connected
+        - generic [ref=e137]:
+          - button "New shell PTY" [ref=e138] [cursor=pointer]:
+            - img [ref=e139]
+          - button "Refresh sessions" [ref=e140] [cursor=pointer]:
+            - img [ref=e141]
+          - button "Stop active task" [disabled] [ref=e146]:
+            - img [ref=e147]
+      - generic [ref=e154]:
+        - textbox "Terminal input" [active] [ref=e155]
+        - generic:
+          - generic:
+            - generic: ╭────────────────────────────────────────────────────────────────────────────╮
+          - generic:
+            - generic: │ aiscan v0.1.0 │
+          - generic:
+            - generic: "│ model not configured - run `aiscan --init` │"
+          - generic:
+            - generic: │ mode pty · stream · space default │
+          - generic:
+            - generic: │ help /help /status /exit │
+          - generic:
+            - generic: ╰────────────────────────────────────────────────────────────────────────────╯
+          - generic:
+            - generic: 输入目标或任务即可
+            - generic: ；
+            - generic: 例如
+            - generic: ：
+            - generic: 扫描
+            - generic: 192.168.1.10
+            - generic: 的
+            - generic: Web
+            - generic: 风险
+          - generic:
+            - generic: aiscan>

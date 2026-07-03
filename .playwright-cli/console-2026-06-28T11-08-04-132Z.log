@@ -1,0 +1,14 @@
+[   33741ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/cyber-ui/packages/viewer/src/components/graph/LiveGraphView.tsx?t=1782644916979:0
+[   34409ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/cyber-ui/packages/viewer/src/components/graph/StaticGraphView.tsx?t=1782644916979:0
+[   34417ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/cyber-ui/packages/viewer/src/components/graph/LiveAPGNode.tsx?t=1782644916979:0
+[   34431ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/cyber-ui/packages/viewer/src/lib/execution-graph.ts?t=1782644916979:0
+[   34456ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/cyber-ui/packages/viewer/src/lib/execution-history-graph.ts?t=1782644916979:0
+[   34515ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/cyber-ui/packages/viewer/src/components/ExecutionGraphView.tsx?t=1782644916979:0
+[   52645ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/cyber-ui/packages/viewer/src/components/graph/StaticGraphView.tsx?t=1782644935915:0
+[   52645ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/cyber-ui/packages/viewer/src/lib/execution-graph.ts?t=1782644935915:0
+[   52650ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/cyber-ui/packages/viewer/src/components/graph/LiveAPGNode.tsx?t=1782644935915:0
+[   52650ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/cyber-ui/packages/viewer/src/components/graph/LiveGraphView.tsx?t=1782644935915:0
+[   52655ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/cyber-ui/packages/viewer/src/lib/execution-history-graph.ts?t=1782644935915:0
+[   52717ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5173/cyber-ui/packages/viewer/src/components/ExecutionGraphView.tsx?t=1782644935915:0
+[  181531ms] [ERROR] WebSocket connection to 'ws://127.0.0.1:5173/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/@vite/client:1034
+[  181960ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:5173/api/agents:0

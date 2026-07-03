@@ -1,0 +1,134 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: 1 agent
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e58]:
+      - generic [ref=e59]:
+        - button "aiscan-80f4bd3e idle openai/deepseek-v4-pro" [ref=e60] [cursor=pointer]:
+          - img [ref=e61]
+          - generic [ref=e63]:
+            - generic [ref=e64]:
+              - generic [ref=e65]: aiscan-80f4bd3e
+              - generic [ref=e66]: idle
+            - generic [ref=e67]: openai/deepseek-v4-pro
+          - img [ref=e68]
+        - generic [ref=e70]:
+          - button "Terminal" [ref=e71] [cursor=pointer]:
+            - img [ref=e72]
+            - text: Terminal
+          - button "New" [ref=e74] [cursor=pointer]:
+            - img [ref=e75]
+            - text: New
+          - generic [ref=e76]: 1 sessions
+      - 'button "Use the bash tool to run exactly: echo inline-tool-ok. Then ... 6月27日" [ref=e79] [cursor=pointer]':
+        - generic [ref=e80]:
+          - img [ref=e81]
+          - generic [ref=e83]: "Use the bash tool to run exactly: echo inline-tool-ok. Then ..."
+        - generic [ref=e84]: 6月27日
+  - generic [ref=e21]:
+    - generic [ref=e22]:
+      - generic [ref=e23]:
+        - img [ref=e24]
+        - text: Chat
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - img [ref=e28]
+          - generic [ref=e30]: "1"
+        - button "Open scan workspace" [ref=e31] [cursor=pointer]:
+          - img [ref=e32]
+        - button "LLM Config" [ref=e34] [cursor=pointer]:
+          - img [ref=e35]
+        - button "Switch to dark theme" [ref=e38] [cursor=pointer]:
+          - img [ref=e39]
+        - button "Show detail panel" [ref=e41] [cursor=pointer]:
+          - img [ref=e42]
+    - main [ref=e44]:
+      - generic [ref=e46]:
+        - generic [ref=e85]:
+          - generic [ref=e87]:
+            - generic [ref=e89]:
+              - generic [ref=e90]: You
+              - img [ref=e91]
+            - generic [ref=e94]: 23:02
+          - generic [ref=e96]:
+            - img [ref=e98]
+            - generic [ref=e101]:
+              - generic [ref=e102]:
+                - generic [ref=e103]: You
+                - generic [ref=e104]: 23:02:20
+              - paragraph [ref=e107]: "Use the bash tool to run exactly: echo inline-tool-ok. Then reply with the output."
+        - generic [ref=e108]:
+          - generic [ref=e110]:
+            - generic [ref=e112]:
+              - generic [ref=e113]: aiscan-80f4bd3e
+              - img [ref=e114]
+            - generic [ref=e117]: 23:02
+          - generic [ref=e121]:
+            - img [ref=e122]
+            - text: aiscan-80f4bd3e joined
+        - generic [ref=e126]:
+          - generic [ref=e128]:
+            - generic [ref=e130]:
+              - generic [ref=e131]: aiscan-80f4bd3e
+              - img [ref=e132]
+            - generic [ref=e141]: 23:02
+          - generic [ref=e143]:
+            - img [ref=e145]
+            - generic [ref=e148]:
+              - generic [ref=e149]: aiscan-80f4bd3e
+              - paragraph [ref=e152]: The user wants me to run a simple bash command and reply with the output.
+        - generic [ref=e153]:
+          - generic [ref=e155]:
+            - generic [ref=e157]:
+              - generic [ref=e158]: bash
+              - img [ref=e159]
+            - generic [ref=e161]: 23:02
+          - generic [ref=e163]:
+            - button "bash echo inline-tool-ok" [ref=e164] [cursor=pointer]:
+              - img [ref=e165]
+              - generic [ref=e167]: bash
+              - generic "echo inline-tool-ok" [ref=e168]
+              - img [ref=e169]
+              - img [ref=e171]
+            - generic [ref=e173]:
+              - generic [ref=e174]:
+                - generic [ref=e175]: Arguments
+                - generic [ref=e176]: "{ \"command\": \"echo inline-tool-ok\" }"
+              - generic [ref=e177]:
+                - generic [ref=e178]: Result
+                - generic [ref=e179]: "\x1b[?9001h\x1b[?1004h\x1b[?25linline-tool-ok \x1b[?25h\x1b[?9001l\x1b[?1004l"
+        - generic [ref=e180]:
+          - generic [ref=e182]:
+            - generic [ref=e184]:
+              - generic [ref=e185]: aiscan-80f4bd3e
+              - img [ref=e186]
+            - generic [ref=e195]: 23:02
+          - generic [ref=e197]:
+            - img [ref=e199]
+            - generic [ref=e202]:
+              - generic [ref=e203]: aiscan-80f4bd3e
+              - paragraph [ref=e206]: The command ran successfully and output "inline-tool-ok".
+        - generic [ref=e207]:
+          - generic [ref=e209]:
+            - generic [ref=e211]:
+              - generic [ref=e212]: aiscan-80f4bd3e
+              - img [ref=e213]
+            - generic [ref=e216]: 23:02
+          - generic [ref=e218]:
+            - img [ref=e220]
+            - generic [ref=e223]:
+              - generic [ref=e224]:
+                - generic [ref=e225]: aiscan-80f4bd3e
+                - generic [ref=e226]: 23:02:24
+              - generic [ref=e228]:
+                - paragraph [ref=e229]: "The output is:"
+                - code [ref=e231]: inline-tool-ok
+      - generic [ref=e56]:
+        - textbox "Type a message... (/ for commands)" [ref=e57]
+        - button "Send message" [disabled]:
+          - img

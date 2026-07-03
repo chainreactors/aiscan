@@ -1,0 +1,98 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Web console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - heading "History" [level=2] [ref=e17]
+      - generic [ref=e18]:
+        - img
+        - textbox "Search scan targets" [ref=e19]:
+          - /placeholder: Search targets
+      - generic [ref=e20]:
+        - button "127.0.0.1, failed, quick, 0 assets, 0 loots" [ref=e156] [cursor=pointer]:
+          - generic [ref=e157]:
+            - generic [ref=e158]: 127.0.0.1
+            - generic "failed" [ref=e159]
+          - generic [ref=e160]:
+            - generic [ref=e161]: quick
+            - generic [ref=e162]: 6月18日 01:50
+        - button "example.com, completed, quick, 13 assets, 0 loots" [ref=e110] [cursor=pointer]:
+          - generic [ref=e111]:
+            - generic [ref=e112]: example.com
+            - generic "completed" [ref=e113]
+          - generic [ref=e114]:
+            - generic [ref=e115]: quick
+            - generic "13 assets" [ref=e116]:
+              - img [ref=e117]
+              - generic [ref=e121]: "13"
+            - generic "0 loots" [ref=e122]:
+              - img [ref=e123]
+              - generic [ref=e125]: "0"
+            - generic [ref=e126]: 6月6日 01:29
+        - button "127.0.0.1, completed, quick, 8 assets, 0 loots" [ref=e127] [cursor=pointer]:
+          - generic [ref=e128]:
+            - generic [ref=e129]: 127.0.0.1
+            - generic "completed" [ref=e130]
+          - generic [ref=e131]:
+            - generic [ref=e132]: quick
+            - generic "8 assets" [ref=e133]:
+              - img [ref=e134]
+              - generic [ref=e138]: "8"
+            - generic "0 loots" [ref=e139]:
+              - img [ref=e140]
+              - generic [ref=e142]: "0"
+            - generic [ref=e143]: Verify
+            - generic [ref=e144]: Sniper
+            - generic [ref=e145]: Deep
+            - generic [ref=e146]: 6月6日 01:27
+  - main [ref=e21]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - img [ref=e25]
+        - textbox "Scan target" [ref=e28]:
+          - /placeholder: Target — IP, hostname, or URL
+          - text: 127.0.0.1
+      - generic [ref=e29]:
+        - group "Scan mode" [ref=e30]:
+          - button "Quick" [ref=e31] [cursor=pointer]
+          - button "Full" [ref=e32] [cursor=pointer]
+        - generic [ref=e33]:
+          - button "Verify analysis" [disabled] [ref=e34]:
+            - img [ref=e35]
+            - generic [ref=e45]: Verify
+          - button "Sniper analysis" [disabled] [ref=e46]:
+            - img [ref=e47]
+            - generic [ref=e49]: Sniper
+          - button "Deep analysis" [disabled] [ref=e50]:
+            - img [ref=e51]
+            - generic [ref=e58]: Deep
+        - button "Start scan" [ref=e147] [cursor=pointer]:
+          - img [ref=e163]
+          - generic [ref=e150]: Scan
+      - generic [ref=e59]:
+        - generic "LLM Offline" [ref=e151]:
+          - img [ref=e152]
+          - text: LLM Offline
+        - button "Agents 0" [ref=e64] [cursor=pointer]:
+          - img [ref=e65]
+          - generic [ref=e67]: Agents
+          - generic [ref=e68]: "0"
+        - button "Open LLM configuration" [ref=e69] [cursor=pointer]:
+          - img [ref=e70]
+          - generic [ref=e73]: LLM
+        - button "Switch to dark theme" [ref=e75] [cursor=pointer]:
+          - img [ref=e76]
+    - alert [ref=e165]:
+      - img [ref=e166]
+      - generic [ref=e168]: scan command is not registered
+      - button "Dismiss error" [ref=e169] [cursor=pointer]:
+        - img [ref=e170]
+    - generic [ref=e174]:
+      - generic [ref=e175]: 127.0.0.1
+      - generic [ref=e176]: quick
+      - generic [ref=e177]: Failed

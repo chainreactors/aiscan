@@ -1131,7 +1131,9 @@ func (s *Service) handleShellCommand(sessionID, command string) {
 		if res.Err != "" {
 			content = "Error: " + res.Err
 		}
-		s.persistAssistantMessage(sessionID, agent.id, agent.name, content, res.Turn)
+		if strings.TrimSpace(content) != "" {
+			s.persistAssistantMessage(sessionID, agent.id, agent.name, content, res.Turn)
+		}
 	}()
 }
 
@@ -1174,7 +1176,9 @@ func (s *Service) handleChatMessage(sessionID, content string) {
 		if res.Err != "" {
 			reply = "Error: " + res.Err
 		}
-		s.persistAssistantMessage(sessionID, agent.id, agent.name, reply, res.Turn)
+		if strings.TrimSpace(reply) != "" {
+			s.persistAssistantMessage(sessionID, agent.id, agent.name, reply, res.Turn)
+		}
 	}()
 }
 

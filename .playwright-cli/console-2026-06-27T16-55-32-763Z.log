@@ -1,0 +1,11 @@
+[  135313ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_RESET @ http://127.0.0.1:18080/api/chat/sessions/1782579359490399800/events:0
+[  140370ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:18080/api/chat/sessions/1782579359490399800/events:0
+[  140637ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:18080/api/agents:0
+[  145420ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:18080/api/chat/sessions/1782579359490399800/events:0
+[  145699ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:18080/api/agents:0
+[  150460ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:18080/api/chat/sessions/1782579359490399800/events:0
+[  150739ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:18080/api/agents:0
+[  155527ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:18080/api/chat/sessions/1782579359490399800/events:0
+[  155778ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:18080/api/agents:0
+[  160591ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:18080/api/chat/sessions/1782579359490399800/events:0
+[  160856ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:18080/api/agents:0

@@ -1,0 +1,48 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Chat console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - heading "Sessions" [level=2] [ref=e17]
+        - button "New session" [active] [ref=e18] [cursor=pointer]:
+          - img [ref=e19]
+      - generic [ref=e20]:
+        - img
+        - textbox "Search sessions" [ref=e21]
+      - button "New session 6月27日" [ref=e53] [cursor=pointer]:
+        - generic [ref=e54]:
+          - img [ref=e55]
+          - generic [ref=e57]: New session
+        - generic [ref=e59]: 6月27日
+  - generic [ref=e24]:
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - img [ref=e27]
+        - text: Chat
+      - generic [ref=e29]:
+        - button "0" [ref=e30] [cursor=pointer]:
+          - img [ref=e31]
+          - generic [ref=e33]: "0"
+        - button "LLM Config" [ref=e34] [cursor=pointer]:
+          - img [ref=e35]
+        - button "Switch to dark theme" [ref=e38] [cursor=pointer]:
+          - img [ref=e39]
+        - button "Hide detail panel" [ref=e41] [cursor=pointer]:
+          - img [ref=e42]
+    - generic [ref=e60]:
+      - img [ref=e61]
+      - paragraph [ref=e63]: Ready
+      - paragraph [ref=e64]:
+        - text: Type a message or use
+        - code [ref=e65]: /scan <target>
+        - text: to start scanning
+    - generic [ref=e66]:
+      - textbox "Type a message... (/ for commands)" [ref=e67]
+      - button "Send message" [disabled]:
+        - img

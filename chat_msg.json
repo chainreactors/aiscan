@@ -1,0 +1,1 @@
+{"body":"<img src=x onerror=alert('CHAT_XSS_8f2a')>"}

@@ -1,0 +1,144 @@
+[  456256ms] ReferenceError: useTheme is not defined
+    at ChatPanel (http://127.0.0.1:5174/src/components/ChatPanel.tsx?t=1782663223091:75:43)
+    at renderWithHooks (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:14974:21)
+    at beginWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3739:39)
+    at beginWork$1 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19251:20)
+    at workLoopSync (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19190:13)
+[  456259ms] ReferenceError: useTheme is not defined
+    at ChatPanel (http://127.0.0.1:5174/src/components/ChatPanel.tsx?t=1782663223091:75:43)
+    at renderWithHooks (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:14974:21)
+    at beginWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3739:39)
+    at beginWork$1 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19251:20)
+    at workLoopSync (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19190:13)
+[  456259ms] [ERROR] The above error occurred in the <ChatPanel> component:
+
+    at ChatPanel (http://127.0.0.1:5174/src/components/ChatPanel.tsx?t=1782663223091:52:3)
+    at div
+    at div
+    at div
+    at div
+    at Provider (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-UIH4JD27.js?v=7e077ad8:34:15)
+    at TooltipProvider (http://127.0.0.1:5174/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=7e077ad8:61:5)
+    at div
+    at ThemeProvider (http://127.0.0.1:5174/cyber-ui/packages/theme/src/ThemeProvider.tsx:29:33)
+    at App (http://127.0.0.1:5174/src/App.tsx?t=1782663217240:49:16)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:14079
+[  456270ms] ReferenceError: useTheme is not defined
+    at ChatPanel (http://127.0.0.1:5174/src/components/ChatPanel.tsx?t=1782663223091:75:43)
+    at renderWithHooks (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:14974:21)
+    at beginWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:15962:22)
+    at beginWork$1 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19806:22)
+    at performUnitOfWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19251:20)
+    at workLoopSync (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19190:13)
+    at renderRootSync (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19169:15)
+    at recoverFromConcurrentError (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:18786:28)
+    at performSyncWorkOnRoot (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:18932:28)
+[  468657ms] ReferenceError: useTheme is not defined
+    at ChatPanel (http://127.0.0.1:5174/src/components/ChatPanel.tsx?t=1782663235512:75:43)
+    at renderWithHooks (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:14974:21)
+    at beginWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3739:39)
+    at beginWork$1 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19251:20)
+    at workLoopSync (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19190:13)
+[  468666ms] ReferenceError: useTheme is not defined
+    at ChatPanel (http://127.0.0.1:5174/src/components/ChatPanel.tsx?t=1782663235512:75:43)
+    at renderWithHooks (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:14974:21)
+    at beginWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3739:39)
+    at beginWork$1 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19251:20)
+    at workLoopSync (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19190:13)
+[  468671ms] [ERROR] The above error occurred in the <ChatPanel> component:
+
+    at ChatPanel (http://127.0.0.1:5174/src/components/ChatPanel.tsx?t=1782663235512:52:3)
+    at div
+    at div
+    at div
+    at div
+    at Provider (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-UIH4JD27.js?v=7e077ad8:34:15)
+    at TooltipProvider (http://127.0.0.1:5174/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=7e077ad8:61:5)
+    at div
+    at ThemeProvider (http://127.0.0.1:5174/cyber-ui/packages/theme/src/ThemeProvider.tsx:29:33)
+    at App (http://127.0.0.1:5174/src/App.tsx?t=1782663217240:49:16)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:14079
+[  468676ms] ReferenceError: useTheme is not defined
+    at ChatPanel (http://127.0.0.1:5174/src/components/ChatPanel.tsx?t=1782663235512:75:43)
+    at renderWithHooks (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:14974:21)
+    at beginWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:15962:22)
+    at beginWork$1 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19806:22)
+    at performUnitOfWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19251:20)
+    at workLoopSync (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19190:13)
+    at renderRootSync (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19169:15)
+    at recoverFromConcurrentError (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:18786:28)
+    at performSyncWorkOnRoot (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:18932:28)
+[  477609ms] ReferenceError: agentsPill is not defined
+    at ChatPanel (http://127.0.0.1:5174/src/components/ChatPanel.tsx?t=1782663244453:125:9)
+    at renderWithHooks (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:14974:21)
+    at beginWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3739:39)
+    at beginWork$1 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19251:20)
+    at workLoopSync (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19190:13)
+[  477617ms] ReferenceError: agentsPill is not defined
+    at ChatPanel (http://127.0.0.1:5174/src/components/ChatPanel.tsx?t=1782663244453:125:9)
+    at renderWithHooks (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:14974:21)
+    at beginWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:15962:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3680:22)
+    at Object.invokeGuardedCallbackDev (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3705:24)
+    at invokeGuardedCallback (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:3739:39)
+    at beginWork$1 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19818:15)
+    at performUnitOfWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19251:20)
+    at workLoopSync (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19190:13)
+[  477620ms] [ERROR] The above error occurred in the <ChatPanel> component:
+
+    at ChatPanel (http://127.0.0.1:5174/src/components/ChatPanel.tsx?t=1782663244453:52:3)
+    at div
+    at div
+    at div
+    at div
+    at Provider (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-UIH4JD27.js?v=7e077ad8:34:15)
+    at TooltipProvider (http://127.0.0.1:5174/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=7e077ad8:61:5)
+    at div
+    at ThemeProvider (http://127.0.0.1:5174/cyber-ui/packages/theme/src/ThemeProvider.tsx:29:33)
+    at App (http://127.0.0.1:5174/src/App.tsx?t=1782663217240:49:16)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:14079
+[  477623ms] ReferenceError: agentsPill is not defined
+    at ChatPanel (http://127.0.0.1:5174/src/components/ChatPanel.tsx?t=1782663244453:125:9)
+    at renderWithHooks (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:11596:26)
+    at mountIndeterminateComponent (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:14974:21)
+    at beginWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:15962:22)
+    at beginWork$1 (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19806:22)
+    at performUnitOfWork (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19251:20)
+    at workLoopSync (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19190:13)
+    at renderRootSync (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:19169:15)
+    at recoverFromConcurrentError (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:18786:28)
+    at performSyncWorkOnRoot (http://127.0.0.1:5174/node_modules/.vite/deps/chunk-KDCVS43I.js?v=7e077ad8:18932:28)

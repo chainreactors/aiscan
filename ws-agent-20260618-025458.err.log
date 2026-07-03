@@ -1,0 +1,12 @@
+[eval]:1
+const
+     
+Trailing comma is not allowed
+
+SyntaxError: Unexpected end of input
+    at makeContextifyScript (node:internal/vm:185:14)
+    at compileScript (node:internal/process/execution:383:10)
+    at evalTypeScript (node:internal/process/execution:256:22)
+    at node:internal/main/eval_string:74:3
+
+Node.js v22.18.0

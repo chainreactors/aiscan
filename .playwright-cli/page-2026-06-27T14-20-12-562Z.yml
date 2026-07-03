@@ -1,0 +1,40 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: 0 agents
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e16]:
+      - img [ref=e17]
+      - paragraph [ref=e19]: No agents connected
+      - paragraph [ref=e20]: Start an aiscan agent to begin
+  - generic [ref=e21]:
+    - generic [ref=e22]:
+      - generic [ref=e23]:
+        - img [ref=e24]
+        - text: Chat
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - img [ref=e28]
+          - generic [ref=e30]: "0"
+        - button "LLM Config" [ref=e31] [cursor=pointer]:
+          - img [ref=e32]
+        - button "Switch to dark theme" [ref=e35] [cursor=pointer]:
+          - img [ref=e36]
+        - button "Show detail panel" [ref=e38] [cursor=pointer]:
+          - img [ref=e39]
+    - main [ref=e41]:
+      - generic [ref=e45]:
+        - img [ref=e46]
+        - paragraph [ref=e48]: Ready
+        - paragraph [ref=e49]:
+          - text: Type a message or use
+          - code [ref=e50]: /scan <target>
+          - text: to start scanning
+      - generic [ref=e53]:
+        - textbox "Type a message... (/ for commands)" [ref=e54]
+        - button "Send message" [disabled]:
+          - img

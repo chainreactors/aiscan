@@ -1,0 +1,27 @@
+[2m02:46:40[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/scans[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m02:46:40[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/status[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m02:46:40[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/scans[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m02:46:40[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/status[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m02:47:08[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/config/llm[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m02:47:37[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m02:47:42[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m02:47:47[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m02:47:52[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/agents[39m
+Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)

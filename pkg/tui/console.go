@@ -920,7 +920,40 @@ func (r *AgentConsole) atCompleteAction(c carapace.Context) carapace.Action {
 		return carapace.ActionValues()
 	}
 	c.Value = c.Value[1:]
-	return carapace.ActionFiles().Invoke(c).Prefix("@").ToA().NoSpace()
+	fileAction := carapace.ActionFiles().Invoke(c).Prefix("@").ToA().NoSpace()
+	nodeAction := r.atNodeCompleteAction(c)
+	return carapace.Batch(fileAction, nodeAction).ToA()
+}
+
+func (r *AgentConsole) atNodeCompleteAction(c carapace.Context) carapace.Action {
+	if r.option == nil || r.option.IOAURL == "" {
+		return carapace.ActionValues()
+	}
+	client, err := r.ioaClient()
+	if err != nil {
+		return carapace.ActionValues()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if r.option.Space != "" {
+		space, err := client.ResolveSpace(ctx, r.option.Space)
+		if err == nil {
+			var names []string
+			for _, n := range space.Nodes {
+				names = append(names, "@"+n.Name)
+			}
+			return carapace.ActionValues(names...).NoSpace()
+		}
+	}
+	nodes, err := client.ListNodes(ctx)
+	if err != nil {
+		return carapace.ActionValues()
+	}
+	var names []string
+	for _, n := range nodes {
+		names = append(names, "@"+n.Name)
+	}
+	return carapace.ActionValues(names...).NoSpace()
 }
 
 func agentConsoleHistoryPath() string {

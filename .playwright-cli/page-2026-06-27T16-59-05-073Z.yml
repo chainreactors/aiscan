@@ -1,0 +1,47 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: 1 agent
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e18]:
+      - button "aiscan-30d75ed4 idle openai/deepseek-v4-pro" [ref=e19] [cursor=pointer]:
+        - img [ref=e20]
+        - generic [ref=e22]:
+          - generic [ref=e23]:
+            - generic [ref=e24]: aiscan-30d75ed4
+            - generic [ref=e25]: idle
+          - generic [ref=e26]: openai/deepseek-v4-pro
+        - img [ref=e27]
+      - generic [ref=e29]:
+        - button "Terminal" [ref=e30] [cursor=pointer]:
+          - img [ref=e31]
+          - text: Terminal
+        - button "New" [ref=e33] [cursor=pointer]:
+          - img [ref=e34]
+          - text: New
+  - generic [ref=e35]:
+    - generic [ref=e36]:
+      - generic [ref=e37]:
+        - img [ref=e38]
+        - text: Chat
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - img [ref=e42]
+          - generic [ref=e44]: "1"
+        - button "Open scan workspace" [ref=e45] [cursor=pointer]:
+          - img [ref=e46]
+        - button "LLM Config" [ref=e48] [cursor=pointer]:
+          - img [ref=e49]
+        - button "Switch to dark theme" [ref=e52] [cursor=pointer]:
+          - img [ref=e53]
+        - button "Show detail panel" [ref=e55] [cursor=pointer]:
+          - img [ref=e56]
+    - main [ref=e58]:
+      - generic [ref=e62]:
+        - img [ref=e63]
+        - paragraph [ref=e65]: Start a conversation
+        - paragraph [ref=e66]: Create a new session to begin chatting

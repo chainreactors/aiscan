@@ -1,0 +1,103 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e6]
+      - generic [ref=e8]:
+        - heading "AIScan" [level=1] [ref=e9]
+        - generic [ref=e10]: Chat console
+      - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+        - img [ref=e12]
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - heading "Sessions" [level=2] [ref=e17]
+        - button "New session" [ref=e18] [cursor=pointer]:
+          - img [ref=e19]
+      - generic [ref=e20]:
+        - img
+        - textbox "Search sessions" [ref=e21]
+      - generic [ref=e22]:
+        - 'button "Use the bash tool to run exactly: echo tool-ui-ok. Then repl... 6月27日" [ref=e95] [cursor=pointer]':
+          - generic [ref=e76]:
+            - img [ref=e77]
+            - generic [ref=e79]: "Use the bash tool to run exactly: echo tool-ui-ok. Then repl..."
+          - generic [ref=e81]: 6月27日
+        - 'button "Reply exactly: frontend-chat-ok 6月27日" [ref=e24] [cursor=pointer]':
+          - generic [ref=e25]:
+            - img [ref=e26]
+            - generic [ref=e28]: "Reply exactly: frontend-chat-ok"
+          - generic [ref=e30]: 6月27日
+        - 'button "Reply exactly: frontend-chat-clean 6月27日" [ref=e32] [cursor=pointer]':
+          - generic [ref=e33]:
+            - img [ref=e34]
+            - generic [ref=e36]: "Reply exactly: frontend-chat-clean"
+          - generic [ref=e38]: 6月27日
+        - button "hello 6月27日" [ref=e40] [cursor=pointer]:
+          - generic [ref=e41]:
+            - img [ref=e42]
+            - generic [ref=e44]: hello
+          - generic [ref=e46]: 6月27日
+  - generic [ref=e47]:
+    - generic [ref=e48]:
+      - generic [ref=e49]:
+        - img [ref=e50]
+        - text: Chat
+      - generic [ref=e52]:
+        - button "1" [ref=e53] [cursor=pointer]:
+          - img [ref=e54]
+          - generic [ref=e56]: "1"
+        - button "LLM Config" [ref=e57] [cursor=pointer]:
+          - img [ref=e58]
+        - button "Switch to dark theme" [ref=e61] [cursor=pointer]:
+          - img [ref=e62]
+        - button "Show detail panel" [ref=e64] [cursor=pointer]:
+          - img [ref=e65]
+    - generic [ref=e68]:
+      - generic [ref=e97]:
+        - img [ref=e99]
+        - generic [ref=e102]:
+          - generic [ref=e103]:
+            - generic [ref=e104]: You
+            - generic [ref=e105]: 21:54:56
+          - paragraph [ref=e108]: "Use the bash tool to run exactly: echo tool-ui-ok. Then reply exactly: tool-ui-done"
+      - generic [ref=e111]:
+        - img [ref=e112]
+        - text: local-worker-1 joined
+      - generic [ref=e117]:
+        - button "bash playwright text-content -s chat2 \"#chat-stream\"" [ref=e118] [cursor=pointer]:
+          - img [ref=e119]
+          - generic [ref=e121]: bash
+          - generic "playwright text-content -s chat2 \"#chat-stream\"" [ref=e122]
+          - img [ref=e123]
+          - img [ref=e125]
+        - generic [ref=e127]:
+          - generic [ref=e128]:
+            - generic [ref=e129]: Arguments
+            - generic [ref=e130]: "{ \"command\": \"playwright text-content -s chat2 \\\"#chat-stream\\\"\" }"
+          - generic [ref=e131]:
+            - generic [ref=e132]: Result
+            - generic [ref=e133]: "URL: #chat-stream Chars: 741 --- anonymous 匿名访客 06-26 20:00 大家好，第一次来 RedHaze。 guest Curious Visitor 06-26 20:00 新版的客服机器人挺有意思。 bot WeatherBot 06-26 20:00 今日北京：多云转晴 22℃，建议带伞。 system system 2026-06-27T13:54:20Z welcome to free-lobby, you are 匿名访客 system system 2026-06-27T13:54:20Z 匿名访客 加入了 free-lobby bot BabbleBot 胡言乱语 2026-06-27T13:54:20Z 你好，我是 BabbleBot，胡言乱语，但绝不打扰。运维姐姐把告警分成了三档：温柔、傲娇和爆炸。 bot BabbleBot 胡言乱语 2026-06-27T13:54:40Z 听说红雾后端服务都参加了一个匿名互助小组。 anonymous 匿名访客 2026-06-27T13:54:52Z Security test message from assessment"
+      - generic [ref=e135]:
+        - button "bash echo tool-ui-ok" [ref=e136] [cursor=pointer]:
+          - img [ref=e137]
+          - generic [ref=e139]: bash
+          - generic "echo tool-ui-ok" [ref=e140]
+          - img [ref=e141]
+          - img [ref=e143]
+        - generic [ref=e145]:
+          - generic [ref=e146]:
+            - generic [ref=e147]: Arguments
+            - generic [ref=e148]: "{ \"command\": \"echo tool-ui-ok\" }"
+          - generic [ref=e149]:
+            - generic [ref=e150]: Result
+            - generic [ref=e151]: "\x1b[?9001h\x1b[?1004h\x1b[?25ltool-ui-ok \x1b[?25h\x1b[?9001l\x1b[?1004l"
+      - generic [ref=e165]:
+        - img [ref=e167]
+        - generic [ref=e170]:
+          - generic [ref=e171]:
+            - generic [ref=e172]: local-worker-1
+            - generic [ref=e173]: 21:54:59
+          - paragraph [ref=e176]: tool-ui-done
+    - generic [ref=e89]:
+      - textbox "Type a message... (/ for commands)" [active] [ref=e90]
+      - button "Send message" [disabled]:
+        - img

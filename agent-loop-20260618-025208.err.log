@@ -1,0 +1,3 @@
+loaded config: config.yaml
+[error] agent failed: init app: no API key for provider "deepseek": set --api-key, llm.api_key, DEEPSEEK_API_KEY, or AISCAN_API_KEY
+exit status 1

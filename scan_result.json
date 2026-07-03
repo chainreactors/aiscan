@@ -1,0 +1,16 @@
+{"type":"scan_start","ts":"2026-06-15T12:12:27.837459026-07:00","data":{"targets":["redhaze.top"],"mode":"quick","flags":["-i","redhaze.top","--mode","quick","-j","-f","scan_result.json"]}}
+{"type":"service","ts":"2026-06-15T12:12:37.197653262-07:00","data":{"ip":"47.86.177.216","port":"8006","protocol":"tcp","status":"open","timing":9356}}
+{"type":"service","ts":"2026-06-15T12:12:38.511824477-07:00","data":{"ip":"47.86.177.216","port":"445","protocol":"smb","status":"tcp","timing":10669}}
+{"type":"service","ts":"2026-06-15T12:12:42.380832186-07:00","data":{"ip":"47.86.177.216","port":"993","protocol":"tcp","status":"open","frameworks":{"imap":{"name":"imap","froms":{"4":true},"attributes":{"part":"a","product":"imap"}}},"timing":14540}}
+{"type":"service","ts":"2026-06-15T12:12:42.388012586-07:00","data":{"ip":"47.86.177.216","port":"7443","protocol":"tcp","status":"open","timing":14539}}
+{"type":"service","ts":"2026-06-15T12:12:42.414421836-07:00","data":{"ip":"47.86.177.216","port":"7007","protocol":"tcp","status":"open","timing":14572}}
+{"type":"service","ts":"2026-06-15T12:12:42.424827407-07:00","data":{"ip":"47.86.177.216","port":"8098","protocol":"tcp","status":"open","timing":14581}}
+{"type":"service","ts":"2026-06-15T12:12:42.42924878-07:00","data":{"ip":"47.86.177.216","port":"5901","protocol":"tcp","status":"open","frameworks":{"vnc":{"name":"vnc","froms":{"4":true},"attributes":{"part":"a","product":"vnc"}}},"timing":14588}}
+{"type":"service","ts":"2026-06-15T12:12:42.429665504-07:00","data":{"ip":"47.86.177.216","port":"16010","protocol":"tcp","status":"open","frameworks":{"hbase":{"name":"hbase","froms":{"4":true},"attributes":{"part":"a","product":"hbase"}}},"timing":14587}}
+{"type":"service","ts":"2026-06-15T12:12:42.466764206-07:00","data":{"ip":"47.86.177.216","port":"2082","protocol":"tcp","status":"open","timing":14623}}
+{"type":"service","ts":"2026-06-15T12:12:42.570002214-07:00","data":{"ip":"47.86.177.216","port":"90","protocol":"tcp","status":"open","timing":14727}}
+{"type":"service","ts":"2026-06-15T12:12:42.619100913-07:00","data":{"ip":"47.86.177.216","port":"8092","protocol":"tcp","status":"open","timing":14775}}
+{"type":"service","ts":"2026-06-15T12:12:43.074136114-07:00","data":{"ip":"47.86.177.216","port":"2001","protocol":"tcp","status":"open","timing":15231}}
+{"type":"service","ts":"2026-06-15T12:12:43.345843281-07:00","data":{"ip":"47.86.177.216","port":"9004","protocol":"tcp","status":"open","timing":15505}}
+{"type":"service","ts":"2026-06-15T12:12:44.025713586-07:00","data":{"ip":"47.86.177.216","port":"18086","protocol":"tcp","status":"open","frameworks":{"dubbo":{"name":"dubbo","froms":{"4":true},"attributes":{"part":"a","product":"dubbo"}}},"timing":16185}}
+{"type":"scan_end","ts":"2026-06-15T12:13:38.410378403-07:00","data":{"duration_s":70.687073172,"targets":1,"services":14,"webs":0,"loots":0,"errors":0}}

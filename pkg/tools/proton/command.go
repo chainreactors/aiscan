@@ -372,15 +372,13 @@ func writeFinding(w interface{ Write([]byte) (int, error) }, f file.Finding, jso
 		relPath = r
 	}
 	fmt.Fprintf(w, "[%s] [%s] [%s] [%s] %s\n", f.TemplateName, f.Severity, f.Class, f.TemplateID, relPath)
-	for name, events := range f.Matches {
-		for _, ev := range events {
-			val := truncate(ev.Value, 200)
-			fmt.Fprintf(w, "   [match:%s] [L%d] %s\n", name, ev.Line, val)
-		}
-	}
-	for _, ev := range f.Extracts {
+	for _, ev := range f.Events {
 		val := truncate(ev.Value, 200)
-		fmt.Fprintf(w, "   [extract] [L%d] %s\n", ev.Line, val)
+		if ev.Name != "" {
+			fmt.Fprintf(w, "   [%s:%s] [L%d] %s\n", ev.Type, ev.Name, ev.Line, val)
+		} else {
+			fmt.Fprintf(w, "   [%s] [L%d] %s\n", ev.Type, ev.Line, val)
+		}
 	}
 }
 

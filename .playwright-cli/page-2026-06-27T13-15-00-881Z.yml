@@ -1,0 +1,94 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - img [ref=e6]
+        - generic [ref=e8]:
+          - heading "AIScan" [level=1] [ref=e9]
+          - generic [ref=e10]: Chat console
+        - button "Collapse sidebar" [ref=e11] [cursor=pointer]:
+          - img [ref=e12]
+      - generic [ref=e15]:
+        - generic [ref=e16]:
+          - heading "Sessions" [level=2] [ref=e17]
+          - button "New session" [ref=e18] [cursor=pointer]:
+            - img [ref=e19]
+        - generic [ref=e20]:
+          - img
+          - textbox "Search sessions" [ref=e21]
+        - button "New session 6月27日" [ref=e53] [cursor=pointer]:
+          - generic [ref=e54]:
+            - img [ref=e55]
+            - generic [ref=e57]: New session
+          - generic [ref=e59]: 6月27日
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - img [ref=e27]
+          - text: Chat
+        - generic [ref=e29]:
+          - button "0" [ref=e30] [cursor=pointer]:
+            - img [ref=e31]
+            - generic [ref=e33]: "0"
+          - button "LLM Config" [active] [ref=e34] [cursor=pointer]:
+            - img [ref=e35]
+          - button "Switch to dark theme" [ref=e38] [cursor=pointer]:
+            - img [ref=e39]
+          - button "Hide detail panel" [ref=e41] [cursor=pointer]:
+            - img [ref=e42]
+      - generic [ref=e60]:
+        - img [ref=e61]
+        - paragraph [ref=e63]: Ready
+        - paragraph [ref=e64]:
+          - text: Type a message or use
+          - code [ref=e65]: /scan <target>
+          - text: to start scanning
+      - generic [ref=e66]:
+        - textbox "Type a message... (/ for commands)" [ref=e67]
+        - button "Send message" [disabled]:
+          - img
+  - generic [ref=e69]:
+    - generic [ref=e70]:
+      - generic [ref=e71]:
+        - img [ref=e72]
+        - generic [ref=e75]:
+          - generic [ref=e76]: LLM Config
+          - generic [ref=e77]: aiscan.yaml
+      - button [ref=e78] [cursor=pointer]:
+        - img [ref=e79]
+    - generic [ref=e82]:
+      - generic [ref=e83]:
+        - generic [ref=e84]: LLM Offline
+        - generic [ref=e85]: Config Loaded
+        - generic [ref=e86]: API Key Empty
+      - generic [ref=e87]:
+        - generic [ref=e88]:
+          - text: Provider
+          - combobox "Provider" [ref=e89]:
+            - option "Select provider" [disabled]
+            - option "deepseek" [selected]
+            - option "openai"
+            - option "openrouter"
+            - option "ollama"
+            - option "groq"
+            - option "moonshot"
+            - option "anthropic"
+        - generic [ref=e90]:
+          - text: Model
+          - textbox "Model" [ref=e91]:
+            - /placeholder: deepseek-v4-pro / gpt-4.1 / qwen2.5
+        - generic [ref=e92]:
+          - text: Base URL
+          - textbox "Base URL" [ref=e93]:
+            - /placeholder: leave empty for provider default
+        - generic [ref=e94]:
+          - text: Proxy
+          - textbox "Proxy" [ref=e95]:
+            - /placeholder: http://127.0.0.1:7890
+        - generic [ref=e97]:
+          - text: API Key
+          - textbox "API Key" [ref=e98]:
+            - /placeholder: required unless provider is ollama
+    - generic [ref=e99]:
+      - button "Close" [ref=e100] [cursor=pointer]
+      - button "Save" [ref=e101] [cursor=pointer]

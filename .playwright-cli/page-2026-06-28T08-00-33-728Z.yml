@@ -1,0 +1,140 @@
+- generic [ref=e4]:
+  - complementary [ref=e5]:
+    - generic [ref=e6]:
+      - img [ref=e7]
+      - generic [ref=e9]:
+        - heading "AIScan" [level=1] [ref=e10]
+        - generic [ref=e11]: 1 agent
+      - button "Collapse sidebar" [ref=e12] [cursor=pointer]:
+        - img [ref=e13]
+    - generic [ref=e19]:
+      - button "aiscan-fde949e5 idle openai/deepseek-v4-pro" [ref=e20] [cursor=pointer]:
+        - img [ref=e21]
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - generic [ref=e25]: aiscan-fde949e5
+            - generic [ref=e26]: idle
+          - generic [ref=e27]: openai/deepseek-v4-pro
+        - img [ref=e28]
+      - generic [ref=e30]:
+        - button "Terminal" [ref=e31] [cursor=pointer]:
+          - img [ref=e32]
+          - text: Terminal
+        - button "New" [ref=e34] [cursor=pointer]:
+          - img [ref=e35]
+          - text: New
+  - generic [ref=e74]:
+    - generic [ref=e75]:
+      - generic "main-repl" [ref=e76]:
+        - img [ref=e77]
+        - generic [ref=e79]: main-repl
+        - generic [ref=e80]: connected
+      - generic [ref=e81]:
+        - button "New shell PTY" [ref=e82] [cursor=pointer]:
+          - img [ref=e83]
+        - button "Refresh sessions" [ref=e84] [cursor=pointer]:
+          - img [ref=e85]
+        - button "Stop active task" [disabled] [ref=e90]:
+          - img [ref=e91]
+        - button "Show details" [ref=e93] [cursor=pointer]:
+          - img [ref=e94]
+    - generic [ref=e96]:
+      - complementary [ref=e97]:
+        - button "Main REPL running always on" [ref=e99] [cursor=pointer]:
+          - generic [ref=e101]:
+            - generic [ref=e102]:
+              - generic [ref=e103]: Main REPL
+              - generic [ref=e104]: running
+            - generic [ref=e105]: always on
+        - generic [ref=e106]:
+          - generic [ref=e107]: Tasks
+          - generic [ref=e108]: 0 running
+        - generic [ref=e110]: No tasks yet
+      - generic [ref=e116]:
+        - textbox "Terminal input" [active] [ref=e117]
+        - generic:
+          - generic:
+            - generic: ╭──────────────────────────────────────────────────────────────────────────╮
+          - generic:
+            - generic: │
+            - generic: aiscan
+            - generic: v0.1.0
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: model
+            - generic: openai / deepseek-v4-pro
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: mode pty · stream · space default
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: help
+            - generic: /help
+            - generic: /status
+            - generic: /exit
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: keys Esc
+            - generic: interrupt Ctrl+O
+            - generic: verbosity
+            - generic: │
+          - generic:
+            - generic: ╰──────────────────────────────────────────────────────────────────────────╯
+          - generic:
+            - generic: 输入目标或任务即可
+            - generic: ；
+            - generic: 例如
+            - generic: ：
+            - generic: 扫描
+            - generic: 192.168.1.10
+            - generic: 的
+            - generic: Web
+            - generic: 风险
+          - generic:
+            - generic: aiscan
+          - generic:
+            - generic: ╭──────────────────────────────────────────────────────────────────────────────────────────────────────╮
+          - generic:
+            - generic: │
+            - generic: status
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: model
+            - generic: openai / deepseek-v4-pro
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: render
+            - generic: pty · stream · space default
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: task
+            - generic: idle
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: ioa
+            - generic: disabled
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: history
+            - generic: C:\Users\John\AppData\Local\Temp\go-build2659321327\b001\exe\.aiscan\agent_history
+            - generic: │
+          - generic:
+            - generic: │
+            - generic: skills
+            - generic: /aiscan /passive
+            - generic: │
+          - generic:
+            - generic: ╰──────────────────────────────────────────────────────────────────────────────────────────────────────╯
+          - generic:
+            - generic: a
+            - generic: iscan
+            - generic: ❯

@@ -204,7 +204,7 @@ func TestRunConnectionChatWithoutRuntimeReturnsClearError(t *testing.T) {
 
 	select {
 	case msg := <-messages:
-		if msg.Type != "error" || msg.TaskID != "task-chat" || !strings.Contains(msg.Data, "LLM provider is not configured") {
+		if msg.Type != "error" || msg.TaskID != "task-chat" || (!strings.Contains(msg.Data, "LLM provider is not configured") && !strings.Contains(msg.Data, "agent runtime is not configured")) {
 			t.Fatalf("unexpected message: %+v", msg)
 		}
 	case <-time.After(3 * time.Second):

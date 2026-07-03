@@ -1,0 +1,18 @@
+[   97014ms] [WARNING] WebSocket connection to 'ws://127.0.0.1:57435/api/agents/1781947849632385500/terminal/ws' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:57435/assets/index-BXQn2vdi.js:336
+[   97014ms] [WARNING] WebSocket connection to 'ws://127.0.0.1:57435/api/agents/1781947849632385500/terminal/ws' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:57435/assets/index-BXQn2vdi.js:340
+[   97610ms] [WARNING] WebSocket connection to 'ws://127.0.0.1:57435/api/agents/1781947849632385500/terminal/ws' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:57435/assets/index-BXQn2vdi.js:336
+[   97610ms] [WARNING] WebSocket connection to 'ws://127.0.0.1:57435/api/agents/1781947849632385500/terminal/ws' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:57435/assets/index-BXQn2vdi.js:340
+[   98216ms] [WARNING] WebSocket connection to 'ws://127.0.0.1:57435/api/agents/1781947849632385500/terminal/ws' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:57435/assets/index-BXQn2vdi.js:336
+[   98216ms] [WARNING] WebSocket connection to 'ws://127.0.0.1:57435/api/agents/1781947849632385500/terminal/ws' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:57435/assets/index-BXQn2vdi.js:340
+[   98813ms] [WARNING] WebSocket connection to 'ws://127.0.0.1:57435/api/agents/1781947849632385500/terminal/ws' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:57435/assets/index-BXQn2vdi.js:336
+[   98814ms] [WARNING] WebSocket connection to 'ws://127.0.0.1:57435/api/agents/1781947849632385500/terminal/ws' failed: WebSocket is closed before the connection is established. @ http://127.0.0.1:57435/assets/index-BXQn2vdi.js:340
+[  370848ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:57435/api/agents:0
+[  375864ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:57435/api/agents:0
+[  380866ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:57435/api/agents:0
+[  385860ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:57435/api/agents:0
+[  390850ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:57435/api/agents:0
+[  395859ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:57435/api/agents:0
+[  400855ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:57435/api/agents:0
+[  405848ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:57435/api/agents:0
+[  410859ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:57435/api/agents:0
+[  415857ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:57435/api/agents:0

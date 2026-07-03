@@ -1,0 +1,15 @@
+[eval]:1
+eval(Buffer.from(process.argv[1],base64).toString())
+                                 ^
+
+ReferenceError: base64 is not defined
+    at [eval]:1:34
+    at runScriptInThisContext (node:internal/vm:209:10)
+    at node:internal/process/execution:446:12
+    at [eval]-wrapper:6:24
+    at runScriptInContext (node:internal/process/execution:444:60)
+    at evalFunction (node:internal/process/execution:279:30)
+    at evalTypeScript (node:internal/process/execution:291:3)
+    at node:internal/main/eval_string:74:3
+
+Node.js v22.18.0

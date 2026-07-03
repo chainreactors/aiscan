@@ -1,0 +1,4 @@
+[GET] http://127.0.0.1:8080/api/scans => [200] OK
+[POST] http://127.0.0.1:8080/api/scans => [201] Created
+[GET] http://127.0.0.1:8080/api/scans => [500] Internal Server Error
+[GET] http://127.0.0.1:8080/api/scans/1780370314184021800/events => [404] Not Found

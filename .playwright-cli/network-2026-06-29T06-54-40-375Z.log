@@ -1,0 +1,12 @@
+[GET] http://127.0.0.1:18084/api/agents => [200] OK
+[GET] http://127.0.0.1:18084/api/chat/sessions => [200] OK
+[GET] http://127.0.0.1:18084/api/scans => [200] OK
+[GET] http://127.0.0.1:18084/api/status => [200] OK
+[GET] http://127.0.0.1:18084/api/agents => [200] OK
+[GET] http://127.0.0.1:18084/api/agents => [200] OK
+[GET] http://127.0.0.1:18084/api/agents => [200] OK
+[GET] http://127.0.0.1:18084/api/agents => [200] OK
+[GET] http://127.0.0.1:18084/api/agents => [200] OK
+[GET] http://127.0.0.1:18084/api/agents => [200] OK
+[GET] http://127.0.0.1:18084/api/agents => [200] OK
+[GET] http://127.0.0.1:18084/api/agents => [200] OK

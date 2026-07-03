@@ -1,0 +1,15 @@
+- generic [active] [ref=e1]:
+  - heading "Playwright CLI Demo" [level=1] [ref=e2]
+  - paragraph [ref=e3]: Small local page for browser automation examples.
+  - generic [ref=e4]: Name
+  - textbox "Name" [ref=e5]:
+    - /placeholder: Your name
+  - generic [ref=e6]:
+    - checkbox "Enable feature" [ref=e7]
+    - text: Enable feature
+  - generic [ref=e8]: Mode
+  - combobox "Mode" [ref=e9]:
+    - option "Quick" [selected]
+    - option "Full"
+  - button "Submit" [ref=e10] [cursor=pointer]
+  - generic [ref=e11]: No submission yet.

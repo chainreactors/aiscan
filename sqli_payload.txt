@@ -1,0 +1,1 @@
+nickname=testuser_sqli&password=test' OR '1'='1

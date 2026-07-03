@@ -93,6 +93,7 @@ func migrate(db *sql.DB) error {
 		{table: "chat_sessions", name: "agent_name", definition: "TEXT NOT NULL DEFAULT ''"},
 		{table: "chat_sessions", name: "title", definition: "TEXT NOT NULL DEFAULT ''"},
 		{table: "chat_sessions", name: "status", definition: "TEXT NOT NULL DEFAULT 'active'"},
+		{table: "chat_sessions", name: "topic_id", definition: "TEXT NOT NULL DEFAULT ''"},
 		{table: "chat_messages", name: "agent_id", definition: "TEXT NOT NULL DEFAULT ''"},
 		{table: "chat_messages", name: "agent_name", definition: "TEXT NOT NULL DEFAULT ''"},
 		{table: "chat_messages", name: "metadata", definition: "TEXT NOT NULL DEFAULT ''"},
@@ -321,8 +322,8 @@ func scanRows(rows *sql.Rows) (*ScanJob, error) {
 
 func (s *SQLiteStore) CreateSession(ctx context.Context, session *ChatSession) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO chat_sessions (id, agent_id, agent_name, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		session.ID, session.AgentID, session.AgentName, session.Title, session.Status,
+		`INSERT INTO chat_sessions (id, agent_id, agent_name, title, status, topic_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		session.ID, session.AgentID, session.AgentName, session.Title, session.Status, session.TopicID,
 		session.CreatedAt.Format(time.RFC3339Nano), session.UpdatedAt.Format(time.RFC3339Nano),
 	)
 	return err
@@ -330,10 +331,10 @@ func (s *SQLiteStore) CreateSession(ctx context.Context, session *ChatSession) e
 
 func (s *SQLiteStore) GetSession(ctx context.Context, id string) (*ChatSession, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, agent_id, agent_name, title, status, created_at, updated_at FROM chat_sessions WHERE id = ?`, id)
+		`SELECT id, agent_id, agent_name, title, status, topic_id, created_at, updated_at FROM chat_sessions WHERE id = ?`, id)
 	var cs ChatSession
 	var createdAt, updatedAt string
-	if err := row.Scan(&cs.ID, &cs.AgentID, &cs.AgentName, &cs.Title, &cs.Status, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&cs.ID, &cs.AgentID, &cs.AgentName, &cs.Title, &cs.Status, &cs.TopicID, &createdAt, &updatedAt); err != nil {
 		return nil, err
 	}
 	cs.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
@@ -348,7 +349,7 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, limit int) ([]*ChatSessi
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, agent_id, agent_name, title, status, created_at, updated_at FROM chat_sessions ORDER BY updated_at DESC LIMIT ?`, limit)
+		`SELECT id, agent_id, agent_name, title, status, topic_id, created_at, updated_at FROM chat_sessions ORDER BY updated_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +358,7 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, limit int) ([]*ChatSessi
 	for rows.Next() {
 		var cs ChatSession
 		var createdAt, updatedAt string
-		if err := rows.Scan(&cs.ID, &cs.AgentID, &cs.AgentName, &cs.Title, &cs.Status, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&cs.ID, &cs.AgentID, &cs.AgentName, &cs.Title, &cs.Status, &cs.TopicID, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
 		cs.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
@@ -369,8 +370,8 @@ func (s *SQLiteStore) ListSessions(ctx context.Context, limit int) ([]*ChatSessi
 
 func (s *SQLiteStore) UpdateSession(ctx context.Context, session *ChatSession) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE chat_sessions SET title=?, status=?, updated_at=? WHERE id=?`,
-		session.Title, session.Status, session.UpdatedAt.Format(time.RFC3339Nano), session.ID,
+		`UPDATE chat_sessions SET title=?, status=?, topic_id=?, updated_at=? WHERE id=?`,
+		session.Title, session.Status, session.TopicID, session.UpdatedAt.Format(time.RFC3339Nano), session.ID,
 	)
 	return err
 }

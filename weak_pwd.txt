@@ -1,0 +1,1 @@
+nickname=aiscan_tester&password=a

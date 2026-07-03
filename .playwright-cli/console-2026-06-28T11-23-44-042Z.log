@@ -1,0 +1,60 @@
+[  199006ms] [ERROR] Warning: React has detected a change in the order of Hooks called by %s. This will lead to bugs and errors if not fixed. For more information, read the Rules of Hooks: https://reactjs.org/link/rules-of-hooks
+
+   Previous render            Next render
+   ------------------------------------------------------
+%s   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+%s App 1. useState                   useState
+2. useState                   useState
+3. useState                   useState
+4. useState                   useState
+5. useState                   useState
+6. useState                   useState
+7. useRef                     useRef
+8. useState                   useState
+9. useState                   useState
+10. useState                  useState
+11. useState                  useState
+12. useState                  useState
+13. useState                  useState
+14. useRef                    useState
+ 
+    at App (http://127.0.0.1:5173/src/App.tsx?t=1782646022895:49:16) @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:520
+[  199037ms] Error: Should have a queue. This is likely a bug in React. Please file an issue.
+    at updateReducer (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:11778:19)
+    at updateState (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:12069:18)
+    at Object.useState (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:12801:24)
+    at useState (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-RLJ2RCJQ.js?v=90573511:1066:29)
+    at useChatSession (http://127.0.0.1:5173/src/hooks/useChatSession.ts?t=1782646022895:33:29)
+    at App (http://127.0.0.1:5173/src/App.tsx?t=1782646022895:49:16)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:11596:26)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:14630:28)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:15972:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:3680:22)
+[  199038ms] Error: Should have a queue. This is likely a bug in React. Please file an issue.
+    at updateReducer (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:11778:19)
+    at updateState (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:12069:18)
+    at Object.useState (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:12801:24)
+    at useState (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-RLJ2RCJQ.js?v=90573511:1066:29)
+    at useChatSession (http://127.0.0.1:5173/src/hooks/useChatSession.ts?t=1782646022895:33:29)
+    at App (http://127.0.0.1:5173/src/App.tsx?t=1782646022895:49:16)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:11596:26)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:14630:28)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:15972:22)
+    at HTMLUnknownElement.callCallback2 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:3680:22)
+[  199009ms] [ERROR] The above error occurred in the <App> component:
+
+    at App (http://127.0.0.1:5173/src/App.tsx?t=1782646022895:49:16)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:14079
+[  199038ms] Error: Should have a queue. This is likely a bug in React. Please file an issue.
+    at updateReducer (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:11778:19)
+    at updateState (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:12069:18)
+    at Object.useState (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:12801:24)
+    at useState (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-RLJ2RCJQ.js?v=90573511:1066:29)
+    at useChatSession (http://127.0.0.1:5173/src/hooks/useChatSession.ts?t=1782646022895:33:29)
+    at App (http://127.0.0.1:5173/src/App.tsx?t=1782646022895:49:16)
+    at renderWithHooks (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:11596:26)
+    at updateFunctionComponent (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:14630:28)
+    at beginWork (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:15972:22)
+    at beginWork$1 (http://127.0.0.1:5173/node_modules/.vite/deps/chunk-KDCVS43I.js?v=90573511:19806:22)
