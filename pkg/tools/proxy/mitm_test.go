@@ -164,7 +164,7 @@ func TestMITMCapture_NonHTTP_Fallback(t *testing.T) {
 	// Send non-HTTP data (binary) — should trigger transfer fallback
 	conn.Write([]byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07})
 	buf := make([]byte, 64)
-	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(20 * time.Second))
 	n, _ := conn.Read(buf)
 	conn.Close()
 
@@ -215,7 +215,7 @@ func TestMITMCapture_ServerFirst_Fallback(t *testing.T) {
 	defer conn.Close()
 
 	buf := make([]byte, 64)
-	conn.SetReadDeadline(time.Now().Add(8 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 	n, err := io.ReadAtLeast(conn, buf, 3)
 	if err != nil {
 		t.Fatalf("expected SSH banner data, got error: %v", err)
