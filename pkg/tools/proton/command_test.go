@@ -116,18 +116,25 @@ BACKEND=10.0.1.50:8080
 	out := run(t, bash, "proton -i "+path)
 	t.Logf("output:\n%s", out)
 
-	// Verify key patterns were detected (match by content, not template ID)
+	// Verify key patterns were detected (match by content, not template ID).
 	expects := []string{
 		"AKIAIOSFODNN7EXAMPLE",
 		"ghp_",
 		"glpat-",
-		"private-key",
 		"findings",
 	}
 	for _, s := range expects {
 		if !strings.Contains(out, s) {
 			t.Errorf("output should contain %q", s)
 		}
+	}
+
+	// proton v0.3.3's false-positive filter suppresses the low-confidence
+	// private-key extract in a mixed aggregate scan, so verify the rule still
+	// fires in isolation (a realistic key cannot be committed: push protection).
+	isolated := run(t, bash, "proton -i "+path+" --id private-key")
+	if !strings.Contains(isolated, "private-key") {
+		t.Errorf("private-key rule should detect the PEM block in isolation:\n%s", isolated)
 	}
 }
 
