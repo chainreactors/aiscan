@@ -20,6 +20,22 @@ type Message struct {
 	Payload  json.RawMessage `json:"payload,omitempty"`
 }
 
+// ChatPayload scopes a chat dispatch to a conversation and carries per-message
+// behavior flags. It is the shared wire contract between the web hub (sender)
+// and the remote agent (receiver).
+type ChatPayload struct {
+	SessionID string `json:"session_id,omitempty"`
+	// Persist keeps the agent working until it calls finish (or MaxTurns is hit)
+	// instead of stopping at the first text-only reply.
+	Persist  bool `json:"persist,omitempty"`
+	MaxTurns int  `json:"max_turns,omitempty"`
+	// EvalCriteria, when set, upgrades persist to evaluator-judged completion:
+	// an independent LLM checks this natural-language goal and re-runs with
+	// feedback until it passes or EvalMaxRounds is reached (web equivalent of -e).
+	EvalCriteria  string `json:"eval_criteria,omitempty"`
+	EvalMaxRounds int    `json:"eval_max_rounds,omitempty"`
+}
+
 type RegisterPayload struct {
 	Name     string        `json:"name"`
 	Commands []string      `json:"commands,omitempty"`
@@ -56,6 +72,12 @@ type AgentStats struct {
 	Assets           int    `json:"assets,omitempty"`
 	Loots            int    `json:"loots,omitempty"`
 	LastEvent        string `json:"last_event,omitempty"`
+	// CurrentTool is the tool the agent is executing right now (empty when no
+	// tool is running). CurrentDetail is a short human-readable target pulled
+	// from that tool's arguments, e.g. the URL/host being scanned. Together they
+	// let the UI show "what is this node doing" even for session-less swarm work.
+	CurrentTool   string `json:"current_tool,omitempty"`
+	CurrentDetail string `json:"current_detail,omitempty"`
 }
 
 type FileUploadPayload struct {
