@@ -23,6 +23,10 @@ dist/
 *.sock.lock
 /aiscan
 /spray
+aiscan_test
+aiscan_test_eval
+aiscan-test-provider
+aiscan-test-ioa*
 out/
 scan_results.jsonl
 pw_driver_bin
