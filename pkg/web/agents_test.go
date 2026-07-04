@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -783,6 +784,9 @@ func dialMockAgent(t *testing.T, srv *httptest.Server, name string) *websocket.C
 
 func launchBrowser(t *testing.T) *rod.Browser {
 	t.Helper()
+	if os.Getenv("AISCAN_E2E") == "" {
+		t.Skip("browser e2e disabled; set AISCAN_E2E=1 to run")
+	}
 	path, ok := launcher.LookPath()
 	if !ok {
 		t.Skip("chromium not found, skipping browser e2e test")
