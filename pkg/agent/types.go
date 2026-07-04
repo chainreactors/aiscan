@@ -187,6 +187,10 @@ type Config struct {
 	BeforeToolCall   func(context.Context, BeforeToolCallContext) (*BeforeToolCallResult, error)
 	AfterToolCall    func(context.Context, AfterToolCallContext) (*AfterToolCallResult, error)
 	MaxTurns         int
+	// Persist keeps the loop running when the model produces a final text-only
+	// reply: instead of completing, the loop nudges the model to continue until
+	// it explicitly calls the finish tool (or MaxTurns is reached).
+	Persist          bool
 	LoopScheduler    *LoopScheduler
 	Inbox            inbox.Inbox
 	Expander         *inbox.Expander
@@ -205,6 +209,8 @@ func (c Config) WithModel(m string) Config                    { c.Model = m; ret
 func (c Config) WithSystemPrompt(s string) Config             { c.SystemPrompt = s; return c }
 func (c Config) WithMessages(msgs []ChatMessage) Config       { c.Messages = msgs; return c }
 func (c Config) WithStream(s bool) Config                     { c.Stream = s; return c }
+func (c Config) WithPersist(p bool) Config                    { c.Persist = p; return c }
+func (c Config) WithMaxTurns(n int) Config                    { c.MaxTurns = n; return c }
 func (c Config) WithInbox(ib inbox.Inbox) Config              { c.Inbox = ib; return c }
 func (c Config) WithLogger(l telemetry.Logger) Config         { c.Logger = l; return c }
 func (c Config) WithBus(b *eventbus.Bus[Event]) Config        { c.Bus = b; return c }

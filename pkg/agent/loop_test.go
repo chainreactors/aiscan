@@ -1036,3 +1036,86 @@ func TestEventCarriesCacheUsage(t *testing.T) {
 	}
 	fmt.Printf("Event carries cache usage: read=%d write=%d\n", captured.CacheReadTokens, captured.CacheWriteTokens)
 }
+
+func TestPersistModeNudgesUntilFinish(t *testing.T) {
+	tools := commands.NewRegistry()
+	tools.RegisterTool(NewFinishTool())
+
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			// Turn 1: text-only reply. Without persist this would complete the
+			// loop; with persist it must be nudged to continue.
+			chatResponse(NewTextMessage("assistant", "I think that's everything.")),
+			// Turn 2: the model takes the hint and signals completion.
+			chatResponse(ChatMessage{
+				Role: "assistant",
+				ToolCalls: []ToolCall{{
+					ID: "call_1", Type: "function",
+					Function: FunctionCall{Name: "finish", Arguments: `{"summary":"done"}`},
+				}},
+			}),
+		},
+	}
+
+	result, err := NewAgent(Config{
+		Provider: llm,
+		Tools:    tools,
+		Model:    "test",
+		Persist:  true,
+		Bus:      testBus(nil),
+	}).Run(context.Background(), "do something")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Stop != StopReasonTerminated {
+		t.Fatalf("stop = %q, want %q", result.Stop, StopReasonTerminated)
+	}
+	if result.Turns != 2 {
+		t.Fatalf("turns = %d, want 2 (should not stop on the first text-only reply)", result.Turns)
+	}
+	// The second request must carry the injected nudge so the model knows to keep going.
+	reqs := llm.requestsSnapshot()
+	if len(reqs) < 2 {
+		t.Fatalf("expected at least 2 requests, got %d", len(reqs))
+	}
+	if !containsUserMessage(reqs[1].Messages, persistNudge) {
+		t.Fatalf("second request missing persist nudge")
+	}
+}
+
+func TestPersistModeStopsAtMaxTurns(t *testing.T) {
+	llm := &scriptedProvider{
+		responses: []*ChatCompletionResponse{
+			chatResponse(NewTextMessage("assistant", "still going")),
+			chatResponse(NewTextMessage("assistant", "still going")),
+			chatResponse(NewTextMessage("assistant", "still going")),
+		},
+	}
+
+	result, err := NewAgent(Config{
+		Provider: llm,
+		Tools:    commands.NewRegistry(),
+		Model:    "test",
+		Persist:  true,
+		MaxTurns: 2,
+		Bus:      testBus(nil),
+	}).Run(context.Background(), "do something")
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.Stop != StopReasonStopped {
+		t.Fatalf("stop = %q, want %q", result.Stop, StopReasonStopped)
+	}
+	if result.Turns != 2 {
+		t.Fatalf("turns = %d, want 2 (MaxTurns cap)", result.Turns)
+	}
+}
+
+func containsUserMessage(messages []ChatMessage, content string) bool {
+	for _, m := range messages {
+		if m.Role == "user" && messageContent(m) == content {
+			return true
+		}
+	}
+	return false
+}

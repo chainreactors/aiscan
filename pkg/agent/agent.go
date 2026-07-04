@@ -20,6 +20,23 @@ type Agent struct {
 // For one-shot usage, create an agent and call Run once.
 // For multi-turn, call Run repeatedly — message history accumulates.
 func (a *Agent) Run(ctx context.Context, prompt string) (*Result, error) {
+	return a.RunWith(ctx, prompt, nil)
+}
+
+// WorkDir returns the directory the agent's file tools (write/read/glob)
+// resolve relative paths against, or "" if no tool registry is configured.
+// The evaluator uses it to locate the artifacts an agent produced.
+func (a *Agent) WorkDir() string {
+	if a.Cfg.Tools == nil {
+		return ""
+	}
+	return a.Cfg.Tools.WorkDir()
+}
+
+// RunWith is like Run but applies per-run overrides to a copy of the agent's
+// config before executing, leaving the cached base config untouched. Use it for
+// options that vary message-to-message (e.g. persist mode) on a reused agent.
+func (a *Agent) RunWith(ctx context.Context, prompt string, override func(Config) Config) (*Result, error) {
 	runCtx, cancel, err := a.startRun(ctx)
 	if err != nil {
 		return nil, err
@@ -28,6 +45,9 @@ func (a *Agent) Run(ctx context.Context, prompt string) (*Result, error) {
 	defer a.finishRun()
 
 	cfg := a.Cfg
+	if override != nil {
+		cfg = override(cfg)
+	}
 	cfg = cfg.init()
 	cfg.Messages = a.messagesSnapshot()
 	if cfg.Inbox == nil {

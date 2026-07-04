@@ -32,6 +32,10 @@ func (e Event) MarshalJSON() ([]byte, error) {
 		RequestModel    string        `json:"request_model,omitempty"`
 		RequestMessages int           `json:"request_messages,omitempty"`
 		RequestTools    int           `json:"request_tools,omitempty"`
+		EvalRound       int           `json:"eval_round,omitempty"`
+		EvalPass        bool          `json:"eval_pass,omitempty"`
+		EvalReason      string        `json:"eval_reason,omitempty"`
+		EvalError       string        `json:"eval_error,omitempty"`
 	}{
 		Timestamp:       ts.UTC().Format(time.RFC3339Nano),
 		Type:            e.Type,
@@ -45,6 +49,10 @@ func (e Event) MarshalJSON() ([]byte, error) {
 		IsError:         e.IsError,
 		Stop:            e.Stop,
 		ContextTokens:   e.ContextTokens,
+		EvalRound:       e.EvalRound,
+		EvalPass:        e.EvalPass,
+		EvalReason:      e.EvalReason,
+		EvalError:       e.EvalError,
 	}
 
 	if e.Err != nil {

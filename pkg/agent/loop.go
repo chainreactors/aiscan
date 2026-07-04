@@ -13,6 +13,11 @@ import (
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 )
 
+// persistNudge is injected when a persist-mode agent stops calling tools before
+// signalling completion, pushing it to either finish the goal or call finish.
+const persistNudge = "You stopped without calling the `finish` tool. Persist mode is on: keep working until the task's goal is fully achieved. " +
+	"If the goal is genuinely complete, call the `finish` tool now with a short summary. Otherwise, take the next concrete action toward the goal."
+
 func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 	if cfg.Provider == nil {
 		return nil, fmt.Errorf("agent provider is nil")
@@ -160,6 +165,15 @@ func runLoop(ctx context.Context, cfg Config) (*Result, error) {
 		if len(assistantMsg.ToolCalls) == 0 {
 			if ib != nil && ib.Len() > 0 {
 				cfg.Logger.Debugf("[turn %d] continuing for pending inbox message(s)", turn)
+				continue
+			}
+
+			// Persist mode: a final text-only reply is not a stopping point. Nudge
+			// the model to keep working until it explicitly calls the finish tool
+			// (StopReasonTerminated above) or MaxTurns is reached (checked above).
+			if cfg.Persist {
+				cfg.Logger.Debugf("[turn %d] persist mode: nudging to continue", turn)
+				transcript.append(NewTextMessage("user", persistNudge))
 				continue
 			}
 
