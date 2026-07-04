@@ -165,6 +165,8 @@ func runConnectionOnce(ctx context.Context, serverURL, name string, reg *command
 
 	sendCh := make(chan webproto.Message, 64)
 	done := make(chan struct{})
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	defer close(done)
 
 	send := func(m webproto.Message) {
@@ -185,7 +187,9 @@ func runConnectionOnce(ctx context.Context, serverURL, name string, reg *command
 		return fmt.Errorf("expected connected ack")
 	}
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		ping := time.NewTicker(agentPingPeriod)
 		defer ping.Stop()
 		for {
@@ -210,7 +214,9 @@ func runConnectionOnce(ctx context.Context, serverURL, name string, reg *command
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		select {
 		case <-ctx.Done():
 			conn.Close()
