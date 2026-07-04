@@ -19,20 +19,27 @@ const (
 )
 
 type ScanJob struct {
-	ID        string         `json:"id"`
-	Target    string         `json:"target"`
-	Mode      string         `json:"mode"`
-	Verify    bool           `json:"verify,omitempty"`
-	Sniper    bool           `json:"sniper,omitempty"`
-	AI        bool           `json:"ai,omitempty"`
-	Deep      bool           `json:"deep,omitempty"`
-	Status    ScanStatus     `json:"status"`
-	Progress  string         `json:"progress,omitempty"`
-	Report    string         `json:"report,omitempty"`
-	Result    *output.Result `json:"result,omitempty"`
-	Error     string         `json:"error,omitempty"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
+	ID       string         `json:"id"`
+	Target   string         `json:"target"`
+	Mode     string         `json:"mode"`
+	Verify   bool           `json:"verify,omitempty"`
+	Sniper   bool           `json:"sniper,omitempty"`
+	AI       bool           `json:"ai,omitempty"`
+	Deep     bool           `json:"deep,omitempty"`
+	Status   ScanStatus     `json:"status"`
+	Progress string         `json:"progress,omitempty"`
+	Report   string         `json:"report,omitempty"`
+	Result   *output.Result `json:"result,omitempty"`
+	Error    string         `json:"error,omitempty"`
+	// Project scopes the assets this scan ingests into the pool. Scans are still
+	// listed globally; this is persisted only so the background runner can re-load
+	// the job and ingest discovered assets into the selected project.
+	Project string `json:"project,omitempty"`
+	// Skipped lists batch targets that failed validation and were dropped from
+	// the run. Populated on the create response; transient (not persisted).
+	Skipped   []RejectedTarget `json:"skipped,omitempty"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
 }
 
 type ScanRequest struct {
@@ -42,6 +49,8 @@ type ScanRequest struct {
 	Sniper bool   `json:"sniper,omitempty"`
 	AI     bool   `json:"ai,omitempty"`
 	Deep   bool   `json:"deep,omitempty"`
+	// Project scopes the asset pool the scan's discovered assets fold into.
+	Project string `json:"project,omitempty"`
 }
 
 func (r ScanRequest) AnalysisOptions() (verify, sniper, deep bool) {
@@ -51,6 +60,64 @@ func (r ScanRequest) AnalysisOptions() (verify, sniper, deep bool) {
 		sniper = true
 	}
 	return verify, sniper, deep
+}
+
+// PoolAsset is one entry in the shared asset inventory — a target (host / IP /
+// host:port / URL) discovered by a scan, surfaced by an AI agent's recon, or
+// entered by a human. It is deduplicated by Target and can be re-tested with a
+// single click from the scan deck.
+type PoolAsset struct {
+	ID         string    `json:"id"`
+	ProjectID  string    `json:"project_id,omitempty"`
+	Target     string    `json:"target"`
+	Label      string    `json:"label,omitempty"`
+	Source     string    `json:"source,omitempty"` // scan | agent | manual
+	Status     string    `json:"status,omitempty"`
+	Note       string    `json:"note,omitempty"`
+	Services   int       `json:"services,omitempty"`
+	Loots      int       `json:"loots,omitempty"`
+	LastScanID string    `json:"last_scan_id,omitempty"`
+	FirstSeen  time.Time `json:"first_seen"`
+	LastSeen   time.Time `json:"last_seen"`
+}
+
+const (
+	AssetSourceScan   = "scan"
+	AssetSourceAgent  = "agent"
+	AssetSourceManual = "manual"
+)
+
+// AssetRequest is the POST /api/assets body. Either Target or Targets may be
+// set; both are folded into a single upsert batch.
+type AssetRequest struct {
+	Target  string   `json:"target,omitempty"`
+	Targets []string `json:"targets,omitempty"`
+	Source  string   `json:"source,omitempty"`
+	Label   string   `json:"label,omitempty"`
+	Project string   `json:"project,omitempty"`
+}
+
+// DefaultProjectID is the implicit project every asset falls into when no
+// project is selected — it holds the pre-project global inventory after
+// migration, so existing behavior is preserved for anyone who never switches.
+const DefaultProjectID = "default"
+
+// Project scopes the asset pool: a named workspace / engagement. Assets are
+// filtered by the active project so separate engagements don't share one global
+// inventory. The IOA space name is derived from the project id when deploying
+// agents, so operators pick a single thing. (Scan / session scoping may follow.)
+type Project struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Assets    int       `json:"assets"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ProjectRequest is the POST /api/projects body. ID is optional; when blank it
+// is slugified from Name (falling back to a generated id).
+type ProjectRequest struct {
+	ID   string `json:"id,omitempty"`
+	Name string `json:"name"`
 }
 
 type ServiceStatus struct {
@@ -184,6 +251,7 @@ const (
 	ChatEventScanComplete = "scan_complete"
 	ChatEventScanError    = "scan_error"
 	ChatEventAgentJoined  = "agent_joined"
+	ChatEventEval         = "eval"
 	ChatEventError        = "error"
 )
 
@@ -204,11 +272,35 @@ type ChatEvent struct {
 	Result     *output.Result `json:"result,omitempty"`
 	Data       string         `json:"data,omitempty"`
 	Error      string         `json:"error,omitempty"`
-	Transient  bool           `json:"-"`
+	// Eval fields carry goal-evaluation verdicts (persist mode with criteria).
+	EvalRound  int    `json:"eval_round,omitempty"`
+	EvalPass   bool   `json:"eval_pass,omitempty"`
+	EvalReason string `json:"eval_reason,omitempty"`
+	Transient  bool   `json:"-"`
 }
 
 type SendMessageRequest struct {
 	Content string `json:"content"`
+	// Persist enables "keep going until the goal is reached" mode for this
+	// message: the agent is nudged to continue until it calls finish or hits the
+	// turn cap below.
+	Persist bool `json:"persist,omitempty"`
+	// PersistMaxTurns bounds persist mode (0 = use the server default).
+	PersistMaxTurns int `json:"persist_max_turns,omitempty"`
+	// EvalCriteria, when set, upgrades persist mode to evaluator-judged completion:
+	// an independent LLM decides whether this natural-language goal is achieved,
+	// re-running with feedback until it passes or EvalMaxRounds is reached.
+	EvalCriteria string `json:"eval_criteria,omitempty"`
+	// EvalMaxRounds bounds evaluator rounds (0 = engine default).
+	EvalMaxRounds int `json:"eval_max_rounds,omitempty"`
+}
+
+// ChatOptions carries per-message agent behavior flags through the dispatch path.
+type ChatOptions struct {
+	Persist       bool
+	MaxTurns      int
+	EvalCriteria  string
+	EvalMaxRounds int
 }
 
 type CreateSessionRequest struct {

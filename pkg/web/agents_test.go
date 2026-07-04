@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	webstatic "github.com/chainreactors/aiscan/web"
-
+	"github.com/chainreactors/aiscan/core/output"
 	"github.com/chainreactors/aiscan/pkg/webproto"
+	webstatic "github.com/chainreactors/aiscan/web"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/gorilla/websocket"
@@ -89,6 +89,58 @@ func TestWSRegisterAndList(t *testing.T) {
 	}
 }
 
+func TestAgentPoolBroadcastConfigAndIdentityUpdate(t *testing.T) {
+	srv, pool := setupTestServer(t)
+	conn := dialAgent(t, srv, "cfg-agent", []string{"scan"})
+	defer conn.Close()
+
+	var cfg webproto.DistributeConfig
+	cfg.LLM.Provider = "openai"
+	cfg.LLM.BaseURL = "https://example.test/v1"
+	cfg.LLM.APIKey = "server-key"
+	cfg.LLM.Model = "new-model"
+
+	pool.BroadcastConfig(cfg)
+	var update WSMessage
+	if err := conn.ReadJSON(&update); err != nil {
+		t.Fatalf("read config update: %v", err)
+	}
+	if update.Type != "config.update" {
+		t.Fatalf("unexpected message: %+v", update)
+	}
+	var got webproto.DistributeConfig
+	if err := json.Unmarshal(update.Payload, &got); err != nil {
+		t.Fatalf("decode config update: %v", err)
+	}
+	if got.LLM.APIKey != "server-key" || got.LLM.Model != "new-model" {
+		t.Fatalf("unexpected pushed config: %+v", got.LLM)
+	}
+
+	identity := webproto.AgentIdentity{
+		NodeID:   "node-cfg-agent",
+		NodeName: "cfg-agent",
+		Space:    "case-test",
+		Provider: "openai",
+		Model:    "new-model",
+	}
+	if err := conn.WriteJSON(WSMessage{Type: "identity", Payload: mustJSON(identity)}); err != nil {
+		t.Fatalf("write identity: %v", err)
+	}
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("identity was not updated")
+		default:
+		}
+		agents := pool.List()
+		if len(agents) == 1 && agents[0].Identity.Model == "new-model" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func TestWSDispatchAndComplete(t *testing.T) {
 	srv, pool := setupTestServer(t)
 	conn := dialAgent(t, srv, "worker", []string{"scan"})
@@ -133,6 +185,93 @@ func TestWSDispatchAndComplete(t *testing.T) {
 	}
 }
 
+// TestDispatchMessageOnDisconnectedAgentReturnsError reproduces the disconnect
+// race: get() returns the agent, then unregister() nils its task map before
+// dispatchMessage locks a.mu. The write must be guarded — an unguarded nil-map
+// write panics a bare goroutine and crashes the whole hub.
+func TestDispatchMessageOnDisconnectedAgentReturnsError(t *testing.T) {
+	pool := NewAgentPool(NewHub())
+	a := &remoteAgent{id: "worker", sendCh: make(chan WSMessage, 1)}
+	pool.register(a)
+	// Simulate unregister()'s teardown having run in the race window.
+	a.mu.Lock()
+	a.tasks = nil
+	a.turns = nil
+	a.mu.Unlock()
+
+	ch, err := pool.dispatchMessage("worker", "task-x", WSMessage{Type: "exec", TaskID: "task-x"})
+	if err == nil {
+		t.Fatal("expected an error dispatching to a disconnected agent, got nil")
+	}
+	if ch != nil {
+		t.Fatalf("expected nil result channel, got %v", ch)
+	}
+}
+
+func TestAgentScanStatsRelayDoesNotAccumulateAgentTotals(t *testing.T) {
+	srv, pool := setupTestServer(t)
+	conn := dialAgent(t, srv, "stats-worker", []string{"scan"})
+	defer conn.Close()
+
+	time.Sleep(50 * time.Millisecond)
+
+	statsCh, unsub := pool.hub.Subscribe("task-stats")
+	defer unsub()
+
+	result := output.Result{
+		Summary: output.Summary{Loots: 2},
+		Assets:  []output.Asset{{ID: "asset-1", Target: "https://example.test"}},
+	}
+	payload := mustJSON(result)
+	if err := conn.WriteJSON(WSMessage{Type: "scan.stats", TaskID: "task-stats", Payload: payload}); err != nil {
+		t.Fatalf("write scan.stats: %v", err)
+	}
+
+	select {
+	case evt := <-statsCh:
+		if evt.Type != "stats" {
+			t.Fatalf("event type = %q, want stats", evt.Type)
+		}
+		var got struct {
+			ScanID string        `json:"scan_id"`
+			Result output.Result `json:"result"`
+		}
+		if err := json.Unmarshal(evt.Data, &got); err != nil {
+			t.Fatalf("decode stats event: %v", err)
+		}
+		if got.ScanID != "task-stats" || got.Result.Summary.Loots != 2 || len(got.Result.Assets) != 1 {
+			t.Fatalf("unexpected stats event payload: %+v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for stats event")
+	}
+
+	agents := pool.List()
+	if len(agents) != 1 {
+		t.Fatalf("agents = %d, want 1", len(agents))
+	}
+	if agents[0].Stats.Assets != 0 || agents[0].Stats.Loots != 0 {
+		t.Fatalf("scan.stats should not accumulate agent totals: %+v", agents[0].Stats)
+	}
+
+	if err := conn.WriteJSON(WSMessage{Type: "complete", TaskID: "task-stats", Payload: payload}); err != nil {
+		t.Fatalf("write complete: %v", err)
+	}
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("complete did not accumulate agent totals")
+		default:
+		}
+		agents = pool.List()
+		if len(agents) == 1 && agents[0].Stats.Assets == 1 && agents[0].Stats.Loots == 2 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func TestWSDispatchChatUsesChatMessage(t *testing.T) {
 	srv, pool := setupTestServer(t)
 	conn := dialAgentWithIdentity(t, srv, "chat-worker", []string{"scan"}, webproto.AgentIdentity{
@@ -145,12 +284,12 @@ func TestWSDispatchChatUsesChatMessage(t *testing.T) {
 	defer conn.Close()
 
 	time.Sleep(50 * time.Millisecond)
-	agent := pool.PickChat()
+	agent := pool.Pick()
 	if agent == nil {
 		t.Fatal("expected chat-capable agent")
 	}
 
-	resultCh, err := pool.DispatchChat(agent.id, "task-chat", "hello")
+	resultCh, err := pool.DispatchChatSession(agent.id, "task-chat", "", "hello", ChatOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +322,7 @@ func TestHandleFileUploadPersistsSystemMessage(t *testing.T) {
 	pool := NewAgentPool(svc.Hub())
 	svc.SetAgentPool(pool)
 
-	srv := httptest.NewServer(NewHandler(svc, pool, nil, nil))
+	srv := httptest.NewServer(NewHandler(svc, pool, nil, "", nil, nil))
 	defer srv.Close()
 
 	conn := dialAgentWithIdentity(t, srv, "upload-agent", []string{"scan"}, webproto.AgentIdentity{
@@ -264,15 +403,14 @@ func TestHandleFileUploadPersistsSystemMessage(t *testing.T) {
 	}
 }
 
-func TestWSPickChatIgnoresAgentsWithoutProvider(t *testing.T) {
-	srv, pool := setupTestServer(t)
-	conn := dialAgent(t, srv, "command-worker", []string{"scan"})
-	defer conn.Close()
-
-	time.Sleep(50 * time.Millisecond)
-	if got := pool.PickChat(); got != nil {
-		t.Fatalf("PickChat() = %#v, want nil", got)
+// pathSegments splits a URL path into its non-empty segments. Test-only helper
+// for the ad-hoc routers below.
+func pathSegments(path string) []string {
+	path = strings.Trim(path, "/")
+	if path == "" {
+		return nil
 	}
+	return strings.Split(path, "/")
 }
 
 func TestWSPick(t *testing.T) {

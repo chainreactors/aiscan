@@ -24,25 +24,29 @@ type ConfigStore interface {
 }
 
 type ServiceConfig struct {
-	Store         Store
-	App           *runner.App
-	ConfigStore   ConfigStore
-	AppFactory    func(ctx context.Context) (*runner.App, error)
-	AgentPool     *AgentPool
-	MaxConcurrent int
-	ScanTimeout   time.Duration
+	Store          Store
+	App            *runner.App
+	ConfigStore    ConfigStore
+	AppFactory     func(ctx context.Context) (*runner.App, error)
+	RuntimeContext context.Context
+	AgentPool      *AgentPool
+	MaxConcurrent  int
+	ScanTimeout    time.Duration
 }
 
 type Service struct {
-	store   Store
-	appMu   sync.RWMutex
-	app     *runner.App
-	config  ConfigStore
-	reload  func(ctx context.Context) (*runner.App, error)
-	agents  *AgentPool
-	hub     *Hub
-	sem     chan struct{}
-	timeout time.Duration
+	store    Store
+	appMu    sync.RWMutex
+	app      *runner.App
+	appRefs  *sync.WaitGroup
+	appCtx   context.Context
+	config   ConfigStore
+	reload   func(ctx context.Context) (*runner.App, error)
+	reloadMu sync.Mutex
+	agents   *AgentPool
+	hub      *Hub
+	sem      chan struct{}
+	timeout  time.Duration
 
 	mu           sync.Mutex
 	cancels      map[string]context.CancelFunc
@@ -60,9 +64,15 @@ func NewService(cfg ServiceConfig) *Service {
 	if timeout <= 0 {
 		timeout = 10 * time.Minute
 	}
+	appCtx := cfg.RuntimeContext
+	if appCtx == nil {
+		appCtx = context.Background()
+	}
 	svc := &Service{
 		store:        cfg.Store,
 		app:          cfg.App,
+		appRefs:      new(sync.WaitGroup),
+		appCtx:       appCtx,
 		config:       cfg.ConfigStore,
 		reload:       cfg.AppFactory,
 		agents:       cfg.AgentPool,
@@ -76,8 +86,22 @@ func NewService(cfg ServiceConfig) *Service {
 	}
 	if cfg.AgentPool != nil {
 		cfg.AgentPool.SetSessionLookup(svc)
+		cfg.AgentPool.SetConfigProvider(svc.currentDistributeConfig)
 	}
 	return svc
+}
+
+// currentDistributeConfig returns the latest persisted config, used to push
+// config to agents the moment they (re)connect.
+func (s *Service) currentDistributeConfig() (webproto.DistributeConfig, bool) {
+	if s.config == nil {
+		return webproto.DistributeConfig{}, false
+	}
+	_, loaded, dc, err := s.config.GetDistributeConfig(s.appCtx)
+	if err != nil || !loaded {
+		return webproto.DistributeConfig{}, false
+	}
+	return dc, true
 }
 
 func (s *Service) Hub() *Hub { return s.hub }
@@ -85,23 +109,35 @@ func (s *Service) Hub() *Hub { return s.hub }
 func (s *Service) SetAgentPool(pool *AgentPool) {
 	s.agents = pool
 	pool.SetSessionLookup(s)
+	pool.SetConfigProvider(s.currentDistributeConfig)
 }
 
 func (s *Service) Close() {
 	if s == nil {
 		return
 	}
+	s.mu.Lock()
+	for _, cancel := range s.cancels {
+		cancel()
+	}
+	s.mu.Unlock()
 	s.appMu.Lock()
 	app := s.app
+	refs := s.appRefs
 	s.app = nil
+	s.appRefs = new(sync.WaitGroup)
 	s.appMu.Unlock()
 	if app != nil {
+		if refs != nil {
+			refs.Wait()
+		}
 		app.Close()
 	}
 }
 
 func (s *Service) Status() ServiceStatus {
-	app := s.appSnapshot()
+	app, release := s.borrowApp()
+	defer release()
 	status := ServiceStatus{
 		LLMAvailable: app != nil && app.Provider != nil,
 	}
@@ -141,16 +177,27 @@ func (s *Service) SaveConfig(ctx context.Context, cfg webproto.DistributeConfig)
 	if s.config == nil {
 		return ConfigStatus{}, fmt.Errorf("config store is not configured")
 	}
+	// Serialize saves so concurrent reloads don't race on the rebuild or on the
+	// process-global runtime defaults touched while loading config.
+	s.reloadMu.Lock()
+	defer s.reloadMu.Unlock()
 	if err := s.config.SaveDistributeConfig(ctx, cfg); err != nil {
 		return ConfigStatus{}, err
 	}
+	fullCfg := cfg
+	if _, _, stored, err := s.config.GetDistributeConfig(ctx); err == nil {
+		fullCfg = stored
+	}
 	if s.reload != nil {
-		app, err := s.reload(ctx)
+		app, err := s.reload(s.appCtx)
 		if err != nil {
 			cs, _ := s.GetConfigStatus(ctx)
 			return cs, fmt.Errorf("reload aiscan runtime: %w", err)
 		}
 		s.swapApp(app)
+	}
+	if s.agents != nil {
+		s.agents.BroadcastConfig(fullCfg)
 	}
 	return s.GetConfigStatus(ctx)
 }
@@ -163,8 +210,12 @@ func (s *Service) GetDistributeConfig(ctx context.Context) (webproto.DistributeC
 	return dc, err
 }
 
-func (s *Service) SubmitScan(ctx context.Context, target, mode string, verify, sniper, deep bool) (*ScanJob, error) {
-	target, err := ValidateTarget(target)
+func (s *Service) SubmitScan(ctx context.Context, target, mode string, verify, sniper, deep bool, project string) (*ScanJob, error) {
+	// target may carry one or many targets (comma/newline/space separated); the
+	// job aggregates all valid ones into a single scan run. Invalid tokens are
+	// skipped (not fatal) unless none are valid, so one typo in a pasted batch
+	// no longer sinks the whole scan.
+	targets, skipped, err := ParseTargets(target)
 	if err != nil {
 		return nil, err
 	}
@@ -176,16 +227,22 @@ func (s *Service) SubmitScan(ctx context.Context, target, mode string, verify, s
 		return nil, fmt.Errorf("selected analysis options require an LLM provider")
 	}
 
+	project, err = s.resolveProjectID(ctx, project)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	job := &ScanJob{
 		ID:        generateID(),
-		Target:    target,
+		Target:    strings.Join(targets, ", "),
 		Mode:      mode,
 		Verify:    verify,
 		Sniper:    sniper,
 		AI:        verify || sniper,
 		Deep:      deep,
+		Project:   project,
 		Status:    StatusQueued,
+		Skipped:   skipped,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -207,30 +264,31 @@ func (s *Service) ListScans(ctx context.Context) ([]*ScanJob, error) {
 	return s.store.List(ctx, 100)
 }
 
-func (s *Service) CancelScan(id string) error {
+// DeleteScan removes a scan from history. A running or queued scan is canceled
+// first so its goroutine unwinds, then the record is dropped from the store.
+// Deleting an already-finished scan simply removes the row.
+func (s *Service) DeleteScan(id string) error {
 	s.mu.Lock()
 	cancel, ok := s.cancels[id]
+	if ok {
+		delete(s.cancels, id)
+	}
 	s.mu.Unlock()
 	if ok {
 		cancel()
 	}
-	ctx := context.Background()
-	job, err := s.store.Get(ctx, id)
-	if err != nil {
-		return err
-	}
-	if job.Status == StatusRunning || job.Status == StatusQueued {
-		job.Status = StatusCanceled
-		job.UpdatedAt = time.Now()
-		return s.store.Update(ctx, job)
-	}
-	return nil
+	return s.store.Delete(context.Background(), id)
 }
 
-func (s *Service) GetReport(ctx context.Context, id string) (string, error) {
+func (s *Service) GetReport(ctx context.Context, id, lang string) (string, error) {
 	job, err := s.store.Get(ctx, id)
 	if err != nil {
 		return "", err
+	}
+	// Re-render from the structured result so the requested language is honored.
+	// Fall back to the stored report for legacy jobs without a structured result.
+	if job.Result != nil {
+		return buildMarkdownReport(job.Target, job.Mode, job.Result, lang), nil
 	}
 	return job.Report, nil
 }
@@ -291,10 +349,21 @@ func (s *Service) runScanViaAgent(ctx context.Context, job *ScanJob) {
 	}
 
 	// Wait for agent to complete. Output is forwarded to SSE hub by
-	// AgentPool.HandleOutput as the agent POSTs progress lines.
-	res, ok := <-resultCh
-	if !ok {
-		s.failJob(job, "agent disconnected")
+	// AgentPool.HandleOutput as the agent POSTs progress lines. Honor ctx so a
+	// hung-but-connected agent can't pin this goroutine (and its bounded scan
+	// semaphore slot) forever; on cancel, tell the remote to stop scanning so
+	// the billable node doesn't keep running.
+	var res taskResult
+	select {
+	case r, ok := <-resultCh:
+		if !ok {
+			s.failJob(job, "agent disconnected")
+			return
+		}
+		res = r
+	case <-ctx.Done():
+		s.agents.CancelTask(agent.id, job.ID)
+		s.failJob(job, ctx.Err().Error())
 		return
 	}
 	if res.Err != "" {
@@ -311,18 +380,20 @@ func (s *Service) runScanViaAgent(ctx context.Context, job *ScanJob) {
 		_ = json.Unmarshal(res.Result, result)
 	}
 
-	report := buildMarkdownReport(job.Target, job.Mode, result)
+	report := buildMarkdownReport(job.Target, job.Mode, result, "en")
 	job.Status = StatusCompleted
 	job.Report = report
 	job.Result = result
 	job.UpdatedAt = time.Now()
 	_ = s.store.Update(ctx, job)
+	s.ingestScanAssets(ctx, job, result)
 
 	s.persistResultRecords(job.ID, agent.id, result)
 
 	s.hub.Broadcast(job.ID, HubEvent{
-		Type: "complete",
-		Data: mustJSON(map[string]any{"scan_id": job.ID, "status": "completed", "result": result}),
+		Type:     "complete",
+		Data:     mustJSON(map[string]any{"scan_id": job.ID, "status": "completed", "result": result}),
+		Reliable: true,
 	})
 	s.broadcastScanComplete(job.ID, result)
 }
@@ -346,18 +417,20 @@ func (s *Service) runScanLocally(ctx context.Context, job *ScanJob) {
 		job = streamWriter.job
 	}
 
-	report := buildMarkdownReport(job.Target, job.Mode, result)
+	report := buildMarkdownReport(job.Target, job.Mode, result, "en")
 	job.Status = StatusCompleted
 	job.Report = report
 	job.Result = result
 	job.UpdatedAt = time.Now()
 	_ = s.store.Update(ctx, job)
+	s.ingestScanAssets(ctx, job, result)
 
 	s.persistResultRecords(job.ID, "", result)
 
 	s.hub.Broadcast(job.ID, HubEvent{
-		Type: "complete",
-		Data: mustJSON(map[string]any{"scan_id": job.ID, "status": "completed", "result": result}),
+		Type:     "complete",
+		Data:     mustJSON(map[string]any{"scan_id": job.ID, "status": "completed", "result": result}),
+		Reliable: true,
 	})
 	s.broadcastScanComplete(job.ID, result)
 }
@@ -375,23 +448,36 @@ func (s *Service) failJob(job *ScanJob, errMsg string) {
 	job.UpdatedAt = time.Now()
 	_ = s.store.Update(context.Background(), job)
 	s.hub.Broadcast(job.ID, HubEvent{
-		Type: "error",
-		Data: mustJSON(map[string]string{"scan_id": job.ID, "error": errMsg}),
+		Type:     "error",
+		Data:     mustJSON(map[string]string{"scan_id": job.ID, "error": errMsg}),
+		Reliable: true,
 	})
 }
 
 func (s *Service) aiAvailable() bool {
-	app := s.appSnapshot()
+	app, release := s.borrowApp()
+	defer release()
 	return app != nil && app.Provider != nil
 }
 
-func (s *Service) appSnapshot() *runner.App {
+// borrowApp returns the live App together with a release func the caller must
+// invoke when done. Outstanding borrows are drained before a swapped-out App is
+// closed, so reloading config never closes engines out from under a running scan.
+func (s *Service) borrowApp() (*runner.App, func()) {
 	if s == nil {
-		return nil
+		return nil, func() {}
 	}
 	s.appMu.RLock()
-	defer s.appMu.RUnlock()
-	return s.app
+	app := s.app
+	refs := s.appRefs
+	if app != nil && refs != nil {
+		refs.Add(1)
+	}
+	s.appMu.RUnlock()
+	if app == nil {
+		return nil, func() {}
+	}
+	return app, func() { refs.Done() }
 }
 
 func (s *Service) swapApp(next *runner.App) {
@@ -400,15 +486,27 @@ func (s *Service) swapApp(next *runner.App) {
 	}
 	s.appMu.Lock()
 	prev := s.app
+	prevRefs := s.appRefs
 	s.app = next
+	s.appRefs = new(sync.WaitGroup)
 	s.appMu.Unlock()
 	if prev != nil && prev != next {
-		prev.Close()
+		// Close the old App only after in-flight borrowers have returned.
+		go func() {
+			if prevRefs != nil {
+				prevRefs.Wait()
+			}
+			prev.Close()
+		}()
 	}
 }
 
 func scanArgsForJob(job *ScanJob) []string {
-	args := []string{"-i", job.Target, "--mode", job.Mode}
+	var args []string
+	for _, t := range splitTargets(job.Target) {
+		args = append(args, "-i", t)
+	}
+	args = append(args, "--mode", job.Mode)
 	if job.Verify {
 		args = append(args, "--verify=high")
 	}
@@ -426,9 +524,15 @@ type structuredScanCommand interface {
 }
 
 func (s *Service) executeScan(ctx context.Context, args []string, stream io.Writer) (string, *output.Result, error) {
-	app := s.appSnapshot()
+	app, release := s.borrowApp()
+	defer release()
 	if app == nil || app.Commands == nil {
 		return "", nil, fmt.Errorf("aiscan runtime is not ready")
+	}
+	// Engines (and the scan command) finish initializing asynchronously after a
+	// reload; wait here so a scan issued right after saving config doesn't race them.
+	if err := app.WaitEngines(ctx); err != nil {
+		return "", nil, fmt.Errorf("scan engines not ready: %w", err)
 	}
 	cmd, ok := app.Commands.Get("scan")
 	if !ok {
@@ -442,6 +546,7 @@ func (s *Service) executeScan(ctx context.Context, args []string, stream io.Writ
 }
 
 type sseStreamWriter struct {
+	mu     sync.Mutex
 	hub    *Hub
 	scanID string
 	store  Store
@@ -458,6 +563,8 @@ func (w *sseStreamWriter) Write(p []byte) (int, error) {
 		default:
 		}
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.buf = append(w.buf, p...)
 	for {
 		idx := bytes.IndexByte(w.buf, '\n')
@@ -496,30 +603,112 @@ func (w *sseStreamWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func buildMarkdownReport(target, mode string, result *output.Result) string {
+// ScanSnapshot implements scan.ScanSnapshotSink. For a local (in-process) scan
+// it pushes an incremental structured result to the scan's SSE topic under the
+// "stats" event, lighting up the live counters, findings, and asset tree while
+// the scan runs. The authoritative final result still arrives with "complete".
+func (w *sseStreamWriter) ScanSnapshot(result *output.Result) {
+	if result == nil || w.hub == nil {
+		return
+	}
+	if w.ctx != nil {
+		select {
+		case <-w.ctx.Done():
+			return
+		default:
+		}
+	}
+	w.hub.Broadcast(w.scanID, HubEvent{
+		Type: "stats",
+		Data: mustJSON(map[string]any{"scan_id": w.scanID, "result": result}),
+	})
+}
+
+// reportLabels holds the localized structural labels for a markdown report.
+// Only the labels are translated; scan data (targets, fingerprint names,
+// evidence) is always emitted verbatim.
+type reportLabels struct {
+	title, target, mode, date                    string
+	summary, metric, value                       string
+	targets, services, web, probes, fingerprints string
+	loots, errors, duration                      string
+	assets, state, http, fingers, sources, paths string
+	analysis, source, assetFallback              string
+	noStructuredResult                           string
+}
+
+// normalizeReportLang maps an arbitrary lang hint to a supported locale.
+func normalizeReportLang(lang string) string {
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(lang)), "zh") {
+		return "zh"
+	}
+	return "en"
+}
+
+func reportLabelsFor(lang string) reportLabels {
+	if normalizeReportLang(lang) == "zh" {
+		return reportLabels{
+			title: "渗透测试报告", target: "目标", mode: "模式", date: "日期",
+			summary: "摘要", metric: "指标", value: "数值",
+			targets: "目标数", services: "服务", web: "Web", probes: "探测", fingerprints: "指纹",
+			loots: "战利品", errors: "错误", duration: "耗时",
+			assets: "资产", state: "状态", http: "HTTP", fingers: "指纹", sources: "来源", paths: "路径",
+			analysis: "分析", source: "来源", assetFallback: "资产",
+			noStructuredResult: "未返回结构化结果。",
+		}
+	}
+	return reportLabels{
+		title: "Penetration Test Report", target: "Target", mode: "Mode", date: "Date",
+		summary: "Summary", metric: "Metric", value: "Value",
+		targets: "Targets", services: "Services", web: "Web", probes: "Probes", fingerprints: "Fingerprints",
+		loots: "Loots", errors: "Errors", duration: "Duration",
+		assets: "Assets", state: "State", http: "HTTP", fingers: "Fingers", sources: "Sources", paths: "Paths",
+		analysis: "Analysis", source: "Source", assetFallback: "Asset",
+		noStructuredResult: "No structured result was returned.",
+	}
+}
+
+var reportStateValuesZh = map[string]string{
+	"low": "低", "medium": "中", "high": "高", "critical": "严重", "info": "信息", "unknown": "未知",
+}
+
+// translateStateValue localizes an asset state token (low/high/...). Unknown
+// values (real data) fall through unchanged.
+func translateStateValue(lang, value string) string {
+	if value == "" || normalizeReportLang(lang) != "zh" {
+		return value
+	}
+	if v, ok := reportStateValuesZh[strings.ToLower(value)]; ok {
+		return v
+	}
+	return value
+}
+
+func buildMarkdownReport(target, mode string, result *output.Result, lang string) string {
+	lbl := reportLabelsFor(lang)
 	var sb strings.Builder
-	sb.WriteString("# Penetration Test Report\n\n")
-	sb.WriteString(fmt.Sprintf("**Target:** `%s`  \n", target))
-	sb.WriteString(fmt.Sprintf("**Mode:** %s  \n", mode))
-	sb.WriteString(fmt.Sprintf("**Date:** %s\n\n", time.Now().Format("2006-01-02 15:04:05")))
+	sb.WriteString("# " + lbl.title + "\n\n")
+	sb.WriteString(fmt.Sprintf("**%s:** `%s`  \n", lbl.target, target))
+	sb.WriteString(fmt.Sprintf("**%s:** %s  \n", lbl.mode, mode))
+	sb.WriteString(fmt.Sprintf("**%s:** %s\n\n", lbl.date, time.Now().Format("2006-01-02 15:04:05")))
 	sb.WriteString("---\n\n")
 
 	if result == nil {
-		sb.WriteString("No structured result was returned.\n")
+		sb.WriteString(lbl.noStructuredResult + "\n")
 		return sb.String()
 	}
 
-	sb.WriteString("## Summary\n\n")
-	sb.WriteString("| Metric | Value |\n|---|---:|\n")
-	sb.WriteString(fmt.Sprintf("| Targets | %d |\n", result.Summary.Targets))
-	sb.WriteString(fmt.Sprintf("| Services | %d |\n", result.Summary.Services))
-	sb.WriteString(fmt.Sprintf("| Web | %d |\n", result.Summary.Webs))
-	sb.WriteString(fmt.Sprintf("| Probes | %d |\n", result.Summary.Probes))
-	sb.WriteString(fmt.Sprintf("| Fingerprints | %d |\n", resultFingerprintCount(result)))
-	sb.WriteString(fmt.Sprintf("| Loots | %d |\n", result.Summary.Loots))
-	sb.WriteString(fmt.Sprintf("| Errors | %d |\n", result.Summary.Errors))
+	sb.WriteString("## " + lbl.summary + "\n\n")
+	sb.WriteString(fmt.Sprintf("| %s | %s |\n|---|---:|\n", lbl.metric, lbl.value))
+	sb.WriteString(fmt.Sprintf("| %s | %d |\n", lbl.targets, result.Summary.Targets))
+	sb.WriteString(fmt.Sprintf("| %s | %d |\n", lbl.services, result.Summary.Services))
+	sb.WriteString(fmt.Sprintf("| %s | %d |\n", lbl.web, result.Summary.Webs))
+	sb.WriteString(fmt.Sprintf("| %s | %d |\n", lbl.probes, result.Summary.Probes))
+	sb.WriteString(fmt.Sprintf("| %s | %d |\n", lbl.fingerprints, resultFingerprintCount(result)))
+	sb.WriteString(fmt.Sprintf("| %s | %d |\n", lbl.loots, result.Summary.Loots))
+	sb.WriteString(fmt.Sprintf("| %s | %d |\n", lbl.errors, result.Summary.Errors))
 	if result.Summary.Duration != "" {
-		sb.WriteString(fmt.Sprintf("| Duration | %s |\n", result.Summary.Duration))
+		sb.WriteString(fmt.Sprintf("| %s | %s |\n", lbl.duration, result.Summary.Duration))
 	}
 	sb.WriteString("\n")
 
@@ -527,24 +716,24 @@ func buildMarkdownReport(target, mode string, result *output.Result) string {
 		return sb.String()
 	}
 
-	sb.WriteString("## Assets\n\n")
+	sb.WriteString("## " + lbl.assets + "\n\n")
 	for _, asset := range result.Assets {
-		title := output.FirstNonEmpty(asset.Title, asset.Target, asset.Key, "Asset")
+		title := output.FirstNonEmpty(asset.Title, asset.Target, asset.Key, lbl.assetFallback)
 		sb.WriteString(fmt.Sprintf("### %s\n\n", title))
 		if asset.Target != "" && asset.Target != title {
-			sb.WriteString(fmt.Sprintf("- **Target:** %s\n", markdownCode(asset.Target)))
+			sb.WriteString(fmt.Sprintf("- **%s:** %s\n", lbl.target, markdownCode(asset.Target)))
 		}
 		if asset.Status != "" {
-			sb.WriteString(fmt.Sprintf("- **State:** %s\n", markdownCode(asset.Status)))
+			sb.WriteString(fmt.Sprintf("- **%s:** %s\n", lbl.state, markdownCode(translateStateValue(lang, asset.Status))))
 		}
-		writeMarkdownList(&sb, "Services", assetServiceFacts(asset.Items))
-		writeMarkdownList(&sb, "HTTP", assetHTTPStatuses(asset.Items))
-		writeMarkdownList(&sb, "Fingers", assetFingers(asset.Items))
-		writeMarkdownList(&sb, "Sources", assetSources(asset.Items))
+		writeMarkdownList(&sb, lbl.services, assetServiceFacts(asset.Items))
+		writeMarkdownList(&sb, lbl.http, assetHTTPStatuses(asset.Items))
+		writeMarkdownList(&sb, lbl.fingers, assetFingers(asset.Items))
+		writeMarkdownList(&sb, lbl.sources, assetSources(asset.Items))
 		if paths := assetPathCount(asset.Items); paths > 0 {
-			sb.WriteString(fmt.Sprintf("- **Paths:** %d\n", paths))
+			sb.WriteString(fmt.Sprintf("- **%s:** %d\n", lbl.paths, paths))
 		}
-		writeAssetLootMarkdown(&sb, asset.Items)
+		writeAssetLootMarkdown(&sb, asset.Items, lbl)
 		sb.WriteString("\n")
 	}
 
@@ -562,7 +751,7 @@ func writeMarkdownList(sb *strings.Builder, label string, values []string) {
 	sb.WriteString(fmt.Sprintf("- **%s:** %s\n", label, strings.Join(coded, ", ")))
 }
 
-func writeAssetLootMarkdown(sb *strings.Builder, items []output.AssetItem) {
+func writeAssetLootMarkdown(sb *strings.Builder, items []output.AssetItem, lbl reportLabels) {
 	wrote := false
 	for _, item := range items {
 		switch item.Kind {
@@ -577,14 +766,14 @@ func writeAssetLootMarkdown(sb *strings.Builder, items []output.AssetItem) {
 				prefix += ":" + item.Status
 			}
 			if !wrote {
-				sb.WriteString("\n#### Analysis\n\n")
+				sb.WriteString("\n#### " + lbl.analysis + "\n\n")
 				wrote = true
 			}
 			if summary == "" {
 				summary = firstMarkdownLine(detail)
 			}
 			sb.WriteString(fmt.Sprintf("##### %s\n\n", markdownHeading(summary)))
-			sb.WriteString(fmt.Sprintf("**Source:** %s\n\n", markdownCode(prefix)))
+			sb.WriteString(fmt.Sprintf("**%s:** %s\n\n", lbl.source, markdownCode(prefix)))
 			if detail != "" && !sameMarkdownText(summary, detail) {
 				writeMarkdownBlock(sb, detail)
 			} else if detail == "" && summary != "" {
@@ -956,7 +1145,7 @@ func (s *Service) persistRuntimeChatEvent(sessionID string, event ChatEvent) {
 	_ = s.store.AddMessage(context.Background(), msg)
 }
 
-func (s *Service) HandleUserMessage(ctx context.Context, sessionID, content string) (*ChatMessage, error) {
+func (s *Service) HandleUserMessage(ctx context.Context, sessionID, content string, opts ChatOptions) (*ChatMessage, error) {
 	now := time.Now()
 	msg := &ChatMessage{
 		ID:        generateID(),
@@ -983,14 +1172,53 @@ func (s *Service) HandleUserMessage(ctx context.Context, sessionID, content stri
 		_ = s.store.UpdateSession(ctx, session)
 	}
 
-	go s.dispatchUserMessage(sessionID, msg)
+	go s.dispatchUserMessage(sessionID, msg, opts)
 
 	return msg, nil
 }
 
-func (s *Service) dispatchUserMessage(sessionID string, msg *ChatMessage) {
+func (s *Service) dispatchUserMessage(sessionID string, msg *ChatMessage, opts ChatOptions) {
 	content := strings.TrimSpace(msg.Content)
-	s.handleChatMessage(sessionID, content)
+
+	// Slash commands act on the hub itself (scan pipeline, agent roster, raw
+	// shell) rather than being forwarded to the LLM. Anything that is not a
+	// recognized verb — including plain messages that merely start with "/" —
+	// falls through and is dispatched to the agent as normal chat.
+	if cmd, args, ok := parseSlashCommand(content); ok {
+		switch cmd {
+		case "scan":
+			s.handleScanCommand(sessionID, args)
+			return
+		case "agents":
+			s.handleAgentsCommand(sessionID)
+			return
+		case "shell", "sh":
+			s.handleShellCommand(sessionID, args)
+			return
+		case "help":
+			s.handleHelpCommand(sessionID)
+			return
+		}
+	}
+
+	s.handleChatMessage(sessionID, content, opts)
+}
+
+// parseSlashCommand splits a leading "/verb args..." into its lowercased verb
+// and the trimmed remainder. ok is false when content does not begin with a
+// non-empty "/verb".
+func parseSlashCommand(content string) (cmd, args string, ok bool) {
+	if !strings.HasPrefix(content, "/") {
+		return "", "", false
+	}
+	rest := strings.TrimSpace(content[1:])
+	if rest == "" {
+		return "", "", false
+	}
+	if i := strings.IndexAny(rest, " \t\r\n"); i >= 0 {
+		return strings.ToLower(rest[:i]), strings.TrimSpace(rest[i:]), true
+	}
+	return strings.ToLower(rest), "", true
 }
 
 func (s *Service) handleScanCommand(sessionID, args string) {
@@ -1027,7 +1255,7 @@ func (s *Service) handleScanCommand(sessionID, args string) {
 		}
 	}
 
-	job, err := s.SubmitScan(ctx, target, mode, verify, sniper, deep)
+	job, err := s.SubmitScan(ctx, target, mode, verify, sniper, deep, DefaultProjectID)
 	if err != nil {
 		s.BroadcastChatEvent(sessionID, ChatEvent{
 			Type:  ChatEventError,
@@ -1045,6 +1273,15 @@ func (s *Service) handleScanCommand(sessionID, args string) {
 		ScanID: job.ID,
 		Data:   fmt.Sprintf("Scan started: %s (%s)", target, mode),
 	})
+}
+
+func (s *Service) handleHelpCommand(sessionID string) {
+	s.broadcastSystemMessage(sessionID, "**Commands**\n"+
+		"- `/scan <target> [--mode full] [--verify] [--sniper] [--deep]` — run a scan in this session\n"+
+		"- `/agents` — list connected agents\n"+
+		"- `/shell <command>` — run a shell command on the session's agent\n"+
+		"- `/help` — show this message\n\n"+
+		"Anything else is sent to the agent as a chat message.")
 }
 
 func (s *Service) handleAgentsCommand(sessionID string) {
@@ -1135,7 +1372,7 @@ func (s *Service) handleShellCommand(sessionID, command string) {
 	}()
 }
 
-func (s *Service) handleChatMessage(sessionID, content string) {
+func (s *Service) handleChatMessage(sessionID, content string, opts ChatOptions) {
 	agent := s.sessionAgent(sessionID)
 	if agent == nil {
 		s.broadcastSystemMessage(sessionID, "Agent is not connected. Reconnect the agent to continue chatting.")
@@ -1151,7 +1388,7 @@ func (s *Service) handleChatMessage(sessionID, content string) {
 		AgentName: agent.name,
 	})
 
-	resultCh, err := s.agents.DispatchChatSession(agent.id, taskID, sessionID, content)
+	resultCh, err := s.agents.DispatchChatSession(agent.id, taskID, sessionID, content, opts)
 	if err != nil {
 		s.finishSessionTask(taskID)
 		s.BroadcastChatEvent(sessionID, ChatEvent{
@@ -1194,6 +1431,173 @@ func (s *Service) broadcastSystemMessage(sessionID, content string) {
 		Role:      "system",
 		Content:   content,
 	})
+}
+
+// --- Asset pool ---
+
+func (s *Service) ListAssets(ctx context.Context, projectID string) ([]*PoolAsset, error) {
+	return s.store.ListAssets(ctx, projectID, 500)
+}
+
+// AddAssets validates and upserts a batch of targets into the pool. Invalid
+// tokens (bash fragments, file paths, prose) are silently skipped so the
+// agent-recon extractor and manual entry can both feed it raw material.
+func (s *Service) AddAssets(ctx context.Context, projectID string, targets []string, source, label string) ([]*PoolAsset, error) {
+	if source == "" {
+		source = AssetSourceManual
+	}
+	var err error
+	projectID, err = s.resolveProjectID(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool)
+	var added []*PoolAsset
+	for _, raw := range targets {
+		t, err := validateOneTarget(raw)
+		if err != nil || seen[t] {
+			continue
+		}
+		seen[t] = true
+		a := &PoolAsset{Target: t, Source: source, Label: label, ProjectID: projectID}
+		if err := s.store.UpsertAsset(ctx, a); err != nil {
+			return nil, err
+		}
+		added = append(added, a)
+	}
+	return added, nil
+}
+
+func (s *Service) DeleteAsset(ctx context.Context, projectID, id string) error {
+	projectID, err := s.resolveProjectID(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	return s.store.DeleteAsset(ctx, projectID, id)
+}
+
+// --- Projects (asset-pool scope) ---
+
+func (s *Service) ListProjects(ctx context.Context) ([]*Project, error) {
+	return s.store.ListProjects(ctx)
+}
+
+// CreateProject registers (or renames) a project. ID defaults to a slug of the
+// name; a blank slug (e.g. an all-punctuation name) falls back to a generated
+// id. The returned Project carries the resolved id the client should switch to.
+func (s *Service) CreateProject(ctx context.Context, req ProjectRequest) (*Project, error) {
+	name := strings.TrimSpace(req.Name)
+	id := strings.TrimSpace(req.ID)
+	if id == "" {
+		id = slugify(name)
+	}
+	if id == "" {
+		id = generateID()
+	}
+	if name == "" {
+		name = id
+	}
+	p := &Project{ID: id, Name: name, CreatedAt: time.Now()}
+	if err := s.store.CreateProject(ctx, p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// DeleteProject removes a project and its entire asset pool. The default project
+// is permanent — it holds the pre-project rows and is the fallback scope for
+// every unscoped operation — so deleting it is refused.
+func (s *Service) DeleteProject(ctx context.Context, id string) error {
+	id = normalizeProjectID(id)
+	if id == DefaultProjectID {
+		return fmt.Errorf("the default project cannot be deleted")
+	}
+	ok, err := s.store.ProjectExists(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("project %q not found", id)
+	}
+	return s.store.DeleteProject(ctx, id)
+}
+
+func normalizeProjectID(projectID string) string {
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return DefaultProjectID
+	}
+	return projectID
+}
+
+func (s *Service) resolveProjectID(ctx context.Context, projectID string) (string, error) {
+	projectID = normalizeProjectID(projectID)
+	if s == nil || s.store == nil {
+		return projectID, nil
+	}
+	ok, err := s.store.ProjectExists(ctx, projectID)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", fmt.Errorf("project %q not found", projectID)
+	}
+	return projectID, nil
+}
+
+// slugify converts a display name into a compact, url/space-safe id: lowercase
+// ASCII alphanumerics and CJK ideographs are kept, every other run collapses to
+// a single hyphen. Returns "" when nothing usable remains.
+func slugify(s string) string {
+	var b strings.Builder
+	prevDash := false
+	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r >= 0x4e00 && r <= 0x9fff:
+			b.WriteRune(r)
+			prevDash = false
+		default:
+			if !prevDash && b.Len() > 0 {
+				b.WriteByte('-')
+				prevDash = true
+			}
+		}
+	}
+	return strings.TrimRight(b.String(), "-")
+}
+
+// ingestScanAssets folds a completed scan's structured assets into the shared
+// pool so anything the scanner confirmed becomes a first-class, re-testable
+// target. Best-effort: pool errors never fail a scan.
+func (s *Service) ingestScanAssets(ctx context.Context, job *ScanJob, result *output.Result) {
+	if s == nil || s.store == nil || job == nil || result == nil {
+		return
+	}
+	project := job.Project
+	if project == "" {
+		project = DefaultProjectID
+	}
+	for _, asset := range result.Assets {
+		target, err := validateOneTarget(asset.Target)
+		if err != nil {
+			continue
+		}
+		services := 0
+		for _, item := range asset.Items {
+			if item.Kind == output.AssetItemService {
+				services++
+			}
+		}
+		_ = s.store.UpsertAsset(ctx, &PoolAsset{
+			ProjectID:  project,
+			Target:     target,
+			Source:     AssetSourceScan,
+			Status:     asset.Status,
+			Label:      asset.Title,
+			Services:   services,
+			LastScanID: job.ID,
+		})
+	}
 }
 
 func (s *Service) broadcastScanComplete(scanID string, result *output.Result) {

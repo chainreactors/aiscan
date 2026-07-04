@@ -66,6 +66,20 @@ func (a *remoteAgent) info() AgentInfo {
 	}
 }
 
+// takeTask atomically removes a task and returns its result channel and turn.
+// ok is false when the task ID is unknown (already completed or never tracked).
+func (a *remoteAgent) takeTask(taskID string) (ch chan taskResult, turn int, ok bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	ch, ok = a.tasks[taskID]
+	turn = a.turns[taskID]
+	if ok {
+		delete(a.tasks, taskID)
+		delete(a.turns, taskID)
+	}
+	return ch, turn, ok
+}
+
 // SessionLookup resolves a task ID to its owning chat session.
 type SessionLookup interface {
 	TaskSession(taskID string) (sessionID string, ok bool)
@@ -84,6 +98,7 @@ type AgentPool struct {
 	agents         map[string]*remoteAgent
 	hub            *Hub
 	sessions       SessionLookup
+	configProvider func() (webproto.DistributeConfig, bool)
 	records        RecordStore
 	ptyMu          sync.RWMutex
 	ptySubs        map[string]chan WSMessage
@@ -102,6 +117,26 @@ func NewAgentPool(hub *Hub, allowedOrigins ...string) *AgentPool {
 
 func (p *AgentPool) SetSessionLookup(sl SessionLookup) {
 	p.sessions = sl
+}
+
+// SetConfigProvider lets the pool fetch the current server-managed config so it
+// can push it to each agent the moment it registers. Without this, a freshly
+// (re)connected agent keeps running on its deploy-time config (stale key/model)
+// until the next manual save triggers BroadcastConfig.
+func (p *AgentPool) SetConfigProvider(fn func() (webproto.DistributeConfig, bool)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.configProvider = fn
+}
+
+func (p *AgentPool) currentConfig() (webproto.DistributeConfig, bool) {
+	p.mu.RLock()
+	fn := p.configProvider
+	p.mu.RUnlock()
+	if fn == nil {
+		return webproto.DistributeConfig{}, false
+	}
+	return fn()
 }
 
 func (p *AgentPool) SetRecordStore(rs RecordStore) {
@@ -170,76 +205,25 @@ func (p *AgentPool) Pick() *remoteAgent {
 	return fallback
 }
 
-// PickChat selects an idle LLM-capable agent, or any LLM-capable agent if all
-// are busy.
-func (p *AgentPool) PickChat() *remoteAgent {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	var fallback *remoteAgent
-	for _, a := range p.agents {
-		a.mu.Lock()
-		busy := len(a.tasks) > 0
-		chatCapable := a.identity.Provider != ""
-		a.mu.Unlock()
-		if !chatCapable {
-			continue
-		}
-		if !busy {
-			return a
-		}
-		if fallback == nil {
-			fallback = a
-		}
-	}
-	return fallback
-}
-
 // DispatchCommand sends a command to an agent and returns a channel for the result.
 func (p *AgentPool) DispatchCommand(agentID, taskID, command string) (<-chan taskResult, error) {
-	return p.dispatch(agentID, taskID, "exec", command)
-}
-
-// DispatchChat sends a natural-language prompt to an LLM-capable agent.
-func (p *AgentPool) DispatchChat(agentID, taskID, prompt string) (<-chan taskResult, error) {
-	return p.DispatchChatSession(agentID, taskID, "", prompt)
+	return p.dispatchMessage(agentID, taskID, WSMessage{Type: "exec", TaskID: taskID, Data: command})
 }
 
 // DispatchChatSession sends chat input to an agent and scopes the remote
 // agent-side conversation state to the web chat session.
-func (p *AgentPool) DispatchChatSession(agentID, taskID, sessionID, prompt string) (<-chan taskResult, error) {
+func (p *AgentPool) DispatchChatSession(agentID, taskID, sessionID, prompt string, opts ChatOptions) (<-chan taskResult, error) {
 	var payload json.RawMessage
-	if sessionID != "" {
-		payload = mustJSON(map[string]string{"session_id": sessionID})
+	if sessionID != "" || opts.Persist || opts.MaxTurns > 0 || opts.EvalCriteria != "" {
+		payload = mustJSON(webproto.ChatPayload{
+			SessionID:     sessionID,
+			Persist:       opts.Persist,
+			MaxTurns:      opts.MaxTurns,
+			EvalCriteria:  opts.EvalCriteria,
+			EvalMaxRounds: opts.EvalMaxRounds,
+		})
 	}
-	return p.dispatchPayload(agentID, taskID, "chat", prompt, payload)
-}
-
-func (p *AgentPool) dispatch(agentID, taskID, typ, data string) (<-chan taskResult, error) {
-	return p.dispatchPayload(agentID, taskID, typ, data, nil)
-}
-
-func (p *AgentPool) dispatchPayload(agentID, taskID, typ, data string, payload json.RawMessage) (<-chan taskResult, error) {
-	a := p.get(agentID)
-	if a == nil {
-		return nil, fmt.Errorf("agent %s not connected", agentID)
-	}
-	ch := make(chan taskResult, 1)
-	a.mu.Lock()
-	a.tasks[taskID] = ch
-	a.turns[taskID] = 0
-	a.mu.Unlock()
-
-	select {
-	case a.sendCh <- WSMessage{Type: typ, TaskID: taskID, Data: data, Payload: payload}:
-	default:
-		a.mu.Lock()
-		delete(a.tasks, taskID)
-		delete(a.turns, taskID)
-		a.mu.Unlock()
-		close(ch)
-		return nil, fmt.Errorf("agent %s send channel full", agentID)
-	}
-	return ch, nil
+	return p.dispatchMessage(agentID, taskID, WSMessage{Type: "chat", TaskID: taskID, Data: prompt, Payload: payload})
 }
 
 func (p *AgentPool) dispatchMessage(agentID, taskID string, msg WSMessage) (<-chan taskResult, error) {
@@ -249,6 +233,14 @@ func (p *AgentPool) dispatchMessage(agentID, taskID string, msg WSMessage) (<-ch
 	}
 	ch := make(chan taskResult, 1)
 	a.mu.Lock()
+	if a.tasks == nil {
+		// unregister() niled the task map as the agent disconnected; registering
+		// a task now would panic on the nil-map write and take down this (bare,
+		// un-recovered) goroutine and the whole hub with it.
+		a.mu.Unlock()
+		close(ch)
+		return nil, fmt.Errorf("agent %s disconnected", agentID)
+	}
 	a.tasks[taskID] = ch
 	a.turns[taskID] = 0
 	a.mu.Unlock()
@@ -276,6 +268,34 @@ func (p *AgentPool) SendAgentMessage(agentID string, msg WSMessage) error {
 		return nil
 	default:
 		return fmt.Errorf("agent %s send channel full", agentID)
+	}
+}
+
+// BroadcastConfig pushes the latest server-managed config to all connected
+// agents. Agents that do not understand config.update will ignore it.
+func (p *AgentPool) BroadcastConfig(cfg webproto.DistributeConfig) {
+	if p == nil {
+		return
+	}
+	msg := WSMessage{Type: "config.update", Payload: mustJSON(cfg)}
+	p.mu.RLock()
+	agents := make([]*remoteAgent, 0, len(p.agents))
+	for _, a := range p.agents {
+		agents = append(agents, a)
+	}
+	p.mu.RUnlock()
+	for _, a := range agents {
+		// Block briefly rather than silently drop: a missed config.update leaves
+		// the agent on a stale key/model until it happens to reconnect, which is
+		// exactly the "I saved but the agent didn't change" failure mode.
+		t := time.NewTimer(2 * time.Second)
+		select {
+		case a.sendCh <- msg:
+			t.Stop()
+		case <-a.done:
+			t.Stop()
+		case <-t.C:
+		}
 	}
 }
 
@@ -350,10 +370,6 @@ func (p *AgentPool) HandleTerminalWS(agentID string, w http.ResponseWriter, r *h
 			return
 		}
 	}
-}
-
-func (p *AgentPool) CancelPTY(agentID, terminalID string) {
-	_ = p.SendAgentMessage(agentID, WSMessage{Type: "pty.kill", StreamID: terminalID})
 }
 
 func (p *AgentPool) CloseTerminal(agentID, terminalID string) {
@@ -471,6 +487,14 @@ func (p *AgentPool) HandleWS(w http.ResponseWriter, r *http.Request) {
 	ack, _ := json.Marshal(map[string]string{"agent_id": agent.id, "name": agent.name})
 	_ = conn.WriteJSON(WSMessage{Type: "connected", Payload: ack})
 
+	// Push the current server-managed config so a freshly (re)connected agent
+	// adopts the latest key/model immediately, instead of running on its
+	// deploy-time config until the next manual save. Enqueued on sendCh and
+	// flushed by the write goroutine started below.
+	if dc, ok := p.currentConfig(); ok {
+		agent.sendCh <- WSMessage{Type: "config.update", Payload: mustJSON(dc)}
+	}
+
 	// Write goroutine: sendCh → WebSocket.
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
@@ -510,6 +534,14 @@ func (p *AgentPool) handleAgentMessage(a *remoteAgent, msg WSMessage) {
 	}
 
 	switch msg.Type {
+	case "identity":
+		var identity webproto.AgentIdentity
+		if len(msg.Payload) > 0 && json.Unmarshal(msg.Payload, &identity) == nil {
+			a.mu.Lock()
+			a.identity = identity
+			a.mu.Unlock()
+		}
+
 	case "agent.stats":
 		var stats webproto.AgentStats
 		if len(msg.Payload) > 0 && json.Unmarshal(msg.Payload, &stats) == nil {
@@ -535,33 +567,29 @@ func (p *AgentPool) handleAgentMessage(a *remoteAgent, msg WSMessage) {
 			})
 		}
 
-	case "complete":
-		a.mu.Lock()
-		ch, ok := a.tasks[msg.TaskID]
-		turn := a.turns[msg.TaskID]
-		if ok {
-			delete(a.tasks, msg.TaskID)
-			delete(a.turns, msg.TaskID)
+	case "scan.stats":
+		// Incremental structured snapshot from a scan running on the agent node.
+		// Relay it to the scan's SSE topic as a "stats" event so the deck's live
+		// counters/findings/asset-tree fill in mid-scan. Deliberately not routed
+		// through recordScanResultStats: that accumulates per-completion asset
+		// counts, and snapshots would double-count it on every tick.
+		if p.hub != nil && msg.TaskID != "" && len(msg.Payload) > 0 {
+			p.hub.Broadcast(msg.TaskID, HubEvent{
+				Type: "stats",
+				Data: mustJSON(map[string]any{"scan_id": msg.TaskID, "result": json.RawMessage(msg.Payload)}),
+			})
 		}
-		a.mu.Unlock()
-		if ok && ch != nil {
-			res := taskResult{Output: msg.Data, Result: msg.Payload, Turn: turn}
-			ch <- res
+
+	case "complete":
+		if ch, turn, ok := a.takeTask(msg.TaskID); ok && ch != nil {
+			ch <- taskResult{Output: msg.Data, Result: msg.Payload, Turn: turn}
 			close(ch)
 		}
 		p.recordScanResultStats(a, msg.Payload)
 		p.persistResultRecords(a, msg.TaskID, msg.Payload)
 
 	case "error":
-		a.mu.Lock()
-		ch, ok := a.tasks[msg.TaskID]
-		turn := a.turns[msg.TaskID]
-		if ok {
-			delete(a.tasks, msg.TaskID)
-			delete(a.turns, msg.TaskID)
-		}
-		a.mu.Unlock()
-		if ok && ch != nil {
+		if ch, turn, ok := a.takeTask(msg.TaskID); ok && ch != nil {
 			ch <- taskResult{Err: msg.Data, Turn: turn}
 			close(ch)
 		}
@@ -720,6 +748,34 @@ func (p *AgentPool) forwardAgentEvent(a *remoteAgent, msg WSMessage) {
 			ToolCallID: ev.ToolCallID,
 			Content:    ev.Result,
 			Turn:       turn,
+		}
+	case "agent.eval_end":
+		var payload struct {
+			EvalRound  int    `json:"eval_round"`
+			EvalPass   bool   `json:"eval_pass"`
+			EvalReason string `json:"eval_reason"`
+		}
+		if msg.Payload != nil {
+			_ = json.Unmarshal(msg.Payload, &payload)
+		}
+		event = ChatEvent{
+			Type:       ChatEventEval,
+			EvalRound:  payload.EvalRound,
+			EvalPass:   payload.EvalPass,
+			EvalReason: payload.EvalReason,
+		}
+	case "agent.eval_error":
+		var payload struct {
+			EvalRound int    `json:"eval_round"`
+			EvalError string `json:"eval_error"`
+		}
+		if msg.Payload != nil {
+			_ = json.Unmarshal(msg.Payload, &payload)
+		}
+		event = ChatEvent{
+			Type:       ChatEventEval,
+			EvalRound:  payload.EvalRound,
+			EvalReason: payload.EvalError,
 		}
 	default:
 		return
