@@ -43,6 +43,15 @@ func RunAgentConsoleWithTerminal(ctx context.Context, option *cfg.Option, appInf
 		return fmt.Errorf("terminal is nil")
 	}
 	agentOutput := NewAgentOutputWithWriters(option, terminal.Out, terminal.Err, terminal.Control == nil || terminal.Control.IsTerminal())
+	// Render live agent events (streaming deltas, "thinking"/"talking" spinner,
+	// tool activity) onto this terminal. Without this subscription the console
+	// only receives the final result via the controller, so the remote/PTY REPL
+	// would show no progress and dump the whole reply at once. The local REPL
+	// gets this for free because the runner subscribes its shared output.
+	if len(bus) > 0 && bus[0] != nil {
+		unsub := bus[0].Subscribe(agentOutput.HandleEvent)
+		defer unsub()
+	}
 	repl := NewAgentConsoleWithTerminal(ctx, option, appInfo, session, agentOutput, terminal, bus...)
 	return repl.Start()
 }

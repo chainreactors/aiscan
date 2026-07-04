@@ -1,16 +1,30 @@
 llm:
-    provider: deepseek
-    base_url: https://api.deepseek.com
-    api_key: sk-c7db27377bb243eca301d3e09c615df2
-    model: deepseek-v4-pro
+    provider: anthropic
+    base_url: https://kiro.chainreactors.cn/v1
+    api_key: ""
+    model: glm-5.2
     proxy: ""
 cyberhub:
     url: ""
     key: ""
     mode: ""
     proxy: ""
+recon:
+    fofa_email: ""
+    fofa_key: ""
+    hunter_token: ""
+    hunter_api_key: ""
+    proxy: ""
 scan:
     verify: ""
     verify_timeout: 0
 search:
     tavily_keys: ""
+ioa:
+    url: ""
+    token: ""
+    node_name: ""
+    space: ""
+agent:
+    timeout: 0
+    save_session: false

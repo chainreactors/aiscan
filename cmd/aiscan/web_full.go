@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -16,6 +17,8 @@ import (
 
 	cfg "github.com/chainreactors/aiscan/core/config"
 	"github.com/chainreactors/aiscan/core/runner"
+	"github.com/chainreactors/aiscan/pkg/deploy"
+	"github.com/chainreactors/aiscan/pkg/deploy/manager"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
 	"github.com/chainreactors/aiscan/pkg/web"
 	"github.com/chainreactors/aiscan/pkg/webproto"
@@ -36,7 +39,7 @@ func runWeb(ctx context.Context, option *cfg.Option, opts webCommand, logger tel
 	}
 	defer store.Close()
 
-	application, err := initWebApp(ctx, option, logger)
+	application, err := initWebApp(ctx, option, logger, false)
 	if err != nil {
 		return fmt.Errorf("init aiscan: %s", err)
 	}
@@ -50,12 +53,13 @@ func runWeb(ctx context.Context, option *cfg.Option, opts webCommand, logger tel
 	configFile := option.ConfigFile
 	appOption := *option
 	service := web.NewService(web.ServiceConfig{
-		Store:         store,
-		App:           application,
-		ConfigStore:   &webConfigStore{explicit: configFile},
-		AppFactory:    func(ctx context.Context) (*runner.App, error) { return initWebApp(ctx, &appOption, logger) },
-		MaxConcurrent: opts.MaxScans,
-		ScanTimeout:   time.Duration(opts.ScanTimeout) * time.Second,
+		Store:          store,
+		App:            application,
+		ConfigStore:    &webConfigStore{explicit: configFile},
+		AppFactory:     func(ctx context.Context) (*runner.App, error) { return initWebApp(ctx, &appOption, logger, true) },
+		RuntimeContext: ctx,
+		MaxConcurrent:  opts.MaxScans,
+		ScanTimeout:    time.Duration(opts.ScanTimeout) * time.Second,
 	})
 	defer service.Close()
 
@@ -80,7 +84,34 @@ func runWeb(ctx context.Context, option *cfg.Option, opts webCommand, logger tel
 	ioaSvc := ioaserver.NewService(ioaserver.NewMemoryStore(), accessKey)
 	ioaHandler := ioaserver.AuthMiddleware(ioaSvc)(ioaserver.NewHandler(ioaSvc))
 
-	handler := web.NewHandler(service, pool, ioaHandler, newSPAFileServer(staticSub))
+	// Cloud auto-deploy: credentials/records persisted next to the config file;
+	// the hub's IOA access key is embedded into the IOA URL handed to new nodes.
+	deployStatePath := resolveDeployPath(configFile)
+	logger.Infof("deploy state: %s", deployStatePath)
+	deployStore := deploy.NewFileStore(deployStatePath)
+	deployMgr := manager.NewDeployManager(deployStore, web.NewPoolLister(pool), accessKey, opts.AgentBinary)
+	// Outbound SSH reverse tunnel: lets a hub without a public IP still be reached
+	// by deployed nodes via an auto-provisioned relay. Exposes the hub's own
+	// loopback addr and, once the tunnel was enabled, reconnects to the relay on
+	// boot (the relay's public IP:port is the deploy PublicURL).
+	deployMgr.ConfigureTunnel(hubLocalURL(opts.Addr))
+	go deployMgr.AutoStartTunnel(ctx)
+	go func() {
+		<-ctx.Done()
+		deployMgr.ShutdownTunnel()
+		deployMgr.StopAllLocal()
+	}()
+	go deployMgr.StartReaper(ctx, logger.Infof)
+
+	// The cloud/deploy control plane spends money, holds credentials, and spawns
+	// processes. When it is reachable off-loopback without an admin token it is
+	// wide open; warn loudly rather than silently. (Kept back-compat/open so an
+	// existing public hub isn't locked out mid-run — set --admin-token to gate it.)
+	if opts.AdminToken == "" && !isLoopbackListen(opts.Addr) {
+		logger.Warnf("SECURITY: cloud/deploy API is UNAUTHENTICATED on non-loopback %s — set --admin-token or AISCAN_ADMIN_TOKEN to gate /api/cloud and /api/deploy", opts.Addr)
+	}
+
+	handler := web.NewHandler(service, pool, deployMgr, opts.AdminToken, ioaHandler, newSPAFileServer(staticSub))
 
 	srv := &http.Server{
 		Addr:    opts.Addr,
@@ -119,10 +150,17 @@ func newSPAFileServer(fsys fs.FS) http.HandlerFunc {
 	}
 }
 
-func initWebApp(ctx context.Context, baseOption *cfg.Option, logger telemetry.Logger) (*runner.App, error) {
+func initWebApp(ctx context.Context, baseOption *cfg.Option, logger telemetry.Logger, isReload bool) (*runner.App, error) {
 	option := cfg.Option{}
 	if baseOption != nil {
-		option = *baseOption
+		if isReload {
+			// On hot-reload the saved aiscan.yaml is authoritative for the editable
+			// sections; only carry over infrastructural flags (config path, data dir)
+			// so a value typed in the web UI isn't shadowed by a startup CLI flag.
+			option.MiscOptions = baseOption.MiscOptions
+		} else {
+			option = *baseOption
+		}
 	}
 	cfgPath, err := cfg.ResolveRuntimeConfig(&option)
 	if err != nil {
@@ -145,9 +183,13 @@ func initWebApp(ctx context.Context, baseOption *cfg.Option, logger telemetry.Lo
 	if err != nil {
 		return nil, err
 	}
-	if err := app.WaitEngines(ctx); err != nil {
-		app.Close()
-		return nil, err
+	if !isReload {
+		// First boot blocks until engines are ready; a hot-reload returns
+		// immediately and lets engines warm up in the background.
+		if err := app.WaitEngines(ctx); err != nil {
+			app.Close()
+			return nil, err
+		}
 	}
 	return app, nil
 }
@@ -242,5 +284,68 @@ func findWebConfigFile(explicit string) string {
 		}
 	}
 	return ""
+}
+
+// ---------------------------------------------------------------------------
+// Cloud deploy state store (credentials + deployment records)
+// ---------------------------------------------------------------------------
+
+// isLoopbackListen reports whether addr binds only to loopback, so an open
+// (token-less) control plane is not actually reachable from the network. A
+// wildcard/empty host, a non-loopback IP, or an unparseable address is treated
+// as exposed (returns false) so the security warning errs toward firing.
+func isLoopbackListen(addr string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		return false
+	}
+	switch host {
+	case "", "0.0.0.0", "::", "[::]":
+		return false
+	}
+	if ip := net.ParseIP(strings.Trim(host, "[]")); ip != nil {
+		return ip.IsLoopback()
+	}
+	return host == "localhost"
+}
+
+// hubLocalURL derives the loopback URL the outbound tunnel should expose from
+// the server listen address. A wildcard/empty host becomes 127.0.0.1; an
+// unparseable address yields "" (tunnel disabled).
+func hubLocalURL(addr string) string {
+	host, port, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil || port == "" {
+		return ""
+	}
+	switch host {
+	case "", "0.0.0.0", "::", "[::]":
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port)
+}
+
+// resolveDeployPath picks where the deploy state (cloud creds + records) lives.
+// It must be STABLE across restarts: the file is the hub's only record of which
+// cloud instances it owns, so a path that moves with the working directory would
+// strand running instances as untrackable orphans on every restart. It anchors
+// to the config file's directory, else a fixed per-user dir — never a bare
+// relative path.
+func resolveDeployPath(configFile string) string {
+	if configFile != "" {
+		return filepath.Join(filepath.Dir(configFile), "aiscan-deploy.yaml")
+	}
+	if p := findWebConfigFile(""); p != "" {
+		return filepath.Join(filepath.Dir(p), "aiscan-deploy.yaml")
+	}
+	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
+		return filepath.Join(dir, "aiscan", "aiscan-deploy.yaml")
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return filepath.Join(home, ".aiscan", "aiscan-deploy.yaml")
+	}
+	if abs, err := filepath.Abs("aiscan-deploy.yaml"); err == nil {
+		return abs
+	}
+	return "aiscan-deploy.yaml"
 }
 

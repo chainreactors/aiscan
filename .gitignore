@@ -28,3 +28,16 @@ scan_results.jsonl
 pw_driver_bin
 node_modules/
 community.yaml
+
+# Local runtime state / operator artifacts
+/aiscan-deploy.yaml
+/*.log
+/.claude/
+/caict_home.png
+/caict_ips.txt
+/apps_*.json
+/redhaze_*.md
+
+# leftover from root-build workaround (see memory web-static-build-permission)
+web/static.oldroot*
+web/static.rootold*

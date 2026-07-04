@@ -30,6 +30,8 @@ type webCommand struct {
 	MaxScans    int    `long:"max-scans" default:"3" description:"Maximum concurrent scans"`
 	ScanTimeout int    `long:"scan-timeout" default:"600" description:"Maximum scan runtime in seconds"`
 	IOAToken    string `long:"ioa-token" description:"IOA access key (auto-generated if empty)"`
+	AdminToken  string `long:"admin-token" env:"AISCAN_ADMIN_TOKEN" description:"Admin token gating cloud/deploy endpoints (empty = open)"`
+	AgentBinary string `long:"agent-binary" env:"AISCAN_AGENT_BINARY" description:"Path to the aiscan binary served to deployed nodes (default: this executable)"`
 }
 
 type cliOptions struct {
@@ -148,6 +150,11 @@ func aiscan() {
 		}
 		if err != nil {
 			logger.Errorf("agent failed: %s", err)
+			// The logger flushes asynchronously; os.Exit skips that, so a fatal
+			// reason logged right before exit can be lost (this exact path
+			// crash-looped 200+ times with no visible cause). Write it straight
+			// to stderr too so a fatal startup error is never silent.
+			fmt.Fprintf(os.Stderr, "aiscan agent: fatal: %v\n", err)
 			os.Exit(1)
 		}
 	case runModeWeb:
