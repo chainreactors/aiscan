@@ -13,6 +13,7 @@ import (
 
 	"github.com/chainreactors/aiscan/pkg/commands"
 	"github.com/chainreactors/aiscan/pkg/telemetry"
+	"github.com/chainreactors/aiscan/pkg/tools/katanaguard"
 	"github.com/chainreactors/aiscan/pkg/tools/toolargs"
 	"github.com/projectdiscovery/goflags"
 	"github.com/projectdiscovery/gologger"
@@ -153,6 +154,12 @@ func (c *Command) Execute(ctx context.Context, args []string) (err error) {
 	options.OnResult = func(r katanaoutput.Result) {
 		collector.collect(&r)
 	}
+
+	release, err := katanaguard.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("katana: wait: %w", err)
+	}
+	defer release()
 
 	// Suppress gologger during crawl.
 	gologger.DefaultLogger.SetMaxLevel(levels.LevelSilent)
@@ -420,7 +427,6 @@ func addSchemeIfNotExists(inputURL string) string {
 	}
 	return "https://" + inputURL
 }
-
 
 // resultCollector implements katana's output.Writer interface.
 // It captures all results from both standard engine (via OnResult callback)

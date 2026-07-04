@@ -4,11 +4,11 @@ package scan
 
 import (
 	"context"
-	"math"
 	"net/url"
 	"strings"
 	"sync"
 
+	"github.com/chainreactors/aiscan/pkg/tools/katanaguard"
 	"github.com/projectdiscovery/gologger"
 	"github.com/projectdiscovery/gologger/levels"
 	"github.com/projectdiscovery/katana/pkg/engine/standard"
@@ -22,6 +22,12 @@ import (
 const (
 	capKatanaCrawl = "katana_crawl"
 	capKatanaDeep  = "katana_deep"
+
+	// maxCrawlBodyBytes bounds katana's per-response read. This crawler is aimed
+	// at arbitrary/hostile targets, so an unbounded body (the old math.MaxInt)
+	// could OOM a small agent VM on a single large response. Link/JS extraction
+	// does not need more than a few MB.
+	maxCrawlBodyBytes = 8 << 20 // 8 MiB
 )
 
 func init() {
@@ -87,17 +93,17 @@ func runKatanaCrawl(ctx context.Context, c *Command, e event, depth int, jsMode 
 	seen := make(map[string]struct{})
 
 	options := &katanatypes.Options{
-		MaxDepth:              depth,
-		FieldScope:            "rdn",
-		BodyReadSize:          math.MaxInt,
-		RateLimit:             150,
-		Strategy:              queue.DepthFirst.String(),
-		Silent:                true,
-		ScrapeJSResponses:     jsMode,
+		MaxDepth:               depth,
+		FieldScope:             "rdn",
+		BodyReadSize:           maxCrawlBodyBytes,
+		RateLimit:              150,
+		Strategy:               queue.DepthFirst.String(),
+		Silent:                 true,
+		ScrapeJSResponses:      jsMode,
 		ScrapeJSLuiceResponses: jsMode,
-		Timeout:               10,
-		Concurrency:           10,
-		Parallelism:           10,
+		Timeout:                10,
+		Concurrency:            10,
+		Parallelism:            10,
 		OnResult: func(r katanaoutput.Result) {
 			if r.Request == nil || r.Request.URL == "" {
 				return
@@ -125,6 +131,15 @@ func runKatanaCrawl(ctx context.Context, c *Command, e event, depth int, jsMode 
 	if c.Proxy != "" {
 		options.Proxy = c.Proxy
 	}
+
+	release, err := katanaguard.Acquire(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			emitError(emit, source, "katana wait %s: %v", wt.URL, err)
+		}
+		return
+	}
+	defer release()
 
 	gologger.DefaultLogger.SetMaxLevel(levels.LevelSilent)
 	crawlerOptions, err := katanatypes.NewCrawlerOptions(options)
@@ -177,6 +192,6 @@ func sameRootDomain(rawURL, rdn string) bool {
 
 type silentWriter struct{}
 
-func (w *silentWriter) Close() error                      { return nil }
-func (w *silentWriter) Write(_ *katanaoutput.Result) error { return nil }
+func (w *silentWriter) Close() error                         { return nil }
+func (w *silentWriter) Write(_ *katanaoutput.Result) error   { return nil }
 func (w *silentWriter) WriteErr(_ *katanaoutput.Error) error { return nil }
