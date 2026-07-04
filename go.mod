@@ -7,20 +7,20 @@ require (
 	github.com/carapace-sh/carapace v1.11.6
 	github.com/chainreactors/crtm v0.0.3-0.20260618163257-073207497076
 	github.com/chainreactors/fingers v1.2.2-0.20260703124922-b8ac7e00cf68
-	github.com/chainreactors/gogo/v2 v2.14.2-0.20260703125313-774bd79ac36e
+	github.com/chainreactors/gogo/v2 v2.14.2-0.20260704194421-e5ce938d9b51
 	github.com/chainreactors/ioa v0.1.2-0.20260621175506-35d6a4a11645
 	github.com/chainreactors/logs v0.0.0-20260624034259-9aaea4aa52cc
-	github.com/chainreactors/neutron v0.1.1-0.20260703124839-c4091ad1e02d
-	github.com/chainreactors/proton v0.3.3-0.20260703125000-97bdff4bcf27
+	github.com/chainreactors/neutron v0.1.1-0.20260704194031-f57d0a560e32
+	github.com/chainreactors/proton v0.3.3-0.20260704194051-e7034d2bb8cb
 	github.com/chainreactors/proxyclient v1.1.1-0.20260529172347-2a80e08d5593
 	github.com/chainreactors/proxyclient/extra v0.0.0-20260527160727-36cf133952c3
-	github.com/chainreactors/sdk v0.3.4-0.20260701052449-3d899ae2ef28
-	github.com/chainreactors/spray v1.3.3-0.20260703125243-3bbfb5d1983a
+	github.com/chainreactors/sdk v0.3.4-0.20260704194820-4141f24c2bcd
+	github.com/chainreactors/spray v1.3.3-0.20260704194611-7ce7b850d447
 	github.com/chainreactors/tui/console v0.0.0-20260701051656-c5b85e7256a9
 	github.com/chainreactors/tui/readline v0.0.0-20260626181537-7c0eb4b933cd
-	github.com/chainreactors/utils v0.0.0-20260630095004-c4fb7a13ed39
+	github.com/chainreactors/utils v0.0.0-20260704063748-6f849f173481
 	github.com/chainreactors/utils/mitmproxy v0.0.0-20260630095004-c4fb7a13ed39
-	github.com/chainreactors/utils/parsers v0.0.0-20260703124640-175b2abe30c2
+	github.com/chainreactors/utils/parsers v0.0.2
 	github.com/chainreactors/utils/pty v0.0.0-20260630095004-c4fb7a13ed39
 	github.com/chainreactors/zombie v1.3.0
 	github.com/charmbracelet/bubbles v1.0.0
@@ -309,11 +309,4 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	mvdan.cc/sh/v3 v3.13.1 // indirect
-)
-
-replace (
-	github.com/chainreactors/proton => /mnt/chainreactors/proton
-	github.com/chainreactors/sdk => /mnt/chainreactors/sdk
-	github.com/chainreactors/spray => /mnt/chainreactors/spray
-	github.com/chainreactors/utils/parsers => /mnt/chainreactors/utils/parsers
 )
