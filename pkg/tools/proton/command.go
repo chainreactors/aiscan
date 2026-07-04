@@ -284,7 +284,7 @@ func (c *Command) renderTemplateList(scanner *file.Scanner, jsonOutput bool) err
 	var sb strings.Builder
 	count := 0
 	for _, group := range scanner.Groups {
-		for _, ref := range group.Templates {
+		for _, ref := range group.Templates() {
 			count++
 			if jsonOutput {
 				data, _ := json.Marshal(map[string]string{
@@ -396,7 +396,7 @@ func scanSingleFile(scanner *file.Scanner, path string, callback func(file.Findi
 	for _, group := range scanner.Groups {
 		contents := scanner.ReadFile(path, group)
 		for _, c := range contents {
-			findings := scanner.ScanData(c.Data, c.Label, group)
+			findings := scanner.FindAll(c.Data, c.Label, group)
 			for _, f := range findings {
 				atomic.AddInt64(&scanner.Stats.Findings, 1)
 				callback(f)
@@ -428,7 +428,7 @@ func walkAndScan(ctx context.Context, scanner *file.Scanner, target string, call
 				}
 				contents := scanner.ReadFile(j.path, j.group)
 				for _, c := range contents {
-					findings := scanner.ScanData(c.Data, c.Label, j.group)
+					findings := scanner.FindAll(c.Data, c.Label, j.group)
 					if len(findings) > 0 {
 						atomic.AddInt64(&scanner.Stats.Findings, int64(len(findings)))
 						mu.Lock()
