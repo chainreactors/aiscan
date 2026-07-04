@@ -11,6 +11,9 @@ export interface ScanJob {
   report?: string;
   result?: ScanResult;
   error?: string;
+  project?: string;
+  /** Batch targets dropped by validation on submit (transient, create only). */
+  skipped?: { target: string; reason: string }[];
   created_at: string;
   updated_at: string;
 }
@@ -76,8 +79,25 @@ export interface ResultError {
   message: string;
 }
 
+// One entry in the shared asset pool (deduplicated by target). Source is
+// 'scan' | 'agent' | 'manual'.
+export interface PoolAsset {
+  id: string;
+  project_id?: string;
+  target: string;
+  label?: string;
+  source?: string;
+  status?: string;
+  note?: string;
+  services?: number;
+  loots?: number;
+  last_scan_id?: string;
+  first_seen: string;
+  last_seen: string;
+}
+
 export interface ScanEvent {
-  type: 'progress' | 'status' | 'complete' | 'error';
+  type: 'progress' | 'status' | 'stats' | 'complete' | 'error';
   scan_id: string;
   data?: string;
   status?: string;
@@ -142,6 +162,8 @@ export interface AgentStats {
   assets?: number;
   loots?: number;
   last_event?: string;
+  current_tool?: string;
+  current_detail?: string;
 }
 
 // ConfigStatus — GET /api/config response (secrets masked, *_configured flags)
@@ -197,12 +219,442 @@ export async function saveConfig(config: DistributeConfig): Promise<ConfigStatus
   });
 }
 
-export async function submitScan(target: string, mode: string, options: ScanOptions): Promise<ScanJob> {
+// LLMTestRequest — POST /api/config/llm/test body. Leave api_key blank to
+// reuse the key already stored on the server.
+export interface LLMTestRequest {
+  provider: string;
+  base_url: string;
+  api_key: string;
+  model: string;
+  proxy: string;
+}
+
+// LLMTestResult — outcome of a connectivity probe. ok=false carries the
+// failure reason in `error`; transport/HTTP errors never reject the promise.
+export interface LLMTestResult {
+  ok: boolean;
+  provider: string;
+  model: string;
+  latency_ms: number;
+  reply?: string;
+  error?: string;
+}
+
+export async function testLLM(req: LLMTestRequest): Promise<LLMTestResult> {
+  return apiJSON('/api/config/llm/test', 'Failed to test LLM', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+}
+
+// ConnCheck — outcome of probing one external dependency within a settings
+// section. A section may return several checks (Recon probes FOFA and Hunter
+// independently). ok=false carries the reason in `error`.
+export interface ConnCheck {
+  name: string; // fofa | hunter | cyberhub | tavily | ioa | recon
+  ok: boolean;
+  latency_ms: number;
+  detail?: string;
+  error?: string;
+}
+
+export interface ConnTestResponse {
+  checks: ConnCheck[];
+}
+
+// testConn probes the external dependencies of a settings section
+// (cyberhub | recon | search | ioa). The current (possibly unsaved) form is
+// sent so edits are tested; blank secrets fall back to stored values server-side.
+export async function testConn(section: string, config: DistributeConfig): Promise<ConnTestResponse> {
+  return apiJSON(`/api/config/${section}/test`, 'Failed to test connection', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+}
+
+// --- Cloud auto-deploy types ---
+
+export interface CloudCredentialView {
+  id: string
+  name: string
+  provider: string
+  access_key_id: string // masked
+  default_region: string
+  secret_configured: boolean
+}
+
+export interface SaveCredentialInput {
+  id?: string
+  name?: string
+  provider: string
+  access_key_id: string
+  access_key_secret: string
+  default_region: string
+}
+
+export interface CloudRegion {
+  id: string
+  local_name?: string
+}
+
+export interface ListRegionsInput {
+  cloud_id?: string
+  provider?: string
+  access_key_id?: string
+  access_key_secret?: string
+}
+
+export interface CloudImage {
+  id: string
+  name?: string
+  os_name?: string
+  platform?: string
+  arch?: string
+}
+
+export interface CloudInstanceType {
+  id: string
+  cpu: number
+  memory_gib: number
+}
+
+export interface ListImagesInput {
+  cloud_id: string
+  region?: string
+}
+
+export interface ListInstanceTypesInput {
+  cloud_id: string
+  region?: string
+  zone?: string
+}
+
+export interface NodeProgress {
+  phase: string // booting | downloading | installing | starting
+  bytes?: number
+  total?: number
+  age_sec: number
+}
+
+export interface DeployNodeView {
+  instance_id: string
+  node_name: string
+  public_ip?: string
+  private_ip?: string
+  status?: string
+  registered: boolean
+  agent_id?: string
+  busy?: boolean
+  progress?: NodeProgress
+}
+
+export interface DeployRecordView {
+  id: string
+  cloud_id: string
+  provider: string
+  region: string
+  space: string
+  nodes: DeployNodeView[]
+  status: string
+  phase?: string
+  desired_count?: number
+  ttl_minutes?: number
+  recycle_when_idle?: boolean
+  created_at: string
+  updated_at?: string
+  recycled_at?: string
+  error?: string
+  registered_count: number
+  orphans: number
+}
+
+export interface DeployRequest {
+  cloud_id: string
+  region?: string
+  zone_id?: string
+  image_id: string
+  instance_type: string
+  security_group_id?: string
+  vswitch_id?: string
+  vpc_id?: string
+  count: number
+  space?: string
+  bandwidth_out?: number
+  overrides?: Record<string, string>
+  ttl_minutes?: number
+  recycle_when_idle?: boolean
+  dry_run?: boolean
+}
+
+export interface DeployResult {
+  record?: DeployRecordView
+  script?: string
+  dry_run: boolean
+}
+
+export interface PublicURLInfo {
+  public_url: string
+  providers: string[]
+}
+
+export interface TunnelStatus {
+  backend: string
+  available: boolean
+  enabled: boolean
+  running: boolean
+  connected: boolean
+  phase?: string // provisioning | connecting | connected | error
+  relay_ip?: string
+  provider?: string
+  region?: string
+  public_url?: string
+  error?: string
+  started_at?: string
+}
+
+export interface StartTunnelRequest {
+  cloud_id?: string
+  region?: string
+  instance_type?: string
+  image_id?: string
+  bandwidth?: number
+}
+
+// --- Admin token (gates cloud/deploy endpoints) ---
+
+const ADMIN_TOKEN_KEY = 'aiscan_admin_token'
+
+export function getAdminToken(): string {
+  try {
+    return window.localStorage.getItem(ADMIN_TOKEN_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function setAdminToken(token: string): void {
+  try {
+    if (token) window.localStorage.setItem(ADMIN_TOKEN_KEY, token)
+    else window.localStorage.removeItem(ADMIN_TOKEN_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+function adminHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...(extra || {}) }
+  const token = getAdminToken()
+  if (token) headers['X-Admin-Token'] = token
+  return headers
+}
+
+// --- Cloud auto-deploy API ---
+
+export async function getPublicURL(): Promise<PublicURLInfo> {
+  return apiJSON('/api/cloud/public-url', 'Failed to load public URL', { headers: adminHeaders() })
+}
+
+export async function setPublicURL(publicURL: string): Promise<void> {
+  await apiJSON('/api/cloud/public-url', 'Failed to save public URL', {
+    method: 'PUT',
+    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ public_url: publicURL }),
+  })
+}
+
+export async function getTunnelStatus(): Promise<TunnelStatus> {
+  return apiJSON('/api/cloud/tunnel', 'Failed to load tunnel status', { headers: adminHeaders() })
+}
+
+export async function startTunnel(req: StartTunnelRequest = {}): Promise<TunnelStatus> {
+  return apiJSON('/api/cloud/tunnel', 'Failed to start tunnel', {
+    method: 'POST',
+    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(req),
+  })
+}
+
+export async function stopTunnel(): Promise<TunnelStatus> {
+  return apiJSON('/api/cloud/tunnel', 'Failed to stop tunnel', {
+    method: 'DELETE',
+    headers: adminHeaders(),
+  })
+}
+
+// destroyRelay terminates the auto-provisioned relay VM and clears the tunnel.
+export async function destroyRelay(): Promise<TunnelStatus> {
+  return apiJSON('/api/cloud/tunnel/relay', 'Failed to destroy relay', {
+    method: 'DELETE',
+    headers: adminHeaders(),
+  })
+}
+
+export async function listCloudCredentials(): Promise<CloudCredentialView[]> {
+  return apiJSON('/api/cloud/credentials', 'Failed to list credentials', { headers: adminHeaders() })
+}
+
+export async function saveCloudCredential(input: SaveCredentialInput): Promise<CloudCredentialView> {
+  return apiJSON('/api/cloud/credentials', 'Failed to save credential', {
+    method: 'PUT',
+    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteCloudCredential(id: string): Promise<void> {
+  await apiJSON(`/api/cloud/credentials/${encodeURIComponent(id)}`, 'Failed to delete credential', {
+    method: 'DELETE',
+    headers: adminHeaders(),
+  })
+}
+
+export async function listCloudRegions(input: ListRegionsInput): Promise<CloudRegion[]> {
+  return apiJSON('/api/cloud/regions', 'Failed to list regions', {
+    method: 'POST',
+    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(input),
+  })
+}
+
+export async function listCloudImages(input: ListImagesInput): Promise<CloudImage[]> {
+  return apiJSON('/api/cloud/images', 'Failed to list images', {
+    method: 'POST',
+    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(input),
+  })
+}
+
+export async function listCloudInstanceTypes(input: ListInstanceTypesInput): Promise<CloudInstanceType[]> {
+  return apiJSON('/api/cloud/instance-types', 'Failed to list instance types', {
+    method: 'POST',
+    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(input),
+  })
+}
+
+export async function createDeploy(req: DeployRequest): Promise<DeployResult> {
+  const res = await fetch('/api/deploy', {
+    method: 'POST',
+    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(req),
+  })
+  const body = await res.json().catch(() => null)
+  // A partial launch returns 207 (StatusMultiStatus) with {result, error}:
+  // instances may already be billing while network setup / node persistence
+  // failed. 207 is a 2xx, so res.ok is true and apiJSON would report success —
+  // detect the wrapper's `error` field and throw so the operator is told.
+  const partialError = body && typeof body === 'object' && 'error' in body ? (body as any).error : ''
+  if (!res.ok || partialError) {
+    throw new Error(partialError || (body && (body as any).error) || 'Failed to create deployment')
+  }
+  return body as DeployResult
+}
+
+export async function listDeploys(): Promise<DeployRecordView[]> {
+  return apiJSON('/api/deploy', 'Failed to list deployments', { headers: adminHeaders() })
+}
+
+export async function recycleDeploy(id: string, instanceIDs?: string[]): Promise<DeployRecordView> {
+  if (instanceIDs && instanceIDs.length > 0) {
+    return apiJSON(`/api/deploy/${encodeURIComponent(id)}/recycle`, 'Failed to recycle', {
+      method: 'POST',
+      headers: adminHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ instance_ids: instanceIDs }),
+    })
+  }
+  return apiJSON(`/api/deploy/${encodeURIComponent(id)}`, 'Failed to recycle', {
+    method: 'DELETE',
+    headers: adminHeaders(),
+  })
+}
+
+export async function recycleAllDeploys(cloudID?: string, space?: string): Promise<{ recycled: number }> {
+  return apiJSON('/api/deploy/recycle-all', 'Failed to recycle all', {
+    method: 'POST',
+    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ cloud_id: cloudID || '', space: space || '' }),
+  })
+}
+
+// --- Local agents (hub-hosted nodes: one-click launch + delete) ---
+
+export interface LocalAgentView {
+  name: string
+  pid: number
+  registered: boolean
+  busy?: boolean
+}
+
+export async function launchLocalAgent(): Promise<LocalAgentView> {
+  return apiJSON('/api/deploy/local', 'Failed to launch local agent', {
+    method: 'POST',
+    headers: adminHeaders(),
+  })
+}
+
+export async function listLocalAgents(): Promise<LocalAgentView[]> {
+  return apiJSON('/api/deploy/local', 'Failed to list local agents', { headers: adminHeaders() })
+}
+
+export async function stopLocalAgent(name: string): Promise<void> {
+  await apiJSON(`/api/deploy/local/${encodeURIComponent(name)}`, 'Failed to delete local agent', {
+    method: 'DELETE',
+    headers: adminHeaders(),
+  })
+}
+
+export async function submitScan(target: string, mode: string, options: ScanOptions, project?: string): Promise<ScanJob> {
   return apiJSON('/api/scans', 'Failed to submit scan', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ target, mode, ...options }),
+    body: JSON.stringify({ target, mode, ...options, project }),
   });
+}
+
+export async function getAssets(project?: string): Promise<PoolAsset[]> {
+  const q = project ? `?project=${encodeURIComponent(project)}` : '';
+  return apiJSON(`/api/assets${q}`, 'Failed to load assets');
+}
+
+export async function addAssets(targets: string[], source?: string, label?: string, project?: string): Promise<PoolAsset[]> {
+  return apiJSON('/api/assets', 'Failed to add assets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ targets, source, label, project }),
+  });
+}
+
+export async function deleteAsset(id: string, project?: string): Promise<void> {
+  const q = project ? `?project=${encodeURIComponent(project)}` : '';
+  await apiJSON(`/api/assets/${encodeURIComponent(id)}${q}`, 'Failed to delete asset', { method: 'DELETE' });
+}
+
+// --- Projects (asset-pool scope) ---
+
+export interface Project {
+  id: string
+  name: string
+  assets: number
+  created_at: string
+}
+
+export async function getProjects(): Promise<Project[]> {
+  return apiJSON('/api/projects', 'Failed to load projects');
+}
+
+export async function createProject(name: string, id?: string): Promise<Project> {
+  return apiJSON('/api/projects', 'Failed to create project', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, id }),
+  });
+}
+
+// Cascades on the server: the project and its entire asset pool are removed.
+export async function deleteProject(id: string): Promise<void> {
+  await apiJSON(`/api/projects/${encodeURIComponent(id)}`, 'Failed to delete project', { method: 'DELETE' });
 }
 
 export async function getScan(id: string): Promise<ScanJob> {
@@ -213,8 +665,8 @@ export async function listScans(): Promise<ScanJob[]> {
   return apiJSON('/api/scans', 'Failed to list scans');
 }
 
-export async function cancelScan(id: string): Promise<void> {
-  await apiJSON(`/api/scans/${encodeURIComponent(id)}`, 'Failed to cancel scan', { method: 'DELETE' });
+export async function deleteScan(id: string): Promise<void> {
+  await apiJSON(`/api/scans/${encodeURIComponent(id)}`, 'Failed to delete scan', { method: 'DELETE' });
 }
 
 export function subscribeScanEvents(
@@ -266,6 +718,7 @@ export function subscribeScanEvents(
   };
   es.addEventListener('progress', handler('progress'));
   es.addEventListener('status', handler('status'));
+  es.addEventListener('stats', handler('stats'));
   es.addEventListener('complete', handler('complete'));
   es.addEventListener('error', handler('error'));
   es.addEventListener('output', handler('output'));
@@ -301,7 +754,7 @@ export type ChatEventType =
   | 'message' | 'message_start' | 'message_delta' | 'message_end'
   | 'tool_call' | 'tool_result' | 'thinking'
   | 'scan_started' | 'scan_progress' | 'scan_complete' | 'scan_error'
-  | 'agent_joined' | 'error'
+  | 'agent_joined' | 'eval' | 'error'
 
 export interface ChatEvent {
   type: ChatEventType
@@ -320,6 +773,9 @@ export interface ChatEvent {
   result?: ScanResult
   data?: string
   error?: string
+  eval_round?: number
+  eval_pass?: boolean
+  eval_reason?: string
 }
 
 // --- Chat session API ---
@@ -346,11 +802,26 @@ export async function deleteChatSession(id: string): Promise<void> {
   })
 }
 
-export async function sendChatMessage(sessionID: string, content: string): Promise<ChatMessage> {
+export async function sendChatMessage(
+  sessionID: string,
+  content: string,
+  opts?: { persist?: boolean; maxTurns?: number; evalCriteria?: string; evalMaxRounds?: number },
+): Promise<ChatMessage> {
+  const body: Record<string, unknown> = { content }
+  if (opts?.persist) {
+    body.persist = true
+    const criteria = opts.evalCriteria?.trim()
+    if (criteria) {
+      body.eval_criteria = criteria
+      if (opts.evalMaxRounds && opts.evalMaxRounds > 0) body.eval_max_rounds = opts.evalMaxRounds
+    } else if (opts.maxTurns && opts.maxTurns > 0) {
+      body.persist_max_turns = opts.maxTurns
+    }
+  }
   return apiJSON(`/api/chat/sessions/${encodeURIComponent(sessionID)}/messages`, 'Failed to send message', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(body),
   })
 }
 
@@ -385,9 +856,19 @@ export async function listChatMessages(sessionID: string): Promise<ChatMessage[]
   return apiJSON(`/api/chat/sessions/${encodeURIComponent(sessionID)}/messages`, 'Failed to list messages')
 }
 
+// Fetch a scan's markdown report, re-rendered server-side in the given language
+// ('en' | 'zh'). Returns '' when the report isn't ready yet (404) so callers can
+// just show a placeholder.
+export async function fetchScanReport(scanID: string, lang: string): Promise<string> {
+  const res = await fetch(`/api/scans/${encodeURIComponent(scanID)}/report?lang=${encodeURIComponent(lang)}`)
+  if (!res.ok) return ''
+  return res.text()
+}
+
 export function subscribeChatEvents(
   sessionID: string,
   onEvent: (event: ChatEvent) => void,
+  onReconnect?: () => void,
 ): () => void {
   const url = `/api/chat/sessions/${encodeURIComponent(sessionID)}/events`
   const es = new EventSource(url)
@@ -396,7 +877,7 @@ export function subscribeChatEvents(
     'message', 'message_start', 'message_delta', 'message_end',
     'tool_call', 'tool_result', 'thinking',
     'scan_started', 'scan_progress', 'scan_complete', 'scan_error',
-    'agent_joined', 'error',
+    'agent_joined', 'eval', 'error',
   ]
 
   for (const type of eventTypes) {
@@ -413,7 +894,12 @@ export function subscribeChatEvents(
   }
 
   es.addEventListener('error', () => {
-    // EventSource auto-reconnects; no action needed.
+    // EventSource auto-reconnects, but the chat SSE topic keeps no backlog, so a
+    // terminal event (message_end / tool_result / the aggregate 'message')
+    // broadcast during the drop is lost — which strands the composer in a
+    // permanent "thinking" state. Reconcile from REST truth on each connection
+    // error (idempotent), mirroring the scan path's getScan-on-error recovery.
+    onReconnect?.()
   })
 
   return () => es.close()

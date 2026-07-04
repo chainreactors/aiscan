@@ -1,6 +1,8 @@
 import { AlertTriangle, CheckCircle2, HelpCircle, Info, ShieldCheck, XCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { ScanResult } from '../api'
 import { buildFindingsSummary, PRIORITY_ORDER, type FindingsSummaryModel } from '../lib/scan-result'
+import { severityTone } from '../lib/tones'
 import { useMemo } from 'react'
 import { cn } from '@aspect/theme'
 
@@ -8,24 +10,17 @@ interface FindingsSummaryProps {
   result: ScanResult
 }
 
-const PRIORITY_CONFIG = {
-  critical: { label: 'Critical', bg: 'bg-red-500/15', text: 'text-red-600 dark:text-red-400', border: 'border-red-500/30' },
-  high: { label: 'High', bg: 'bg-orange-500/15', text: 'text-orange-600 dark:text-orange-400', border: 'border-orange-500/30' },
-  medium: { label: 'Medium', bg: 'bg-yellow-500/15', text: 'text-yellow-600 dark:text-warning', border: 'border-yellow-500/30' },
-  low: { label: 'Low', bg: 'bg-green-500/15', text: 'text-green-600 dark:text-green-400', border: 'border-green-500/30' },
-  info: { label: 'Info', bg: 'bg-blue-500/15', text: 'text-blue-600 dark:text-blue-400', border: 'border-blue-500/30' },
-} as const
-
 export default function FindingsSummary({ result }: FindingsSummaryProps) {
+  const { t } = useTranslation('findings')
   const summary = useMemo(() => buildFindingsSummary(result), [result])
 
   if (!summary) return null
 
   return (
     <div className="rounded-lg border border-border bg-card/50 p-4 space-y-4">
-      <div className="flex items-center gap-2 text-sm font-medium text-primary">
+      <div className="flex items-center gap-2 text-sm font-medium text-ai">
         <ShieldCheck className="h-4 w-4" />
-        <span>AI Analysis Summary</span>
+        <span>{t('aiAnalysisSummary')}</span>
       </div>
 
       <PriorityGrid summary={summary} />
@@ -42,22 +37,23 @@ export default function FindingsSummary({ result }: FindingsSummaryProps) {
 }
 
 function PriorityGrid({ summary }: { summary: FindingsSummaryModel }) {
+  const { t } = useTranslation('findings')
   return (
     <div className="grid grid-cols-5 gap-2">
       {PRIORITY_ORDER.map((priority) => {
-        const config = PRIORITY_CONFIG[priority]
+        const tone = severityTone[priority]
         const count = summary.byPriority[priority]?.length || 0
         return (
           <div
             key={priority}
             className={cn(
               'rounded-md border p-2.5 text-center',
-              config.bg, config.border,
+              tone.bg, tone.border,
               count === 0 && 'opacity-40',
             )}
           >
-            <div className={cn('text-lg font-bold tabular-nums', config.text)}>{count}</div>
-            <div className="text-[10px] uppercase text-muted-foreground">{config.label}</div>
+            <div className={cn('text-lg font-bold tabular-nums', tone.text)}>{count}</div>
+            <div className="mono-label text-muted-foreground">{t(`severity_${priority}`)}</div>
           </div>
         )
       })}
@@ -66,6 +62,7 @@ function PriorityGrid({ summary }: { summary: FindingsSummaryModel }) {
 }
 
 function VerificationStats({ summary }: { summary: FindingsSummaryModel }) {
+  const { t } = useTranslation('findings')
   const confirmed = summary.byStatus['confirmed']?.length || 0
   const info = summary.byStatus['info']?.length || 0
   const inconclusive = summary.byStatus['inconclusive']?.length || 0
@@ -79,38 +76,38 @@ function VerificationStats({ summary }: { summary: FindingsSummaryModel }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">AI Verification</span>
+        <span className="text-muted-foreground">{t('aiVerification')}</span>
         <span className="font-medium text-foreground">
-          {confirmed}/{total} confirmed
+          {t('confirmedRatio', { confirmed, total })}
         </span>
       </div>
 
       <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
         <div
-          className="h-full rounded-full bg-green-500 transition-all"
+          className="h-full rounded-full bg-success transition-all"
           style={{ width: `${ratio}%` }}
         />
       </div>
 
       <div className="flex flex-wrap gap-3 text-[11px]">
         {confirmed > 0 && (
-          <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
-            <CheckCircle2 className="h-3 w-3" />{confirmed} confirmed
+          <span className="inline-flex items-center gap-1 text-success">
+            <CheckCircle2 className="h-3 w-3" />{t('confirmedCount', { count: confirmed })}
           </span>
         )}
         {info > 0 && (
-          <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
-            <Info className="h-3 w-3" />{info} info
+          <span className="inline-flex items-center gap-1 text-info">
+            <Info className="h-3 w-3" />{t('infoCount', { count: info })}
           </span>
         )}
         {inconclusive > 0 && (
-          <span className="inline-flex items-center gap-1 text-yellow-600 dark:text-warning">
-            <HelpCircle className="h-3 w-3" />{inconclusive} inconclusive
+          <span className="inline-flex items-center gap-1 text-warning">
+            <HelpCircle className="h-3 w-3" />{t('inconclusiveCount', { count: inconclusive })}
           </span>
         )}
         {notConfirmed > 0 && (
           <span className="inline-flex items-center gap-1 text-muted-foreground">
-            <XCircle className="h-3 w-3" />{notConfirmed} not confirmed
+            <XCircle className="h-3 w-3" />{t('notConfirmedCount', { count: notConfirmed })}
           </span>
         )}
       </div>
@@ -119,23 +116,24 @@ function VerificationStats({ summary }: { summary: FindingsSummaryModel }) {
 }
 
 function TopFinding({ summary }: { summary: FindingsSummaryModel }) {
+  const { t } = useTranslation('findings')
   const top = summary.topFinding!
-  const config = PRIORITY_CONFIG[top.priority]
+  const tone = severityTone[top.priority]
 
   return (
-    <div className={cn('rounded-md border p-3', config.border, config.bg)}>
+    <div className={cn('rounded-md border p-3', tone.border, tone.bg)}>
       <div className="flex items-start gap-2">
-        <AlertTriangle className={cn('h-4 w-4 mt-0.5 shrink-0', config.text)} />
+        <AlertTriangle className={cn('h-4 w-4 mt-0.5 shrink-0', tone.text)} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={cn('text-xs font-semibold uppercase', config.text)}>{top.priority}</span>
+            <span className={cn('mono-label', tone.text)}>{t(`severity_${top.priority}`)}</span>
             <span className="text-xs font-medium text-foreground break-words">{top.title}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
             <span className="font-mono break-all">{top.target}</span>
             {top.source === 'verify' && top.status === 'confirmed' && (
-              <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
-                <CheckCircle2 className="h-3 w-3" />AI Verified
+              <span className="inline-flex items-center gap-1 text-success">
+                <CheckCircle2 className="h-3 w-3" />{t('aiVerified')}
               </span>
             )}
             {top.tags.slice(0, 3).map(tag => (

@@ -2,7 +2,7 @@ import type { TimelineItem as ViewerTimelineItem } from '@aspect/viewer'
 import type { TimelineItem as LocalTimelineItem } from '../hooks/useChatSession'
 
 export function toViewerTimeline(items: LocalTimelineItem[]): ViewerTimelineItem[] {
-  return items.map(toViewerTimelineItem).filter(Boolean) as ViewerTimelineItem[]
+  return items.map(toViewerTimelineItem).filter((x): x is ViewerTimelineItem => x !== null)
 }
 
 function toViewerTimelineItem(item: LocalTimelineItem): ViewerTimelineItem | null {

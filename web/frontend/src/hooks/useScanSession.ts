@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getScan, listScans, submitScan, subscribeScanEvents } from '../api'
+import { deleteScan, getScan, listScans, submitScan, subscribeScanEvents } from '../api'
 import type { ScanEvent, ScanJob, ScanOptions, ScanResult } from '../api'
 import { isRootPath, scanIdFromPath, setScanRoute, type RouteMode } from '../lib/scan-route'
 
-export function useScanSession() {
+export function useScanSession(project: string) {
   const [scans, setScans] = useState<ScanJob[]>([])
   const [activeScan, setActiveScan] = useState<ScanJob | null>(null)
   const [progressLines, setProgressLines] = useState<string[]>([])
-  const [report, setReport] = useState('')
   const [result, setResult] = useState<ScanResult | null>(null)
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState('')
-  const [logCollapsed, setLogCollapsed] = useState(false)
   const unsubRef = useRef<(() => void) | null>(null)
   const activationRef = useRef(0)
 
@@ -36,13 +34,11 @@ export function useScanSession() {
     const activation = ++activationRef.current
     setError('')
     setProgressLines([])
-    setReport('')
     setResult(null)
     setScanning(true)
-    setLogCollapsed(false)
 
     try {
-      const job = await submitScan(target, mode, options)
+      const job = await submitScan(target, mode, options, project)
       if (activation !== activationRef.current) return
       refreshScans()
       await activateScan(job, 'push', activation)
@@ -53,11 +49,22 @@ export function useScanSession() {
     }
   }
 
-  function subscribeToScan(id: string) {
+  function subscribeToScan(id: string, activation: number) {
     closeSubscription()
     unsubRef.current = subscribeScanEvents(id, (event: ScanEvent) => {
       if (event.type === 'progress' && event.data) {
         setProgressLines((prev) => [...prev, event.data!])
+        if (event.result) {
+          setResult(event.result)
+          setActiveScan((scan) => (scan?.id === id ? { ...scan, result: event.result } : scan))
+        }
+        return
+      }
+
+      // Incremental structured snapshot mid-scan: light up counters, findings,
+      // and the asset tree without touching the scanning state. The final
+      // authoritative result still arrives with the 'complete' event.
+      if (event.type === 'stats') {
         if (event.result) {
           setResult(event.result)
           setActiveScan((scan) => (scan?.id === id ? { ...scan, result: event.result } : scan))
@@ -76,7 +83,6 @@ export function useScanSession() {
 
       if (event.type === 'complete') {
         setScanning(false)
-        setLogCollapsed(true)
         setError('')
         if (event.result) setResult(event.result)
         setActiveScan((scan) =>
@@ -91,7 +97,11 @@ export function useScanSession() {
         )
         refreshScans()
         if (!event.result) {
-          loadResult(id)
+          // Pass the subscription's activation so a getScan response that
+          // resolves after the user has navigated to another scan is discarded
+          // (matches every other loadResult caller); otherwise a reconnect-driven
+          // resultless 'complete' could overwrite the newly-selected scan's body.
+          loadResult(id, activation)
         }
         return
       }
@@ -119,7 +129,6 @@ export function useScanSession() {
       const job = await getScan(id)
       if (activation && activation !== activationRef.current) return
       if (job.result) setResult(job.result)
-      if (job.report) setReport(job.report)
       setActiveScan((scan) => (scan?.id === id ? { ...scan, ...job } : scan))
     } catch {}
   }
@@ -131,21 +140,17 @@ export function useScanSession() {
     setError('')
     setProgressLines([])
     setResult(scan.result || null)
-    setReport(scan.status === 'completed' && scan.report ? scan.report : '')
-    setLogCollapsed(false)
     setScanning(scan.status === 'queued' || scan.status === 'running')
 
     if (scan.status === 'completed') {
       setScanning(false)
-      setLogCollapsed(true)
       if (!scan.result) {
         await loadResult(scan.id, activation)
       }
     } else if (scan.status === 'queued' || scan.status === 'running') {
-      subscribeToScan(scan.id)
+      subscribeToScan(scan.id, activation)
     } else {
       setScanning(false)
-      setReport('')
     }
   }
 
@@ -168,15 +173,30 @@ export function useScanSession() {
     closeSubscription()
     setActiveScan(null)
     setProgressLines([])
-    setReport('')
     setResult(null)
     setScanning(false)
-    setLogCollapsed(false)
   }
 
   function clearActiveScan() {
     resetActiveScan()
     setError('')
+  }
+
+  async function removeScan(id: string) {
+    setError('')
+    try {
+      await deleteScan(id)
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete scan')
+      return
+    }
+    setScans((prev) => prev.filter((scan) => scan.id !== id))
+    // If the open scan was the one removed, unwind its view and drop back to root
+    // so the URL no longer points at a scan that no longer exists.
+    if (activeScan?.id === id) {
+      clearActiveScan()
+      window.history.pushState({}, '', '/')
+    }
   }
 
   useEffect(() => {
@@ -203,15 +223,13 @@ export function useScanSession() {
     scans,
     activeScan,
     progressLines,
-    report,
     result,
     scanning,
     error,
-    logCollapsed,
     refreshScans,
     submit,
+    removeScan,
     selectScan: (scan: ScanJob) => activateScan(scan, 'push'),
     clearError: () => setError(''),
-    toggleLog: () => setLogCollapsed((collapsed) => !collapsed),
   }
 }

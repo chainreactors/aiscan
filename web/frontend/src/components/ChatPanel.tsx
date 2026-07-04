@@ -1,15 +1,20 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
 import {
   AlertTriangle,
-  Bot,
+  CheckCircle2,
   CircleDashed,
   GitBranch,
   MessageSquare,
+  Sparkles,
+  Target,
   User,
   Wrench,
   X,
 } from 'lucide-react'
 import { cn } from '@aspect/theme'
+import BrandMark from './brand/BrandMark'
 import { MarkdownContent } from '@aspect/markdown'
 import {
   AssistantResponse,
@@ -20,16 +25,18 @@ import {
   resolveTimelineRenderer,
   summarizeArgs,
   type ChatAttachment,
+  type CommandHint,
   type ExtensionTimelineItem,
 } from '@aspect/viewer'
 import { uploadChatFile } from '../api'
 import type { ChatMessage, ScanResult } from '../api'
 import type { AssistantResponseState, TimelineItem } from '../hooks/useChatSession'
+import InstrumentIdle from './InstrumentIdle'
 import { toViewerTimeline } from '../lib/timeline-mapper'
 
 const workspaceClass = 'mx-auto w-full max-w-[96rem] px-4 sm:px-5 lg:px-6'
-const contentOffsetClass = 'xl:ml-[10.75rem]'
-const threadOffsetClass = '2xl:mr-[14.75rem]'
+const contentOffsetClass = 'xl:ml-[6.75rem]'
+const threadOffsetClass = 'xl:mr-[6.75rem]'
 
 interface Props {
   timeline: TimelineItem[]
@@ -41,7 +48,9 @@ interface Props {
   error: string
   hasActiveSession: boolean
   activeSessionID: string | null
-  onSend: (content: string) => void
+  agentOffline?: boolean
+  agentName?: string
+  onSend: (content: string, opts?: { persist?: boolean; maxTurns?: number; evalCriteria?: string; evalMaxRounds?: number }) => void
   onPause: () => void
   onClearError: () => void
   onShowScanDetail: (scanID: string) => void
@@ -58,27 +67,101 @@ export default function ChatPanel({
   error,
   activeSessionID,
   hasActiveSession,
+  agentOffline,
+  agentName,
   onSend,
   onPause,
   onClearError,
   onShowScanDetail,
   detailOpen,
 }: Props) {
+  const { t } = useTranslation('chat')
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
+  const jumpRef = useRef(false)
   const inputFormClass = cn(contentOffsetClass, !detailOpen && threadOffsetClass)
   const hasAssistantResponse = timeline.some((item) => item.kind === 'assistant_response')
+  const [persist, setPersist] = useState(false)
+  const [persistMax, setPersistMax] = useState(20)
+  const [evalCriteria, setEvalCriteria] = useState('')
+  const [evalMaxRounds, setEvalMaxRounds] = useState(3)
+  const evalRef = useRef<HTMLTextAreaElement>(null)
+  // Screen-reader turn status. Streamed replies mutate the DOM silently, so
+  // mirror the coarse turn phase into a polite live region below. It announces
+  // transitions (thinking → responding → done), never the token stream itself
+  // (a live region on the growing text would restart the reader on every delta).
+  const [liveStatus, setLiveStatus] = useState('')
+  const wasActiveRef = useRef(false)
+
+  function sendOpts() {
+    if (!persist) return undefined
+    const criteria = evalCriteria.trim()
+    if (criteria) return { persist: true, evalCriteria: criteria, evalMaxRounds }
+    return { persist: true, maxTurns: persistMax > 0 ? persistMax : undefined }
+  }
+
+  // Slash commands the hub handles directly (see parseSlashCommand /
+  // dispatchUserMessage in pkg/web/service.go). Descriptions are i18n'd; the
+  // hint popup shows cmd + desc, so keep desc short and put full syntax here.
+  const chatCommands: CommandHint[] = [
+    { cmd: '/scan', desc: t('cmdScan'), usage: '/scan <target> [--mode full] [--verify] [--sniper] [--deep]' },
+    { cmd: '/agents', desc: t('cmdAgents') },
+    { cmd: '/shell', desc: t('cmdShell'), usage: '/shell <command>' },
+    { cmd: '/help', desc: t('cmdHelp') },
+  ]
+
+  // Re-entering a session (switching sessions, or returning to the chat tab)
+  // re-pins to the bottom and requests an instant jump, so we land on the
+  // latest message instead of sitting at the top.
+  useEffect(() => {
+    stickRef.current = true
+    jumpRef.current = true
+    // Goal (persist/eval) mode is per-session intent. ChatPanel doesn't remount
+    // on session switch, so clear it here — otherwise session A's done-when
+    // criteria stays toggled on and gets silently sent with the next message in
+    // session B (an unexpected multi-round agentic run against stale criteria).
+    setPersist(false)
+    setPersistMax(20)
+    setEvalCriteria('')
+    setEvalMaxRounds(3)
+  }, [activeSessionID])
 
   useEffect(() => {
-    if (stickRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [timeline.length, streamingText, isThinking])
+    if (!stickRef.current) return
+    if (timeline.length === 0 && streamingText === null) return
+    const behavior: ScrollBehavior = jumpRef.current ? 'auto' : 'smooth'
+    jumpRef.current = false
+    bottomRef.current?.scrollIntoView({ behavior })
+    // Depend on `timeline` (not `timeline.length`): streamed deltas update the
+    // last item in place, producing a new array reference but the same length,
+    // so keying on length would freeze autoscroll mid-reply.
+  }, [timeline, streamingText, isThinking])
+
+  // Auto-grow the goal criteria textarea (min ~2 rows, capped) so long
+  // natural-language goals stay readable instead of scrolling a one-liner.
+  useEffect(() => {
+    const el = evalRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 144) + 'px'
+  }, [evalCriteria, persist])
+
+  // Derive the polite screen-reader status from the turn phase. `isBusy` keeps
+  // the "working" state across tool-execution gaps (thinking false, no stream)
+  // so the "done" cue fires once when the whole turn actually settles, not on
+  // every pause between tool calls.
+  useEffect(() => {
+    const active = isBusy || isThinking || streamingText !== null
+    if (streamingText !== null) setLiveStatus(t('a11yResponding'))
+    else if (active) setLiveStatus(t('a11yThinking'))
+    else if (wasActiveRef.current) setLiveStatus(t('a11yTurnDone'))
+    wasActiveRef.current = active
+  }, [isBusy, isThinking, streamingText, t])
 
   async function handleSendWithAttachments(content: string, attachments?: ChatAttachment[]) {
     if (!attachments?.length) {
-      onSend(content)
+      onSend(content, sendOpts())
       return
     }
     const contextParts: string[] = []
@@ -95,7 +178,7 @@ export default function ChatPanel({
     const fullContent = contextParts.length > 0
       ? `${contextParts.join('\n')}\n\n${content}`
       : content
-    if (fullContent.trim()) onSend(fullContent)
+    if (fullContent.trim()) onSend(fullContent, sendOpts())
   }
 
   function handleScroll() {
@@ -114,13 +197,16 @@ export default function ChatPanel({
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span className="min-w-0 flex-1 break-words">{error}</span>
-          <button type="button" aria-label="Dismiss" onClick={onClearError} className="rounded p-0.5 hover:bg-destructive/10">
+          <button type="button" aria-label={t('dismiss')} onClick={onClearError} className="rounded p-0.5 hover:bg-destructive/10">
             <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
-      <main className="flex min-h-0 flex-1 flex-col bg-background">
+      <main className="flex min-h-0 flex-1 flex-col bg-transparent">
+        {/* Off-screen polite live region — announces the turn phase to screen
+            readers without reading the streamed tokens one by one. */}
+        <div className="sr-only" role="status" aria-live="polite">{liveStatus}</div>
         <div
           ref={scrollRef}
           onScroll={handleScroll}
@@ -130,17 +216,19 @@ export default function ChatPanel({
             {!hasActiveSession && timeline.length === 0 && (
               <div className={inputFormClass}>
                 <EmptyState
-                  title="Start a conversation"
-                  subtitle="Create a new session to begin chatting"
+                  eyebrow={t('consoleReady')}
+                  title={t('startConversation')}
+                  subtitle={t('createSession')}
                 />
               </div>
             )}
             {hasActiveSession && timeline.length === 0 && !isThinking && streamingText === null && (
               <div className={inputFormClass}>
                 <EmptyState
-                  title="Ready"
+                  eyebrow={t('readyEyebrow')}
+                  title={t('ready')}
                   subtitle={
-                    <>Type a message or use <code className="rounded bg-muted px-1 py-0.5 text-[10px] font-mono">/scan &lt;target&gt;</code> to start scanning</>
+                    <>{t('readyHintBefore')}<code className="rounded bg-muted px-1 py-0.5 text-[10px] font-mono">/scan &lt;target&gt;</code>{t('readyHintAfter')}</>
                   }
                 />
               </div>
@@ -183,19 +271,126 @@ export default function ChatPanel({
         </div>
 
         {hasActiveSession && (
-          <ChatInput
-            onSend={handleSendWithAttachments}
-            onPause={onPause}
-            busy={isBusy}
-            enableAttachments={!!activeSessionID}
-          />
+          <div className="border-t border-border bg-card/80 backdrop-blur-sm">
+            {agentOffline && (
+              <div className={cn(workspaceClass, 'pt-2')}>
+                <div className={inputFormClass}>
+                  <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning animate-in fade-in slide-in-from-bottom-1 duration-200">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span className="min-w-0 break-words">
+                      {agentName ? t('agentOfflineBannerNamed', { name: agentName }) : t('agentOfflineBanner')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {persist && (
+              <div className={cn(workspaceClass, 'pt-2')}>
+                <div className={inputFormClass}>
+                  <div className="rounded-xl border border-primary/25 bg-primary/[0.04] px-3.5 py-2.5 animate-in fade-in slide-in-from-bottom-1 duration-200">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+                        <Target className="h-3.5 w-3.5" />
+                        {t('evalCriteriaLabel')}
+                        <span className="rounded bg-primary/10 px-1 py-px font-mono text-[10px] font-normal text-primary/70">-e</span>
+                      </span>
+                      {evalCriteria.trim() ? (
+                        <div className="inline-flex shrink-0 items-center gap-2">
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full bg-ai/10 px-2 py-0.5 text-[11px] font-medium text-ai"
+                            title={t('evalModeHint', { rounds: evalMaxRounds })}
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            {t('evalModeBadge')}
+                          </span>
+                          <label className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                            {t('evalRoundsLabel')}
+                            <input
+                              type="number"
+                              min={1}
+                              max={10}
+                              value={evalMaxRounds}
+                              onChange={(e) => setEvalMaxRounds(Math.min(10, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+                              className="w-12 rounded-md border border-border/70 bg-card/60 px-2 py-0.5 text-xs text-foreground focus:border-ai/50 focus:outline-none focus:ring-1 focus:ring-ai/20"
+                            />
+                          </label>
+                        </div>
+                      ) : (
+                        <label className="inline-flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                          {t('persistMaxTurns')}
+                          <input
+                            type="number"
+                            min={1}
+                            max={200}
+                            value={persistMax}
+                            onChange={(e) => setPersistMax(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                            className="w-14 rounded-md border border-border/70 bg-card/60 px-2 py-0.5 text-xs text-foreground focus:border-primary/60 focus:outline-none focus:ring-1 focus:ring-primary/25"
+                          />
+                        </label>
+                      )}
+                    </div>
+                    <textarea
+                      ref={evalRef}
+                      rows={2}
+                      value={evalCriteria}
+                      onChange={(e) => setEvalCriteria(e.target.value)}
+                      placeholder={t('evalCriteriaPlaceholder')}
+                      className="block max-h-36 min-h-[3.75rem] w-full resize-none overflow-y-auto rounded-lg border border-border/60 bg-card/50 px-3 py-2 text-xs leading-relaxed text-foreground placeholder:text-muted-foreground/60 focus:border-ai/50 focus:outline-none focus:ring-1 focus:ring-ai/20"
+                    />
+                    {evalCriteria.trim() && (
+                      <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground/70">
+                        {t('evalModeHint', { rounds: evalMaxRounds })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className={workspaceClass}>
+              <div className={inputFormClass}>
+                <ChatInput
+                  className="!border-t-0 !bg-transparent !backdrop-blur-none"
+                  leading={
+                    <button
+                      type="button"
+                      onClick={() => setPersist((v) => !v)}
+                      aria-pressed={persist}
+                      title={t('persistHint')}
+                      className={cn(
+                        'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors',
+                        persist
+                          ? 'border-primary/60 bg-primary/15 text-primary'
+                          : 'border-border/60 bg-card/50 text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      <Target className="h-3.5 w-3.5" />
+                      {t('persistMode')}
+                    </button>
+                  }
+                  onSend={handleSendWithAttachments}
+                  onPause={onPause}
+                  busy={isBusy}
+                  commands={chatCommands}
+                  placeholder={t('typeMessageWithCommands')}
+                  enableAttachments={!!activeSessionID}
+                />
+              </div>
+            </div>
+          </div>
         )}
       </main>
     </div>
   )
 }
 
-function TimelineEntry({
+// Memoized: during token streaming useChatSession mints a new `timeline` array
+// on every message_delta, but only the streaming item's reference actually
+// changes. Without memo, timeline.map re-renders EVERY settled entry each token
+// — and each MessageBubble re-parses its markdown (remark) from scratch, so a
+// 40-message transcript re-parses 40 docs per token. A shallow prop compare lets
+// unchanged entries bail out; it holds only because `onShowScanDetail` is now a
+// stable useCallback in App and `scanResults`/`detailOpen` don't change mid-stream.
+const TimelineEntry = memo(function TimelineEntry({
   item,
   scanResults,
   detailOpen,
@@ -214,7 +409,7 @@ function TimelineEntry({
       {content}
     </TimelineRow>
   )
-}
+})
 
 function StreamingEntry({
   text,
@@ -266,8 +461,8 @@ function TimelineRow({
       data-kind={item.kind}
       className={cn(
         'grid grid-cols-1 gap-y-1 animate-in fade-in slide-in-from-bottom-1 duration-200',
-        'xl:grid-cols-[10rem_minmax(0,1fr)] xl:gap-x-3',
-        !detailOpen && '2xl:grid-cols-[10rem_minmax(0,1fr)_14rem]',
+        'xl:gap-x-3',
+        detailOpen ? 'xl:grid-cols-[6rem_minmax(0,1fr)]' : 'xl:grid-cols-[6rem_minmax(0,1fr)_6rem]',
       )}
     >
       <TimelineMark item={item} />
@@ -346,12 +541,40 @@ function timelineContent(
       return <AgentRenderer item={ext} context={{}} />
     }
 
+    case 'eval':
+      return <EvalNote pass={!!item.evalPass} round={item.evalRound} reason={item.evalReason} />
+
     default:
       return null
   }
 }
 
+function EvalNote({ pass, round, reason }: { pass: boolean; round?: number; reason?: string }) {
+  const { t } = useTranslation('chat')
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-2 rounded-lg border px-3 py-2 text-xs',
+        pass ? 'border-success/30 bg-success/5' : 'border-ai/30 bg-ai/5',
+      )}
+    >
+      {pass ? (
+        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+      ) : (
+        <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ai" />
+      )}
+      <div className="min-w-0">
+        <span className={cn('font-medium', pass ? 'text-success' : 'text-ai')}>
+          {t('evalRound', { round: (round ?? 0) + 1 })} · {pass ? t('evalPass') : t('evalFail')}
+        </span>
+        {reason ? <p className="mt-0.5 break-words text-muted-foreground">{reason}</p> : null}
+      </div>
+    </div>
+  )
+}
+
 function AssistantResponseEntry({ response }: { response: AssistantResponseState }) {
+  const { t } = useTranslation('chat')
   const message = response.response
   const hasThinking = !!response.thinking?.trim()
   const hasResponse = !!message?.content?.trim()
@@ -376,13 +599,14 @@ function AssistantResponseEntry({ response }: { response: AssistantResponseState
         </div>
       ) : undefined}
       response={hasResponse ? <MarkdownContent content={trimDisplayContent(message?.content || '')} compact /> : undefined}
-      labels={{ tools: response.tools.length === 1 ? 'Tool' : 'Tools' }}
+      labels={{ tools: response.tools.length === 1 ? t('tool') : t('tools'), thinking: t('thinkingLabel'), response: t('responseLabel') }}
     />
   )
 }
 
 function TimelineMark({ item }: { item: TimelineItem }) {
-  const descriptor = describeTimelineItem(item)
+  const { t } = useTranslation('chat')
+  const descriptor = describeTimelineItem(item, t)
   if (!descriptor) return <div className="hidden xl:block" />
 
   return (
@@ -405,7 +629,8 @@ function TimelineMark({ item }: { item: TimelineItem }) {
 }
 
 function IOAThreadNote({ item }: { item: TimelineItem }) {
-  const note = describeIOAThreadItem(item)
+  const { t } = useTranslation('chat')
+  const note = describeIOAThreadItem(item, t)
   if (!note) return <div className="hidden 2xl:block" />
 
   return (
@@ -423,14 +648,8 @@ function IOAThreadNote({ item }: { item: TimelineItem }) {
   )
 }
 
-function EmptyState({ title, subtitle }: { title: string; subtitle: ReactNode }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in duration-300">
-      <MessageSquare className="h-12 w-12 text-muted-foreground/10" strokeWidth={1} />
-      <p className="mt-3 text-sm font-medium text-foreground">{title}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
-    </div>
-  )
+function EmptyState({ eyebrow, title, subtitle }: { eyebrow: string; title: string; subtitle: ReactNode }) {
+  return <InstrumentIdle eyebrow={eyebrow} title={title} subtitle={subtitle} className="py-16" />
 }
 
 interface TimelineDescriptor {
@@ -440,7 +659,7 @@ interface TimelineDescriptor {
   dotClass: string
 }
 
-function describeTimelineItem(item: TimelineItem): TimelineDescriptor | null {
+function describeTimelineItem(item: TimelineItem, t: (key: string) => string): TimelineDescriptor | null {
   const time = formatRailTime(item)
 
   switch (item.kind) {
@@ -449,7 +668,7 @@ function describeTimelineItem(item: TimelineItem): TimelineDescriptor | null {
       const role = item.message.role
       if (role === 'user') {
         return {
-          label: 'You',
+          label: t('you'),
           time,
           icon: <User className="h-3 w-3 text-primary" />,
           dotClass: 'border-primary bg-primary',
@@ -457,14 +676,14 @@ function describeTimelineItem(item: TimelineItem): TimelineDescriptor | null {
       }
       if (role === 'assistant') {
         return {
-          label: item.message.agent_name || 'Assistant',
+          label: item.message.agent_name || t('assistant'),
           time,
-          icon: <Bot className="h-3 w-3 text-purple-500" />,
-          dotClass: 'border-purple-400 bg-purple-400',
+          icon: <BrandMark size={12} className="text-ai" />,
+          dotClass: 'border-ai bg-ai',
         }
       }
       return {
-        label: 'System',
+        label: t('system'),
         time,
         icon: <MessageSquare className="h-3 w-3 text-muted-foreground" />,
         dotClass: 'border-border bg-muted-foreground/60',
@@ -473,19 +692,19 @@ function describeTimelineItem(item: TimelineItem): TimelineDescriptor | null {
 
     case 'assistant_response':
       return {
-        label: item.assistantResponse?.agentName || item.agentName || 'Assistant',
+        label: item.assistantResponse?.agentName || item.agentName || t('assistant'),
         time,
-        icon: <Bot className="h-3 w-3 text-purple-500" />,
+        icon: <BrandMark size={12} className="text-ai" />,
         dotClass: item.assistantResponse?.streaming
           ? 'border-primary bg-background animate-pulse'
-          : 'border-purple-400 bg-purple-400',
+          : 'border-ai bg-ai',
       }
 
     case 'tool_call':
       return {
-        label: item.toolCall?.toolName || 'Tool',
+        label: item.toolCall?.toolName || t('tool'),
         time,
-        icon: <Wrench className="h-3 w-3 text-yellow-500" />,
+        icon: <Wrench className="h-3 w-3 text-warning" />,
         dotClass: item.toolCall?.pending ? 'border-warning bg-warning animate-pulse' : 'border-primary bg-primary',
       }
 
@@ -513,10 +732,18 @@ function describeTimelineItem(item: TimelineItem): TimelineDescriptor | null {
 
     case 'thinking':
       return {
-        label: item.agentName || 'Thinking',
+        label: item.agentName || t('thinking'),
         time,
         icon: <CircleDashed className="h-3 w-3 animate-spin text-primary" />,
         dotClass: 'border-primary bg-background',
+      }
+
+    case 'eval':
+      return {
+        label: t('evalLabel'),
+        time,
+        icon: <Sparkles className="h-3 w-3 text-ai" />,
+        dotClass: item.evalPass ? 'border-success bg-success' : 'border-ai bg-ai',
       }
 
     default:
@@ -524,7 +751,7 @@ function describeTimelineItem(item: TimelineItem): TimelineDescriptor | null {
   }
 }
 
-function describeIOAThreadItem(item: TimelineItem): { label: string; detail?: string } | null {
+function describeIOAThreadItem(item: TimelineItem, t: (key: string) => string): { label: string; detail?: string } | null {
   if (item.kind === 'assistant_response' && item.assistantResponse) {
     const ioaTool = item.assistantResponse.tools.find((tool) => isIOATool(tool.toolName, tool.toolArgs))
     if (ioaTool) {
@@ -547,7 +774,7 @@ function describeIOAThreadItem(item: TimelineItem): { label: string; detail?: st
     const thread = metadata.ioa_thread || metadata.ioa_message || metadata.thread
     if (thread) {
       return {
-        label: 'IOA message',
+        label: t('ioaMessage'),
         detail: previewText(typeof thread === 'string' ? thread : JSON.stringify(thread), 140),
       }
     }
@@ -566,7 +793,7 @@ function formatRailTime(item: TimelineItem): string {
   const raw = item.message?.created_at ? new Date(item.message.created_at).getTime() : item.timestamp
   const date = new Date(raw)
   if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  return date.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' })
 }
 
 function previewText(value: string, max: number): string {

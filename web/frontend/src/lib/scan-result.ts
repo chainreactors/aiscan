@@ -142,9 +142,13 @@ export function serviceNode(asset: ViewAsset): ServiceNode {
   const detailItems = asset.items.filter((item) => item.kind !== assetItemKind.path && !isAnalysisItem(item))
   const protocol = firstText(dataString(serviceItem, 'protocol'), dataString(serviceItem, 'service'))
   const service = firstText(dataString(serviceItem, 'service'), serviceItem?.title, protocol)
-  const host = dataString(serviceItem, 'ip') || 'Scan'
-  const port = dataString(serviceItem, 'port')
   const target = firstText(serviceItem?.target, asset.target)
+  // Web-only scans produce no `service` item (no port-scan result), so the host
+  // and port live only in the asset target URL. Fall back to parsing them out of
+  // the URL instead of collapsing every web asset under the literal "Scan" host.
+  const targetURL = parseURL(target)
+  const host = dataString(serviceItem, 'ip') || targetURL?.hostname || 'Scan'
+  const port = dataString(serviceItem, 'port') || targetURL?.port || ''
   const title = serviceTitle(asset, serviceItem, service)
   const summary = serviceSummary(asset, serviceItem, title, service)
   const protocolKey = protocol.toLowerCase()
@@ -569,6 +573,19 @@ export function serviceAIStatus(service: ServiceNode): 'verified' | 'sniper' | '
   return null
 }
 
+/**
+ * A finding's target is "navigable" only when it is an absolute http(s) URL we
+ * can open in a browser tab. Bare host:port / service targets (e.g. an ssh
+ * service on :22) return null so the UI never renders a link that 404s or
+ * points at a non-web port. Lets findings click through to the live target.
+ */
+export function findingTargetURL(target?: string): string | null {
+  const parsed = parseURL(target)
+  if (!parsed) return null
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
+  return parsed.href
+}
+
 export function buildFindings(result: ScanResult): FindingItem[] {
   const findings: FindingItem[] = []
   const seen = new Set<string>()
@@ -596,6 +613,11 @@ export function buildFindings(result: ScanResult): FindingItem[] {
     for (const item of asset.items || []) {
       if (!isAnalysisItem(item)) continue
       if (item.kind === 'error') continue
+      // Every loot in result.loots is already emitted above, and the backend
+      // mirrors each loot into its asset as a 'loot' item (isAnalysisItem keeps
+      // the non-fingerprint ones). Counting those here would double every vuln/
+      // weakpass finding, so skip them — result.loots is the single source.
+      if (item.kind === assetItemKind.loot) continue
       const id = `item:${asset.target}:${item.source}:${item.kind}:${item.title || item.summary || ''}`
       if (seen.has(id)) continue
       seen.add(id)
