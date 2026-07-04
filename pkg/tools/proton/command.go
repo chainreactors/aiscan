@@ -159,9 +159,17 @@ func (c *Command) Execute(ctx context.Context, args []string) error {
 	}
 
 	// --- Build engine via SDK (template loading + filtering) ---
+	// -e is a direct search: when only expressions are given (no explicit
+	// templates/ids), load just the expression rule and skip the builtin
+	// category rules, which would otherwise share its scan group and shadow
+	// its matches.
+	categories := flags.Categories
+	if len(flags.Expressions) > 0 && len(flags.Templates) == 0 && len(flags.TemplateIDs) == 0 {
+		categories = nil
+	}
 	cfg := sdkproton.NewConfig().
 		WithTextOnly(!flags.Bin).
-		WithCategories(flags.Categories...).
+		WithCategories(categories...).
 		WithTemplatePaths(flags.Templates...).
 		WithTags(flags.Tags...).
 		WithExcludeTags(flags.ExcludeTags...).
