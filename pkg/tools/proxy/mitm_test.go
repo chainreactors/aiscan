@@ -177,6 +177,9 @@ func TestMITMCapture_NonHTTP_Fallback(t *testing.T) {
 }
 
 func TestMITMCapture_ServerFirst_Fallback(t *testing.T) {
+	if raceEnabled {
+		t.Skip("mitm server-first fallback is pathologically slow under -race (loopback interception starves)")
+	}
 	// Server-first protocol (like SSH): server sends banner, client waits.
 	// MITM should timeout on Peek and fallback to raw transfer.
 	tcpServer, err := net.Listen("tcp", "127.0.0.1:0")
