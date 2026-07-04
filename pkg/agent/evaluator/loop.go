@@ -4,23 +4,34 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/core/eventbus"
+	"github.com/chainreactors/aiscan/pkg/agent"
 )
 
 const defaultMaxEvalRounds = 3
 
 type EvalLoopConfig struct {
-	Evaluator      *Evaluator
-	MaxEvalRounds  int
-	Goal           string
-	Criteria       string
-	Bus            *eventbus.Bus[agent.Event]
+	Evaluator     *Evaluator
+	MaxEvalRounds int
+	Goal          string
+	Criteria      string
+	Bus           *eventbus.Bus[agent.Event]
+	// SessionID tags emitted evaluation events so a host (e.g. the web agent)
+	// can route them back to the conversation that triggered the eval loop.
+	SessionID string
 }
 
 func RunWithEval(ctx context.Context, a *agent.Agent, cfg EvalLoopConfig) (*agent.Result, *Verdict, error) {
 	if cfg.MaxEvalRounds <= 0 {
 		cfg.MaxEvalRounds = defaultMaxEvalRounds
+	}
+
+	// Point file-based acceptance checks at the agent's own working directory,
+	// unless the evaluator was already configured with an explicit one.
+	if cfg.Evaluator != nil && cfg.Evaluator.cfg.WorkDir == "" {
+		if wd := a.WorkDir(); wd != "" {
+			cfg.Evaluator.cfg.WorkDir = wd
+		}
 	}
 
 	result, err := a.Run(ctx, cfg.Goal)
@@ -33,7 +44,7 @@ func RunWithEval(ctx context.Context, a *agent.Agent, cfg EvalLoopConfig) (*agen
 			return result, nil, nil
 		}
 
-		emitEvalEvent(cfg.Bus, agent.EventEvalStart, attempt, nil)
+		emitEvalEvent(cfg.Bus, cfg.SessionID, agent.EventEvalStart, attempt, nil)
 
 		verdict, evalErr := cfg.Evaluator.Evaluate(
 			ctx, cfg.Goal, cfg.Criteria,
@@ -42,7 +53,7 @@ func RunWithEval(ctx context.Context, a *agent.Agent, cfg EvalLoopConfig) (*agen
 
 		if evalErr != nil {
 			cfg.Evaluator.cfg.Logger.Warnf("evaluate error (round %d): %s", attempt+1, evalErr)
-			emitEvalErrorEvent(cfg.Bus, attempt, evalErr)
+			emitEvalErrorEvent(cfg.Bus, cfg.SessionID, attempt, evalErr)
 			feedback := fmt.Sprintf("Evaluation could not determine if the task is complete. Original criteria: %s. Please review your work and continue if the goal is not yet fully achieved.", cfg.Criteria)
 			result, err = a.Run(ctx, feedback)
 			if err != nil {
@@ -51,7 +62,7 @@ func RunWithEval(ctx context.Context, a *agent.Agent, cfg EvalLoopConfig) (*agen
 			continue
 		}
 
-		emitEvalEvent(cfg.Bus, agent.EventEvalEnd, attempt, verdict)
+		emitEvalEvent(cfg.Bus, cfg.SessionID, agent.EventEvalEnd, attempt, verdict)
 		cfg.Evaluator.cfg.Logger.Importantf("evaluate round %d: pass=%v inherit_context=%v reason=%q", attempt+1, verdict.Pass, verdict.InheritContext, verdict.Reason)
 
 		if verdict.Pass {
@@ -81,12 +92,13 @@ func RunWithEval(ctx context.Context, a *agent.Agent, cfg EvalLoopConfig) (*agen
 	return result, nil, nil
 }
 
-func emitEvalEvent(bus *eventbus.Bus[agent.Event], eventType agent.EventType, round int, verdict *Verdict) {
+func emitEvalEvent(bus *eventbus.Bus[agent.Event], sessionID string, eventType agent.EventType, round int, verdict *Verdict) {
 	if bus == nil {
 		return
 	}
 	ev := agent.Event{
 		Type:      eventType,
+		SessionID: sessionID,
 		EvalRound: round,
 	}
 	if verdict != nil {
@@ -96,12 +108,13 @@ func emitEvalEvent(bus *eventbus.Bus[agent.Event], eventType agent.EventType, ro
 	bus.Emit(ev)
 }
 
-func emitEvalErrorEvent(bus *eventbus.Bus[agent.Event], round int, err error) {
+func emitEvalErrorEvent(bus *eventbus.Bus[agent.Event], sessionID string, round int, err error) {
 	if bus == nil {
 		return
 	}
 	bus.Emit(agent.Event{
 		Type:      agent.EventEvalError,
+		SessionID: sessionID,
 		EvalRound: round,
 		EvalError: err.Error(),
 	})

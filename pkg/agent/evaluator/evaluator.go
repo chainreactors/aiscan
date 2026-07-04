@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	agentpkg "github.com/chainreactors/aiscan/pkg/agent"
@@ -26,6 +27,10 @@ type Config struct {
 	MaxRetries    int
 	ContextWindow int
 	Logger        telemetry.Logger
+	// WorkDir roots file-based acceptance checks (count/exists/judge evidence).
+	// Empty falls back to the process working directory, which is where the
+	// agent's file tools write. RunWithEval populates it from the agent.
+	WorkDir string
 }
 
 type Verdict struct {
@@ -37,6 +42,9 @@ type Verdict struct {
 
 type Evaluator struct {
 	cfg Config
+
+	mu           sync.Mutex
+	compileCache map[string][]Assertion
 }
 
 func New(cfg Config) *Evaluator {
@@ -49,11 +57,27 @@ func New(cfg Config) *Evaluator {
 	if cfg.Logger == nil {
 		cfg.Logger = telemetry.NopLogger()
 	}
-	return &Evaluator{cfg: cfg}
+	return &Evaluator{cfg: cfg, compileCache: make(map[string][]Assertion)}
 }
 
 func (e *Evaluator) Evaluate(ctx context.Context, goal, criteria string, messages []provider.ChatMessage, output string, turns, contextTokens int) (*Verdict, error) {
 	trace := buildTrace(messages, output, turns, contextTokens, e.cfg.ContextWindow)
+
+	// Structured path: compile the criteria into machine-checkable assertions and
+	// verify them against the artifacts the agent actually produced. Countable
+	// and existence checks resolve deterministically (no LLM guessing); only
+	// genuinely qualitative clauses reach an LLM, and then with real evidence in
+	// front of it. Falls through to the trace judge if compilation yields nothing.
+	if criteria != "" && e.cfg.Provider != nil {
+		if assertions, err := e.compileAssertions(ctx, goal, criteria); err != nil {
+			e.cfg.Logger.Warnf("criteria compile failed, falling back to trace judge: %s", err)
+		} else if len(assertions) > 0 {
+			v := e.checkAssertions(ctx, goal, trace, output, assertions)
+			v.InheritContext = shouldInherit(contextTokens, e.cfg.ContextWindow)
+			return v, nil
+		}
+	}
+
 	prompt := buildPrompt(goal, criteria, trace)
 
 	var lastErr error
@@ -66,10 +90,10 @@ func (e *Evaluator) Evaluate(ctx context.Context, goal, criteria string, message
 		e.cfg.Logger.Warnf("evaluate attempt %d failed: %s", attempt+1, err)
 		if attempt < e.cfg.MaxRetries-1 {
 			select {
-		case <-time.After(time.Duration(attempt+1) * time.Second):
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+			case <-time.After(time.Duration(attempt+1) * time.Second):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
 		}
 	}
 	return nil, fmt.Errorf("evaluate failed after %d attempts: %w", e.cfg.MaxRetries, lastErr)
@@ -133,6 +157,15 @@ func (e *Evaluator) call(ctx context.Context, userPrompt string) (*Verdict, erro
 		}
 	}
 	return nil, fmt.Errorf("model did not call verdict tool")
+}
+
+// shouldInherit applies the context-usage policy deterministically for the
+// structured path: discard history only when the window is nearly full.
+func shouldInherit(contextTokens, contextWindow int) bool {
+	if contextWindow <= 0 {
+		return true
+	}
+	return float64(contextTokens)/float64(contextWindow) <= 0.8
 }
 
 func buildPrompt(goal, criteria, trace string) string {
