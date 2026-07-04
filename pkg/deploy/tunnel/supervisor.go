@@ -161,7 +161,7 @@ func (t *Supervisor) supervise(ctx context.Context, done chan struct{}) {
 }
 
 // runOnce establishes one SSH connection + remote forward and blocks until it
-// dies or ctx is cancelled, sending periodic keepalives.
+// dies or ctx is canceled, sending periodic keepalives.
 func (t *Supervisor) runOnce(ctx context.Context) error {
 	cfg := &ssh.ClientConfig{
 		User:            t.user,

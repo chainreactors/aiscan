@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -126,7 +127,7 @@ func (p *aliyunProvider) CreateInstances(ctx context.Context, req CreateRequest)
 	if req.ZoneID != "" {
 		r.ZoneId = tea.String(req.ZoneID)
 	}
-	if req.BandwidthOut > 0 {
+	if req.BandwidthOut > 0 && req.BandwidthOut <= math.MaxInt32 {
 		r.InternetMaxBandwidthOut = tea.Int32(int32(req.BandwidthOut))
 		r.InternetChargeType = tea.String("PayByTraffic")
 	}
@@ -758,7 +759,7 @@ func (p *aliyunProvider) ListOwnedInstances(ctx context.Context, region string) 
 			out = append(out, aliyunInstanceView(it))
 		}
 		total := tea.Int32Value(resp.Body.TotalCount)
-		if len(batch) < 100 || int32(len(out)) >= total {
+		if len(batch) < 100 || len(out) >= int(total) {
 			break
 		}
 	}

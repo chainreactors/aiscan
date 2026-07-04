@@ -1020,11 +1020,11 @@ func (s *Service) HandleFileUpload(ctx context.Context, sessionID, filename stri
 		var result webproto.FileUploadResult
 		if len(res.Result) > 0 {
 			if err := json.Unmarshal(res.Result, &result); err != nil {
-				return &webproto.FileUploadResult{
+				result = webproto.FileUploadResult{
 					Filename: filename,
 					Path:     res.Output,
 					Size:     int64(len(data)),
-				}, nil
+				}
 			}
 		} else {
 			result.Filename = filename

@@ -35,7 +35,7 @@ func cannedTransport(handler func(*http.Request) string) http.RoundTripper {
 // canonicalizes) misses them — index the map directly. Older RPC paths put it in
 // the query string, so fall back to that.
 func aliyunAction(r *http.Request) string {
-	if v := r.Header["x-acs-action"]; len(v) > 0 {
+	if v := r.Header["x-acs-action"]; len(v) > 0 { //nolint:staticcheck // mock stores literal lowercase header keys
 		return v[0]
 	}
 	if a := r.URL.Query().Get("Action"); a != "" {

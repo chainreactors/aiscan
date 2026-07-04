@@ -479,11 +479,11 @@ func (s *SQLiteStore) DeleteProject(ctx context.Context, id string) error {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM assets WHERE project_id = ?`, id); err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM projects WHERE id = ?`, id); err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return err
 	}
 	return tx.Commit()
@@ -726,13 +726,13 @@ func (s *SQLiteStore) InsertRecords(ctx context.Context, recs []*output.Record) 
 	}
 	stmt, err := tx.PrepareContext(ctx, insertRecordSQL)
 	if err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return err
 	}
 	defer stmt.Close()
 	for _, rec := range recs {
 		if _, err := stmt.ExecContext(ctx, recordArgs(rec)...); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return err
 		}
 	}

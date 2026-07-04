@@ -638,9 +638,10 @@ func (m *DeployManager) reclaimAutoNetwork(ctx, persistCtx context.Context, prov
 	}
 	if updated, err := m.updateDeployRecord(persistCtx, rec.ID, func(r *deploy.DeployRecord) {
 		r.AutoNet = deploy.AutoNetwork{}
-		if r.Status == deploy.StatusRecycled {
+		switch r.Status {
+		case deploy.StatusRecycled:
 			r.Phase = deploy.PhaseRecycled
-		} else if r.Status == deploy.StatusFailed {
+		case deploy.StatusFailed:
 			r.Phase = deploy.PhaseFailed
 		}
 	}); err == nil {
