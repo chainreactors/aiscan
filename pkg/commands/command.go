@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/chainreactors/aiscan/pkg/agent/provider"
-
 )
 
 type ToolDefinition = provider.ToolDefinition
@@ -41,12 +40,12 @@ type WorkDirAware interface {
 }
 
 type CommandRegistry struct {
-	mu        sync.RWMutex
-	items     map[string]Command
-	order     []string
-	groups    map[string][]string
-	workDir   string
-	output    io.Writer
+	mu      sync.RWMutex
+	items   map[string]Command
+	order   []string
+	groups  map[string][]string
+	workDir string
+	output  io.Writer
 
 	tools     map[string]AgentTool
 	toolOrder []string
@@ -60,7 +59,7 @@ func (r *CommandRegistry) SetOutput(w io.Writer) {
 
 func NewRegistry() *CommandRegistry {
 	return &CommandRegistry{
-		items: make(map[string]Command),
+		items:  make(map[string]Command),
 		groups: make(map[string][]string),
 		tools:  make(map[string]AgentTool),
 	}
@@ -128,6 +127,14 @@ func (r *CommandRegistry) ExecuteTool(ctx context.Context, name, arguments strin
 	return t.Execute(ctx, arguments)
 }
 
+// WorkDir returns the registry's current working directory — the root that
+// relative tool paths (write/read/glob) resolve against. Empty if never set.
+func (r *CommandRegistry) WorkDir() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.workDir
+}
+
 func (r *CommandRegistry) SetWorkDir(dir string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -155,6 +162,31 @@ func (r *CommandRegistry) Register(cmd Command, group string) {
 	if group != "" {
 		r.groups[group] = append(r.groups[group], name)
 	}
+}
+
+// ReplaceWith moves another registry's contents into r while preserving r's
+// identity. Existing users that hold a *CommandRegistry pointer will see the new
+// commands and tools without reconnecting. Shallow move: assumes the caller does
+// not reuse next after ReplaceWith.
+func (r *CommandRegistry) ReplaceWith(next *CommandRegistry) {
+	if r == nil || next == nil || r == next {
+		return
+	}
+	next.mu.RLock()
+	items, order, groups := next.items, next.order, next.groups
+	workDir, output := next.workDir, next.output
+	tools, toolOrder := next.tools, next.toolOrder
+	next.mu.RUnlock()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.items = items
+	r.order = order
+	r.groups = groups
+	r.workDir = workDir
+	r.output = output
+	r.tools = tools
+	r.toolOrder = toolOrder
 }
 
 func (r *CommandRegistry) Get(name string) (Command, bool) {

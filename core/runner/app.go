@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	cfg "github.com/chainreactors/aiscan/core/config"
@@ -28,10 +29,15 @@ type App struct {
 	IOAClient         protocols.ClientAPI
 	IOAStreamClient   ioaclient.StreamAPI
 	enginesReady      chan struct{}
+	enginesCancel     context.CancelFunc
+	closeOnce         sync.Once
 }
 
 func NewApp(ctx context.Context, rc cfg.RuntimeConfig) (*App, error) {
 	a := &App{}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	logger := rc.Logger
 	if logger == nil {
 		logger = telemetry.NopLogger()
@@ -68,18 +74,25 @@ func NewApp(ctx context.Context, rc cfg.RuntimeConfig) (*App, error) {
 
 	a.Commands = initCoreCommands(rc, a.Provider, a.Skills, logger)
 
+	engineCtx, engineCancel := context.WithCancel(ctx)
 	a.enginesReady = make(chan struct{})
+	a.enginesCancel = engineCancel
 	go func() {
 		if ScannerInitFunc != nil {
-			ScannerInitFunc(ctx, a, rc, logger)
+			ScannerInitFunc(engineCtx, a, rc, logger)
 		}
 		close(a.enginesReady)
 	}()
 
 	if rc.IOA != nil {
+		// IOA/swarm coordination is an optional capability, mirroring the
+		// optional provider handled above: failing to reach or register with the
+		// IOA hub must degrade to a warning, not abort agent startup. Aborting
+		// here turned an unreachable/unconfigured IOA space into a silent
+		// crash-loop that also prevented the agent from ever connecting to the
+		// web hub. IOAClient is left as-is so a later retry can still register.
 		if err := a.InitIOA(ctx, *rc.IOA); err != nil {
-			a.Close()
-			return nil, err
+			logger.Warnf("ioa init failed; continuing without swarm coordination: %s", err)
 		}
 	}
 
@@ -87,6 +100,14 @@ func NewApp(ctx context.Context, rc cfg.RuntimeConfig) (*App, error) {
 }
 
 func (a *App) WaitEngines(ctx context.Context) error {
+	// A nil channel means engines were never started asynchronously (e.g. an App
+	// built directly rather than via NewApp); there is nothing to wait for.
+	if a == nil || a.enginesReady == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	select {
 	case <-a.enginesReady:
 		return nil
@@ -99,21 +120,27 @@ func (a *App) Close() {
 	if a == nil {
 		return
 	}
-	if a.Commands != nil {
-		for _, t := range a.Commands.Tools() {
-			if closer, ok := t.(interface{ Close() }); ok {
-				closer.Close()
+	a.closeOnce.Do(func() {
+		if a.enginesCancel != nil {
+			a.enginesCancel()
+		}
+		_ = a.WaitEngines(context.Background())
+		if a.Commands != nil {
+			for _, t := range a.Commands.Tools() {
+				if closer, ok := t.(interface{ Close() }); ok {
+					closer.Close()
+				}
+			}
+			for _, cmd := range a.Commands.All() {
+				if closer, ok := cmd.(interface{ Close() }); ok {
+					closer.Close()
+				}
 			}
 		}
-		for _, cmd := range a.Commands.All() {
-			if closer, ok := cmd.(interface{ Close() }); ok {
-				closer.Close()
-			}
+		if closer, ok := a.Engines.(interface{ Close() }); ok {
+			closer.Close()
 		}
-	}
-	if closer, ok := a.Engines.(interface{ Close() }); ok {
-		closer.Close()
-	}
+	})
 }
 
 func initProvider(provCfg agent.ProviderConfig, logger telemetry.Logger) (agent.Provider, *agent.ProviderConfig, error) {

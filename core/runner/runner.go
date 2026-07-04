@@ -48,38 +48,75 @@ type RuntimeConfig struct {
 	ProviderOptional  bool
 }
 
-func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.Logger, rc *RuntimeConfig) (*AgentRuntime, error) {
-	rt := &AgentRuntime{}
-	if option != nil {
-		optCopy := *option
-		rt.Option = &optCopy
-		rt.ConfigFile = option.ConfigFile
+type AgentRuntimeAppConfig struct {
+	IOA              *cfg.IOAConfig
+	ProviderOptional bool
+	Configure        func(*cfg.RuntimeConfig)
+}
+
+func NewAgentRuntimeApp(ctx context.Context, option *cfg.Option, logger telemetry.Logger, ac *AgentRuntimeAppConfig) (*App, error) {
+	if option == nil {
+		option = &cfg.Option{}
 	}
+	if logger == nil {
+		logger = telemetry.NopLogger()
+	}
+	providerOptional := ac != nil && (ac.IOA != nil || ac.ProviderOptional)
+	appCfg := cfg.AppConfig(option, cfg.RuntimeFeatures{
+		ProviderEnabled:  true,
+		ProviderOptional: providerOptional,
+		ToolsEnabled:     true,
+		AIEnabled:        true,
+	}, logger)
+	if ac != nil {
+		if ac.IOA != nil {
+			appCfg.IOA = ac.IOA
+		}
+		if ac.Configure != nil {
+			ac.Configure(&appCfg)
+		}
+	}
+
+	application, err := NewApp(ctx, appCfg)
+	if err != nil {
+		return nil, fmt.Errorf("init app: %w", err)
+	}
+	cfg.ApplyResolvedProviderOptions(option, application.ProviderConfig)
+
+	for _, d := range application.SkillDiagnostics {
+		logger.Warnf("skill %s: %s", d.Path, d.Message)
+	}
+	return application, nil
+}
+
+func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.Logger, rc *RuntimeConfig) (*AgentRuntime, error) {
+	if option == nil {
+		option = &cfg.Option{}
+	}
+	if logger == nil {
+		logger = telemetry.NopLogger()
+	}
+	rt := &AgentRuntime{}
+	optCopy := *option
+	rt.Option = &optCopy
+	rt.ConfigFile = option.ConfigFile
 
 	if rc != nil && rc.ExistingApp != nil {
 		rt.App = rc.ExistingApp
 	} else {
-		providerOptional := rc != nil && (rc.IOA != nil || rc.ProviderOptional)
-		appCfg := cfg.AppConfig(option, cfg.RuntimeFeatures{
-			ProviderEnabled:  true,
-			ProviderOptional: providerOptional,
-			ToolsEnabled:     true,
-			AIEnabled:        true,
-		}, logger)
-		if rc != nil && rc.IOA != nil {
-			appCfg.IOA = rc.IOA
+		var appCfg *AgentRuntimeAppConfig
+		if rc != nil {
+			appCfg = &AgentRuntimeAppConfig{
+				IOA:              rc.IOA,
+				ProviderOptional: rc.ProviderOptional,
+			}
 		}
-		application, err := NewApp(ctx, appCfg)
+		application, err := NewAgentRuntimeApp(ctx, option, logger, appCfg)
 		if err != nil {
-			return nil, fmt.Errorf("init app: %w", err)
+			return nil, err
 		}
 		rt.App = application
 		rt.ownsApp = true
-		cfg.ApplyResolvedProviderOptions(option, application.ProviderConfig)
-
-		for _, d := range application.SkillDiagnostics {
-			logger.Warnf("skill %s: %s", d.Path, d.Message)
-		}
 
 		if rc == nil || rc.IOA == nil {
 			if err := registerIOATools(ctx, application, option); err != nil {
@@ -143,26 +180,6 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 
 	ib := inboxpkg.NewBuffered(agent.DefaultInboxCapacity)
 
-	sessMgr, bashTool := bashToolAndManager(rt.App.Commands)
-	if bashTool != nil {
-		bashTool.SetInbox(ib)
-	}
-	if sessMgr != nil {
-		sessMgr.SetOnDone(func(info tmuxpkg.Info) {
-			tail := sessMgr.PeekOrEmpty(info.ID, 20)
-			msg := inboxpkg.NewMessage(inboxpkg.OriginSession, "user",
-				tmuxpkg.FormatCompletion(info, tail))
-			msg.Meta = map[string]any{
-				"session_id":   info.ID,
-				"session_name": info.Name,
-				"exit_code":    info.ExitCode,
-			}
-			if err := ib.Push(msg); err != nil {
-				logger.Warnf("inbox push session completion: %s", err)
-			}
-		})
-	}
-
 	scheduler := agent.NewLoopScheduler(ib, logger)
 
 	if option.Heartbeat > 0 {
@@ -179,6 +196,7 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		Fallbacks:      rt.App.ProviderFallbacks,
 		Tools:          rt.App.Commands,
 		Model:          option.Model,
+		MaxTokens:      agent.DefaultMaxTokens,
 		Logger:         logger,
 		Inbox:          ib,
 		LoopScheduler:  scheduler,
@@ -186,26 +204,7 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 		Bus:            agentBus,
 	}
 
-	parentAgent := agent.NewAgent(rt.Config)
-	subAgentTool := agent.NewSubAgentTool(parentAgent, ib, func(name string) (agent.AgentType, error) {
-		if rt.App.Skills == nil {
-			return agent.AgentType{}, fmt.Errorf("agent type %q not found", name)
-		}
-		s, ok := rt.App.Skills.ByName(name)
-		if !ok {
-			return agent.AgentType{}, fmt.Errorf("agent type %q not found", name)
-		}
-		if !s.Agent {
-			return agent.AgentType{}, fmt.Errorf("skill %q is not configured as an agent type", name)
-		}
-		return agent.AgentType{
-			FormattedPrompt: rt.App.Skills.FormatInvocation(s, ""),
-			Model:           s.AgentModel,
-			Background:      s.AgentBackground,
-		}, nil
-	})
-	rt.App.Commands.RegisterTool(subAgentTool)
-	rt.App.Commands.Register(agent.NewLoopCommand(scheduler), "loop")
+	commandsCleanup := ConfigureAgentAppCommands(rt.App, rt)
 
 	if option.Resume != "" {
 		path := option.Resume
@@ -238,15 +237,77 @@ func NewAgentRuntime(ctx context.Context, option *cfg.Option, logger telemetry.L
 
 	rt.cleanup = func() {
 		scheduler.Stop()
-		if sessMgr != nil {
-			sessMgr.Shutdown()
-		}
+		commandsCleanup()
 		if eventsCloser != nil {
 			eventsCloser()
 		}
 	}
 
 	return rt, nil
+}
+
+func ConfigureAgentAppCommands(app *App, rt *AgentRuntime) func() {
+	cleanup := func() {}
+	if app == nil || app.Commands == nil || rt == nil {
+		return cleanup
+	}
+	logger := rt.Config.Logger
+	if logger == nil {
+		logger = telemetry.NopLogger()
+	}
+
+	sessMgr, bashTool := bashToolAndManager(app.Commands)
+	if bashTool != nil {
+		bashTool.SetInbox(rt.Config.Inbox)
+	}
+	if sessMgr != nil && rt.Config.Inbox != nil {
+		sessMgr.SetOnDone(func(info tmuxpkg.Info) {
+			tail := sessMgr.PeekOrEmpty(info.ID, 20)
+			msg := inboxpkg.NewMessage(inboxpkg.OriginSession, "user",
+				tmuxpkg.FormatCompletion(info, tail))
+			msg.Meta = map[string]any{
+				"session_id":   info.ID,
+				"session_name": info.Name,
+				"exit_code":    info.ExitCode,
+			}
+			if err := rt.Config.Inbox.Push(msg); err != nil {
+				logger.Warnf("inbox push session completion: %s", err)
+			}
+		})
+		cleanup = func() { sessMgr.Shutdown() }
+	}
+
+	baseConfig := rt.Config
+	baseConfig.Provider = app.Provider
+	baseConfig.Fallbacks = app.ProviderFallbacks
+	baseConfig.Tools = app.Commands
+	baseConfig.Model = app.ProviderConfig.Model
+	parentAgent := agent.NewAgent(baseConfig)
+	subAgentTool := agent.NewSubAgentTool(parentAgent, rt.Config.Inbox, func(name string) (agent.AgentType, error) {
+		if app.Skills == nil {
+			return agent.AgentType{}, fmt.Errorf("agent type %q not found", name)
+		}
+		s, ok := app.Skills.ByName(name)
+		if !ok {
+			return agent.AgentType{}, fmt.Errorf("agent type %q not found", name)
+		}
+		if !s.Agent {
+			return agent.AgentType{}, fmt.Errorf("skill %q is not configured as an agent type", name)
+		}
+		return agent.AgentType{
+			FormattedPrompt: app.Skills.FormatInvocation(s, ""),
+			Model:           s.AgentModel,
+			Background:      s.AgentBackground,
+		}, nil
+	})
+	app.Commands.RegisterTool(subAgentTool)
+	if rt.Config.LoopScheduler != nil {
+		app.Commands.Register(agent.NewLoopCommand(rt.Config.LoopScheduler), "loop")
+	}
+	// finish lets the model signal task completion explicitly; required as the
+	// clean exit for persist-mode chats, harmless otherwise.
+	app.Commands.RegisterTool(agent.NewFinishTool())
+	return cleanup
 }
 
 func (rt *AgentRuntime) Close() {

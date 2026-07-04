@@ -6,6 +6,7 @@ import (
 	"io"
 
 	cfg "github.com/chainreactors/aiscan/core/config"
+	"github.com/chainreactors/aiscan/core/eventbus"
 	"github.com/chainreactors/aiscan/pkg/agent"
 	"github.com/chainreactors/aiscan/pkg/agent/tmux"
 	"github.com/chainreactors/aiscan/pkg/tui"
@@ -25,9 +26,18 @@ func NewRemoteREPLOpener(rt *AgentRuntime, mgr *tmux.Manager) pty.OpenFunc {
 		if option == nil {
 			option = &cfg.Option{}
 		}
+		// Each REPL session emits onto its own bus so the console renders only
+		// its own events (no cross-talk from concurrent chat sessions sharing
+		// rt.Bus). Bridge that bus back into rt.Bus so agent.stats and any
+		// connection-level forwarding still observe this session's activity.
+		replBus := eventbus.New[agent.Event]()
+		if rt.Bus != nil {
+			replBus.Subscribe(rt.Bus.Emit)
+		}
 		session := agent.NewAgent(rt.Config.
 			WithSystemPrompt(rt.SystemPrompt).
-			WithStream(tui.AgentStreamingEnabled(option)))
+			WithStream(tui.AgentStreamingEnabled(option)).
+			WithBus(replBus))
 		appInfo := tui.AppInfo{
 			Provider:          rt.App.Provider,
 			ProviderConfig:    rt.App.ProviderConfig,
@@ -43,7 +53,7 @@ func NewRemoteREPLOpener(rt *AgentRuntime, mgr *tmux.Manager) pty.OpenFunc {
 		}
 		control := rlterm.NewControl(true, 80, 24)
 		info, err := mgr.CreateInteractiveFunc(ctx, spec.Name, "aiscan remote repl", pty.DefaultSessionTimeout, false, func(replCtx context.Context, input io.Reader, output io.Writer) error {
-			return tui.RunRemoteAgentConsoleWithControl(replCtx, option, appInfo, session, input, output, control, rt.Bus)
+			return tui.RunRemoteAgentConsoleWithControl(replCtx, option, appInfo, session, input, output, control, replBus)
 		})
 		if err != nil {
 			return pty.OpenResult{}, err

@@ -36,50 +36,54 @@ func FetchRemoteConfig(webURL string) (*Option, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&dc); err != nil {
 		return nil, fmt.Errorf("decode remote config: %w", err)
 	}
-	return distributeToOption(&dc), nil
+	return DistributeToOption(&dc), nil
 }
 
-func distributeToOption(d *webproto.DistributeConfig) *Option {
-	opt := &Option{
-		LLMOptions: LLMOptions{
-			Provider: d.LLM.Provider,
-			BaseURL:  d.LLM.BaseURL,
-			APIKey:   d.LLM.APIKey,
-			Model:    d.LLM.Model,
-			LLMProxy: d.LLM.Proxy,
-		},
-		ScannerOptions: ScannerOptions{
-			CyberhubURL:  d.Cyberhub.URL,
-			CyberhubKey:  d.Cyberhub.Key,
-			CyberhubMode: d.Cyberhub.Mode,
-			Proxy:        d.Cyberhub.Proxy,
-		},
-		AgentOptions: AgentOptions{
-			Tools:       d.Agent.Tools,
-			Timeout:     d.Agent.Timeout,
-			SaveSession: d.Agent.SaveSession,
-		},
-		IOAOptions: IOAOptions{
-			IOAURL:      d.IOA.URL,
-			IOAToken:    d.IOA.Token,
-			IOANodeName: d.IOA.NodeName,
-			Space:       d.IOA.Space,
-		},
-		ScanConfig: ScanConfigOptions{
-			Verify:        d.Scan.Verify,
-			VerifyTimeout: d.Scan.VerifyTimeout,
-		},
+// DistributeToOption converts a server-managed config payload into runtime
+// options. It is the shared conversion path for initial remote fetches and
+// in-process config pushes.
+func DistributeToOption(d *webproto.DistributeConfig) *Option {
+	if d == nil {
+		return &Option{}
 	}
-	opt.FofaEmail = d.Recon.FofaEmail
-	opt.FofaKey = d.Recon.FofaKey
-	opt.HunterToken = d.Recon.HunterToken
-	opt.HunterAPIKey = d.Recon.HunterAPIKey
-	opt.ReconProxy = d.Recon.Proxy
-	opt.ReconLimit = d.Recon.Limit
+	opt := ApplyDistributeConfig(Option{}, *d)
+	return &opt
+}
+
+// ApplyDistributeConfig overlays a server-managed config payload onto base. IOA
+// launch identity is preserved when the payload omits it, which lets web-spawned
+// agents keep their existing registration name across global config pushes.
+func ApplyDistributeConfig(base Option, d webproto.DistributeConfig) Option {
+	base.Provider = d.LLM.Provider
+	base.BaseURL = d.LLM.BaseURL
+	base.APIKey = d.LLM.APIKey
+	base.Model = d.LLM.Model
+	base.LLMProxy = d.LLM.Proxy
+	base.CyberhubURL = d.Cyberhub.URL
+	base.CyberhubKey = d.Cyberhub.Key
+	base.CyberhubMode = d.Cyberhub.Mode
+	base.Proxy = d.Cyberhub.Proxy
+	base.FofaEmail = d.Recon.FofaEmail
+	base.FofaKey = d.Recon.FofaKey
+	base.HunterToken = d.Recon.HunterToken
+	base.HunterAPIKey = d.Recon.HunterAPIKey
+	base.ReconProxy = d.Recon.Proxy
+	base.ReconLimit = d.Recon.Limit
+	base.ScanConfig.Verify = d.Scan.Verify
+	base.ScanConfig.VerifyTimeout = d.Scan.VerifyTimeout
+	base.IOAURL = ResolveString(d.IOA.URL, base.IOAURL)
+	base.IOAToken = ResolveString(d.IOA.Token, base.IOAToken)
+	base.IOANodeName = ResolveString(base.IOANodeName, d.IOA.NodeName)
+	base.Space = ResolveString(d.IOA.Space, base.Space)
+	base.Tools = append([]string(nil), d.Agent.Tools...)
+	if d.Agent.Timeout > 0 {
+		base.Timeout = d.Agent.Timeout
+	}
+	base.SaveSession = d.Agent.SaveSession
 	if d.Search.TavilyKeys != "" {
 		DefaultTavilyKeys = ResolveString(DefaultTavilyKeys, d.Search.TavilyKeys)
 	}
-	return opt
+	return base
 }
 
 // MergeRemoteOption merges remote config into local option. Local (non-empty)
