@@ -1060,6 +1060,40 @@ func TestScanSummaryJSONLines(t *testing.T) {
 	}
 }
 
+func TestScanWebCountUsesProbedPages(t *testing.T) {
+	coll := newCollector([]string{"seed"}, nil, false, false)
+	accept := func(e event) {
+		coll.Observe(pipelineEvent{Action: pipeline.ActionAccept, Event: e})
+	}
+
+	// URLs katana merely *discovers* (links scraped from JS/HTML) inflate the
+	// discovered set but are never actually requested.
+	accept(targetEvent("katana", "", newWebTarget("", "http://127.0.0.1:8088/a", "")))
+	accept(targetEvent("katana", "", newWebTarget("", "http://127.0.0.1:8088/b", "")))
+	accept(targetEvent("katana", "", newWebTarget("", "http://127.0.0.1:8088/c", "")))
+
+	probe := func(capability, rawURL string) {
+		accept(targetEvent(capability, "", newWebProbeTarget("", capability, "", &parsers.SprayResult{
+			IsValid: true, UrlString: rawURL, Status: 200, Distance: 1,
+		})))
+	}
+	// Same page probed by two capabilities → counts once.
+	probe(capSprayCheck, "http://127.0.0.1:8088/a")
+	probe(capSprayCrawl, "http://127.0.0.1:8088/a")
+	probe(capSprayCrawl, "http://127.0.0.1:8088/login")
+	// Fuzzy baseline duplicate is not a distinct page → must not count.
+	accept(targetEvent(capSprayCheck, "", newWebProbeTarget("", capSprayCheck, "", &parsers.SprayResult{
+		IsValid: true, IsFuzzy: true, UrlString: "http://127.0.0.1:8088/noise", Status: 200,
+	})))
+
+	if got := len(coll.seenWeb); got != 3 {
+		t.Fatalf("seenWeb (discovered URLs) = %d, want 3", got)
+	}
+	if got := len(coll.seenWebProbe); got != 2 {
+		t.Fatalf("seenWebProbe (probed pages) = %d, want 2", got)
+	}
+}
+
 func TestScanSkipsFailedSprayProbeResults(t *testing.T) {
 	cases := []struct {
 		name   string

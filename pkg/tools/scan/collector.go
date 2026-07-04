@@ -19,6 +19,23 @@ type sprayObservation struct {
 	Capability string
 }
 
+// ScanSnapshotSink, when implemented by the stream writer handed to the
+// collector, receives throttled incremental snapshots of the structured result
+// while the scan is still running. Transports (web SSE writer, agent websocket
+// writer) implement it so the UI's live counters, findings, and asset tree fill
+// in mid-scan instead of only at completion. The CLI and file writers don't
+// implement it, so plain runs pay no snapshot cost.
+type ScanSnapshotSink interface {
+	ScanSnapshot(result *output.Result)
+}
+
+// snapshotInterval bounds how often incremental snapshots are emitted. A busy
+// scan can produce thousands of accepted events per second; rebuilding and
+// broadcasting the full result set on every one would be wasteful, so snapshots
+// are coalesced to at most one per interval. Sparse scans still snapshot on
+// each accepted event, since the interval has always elapsed between them.
+const snapshotInterval = 750 * time.Millisecond
+
 type collector struct {
 	mu           sync.Mutex
 	inputs       []string
@@ -30,23 +47,33 @@ type collector struct {
 	errors       []string
 	trace        []string
 	seenWeb      map[string]struct{}
+	seenWebProbe map[string]struct{}
 	seenFinger   map[string]int
 	stream       io.Writer
 	streamColor  bool
 	fileLines    []string
+	snapshotSink ScanSnapshotSink
+	lastSnapshot time.Time // guarded by mu; last time an incremental snapshot was emitted
 }
 
 func newCollector(inputs []string, stream io.Writer, streamColor, debug bool) *collector {
-	return &collector{
-		inputs:      append([]string(nil), inputs...),
-		debug:       debug,
-		stats:       newStatsCollector(len(inputs)),
-		seenWeb:     make(map[string]struct{}),
-		seenFinger:  make(map[string]int),
-		stream:      stream,
-		streamColor: streamColor,
-		fileLines:   make([]string, 0),
+	c := &collector{
+		inputs:       append([]string(nil), inputs...),
+		debug:        debug,
+		stats:        newStatsCollector(len(inputs)),
+		seenWeb:      make(map[string]struct{}),
+		seenWebProbe: make(map[string]struct{}),
+		seenFinger:   make(map[string]int),
+		stream:       stream,
+		streamColor:  streamColor,
+		fileLines:    make([]string, 0),
 	}
+	// The transports pass a stream that doubles as a snapshot sink; the CLI and
+	// file writers don't, and StructuredResult never gets snapshotted for them.
+	if sink, ok := stream.(ScanSnapshotSink); ok {
+		c.snapshotSink = sink
+	}
+	return c
 }
 
 func (c *collector) Observe(pe pipelineEvent) {
@@ -83,6 +110,33 @@ func (c *collector) Observe(pe pipelineEvent) {
 	if line != "" {
 		fmt.Fprintln(c.stream, line)
 	}
+	// Accepted events are exactly the ones that move the UI counters (targets,
+	// services, web, fingerprints, loot) or the engine stats (requests/errors),
+	// so push a throttled snapshot after each one.
+	c.maybeSnapshot()
+}
+
+// maybeSnapshot emits a throttled incremental snapshot of the structured result
+// to the attached sink, if any. It is a no-op for streams that don't implement
+// ScanSnapshotSink (CLI, file writers) and coalesces to at most one snapshot per
+// snapshotInterval so a high event rate can't flood the transport.
+func (c *collector) maybeSnapshot() {
+	if c.snapshotSink == nil {
+		return
+	}
+	c.mu.Lock()
+	now := time.Now()
+	if !c.lastSnapshot.IsZero() && now.Sub(c.lastSnapshot) < snapshotInterval {
+		c.mu.Unlock()
+		return
+	}
+	c.lastSnapshot = now
+	c.mu.Unlock()
+
+	// StructuredResult acquires c.mu itself, so it must be built with the lock
+	// released. The single-writer throttle above guarantees only one goroutine
+	// snapshots per interval even when Observe runs on multiple worker routines.
+	c.snapshotSink.ScanSnapshot(c.StructuredResult())
 }
 
 func (c *collector) recordAcceptedEvent(event event) {
@@ -119,6 +173,14 @@ func (c *collector) recordTargetEvent(event event) {
 				Result:     target.Result,
 				Capability: source,
 			})
+			// Count a "web" page only once it has actually been probed and
+			// produced a reportable response. Dedup by URL+host so the same
+			// page probed by multiple capabilities counts once, matching the
+			// path nodes shown in the asset tree (vs. seenWeb, which counts
+			// every URL katana merely *discovers* — links scraped from JS/HTML
+			// that may never be requested).
+			probeKey := utils.NormalizeURL(target.Result.UrlString) + "|host=" + strings.ToLower(target.HostHeader)
+			c.seenWebProbe[probeKey] = struct{}{}
 		}
 	}
 }
