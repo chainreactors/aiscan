@@ -289,7 +289,7 @@ func TestHandleFileUploadPersistsSystemMessage(t *testing.T) {
 	pool := NewAgentPool(svc.Hub())
 	svc.SetAgentPool(pool)
 
-	srv := httptest.NewServer(NewHandler(svc, pool, nil, "", nil, nil))
+	srv := httptest.NewServer(NewHandler(svc, pool, nil, nil, nil))
 	defer srv.Close()
 
 	conn := dialAgentWithIdentity(t, srv, "upload-agent", []string{"scan"}, webproto.AgentIdentity{

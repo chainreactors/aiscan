@@ -196,7 +196,7 @@ func TestReconNoCredentials(t *testing.T) {
 
 func TestHandlerTestConnRouting(t *testing.T) {
 	svc := newService(&fakeConfigStore{})
-	srv := httptest.NewServer(NewHandler(svc, nil, nil, "", nil, nil))
+	srv := httptest.NewServer(NewHandler(svc, nil, nil, nil, nil))
 	defer srv.Close()
 
 	// The {section} wildcard must coexist with the static /llm/test route and

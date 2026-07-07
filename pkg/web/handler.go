@@ -14,7 +14,7 @@ type Handler struct {
 	handler http.Handler
 }
 
-func NewHandler(service *Service, agents *AgentPool, local *LocalAgents, adminToken string, ioaHandler http.Handler, static http.Handler) *Handler {
+func NewHandler(service *Service, agents *AgentPool, local *LocalAgents, ioaHandler http.Handler, static http.Handler) *Handler {
 	mux := http.NewServeMux()
 
 	h := &handlerImpl{service: service, agents: agents}
@@ -67,15 +67,13 @@ func NewHandler(service *Service, agents *AgentPool, local *LocalAgents, adminTo
 		mux.Handle("/", static)
 	}
 
-	// Gate the process-spawning local-agent endpoints behind the admin token
-	// (no-op if empty).
-	return &Handler{handler: adminAuthMiddleware(adminToken, mux)}
+	return &Handler{handler: mux}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Admin-Token")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return

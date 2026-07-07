@@ -301,34 +301,6 @@ export async function testConn(section: string, config: DistributeConfig): Promi
   });
 }
 
-// --- Admin token (gates local-agent launch endpoints) ---
-
-const ADMIN_TOKEN_KEY = 'aiscan_admin_token'
-
-export function getAdminToken(): string {
-  try {
-    return window.localStorage.getItem(ADMIN_TOKEN_KEY) || ''
-  } catch {
-    return ''
-  }
-}
-
-export function setAdminToken(token: string): void {
-  try {
-    if (token) window.localStorage.setItem(ADMIN_TOKEN_KEY, token)
-    else window.localStorage.removeItem(ADMIN_TOKEN_KEY)
-  } catch {
-    /* ignore */
-  }
-}
-
-function adminHeaders(extra?: Record<string, string>): Record<string, string> {
-  const headers: Record<string, string> = { ...(extra || {}) }
-  const token = getAdminToken()
-  if (token) headers['X-Admin-Token'] = token
-  return headers
-}
-
 // --- Local agents (hub-hosted nodes: one-click launch + delete) ---
 
 export interface LocalAgentView {
@@ -341,18 +313,16 @@ export interface LocalAgentView {
 export async function launchLocalAgent(): Promise<LocalAgentView> {
   return apiJSON('/api/deploy/local', 'Failed to launch local agent', {
     method: 'POST',
-    headers: adminHeaders(),
   })
 }
 
 export async function listLocalAgents(): Promise<LocalAgentView[]> {
-  return apiJSON('/api/deploy/local', 'Failed to list local agents', { headers: adminHeaders() })
+  return apiJSON('/api/deploy/local', 'Failed to list local agents')
 }
 
 export async function stopLocalAgent(name: string): Promise<void> {
   await apiJSON(`/api/deploy/local/${encodeURIComponent(name)}`, 'Failed to delete local agent', {
     method: 'DELETE',
-    headers: adminHeaders(),
   })
 }
 

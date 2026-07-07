@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"crypto/subtle"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -36,7 +35,6 @@ type localProc struct {
 type LocalAgents struct {
 	webURL string     // hub loopback address children dial (derived from web --addr)
 	ioaURL string     // hub IOA endpoint carrying the embedded access token
-	binary string     // agent binary to exec (empty => this executable)
 	pool   *AgentPool // live pool, for registration/busy cross-reference
 
 	mu    sync.Mutex
@@ -46,12 +44,11 @@ type LocalAgents struct {
 
 // NewLocalAgents builds a launcher. hubURL is the loopback base the children
 // dial (e.g. http://127.0.0.1:8080); ioaToken is embedded into the child's IOA
-// URL; binary overrides the executable served to children (empty => this one).
-func NewLocalAgents(hubURL, ioaToken, binary string, pool *AgentPool) *LocalAgents {
+// URL. Children are launched from the current aiscan executable.
+func NewLocalAgents(hubURL, ioaToken string, pool *AgentPool) *LocalAgents {
 	return &LocalAgents{
 		webURL: hubURL,
 		ioaURL: nodeIOAURL(hubURL, ioaToken),
-		binary: binary,
 		pool:   pool,
 	}
 }
@@ -83,12 +80,9 @@ func (l *LocalAgents) Launch(ctx context.Context) (*LocalAgentView, error) {
 	if l.webURL == "" {
 		return nil, fmt.Errorf("hub local address unknown; cannot launch a local agent (check the web --addr)")
 	}
-	bin := l.binary
-	if bin == "" {
-		var err error
-		if bin, err = os.Executable(); err != nil {
-			return nil, fmt.Errorf("resolve agent binary: %w", err)
-		}
+	bin, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("resolve agent binary: %w", err)
 	}
 
 	l.mu.Lock()
@@ -241,43 +235,4 @@ func registerLocalAgentRoutes(mux *http.ServeMux, l *LocalAgents) {
 	mux.HandleFunc("POST /api/deploy/local", l.handleLaunch)
 	mux.HandleFunc("GET /api/deploy/local", l.handleList)
 	mux.HandleFunc("DELETE /api/deploy/local/{id}", l.handleStop)
-}
-
-// ---------------------------------------------------------------------------
-// Admin-token gate
-// ---------------------------------------------------------------------------
-
-// adminAuthMiddleware gates the process-spawning local-agent endpoints behind an
-// admin token when one is configured. Empty token => no gating (back-compat, so
-// a loopback hub works out of the box); set --admin-token to lock down a hub
-// that listens off-loopback.
-func adminAuthMiddleware(token string, next http.Handler) http.Handler {
-	if token == "" {
-		return next
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/deploy") && r.Method != http.MethodOptions {
-			if !checkAdminToken(r, token) {
-				writeError(w, http.StatusUnauthorized, "admin token required")
-				return
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func checkAdminToken(r *http.Request, token string) bool {
-	if got := r.Header.Get("X-Admin-Token"); tokenEqual(got, token) {
-		return true
-	}
-	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
-		return tokenEqual(strings.TrimPrefix(auth, "Bearer "), token)
-	}
-	return false
-}
-
-// tokenEqual compares an admin token in constant time so a timing side channel
-// cannot leak it byte by byte.
-func tokenEqual(got, want string) bool {
-	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }

@@ -61,6 +61,7 @@ func newMenuTestService(t *testing.T) *Service {
 	if err != nil {
 		t.Fatalf("NewSQLiteStore() error = %v", err)
 	}
+	t.Cleanup(func() { _ = store.Close() })
 	return NewService(ServiceConfig{Store: store})
 }
 
@@ -120,7 +121,7 @@ func TestClearCommandWipesTranscript(t *testing.T) {
 // fetches, proving the route is wired and returns a JSON slashcmd catalog.
 func TestSessionCommandsRoute(t *testing.T) {
 	svc := newMenuTestService(t)
-	srv := httptest.NewServer(NewHandler(svc, nil, nil, "", nil, nil))
+	srv := httptest.NewServer(NewHandler(svc, nil, nil, nil, nil))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/api/chat/sessions/anything/commands")

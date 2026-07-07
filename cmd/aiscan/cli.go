@@ -31,8 +31,6 @@ type webCommand struct {
 	MaxScans    int    `long:"max-scans" default:"3" description:"Maximum concurrent scans"`
 	ScanTimeout int    `long:"scan-timeout" default:"600" description:"Maximum scan runtime in seconds"`
 	IOAToken    string `long:"ioa-token" description:"IOA access key (auto-generated if empty)"`
-	AdminToken  string `long:"admin-token" env:"AISCAN_ADMIN_TOKEN" description:"Admin token gating local-agent launch endpoints (empty = open)"`
-	AgentBinary string `long:"agent-binary" env:"AISCAN_AGENT_BINARY" description:"Path to the aiscan binary used to launch local agents (default: this executable)"`
 }
 
 type cliOptions struct {
