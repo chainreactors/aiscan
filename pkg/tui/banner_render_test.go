@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	outputpkg "github.com/chainreactors/aiscan/core/output"
+	"github.com/chainreactors/aiscan/pkg/agent"
 )
 
 // assertUniformWidth checks every line of a rendered box has the same visible
@@ -81,11 +82,22 @@ func TestRedactIOAURL(t *testing.T) {
 	}
 }
 
+func TestRedactIOAURLFallbackOnMalformedURL(t *testing.T) {
+	raw := "http://super-secret-token@127.0.0.1:3000/ioa/%zz"
+	got := redactIOAURL(raw)
+	if strings.Contains(got, "super-secret-token") {
+		t.Fatalf("redactIOAURL malformed leaked token: %q", got)
+	}
+	if !strings.Contains(got, "127.0.0.1:3000") {
+		t.Fatalf("redactIOAURL malformed dropped host: %q", got)
+	}
+}
+
 func TestTruncMiddleKeepsTail(t *testing.T) {
 	p := "/var/lib/cloud-cli-proxy/hosts/57dfa9df-9093-4bcb/home/aiscan/dist/.aiscan/agent_history"
 	got := truncMiddle(p, 40)
-	if n := len([]rune(got)); n > 40 {
-		t.Errorf("truncMiddle len = %d, want <= 40", n)
+	if n := visibleWidth(got); n > 40 {
+		t.Errorf("truncMiddle width = %d, want <= 40", n)
 	}
 	if !strings.HasSuffix(got, "agent_history") {
 		t.Errorf("truncMiddle dropped tail: %q", got)
@@ -95,6 +107,17 @@ func TestTruncMiddleKeepsTail(t *testing.T) {
 	}
 	if !strings.Contains(got, "…") {
 		t.Errorf("truncMiddle missing ellipsis: %q", got)
+	}
+}
+
+func TestTruncMiddleUsesVisibleWidth(t *testing.T) {
+	p := "/tmp/中文中文中文中文中文/agent_history"
+	got := truncMiddle(p, 18)
+	if n := visibleWidth(got); n > 18 {
+		t.Fatalf("truncMiddle CJK width = %d, want <= 18: %q", n, got)
+	}
+	if !strings.HasSuffix(got, "history") {
+		t.Fatalf("truncMiddle CJK dropped useful tail: %q", got)
 	}
 }
 
@@ -119,6 +142,28 @@ func TestRenderBoxTableNodesSample(t *testing.T) {
 	box := renderFixedBox("nodes\n"+renderBoxTable(rows, false), 44, false)
 	assertUniformWidth(t, box)
 	t.Log("\n" + box)
+}
+
+func TestRenderBoxTableClipsWideIntermediateColumns(t *testing.T) {
+	rows := [][]string{
+		{"de12abca", strings.Repeat("非常长", 20), "3 nodes", "12 msgs"},
+	}
+	table := renderBoxTable(rows, false)
+	if !strings.Contains(table, "12 msgs") {
+		t.Fatalf("wide middle column hid the final column: %q", table)
+	}
+	if visibleWidth(strings.Split(table, "\n")[0]) > 80 {
+		t.Fatalf("wide middle column was not clipped: width=%d table=%q", visibleWidth(table), table)
+	}
+}
+
+func TestProviderModelDoesNotDependOnCommands(t *testing.T) {
+	r := &AgentConsole{}
+	r.appInfo.ProviderConfig = agent.ProviderConfig{Provider: "anthropic", Model: "claude-test"}
+	provider, model := r.providerModel()
+	if provider != "anthropic" || model != "claude-test" {
+		t.Fatalf("providerModel = %q/%q, want anthropic/claude-test", provider, model)
+	}
 }
 
 func TestShortID(t *testing.T) {

@@ -72,11 +72,14 @@ func (r *AgentConsole) bannerWidth() int {
 		maxWidth     = 78
 	)
 	width := defaultWidth
+	resolved := false
 	if r != nil && r.terminal != nil && r.terminal.Control != nil {
 		if columns, _ := r.terminal.Control.Size(); columns > 0 {
 			width = columns - 4
+			resolved = true
 		}
-	} else if r != nil && r.output != nil && r.output.Stderr() != nil {
+	}
+	if !resolved && r != nil && r.output != nil && r.output.Stderr() != nil {
 		if columns := writerTerminalWidth(r.output.Stderr()); columns > 0 {
 			width = columns - 4
 		}
@@ -189,14 +192,49 @@ func clipVisible(s string, maxWidth int) string {
 // truncMiddle shortens s to about max columns by dropping the middle, keeping the
 // head and the (usually more informative) tail — used for long filesystem paths.
 func truncMiddle(s string, max int) string {
-	r := []rune(s)
-	if len(r) <= max || max < 5 {
+	if visibleWidth(s) <= max || max < 5 {
 		return s
 	}
-	keep := max - 1
-	head := keep / 2
-	tail := keep - head
-	return string(r[:head]) + "…" + string(r[len(r)-tail:])
+	ellipsisWidth := visibleWidth("…")
+	keep := max - ellipsisWidth
+	headBudget := keep / 2
+	tailBudget := keep - headBudget
+	return visiblePrefix(s, headBudget) + "…" + visibleSuffix(s, tailBudget)
+}
+
+func visiblePrefix(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	var b strings.Builder
+	width := 0
+	for _, r := range s {
+		rw := runewidth.RuneWidth(r)
+		if width+rw > maxWidth {
+			break
+		}
+		b.WriteRune(r)
+		width += rw
+	}
+	return b.String()
+}
+
+func visibleSuffix(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	width := 0
+	start := len(runes)
+	for start > 0 {
+		rw := runewidth.RuneWidth(runes[start-1])
+		if width+rw > maxWidth {
+			break
+		}
+		start--
+		width += rw
+	}
+	return string(runes[start:])
 }
 
 func ansiWrap(s, code string, enabled bool) string {
@@ -258,7 +296,7 @@ func (r *AgentConsole) sessionSummary() string {
 }
 
 func (r *AgentConsole) providerModel() (string, string) {
-	if r.appInfo.Commands == nil {
+	if r == nil {
 		return "", ""
 	}
 	pc := r.appInfo.ProviderConfig
@@ -329,6 +367,7 @@ func renderHelpRows(rows []helpRow, colorEnabled bool) string {
 // accented, the rest dimmed; the final column is left unpadded and renderFixedBox
 // clips any line that would exceed the frame.
 func renderBoxTable(rows [][]string, colorEnabled bool) string {
+	const maxColumnWidth = 24
 	cols := 0
 	for _, row := range rows {
 		if len(row) > cols {
@@ -338,7 +377,11 @@ func renderBoxTable(rows [][]string, colorEnabled bool) string {
 	widths := make([]int, cols)
 	for _, row := range rows {
 		for i, cell := range row {
-			if w := visibleWidth(cell); w > widths[i] {
+			w := visibleWidth(cell)
+			if i < cols-1 && w > maxColumnWidth {
+				w = maxColumnWidth
+			}
+			if w > widths[i] {
 				widths[i] = w
 			}
 		}
@@ -352,6 +395,9 @@ func renderBoxTable(rows [][]string, colorEnabled bool) string {
 			cell := ""
 			if i < len(row) {
 				cell = row[i]
+			}
+			if i < cols-1 {
+				cell = clipVisible(cell, widths[i])
 			}
 			styled := ansiDim(cell, colorEnabled)
 			if i == 1 {
