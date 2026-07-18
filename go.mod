@@ -31,7 +31,7 @@ require (
 	github.com/charmbracelet/glamour v0.8.0
 	github.com/go-rod/rod v0.116.2
 	github.com/go-rod/stealth v0.4.9
-	github.com/gookit/config/v2 v2.2.8
+	github.com/gookit/config/v2 v2.2.9
 	github.com/gorilla/websocket v1.5.3
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jessevdk/go-flags v1.6.1
@@ -149,7 +149,7 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gookit/goutil v0.7.5 // indirect
+	github.com/gookit/goutil v0.8.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/gosnmp/gosnmp v1.43.2 // indirect
 	github.com/h2non/filetype v1.1.3 // indirect
