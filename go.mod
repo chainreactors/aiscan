@@ -3,7 +3,7 @@ module github.com/chainreactors/aiscan
 go 1.25.7
 
 require (
-	github.com/alecthomas/chroma/v2 v2.14.0
+	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/carapace-sh/carapace v1.11.6
 	github.com/chainreactors/crtm v0.0.3-0.20260618163257-073207497076
 	github.com/chainreactors/fingers v1.2.2-0.20260714063144-070758342f45
@@ -55,6 +55,8 @@ require (
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	sigs.k8s.io/yaml v1.6.0
 )
+
+require github.com/dlclark/regexp2/v2 v2.2.1 // indirect
 
 require (
 	aead.dev/minisign v0.2.0 // indirect
