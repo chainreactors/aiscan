@@ -36,7 +36,7 @@ jobs:
       - name: Run golangci-lint
         id: golangci_lint
         continue-on-error: true
-        uses: golangci/golangci-lint-action@v9.2.1
+        uses: golangci/golangci-lint-action@v9.3.0
         with:
           version: v2.12.2
           args: --timeout=5m --build-tags "re2_cgo re2_static"
