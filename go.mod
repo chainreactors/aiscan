@@ -46,7 +46,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.23
 	github.com/muesli/termenv v0.16.0
 	github.com/projectdiscovery/goflags v0.1.75
-	github.com/projectdiscovery/gologger v1.1.71
+	github.com/projectdiscovery/gologger v1.1.72
 	github.com/projectdiscovery/katana v1.7.0
 	github.com/projectdiscovery/uncover v1.2.1
 	github.com/projectdiscovery/utils v0.11.1
