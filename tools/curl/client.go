@@ -72,18 +72,12 @@ func (c *Command) do(ctx context.Context, req *Request, egress coretool.Egress, 
 			proxyURL = "http://" + proxyURL
 		}
 	}
-	if len(req.Resolve) > 0 && proxyURL != "" {
-		// A standard library HTTP proxy owns the destination dial and therefore
-		// cannot safely honor a local host mapping without also changing CONNECT
-		// and TLS-SNI behavior. Fail explicitly instead of silently ignoring the
-		// option (or bypassing the observed proxy path).
-		return fmt.Errorf("curl: --resolve cannot be used with a proxy")
-	}
-
 	client, err := c.buildClient(proxyURL, caPath, req)
 	if err != nil {
 		return err
 	}
+	// Each invocation owns its transport, including mapping-specific tunnels.
+	defer client.Transport.(*http.Transport).CloseIdleConnections()
 	trace, err := openASCIITrace(req.TraceASCII, workDir, stdout, stderr)
 	if err != nil {
 		return err
@@ -253,27 +247,20 @@ func (c *Command) buildClient(proxyURL, caPath string, req *Request) (*http.Clie
 	}
 	dialer := &net.Dialer{Timeout: dialTimeout}
 	dialContext := dialer.DialContext
-	if len(req.Resolve) > 0 {
-		resolve := makeResolveMap(req.Resolve)
-		dialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(address)
-			if err == nil {
-				entry, ok := lookupResolve(resolve, host, port)
-				if ok {
-					var lastErr error
-					for _, mapped := range entry.Addresses {
-						conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(mapped, port))
-						if dialErr == nil {
-							return conn, nil
-						}
-						lastErr = dialErr
-					}
-					if lastErr != nil {
-						return nil, lastErr
-					}
-				}
-			}
-			return dialer.DialContext(ctx, network, address)
+	var proxyAddress *url.URL
+	if proxyURL != "" {
+		var err error
+		proxyAddress, err = url.Parse(proxyURL)
+		if err != nil || proxyAddress.Hostname() == "" {
+			return nil, fmt.Errorf("curl: invalid proxy URL")
+		}
+	}
+	mapped := len(req.Resolve) > 0 || len(req.ConnectTo) > 0
+	if mapped {
+		var err error
+		dialContext, err = mappedDialer(req, proxyAddress, tlsConfig, dialTimeout)
+		if err != nil {
+			return nil, err
 		}
 	}
 	forceHTTP2 := req.HTTP2 || !req.HTTP11
@@ -290,12 +277,8 @@ func (c *Command) buildClient(proxyURL, caPath string, req *Request) (*http.Clie
 		IdleConnTimeout:     90 * time.Second,
 		TLSHandshakeTimeout: dialTimeout,
 	}
-	if proxyURL != "" {
-		parsed, err := url.Parse(proxyURL)
-		if err != nil {
-			return nil, fmt.Errorf("curl: invalid proxy %q: %w", proxyURL, err)
-		}
-		transport.Proxy = http.ProxyURL(parsed)
+	if proxyAddress != nil && !mapped {
+		transport.Proxy = http.ProxyURL(proxyAddress)
 	}
 
 	jar, _ := cookiejar.New(nil)

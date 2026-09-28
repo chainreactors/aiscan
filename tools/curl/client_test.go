@@ -782,15 +782,18 @@ func TestResolvePreservesTLSServerNameAndHost(t *testing.T) {
 	}
 }
 
-func TestResolveRejectsActiveProxy(t *testing.T) {
+func TestResolveReportsProxyConnectDenial(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("proxy"))
+		if r.Method != http.MethodConnect || r.Host != "127.0.0.1:80" {
+			t.Errorf("unexpected proxy request: %s %s", r.Method, r.Host)
+		}
+		http.Error(w, "private-proxy-detail", http.StatusProxyAuthRequired)
 	}))
 	defer srv.Close()
 	if _, _, err := run(t, []string{
 		"--resolve", "example.test:80:127.0.0.1", "-x", srv.URL,
 		"http://example.test/",
-	}, "", ""); err == nil || !strings.Contains(err.Error(), "--resolve cannot be used with a proxy") {
+	}, "", ""); err == nil || !strings.Contains(err.Error(), "HTTP 407") || strings.Contains(err.Error(), "private-proxy-detail") {
 		t.Fatalf("resolve with proxy error = %v", err)
 	}
 }

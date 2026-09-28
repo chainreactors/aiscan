@@ -57,24 +57,25 @@ type Request struct {
 	CookieIn  string // -b: cookie string or @file
 	CookieJar string // -c: write jar here after the exchange
 
-	Output     string         // -o
-	DumpHeader string         // -D: write response headers to a file (or - for stdout)
-	TraceASCII string         // --trace-ascii: write an ASCII wire trace to a file
-	Include    bool           // -i
-	Head       bool           // -I/--head: issue a HEAD request and include headers
-	Silent     bool           // -s
-	ShowError  bool           // -S
-	Fail       bool           // -f/--fail: fail on HTTP 4xx/5xx
-	WriteOut   string         // -w
-	Verbose    bool           // -v
-	NoBuffer   bool           // -N/--no-buffer: stream response writes without buffering
-	Insecure   bool           // -k
-	Proxy      string         // -x: override the egress proxy for this invocation
-	HTTP2      bool           // --http2: prefer/require HTTP/2 where available
-	HTTP11     bool           // --http1.1: disable HTTP/2 negotiation
-	PathAsIs   bool           // --path-as-is: preserve dot segments in the URL path
-	Version    bool           // --version/-V: print the curl compatibility version
-	Resolve    []ResolveEntry // --resolve host:port:address, repeatable
+	Output     string           // -o
+	DumpHeader string           // -D: write response headers to a file (or - for stdout)
+	TraceASCII string           // --trace-ascii: write an ASCII wire trace to a file
+	Include    bool             // -i
+	Head       bool             // -I/--head: issue a HEAD request and include headers
+	Silent     bool             // -s
+	ShowError  bool             // -S
+	Fail       bool             // -f/--fail: fail on HTTP 4xx/5xx
+	WriteOut   string           // -w
+	Verbose    bool             // -v
+	NoBuffer   bool             // -N/--no-buffer: stream response writes without buffering
+	Insecure   bool             // -k
+	Proxy      string           // -x: override the egress proxy for this invocation
+	HTTP2      bool             // --http2: prefer/require HTTP/2 where available
+	HTTP11     bool             // --http1.1: disable HTTP/2 negotiation
+	PathAsIs   bool             // --path-as-is: preserve dot segments in the URL path
+	Version    bool             // --version/-V: print the curl compatibility version
+	Resolve    []ResolveEntry   // --resolve host:port:address, repeatable
+	ConnectTo  []ConnectToEntry // --connect-to host:port:host:port, repeatable
 
 	ConnectTimeout time.Duration // --connect-timeout
 	MaxTime        time.Duration // --max-time
@@ -406,6 +407,16 @@ func (r *Request) applyLong(name string, need func() (string, error)) error {
 			return err
 		}
 		r.Resolve = append(r.Resolve, entry)
+	case "connect-to":
+		v, err := need()
+		if err != nil {
+			return err
+		}
+		entry, err := parseConnectTo(v)
+		if err != nil {
+			return err
+		}
+		r.ConnectTo = append(r.ConnectTo, entry)
 	case "version":
 		r.Version = true
 	default:

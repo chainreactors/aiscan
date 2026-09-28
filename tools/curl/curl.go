@@ -85,8 +85,14 @@ Supported options:
       --http2                  Prefer HTTP/2
       --http1.1                Force HTTP/1.1
       --resolve host:port:addr Route a host/port to an explicit address
+      --connect-to h1:p1:h2:p2  Connect to h2:p2 while preserving the URL host and TLS name
       --path-as-is             Preserve dot segments in the URL path
       --version, -V            Print the compatibility version and exit
+
+Connection mappings preserve the URL, HTTP Host and TLS verification name.
+Mapped calls through HTTP/HTTPS proxies use CONNECT, including HTTP targets;
+the proxy must permit CONNECT to the selected port. Unlike system curl's
+ordinary HTTP proxy mode, --resolve is applied before opening the tunnel.
 
 Unlisted flags are rejected rather than silently ignored. Requests are routed
 through the runner proxy and published as a typed HTTP observation; a browser User-Agent and
