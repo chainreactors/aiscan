@@ -17,7 +17,6 @@ import (
 	coretool "github.com/chainreactors/cyber/core/tool"
 	"github.com/chainreactors/cyber/internal/testutil/hosttest"
 	arsenalext "github.com/chainreactors/cyber/pkg/exts/arsenal"
-	"github.com/chainreactors/cyber/tools/arsenal"
 )
 
 type offlineTransport struct{}
@@ -44,12 +43,18 @@ func TestArsenalInitializationOffline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manager, err := arsenal.NewManager(t.TempDir(), ToolSpec.ManagerOption(bundle))
+	arsenal, err := arsenalext.New(t.TempDir(), ToolSpec.ManagerOption(bundle))
 	if err != nil {
 		t.Fatal(err)
 	}
 	commands := coretool.NewCommandRegistry()
-	set, err := extension.New(hosttest.Capabilities(), commands, arsenalext.New(manager))
+	var manager *crtm.Manager
+	set, err := extension.New(hosttest.Capabilities(), commands, arsenal,
+		extension.Func{LoadFunc: func(scope *extension.Scope) error {
+			var err error
+			manager, err = extension.Use[*crtm.Manager](scope)
+			return err
+		}})
 	if err != nil {
 		t.Fatal(err)
 	}

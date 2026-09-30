@@ -322,6 +322,11 @@ func TestInstallationBoundaryRules(t *testing.T) {
 		{"custom extension", "examples/main.go", `package main; import ext "github.com/chainreactors/cyber/core/extension"; var x = ext.Func{}`, false},
 		{"unit test", "pkg/web/service/example_test.go", `package service_test; import svc "github.com/chainreactors/cyber/pkg/web/service"; var x = svc.NewService`, false},
 		{"integration test", "pkg/exts/web/example_test.go", `package web_test; import svc "github.com/chainreactors/cyber/pkg/web/service"; var x = svc.NewService`, true},
+		{"host manager construction", "cmd/aiscan/extensions.go", `package main; import arsenal "github.com/chainreactors/cyber/tools/arsenal"; var x = arsenal.NewManager`, true},
+		{"migration store construction", "cmd/migrate-scans/migration_test.go", `package main; import svc "github.com/chainreactors/cyber/pkg/web/service"; var x = svc.NewSQLiteStore`, true},
+		{"migration schema installation", "cmd/migrate-scans/migration_test.go", `package main; import svc "github.com/chainreactors/cyber/pkg/web/service"; var x = svc.ScanSchema`, true},
+		{"cross extension browser construction", "pkg/exts/jev/browser_integration_test.go", `package jev; import browser "github.com/chainreactors/cyber/tools/playwright"; var x = browser.New`, true},
+		{"cross extension shell construction", "pkg/exts/jev/integration_test.go", `package jev; import shell "github.com/chainreactors/cyber/tools/terminal"; var x = shell.NewBashTool`, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			file, err := parser.ParseFile(token.NewFileSet(), test.path, test.source, 0)

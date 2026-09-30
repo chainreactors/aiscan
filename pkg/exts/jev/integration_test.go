@@ -18,12 +18,14 @@ import (
 	"github.com/chainreactors/cyber/agent/provider"
 	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 	aop "github.com/chainreactors/cyber/aop"
+	"github.com/chainreactors/cyber/core/egress"
 	"github.com/chainreactors/cyber/core/events"
 	"github.com/chainreactors/cyber/core/extension"
 	corehooks "github.com/chainreactors/cyber/core/hooks"
+	"github.com/chainreactors/cyber/core/telemetry"
 	coretool "github.com/chainreactors/cyber/core/tool"
 	guardext "github.com/chainreactors/cyber/pkg/exts/guardrail"
-	"github.com/chainreactors/cyber/tools/terminal"
+	terminalext "github.com/chainreactors/cyber/pkg/exts/terminal"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -45,27 +47,36 @@ func action(command string) *aop.Content {
 // Agent loop. Only model inference is replaced for deterministic mechanism tests.
 func testInstallation(t *testing.T, config Config, client *jevapi.Client, commands ...coretool.Command) (*Extension, agent.Config, *corehooks.Registry) {
 	t.Helper()
+	contribution := extension.Func{LoadFunc: func(scope *extension.Scope) error {
+		if len(commands) == 0 {
+			return nil
+		}
+		return extension.Add(scope, commands...)
+	}}
+	e, cfg, _ := testInstallationWithExtensions(t, config, client, contribution)
+	return e, cfg, cfg.Hooks
+}
+
+func testInstallationWithExtensions(t *testing.T, config Config, client *jevapi.Client, entries ...extension.Extension) (*Extension, agent.Config, *coretool.CommandRegistry) {
+	t.Helper()
 	if config.Directory == "" {
 		config.Directory = t.TempDir()
 	}
 	registry := corehooks.New()
 	cmds, tools := coretool.NewCommandRegistry(), coretool.NewToolRegistry()
-	bash := terminal.NewBashTool(t.TempDir(), 10, registry)
-	bash.SetCommandRegistry(cmds)
 	e := New(config)
-	values := []extension.Extension{extension.Provided[*corehooks.Registry](registry), extension.Provided[*events.Stream](events.New()), cmds, tools}
+	values := []extension.Extension{
+		extension.Provided[*corehooks.Registry](registry),
+		extension.Provided[*events.Stream](events.New()),
+		extension.Provided[telemetry.Logger](telemetry.NopLogger()),
+		extension.Provided[egress.Endpoint](egress.Disabled()),
+		cmds, tools, terminalext.New(terminalext.Config{Directory: t.TempDir(), Timeout: 10}),
+	}
 	if client != nil {
 		values = append(values, extension.Provided[*jevapi.Client](client))
 	}
-	values = append(values, extension.Func{LoadFunc: func(s *extension.Scope) error {
-		var err error
-		if len(commands) > 0 {
-			if err = extension.Add(s, commands...); err != nil {
-				return err
-			}
-		}
-		return extension.Add[coretool.Tool](s, bash)
-	}, CloseFunc: func(context.Context) error { bash.Close(); return nil }}, e)
+	values = append(values, entries...)
+	values = append(values, e)
 	set, err := extension.New(values...)
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +91,7 @@ func testInstallation(t *testing.T, config Config, client *jevapi.Client, comman
 			t.Error(err)
 		}
 	})
-	return e, agent.Config{Loop: agent.StandardLoop{}, Tools: tools, Hooks: registry, Model: "test", SystemPrompt: "Use supplied tools to complete the task. Observe the result before reporting success.", MaxTokens: agent.DefaultMaxTokens, MaxTurns: 20, MaxRetries: -1}, registry
+	return e, agent.Config{Loop: agent.StandardLoop{}, Tools: tools, Hooks: registry, Model: "test", SystemPrompt: "Use supplied tools to complete the task. Observe the result before reporting success.", MaxTokens: agent.DefaultMaxTokens, MaxTurns: 20, MaxRetries: -1}, cmds
 }
 func awaitLearning(t *testing.T, e *Extension) {
 	t.Helper()

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
 	"strings"
@@ -8,7 +9,11 @@ import (
 	"time"
 
 	aop "github.com/chainreactors/cyber/aop"
+	"github.com/chainreactors/cyber/core/extension"
 	"github.com/chainreactors/cyber/core/types"
+	"github.com/chainreactors/cyber/internal/testutil/hosttest"
+	webext "github.com/chainreactors/cyber/pkg/exts/web"
+	webpkg "github.com/chainreactors/cyber/pkg/web"
 	scanpb "github.com/chainreactors/cyber/pkg/web/scan"
 	"github.com/chainreactors/cyber/pkg/web/service"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -16,22 +21,40 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func openScanServer(t *testing.T, path string) (webpkg.Service, *extension.Set, error) {
+	t.Helper()
+	web := webext.New(webext.Config{Database: path, Scans: &service.ScanServiceConfig{}})
+	set := hosttest.Set(t, web)
+	if err := set.Load(t.Context()); err != nil {
+		return nil, set, err
+	}
+	return web.Service(), set, nil
+}
+
 func legacyScans(t *testing.T) (string, []*scanpb.Scan) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "scans.db")
-	store, err := service.NewSQLiteStore(path, service.ScanSchema)
+	_, set, err := openScanServer(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateSession(t.Context(), &types.SessionRecord{Session: &aop.Session{Id: "session"}}); err != nil {
+	if err := set.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	store.Close()
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	rawSession, err := protojson.Marshal(&types.SessionRecord{Session: &aop.Session{Id: "session"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO chat_sessions
+		(id, node_id, status, archived, title, agent_name, session_json, created_at, updated_at)
+		VALUES ('session', '', 'open', false, '', '', ?, '', '')`, string(rawSession)); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := db.Exec(`DROP TABLE scans; CREATE TABLE scans (
 		id VARCHAR PRIMARY KEY, target VARCHAR NOT NULL, mode VARCHAR NOT NULL,
 		verify BOOLEAN, sniper BOOLEAN NOT NULL, status VARCHAR NOT NULL,
@@ -64,8 +87,7 @@ func legacyScans(t *testing.T) (string, []*scanpb.Scan) {
 
 func TestMigrationPreservesCanonicalScansLinksAndIndexes(t *testing.T) {
 	path, scans := legacyScans(t)
-	if store, err := service.NewSQLiteStore(path, service.ScanSchema); err == nil {
-		store.Close()
+	if _, _, err := openScanServer(t, path); err == nil {
 		t.Fatal("server accepted legacy storage")
 	} else if !strings.Contains(err.Error(), "migrate-scans") {
 		t.Fatal(err)
@@ -74,33 +96,42 @@ func TestMigrationPreservesCanonicalScansLinksAndIndexes(t *testing.T) {
 	if err != nil || count != int64(len(scans)) {
 		t.Fatalf("migration: %d, %v", count, err)
 	}
-	store, err := service.NewSQLiteStore(path, service.ScanSchema)
+	svc, _, err := openScanServer(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
 	for _, want := range scans {
-		got, err := store.Get(t.Context(), want.Id)
-		if err != nil || !proto.Equal(got, want) {
+		got, err := svc.API().Scans.GetScan(t.Context(), &scanpb.GetScanRequest{ScanId: want.Id})
+		if err != nil || !proto.Equal(got.GetScan(), want) {
 			t.Fatalf("scan %s: %v, %v", want.Id, got, err)
 		}
-		linked, err := store.ScanSessionIDs(t.Context(), want.Id)
-		if err != nil || len(linked) != 1 || linked[0] != "session" {
-			t.Fatalf("links: %v, %v", linked, err)
-		}
 	}
-	if err := store.Delete(t.Context(), scans[0].Id); err != nil {
+	session, err := svc.API().Sessions.GetSession(t.Context(), &types.GetSessionRequest{SessionId: "session"})
+	if err != nil {
 		t.Fatal(err)
 	}
-	linked, err := store.ScanSessionIDs(t.Context(), scans[0].Id)
-	if err != nil || len(linked) != 0 {
-		t.Fatalf("foreign-key cascade lost: %v, %v", linked, err)
+	binding := session.GetSession().GetExtensions()["scan"]
+	if len(binding.GetFields()["ids"].GetListValue().GetValues()) != len(scans) {
+		t.Fatalf("session links: %v, %v", session, err)
 	}
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	for _, scan := range scans {
+		var linked string
+		if err := db.QueryRow(`SELECT session_id FROM session_scans WHERE scan_id=?`, scan.Id).Scan(&linked); err != nil || linked != "session" {
+			t.Fatalf("scan links: %q, %v", linked, err)
+		}
+	}
+	if _, err := db.Exec(`DELETE FROM scans WHERE id=?`, scans[0].Id); err != nil {
+		t.Fatal(err)
+	}
+	var linked int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM session_scans WHERE scan_id=?`, scans[0].Id).Scan(&linked); err != nil || linked != 0 {
+		t.Fatalf("foreign-key cascade lost: %d, %v", linked, err)
+	}
 	var indexes int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name='idx_scans_created'`).Scan(&indexes); err != nil || indexes != 1 {
 		t.Fatalf("indexes: %d, %v", indexes, err)

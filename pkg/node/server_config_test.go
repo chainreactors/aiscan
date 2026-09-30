@@ -15,7 +15,9 @@ import (
 	aop "github.com/chainreactors/cyber/aop"
 	"github.com/chainreactors/cyber/core/telemetry"
 	types "github.com/chainreactors/cyber/core/types"
+	"github.com/chainreactors/cyber/internal/testutil/hosttest"
 	cfg "github.com/chainreactors/cyber/pkg/config"
+	webext "github.com/chainreactors/cyber/pkg/exts/web"
 	"github.com/chainreactors/cyber/pkg/harness"
 	"github.com/chainreactors/cyber/pkg/profile"
 	webservice "github.com/chainreactors/cyber/pkg/web/service"
@@ -89,7 +91,7 @@ func testRemoteNodeUsesServerLLM(t *testing.T, localOverrides bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer h.Close(context.Background())
+	t.Cleanup(func() { _ = h.Close(context.Background()) })
 	if err := h.Load(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -98,14 +100,17 @@ func testRemoteNodeUsesServerLLM(t *testing.T, localOverrides bool) {
 		t.Fatal(err)
 	}
 	providers.Set(nil, provider.ProviderConfig{Provider: "openai", APIKey: "server-only-key", Model: "server-model", BaseURL: llm.URL + "/v1"})
-	svc := webservice.NewService(webservice.ServiceConfig{Profile: &reloadTestProfile{Harness: h}, ConfigStore: emptyServerConfigStore{}})
-	defer svc.Close(context.Background())
+	web := webext.New(webext.Config{
+		Database: filepath.Join(t.TempDir(), "web.db"), ConfigStore: emptyServerConfigStore{},
+		InitialProfile: func(context.Context) (profile.Profile, error) {
+			return &reloadTestProfile{Harness: h}, nil
+		},
+	})
+	hosttest.Load(t, ctx, web)
+	svc := web.Service()
 	if result, err := svc.API().Config.TestLLM(ctx, &types.LLMProbeRequest{}); err != nil || !result.GetOk() || result.GetModel() != "server-model" {
 		t.Fatalf("server runtime health probe = %v, error = %v", result, err)
 	}
-	pool := webservice.NewAgentPool(svc.Hub(), nil)
-	defer pool.Close(context.Background())
-	svc.SetAgentPool(pool)
 	server := httptest.NewServer(svc.NodeWebSocketHandler())
 	defer server.Close()
 
@@ -172,7 +177,7 @@ func testRemoteNodeUsesServerLLM(t *testing.T, localOverrides bool) {
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		for _, node := range pool.List() {
+		for _, node := range svc.API().ListAgents(&types.ListAgentsRequest{}).GetAgents() {
 			if node.GetStatus().GetProvider() == "openai" && node.GetStatus().GetModel() == "server-model" && node.GetStatus().GetConfigError() == "" {
 				return
 			}
