@@ -67,16 +67,15 @@ func (s *SQLiteStore) hasModule(name string) bool {
 	return false
 }
 
-// initializeSchema creates the only supported schema for an empty database.
-// Existing databases must already match it exactly; there are no migrations
-// or historical schema versions before the first release.
+// initializeSchema creates an empty database or migrates supported legacy
+// storage before the store is made available to the host.
 func initializeSchema(orm *bun.DB, db *sql.DB, schema SchemaModule) error {
 	tables, err := schemaTables(db)
 	if err != nil {
 		return err
 	}
 	if len(tables) != 0 {
-		return validateSchema(db, schema)
+		return migrateSchema(context.Background(), orm, schema)
 	}
 	if err := createSchema(context.Background(), orm, schema); err != nil {
 		return err

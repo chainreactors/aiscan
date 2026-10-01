@@ -1,10 +1,9 @@
-package main
+package web_test
 
 import (
 	"context"
 	"database/sql"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -31,7 +30,7 @@ func openScanServer(t *testing.T, path string) (webpkg.Service, *extension.Set, 
 	return web.Service(), set, nil
 }
 
-func legacyScans(t *testing.T) (string, []*scanpb.Scan) {
+func legacyScans(t *testing.T) (string, []*scanpb.Scan, *aop.Event) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "scans.db")
 	_, set, err := openScanServer(t, path)
@@ -53,6 +52,18 @@ func legacyScans(t *testing.T) (string, []*scanpb.Scan) {
 	if _, err := db.Exec(`INSERT INTO chat_sessions
 		(id, node_id, status, archived, title, agent_name, session_json, created_at, updated_at)
 		VALUES ('session', '', 'open', false, '', '', ?, '', '')`, string(rawSession)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE chat_aop_events RENAME COLUMN event_proto TO event_json`); err != nil {
+		t.Fatal(err)
+	}
+	event := &aop.Event{Id: "event", SessionId: "session", TurnId: "turn", Emitter: "node", Seq: 17,
+		Payload: &aop.Event_ToolResult{ToolResult: &aop.ToolResult{CallId: "call", Name: "bash", Output: []*aop.Content{aop.Text("完整输出")}}}}
+	rawEvent, err := protojson.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO chat_aop_events VALUES ('row', 'session', 'event', 9, 'turn', 'node', 17, ?, 'original-time')`, string(rawEvent)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`DROP TABLE scans; CREATE TABLE scans (
@@ -82,21 +93,12 @@ func legacyScans(t *testing.T) (string, []*scanpb.Scan) {
 		}
 		scans = append(scans, scan)
 	}
-	return path, scans
+	return path, scans, event
 }
 
-func TestMigrationPreservesCanonicalScansLinksAndIndexes(t *testing.T) {
-	path, scans := legacyScans(t)
-	if _, _, err := openScanServer(t, path); err == nil {
-		t.Fatal("server accepted legacy storage")
-	} else if !strings.Contains(err.Error(), "migrate-scans") {
-		t.Fatal(err)
-	}
-	count, err := migrateScans(t.Context(), path)
-	if err != nil || count != int64(len(scans)) {
-		t.Fatalf("migration: %d, %v", count, err)
-	}
-	svc, _, err := openScanServer(t, path)
+func TestStartupMigrationPreservesCanonicalScansLinksAndIndexes(t *testing.T) {
+	path, scans, event := legacyScans(t)
+	svc, set, err := openScanServer(t, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,11 +116,36 @@ func TestMigrationPreservesCanonicalScansLinksAndIndexes(t *testing.T) {
 	if len(binding.GetFields()["ids"].GetListValue().GetValues()) != len(scans) {
 		t.Fatalf("session links: %v, %v", session, err)
 	}
+	if err := set.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	svc, set, err = openScanServer(t, path)
+	if err != nil {
+		t.Fatalf("second startup: %v", err)
+	}
+	for _, want := range scans {
+		got, err := svc.API().Scans.GetScan(t.Context(), &scanpb.GetScanRequest{ScanId: want.Id})
+		if err != nil || !proto.Equal(got.GetScan(), want) {
+			t.Fatalf("scan %s after second startup: %v, %v", want.Id, got, err)
+		}
+	}
+	if err := set.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	db, err := sql.Open("sqlite", path+"?_pragma=foreign_keys(1)")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	var eventRaw []byte
+	var cursor, sequence int64
+	if err := db.QueryRow(`SELECT cursor, sequence, event_proto FROM chat_aop_events`).Scan(&cursor, &sequence, &eventRaw); err != nil {
+		t.Fatal(err)
+	}
+	restored := new(aop.Event)
+	if err := proto.Unmarshal(eventRaw, restored); err != nil || cursor != 9 || sequence != 17 || !proto.Equal(restored, event) {
+		t.Fatalf("event after both migrations = %v, cursor=%d sequence=%d, %v", restored, cursor, sequence, err)
+	}
 	for _, scan := range scans {
 		var linked string
 		if err := db.QueryRow(`SELECT session_id FROM session_scans WHERE scan_id=?`, scan.Id).Scan(&linked); err != nil || linked != "session" {
@@ -136,9 +163,6 @@ func TestMigrationPreservesCanonicalScansLinksAndIndexes(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name='idx_scans_created'`).Scan(&indexes); err != nil || indexes != 1 {
 		t.Fatalf("indexes: %d, %v", indexes, err)
 	}
-	if _, err := migrateScans(t.Context(), path); err == nil {
-		t.Fatal("converted twice")
-	}
 }
 
 func TestMigrationFailureRollsBackSchemaAndRows(t *testing.T) {
@@ -147,9 +171,11 @@ func TestMigrationFailureRollsBackSchemaAndRows(t *testing.T) {
 		`UPDATE scans SET scan_json='{"id":"different"}' WHERE id='d'`,
 		`CREATE INDEX custom_json ON scans(scan_json)`,
 		`CREATE TRIGGER custom_scan AFTER UPDATE ON scans BEGIN SELECT 1; END`,
+		`CREATE TRIGGER custom_event AFTER INSERT ON chat_aop_events BEGIN SELECT 1; END`,
+		`ALTER TABLE aop_request_ledger ADD COLUMN unexpected TEXT`,
 	} {
 		t.Run(statement, func(t *testing.T) {
-			path, _ := legacyScans(t)
+			path, _, event := legacyScans(t)
 			db, err := sql.Open("sqlite", path)
 			if err != nil {
 				t.Fatal(err)
@@ -158,7 +184,7 @@ func TestMigrationFailureRollsBackSchemaAndRows(t *testing.T) {
 			if _, err := db.Exec(statement); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := migrateScans(t.Context(), path); err == nil {
+			if _, _, err := openScanServer(t, path); err == nil {
 				t.Fatal("accepted unsupported database")
 			}
 			var extra int
@@ -168,6 +194,17 @@ func TestMigrationFailureRollsBackSchemaAndRows(t *testing.T) {
 			var target, raw string
 			if err := db.QueryRow(`SELECT target, scan_json FROM scans WHERE id='a'`).Scan(&target, &raw); err != nil || target != "stale" {
 				t.Fatalf("rows partially converted: %q, %v", target, err)
+			}
+			if err := db.QueryRow(`SELECT event_json FROM chat_aop_events WHERE event_id='event'`).Scan(&raw); err != nil {
+				t.Fatalf("event migration was not rolled back: %v", err)
+			}
+			restored := new(aop.Event)
+			if err := protojson.Unmarshal([]byte(raw), restored); err != nil || !proto.Equal(restored, event) {
+				t.Fatalf("event changed after failed startup: %v, %v", restored, err)
+			}
+			var leftovers int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'chat_aop_events_legacy_json'`).Scan(&leftovers); err != nil || leftovers != 0 {
+				t.Fatalf("temporary tables after rollback = %d, %v", leftovers, err)
 			}
 		})
 	}

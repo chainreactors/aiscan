@@ -11,7 +11,7 @@ import (
 
 // SchemaModule is one optional slice of the store schema. The core schema is
 // always installed; a host adds modules (e.g. ScanSchema) at open time and the
-// database must match the exact union — there are no migrations.
+// database must match the exact union after startup migrations.
 type SchemaModule struct {
 	Name    string
 	Models  []any
@@ -122,8 +122,13 @@ func createSchema(ctx context.Context, orm *bun.DB, schema SchemaModule) error {
 	})
 }
 
+// schemaQueryer allows schema validation both before and within a migration.
+type schemaQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
 // validateSchema requires an existing database to match the union exactly.
-func validateSchema(db *sql.DB, schema SchemaModule) error {
+func validateSchema(db schemaQueryer, schema SchemaModule) error {
 	tables, err := schemaTables(db)
 	if err != nil {
 		return err
@@ -137,20 +142,14 @@ func validateSchema(db *sql.DB, schema SchemaModule) error {
 			return err
 		}
 		if !slices.Equal(columns, schema.Tables[table]) {
-			if table == "scans" && slices.Contains(columns, "scan_json") {
-				return fmt.Errorf("legacy scan_json storage: stop the server and run go run ./cmd/migrate-scans -db <database-path> to retain scan records")
-			}
-			if table == "chat_aop_events" && slices.Contains(columns, "event_json") {
-				return fmt.Errorf("legacy event_json storage: stop the server and run go run ./cmd/migrate-events -db <database-path> to retain the event history")
-			}
 			return fmt.Errorf("database does not match the latest schema: %s columns %v, want %v; recreate the database", table, columns, schema.Tables[table])
 		}
 	}
 	return nil
 }
 
-func schemaTables(db *sql.DB) ([]string, error) {
-	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
+func schemaTables(db schemaQueryer) ([]string, error) {
+	rows, err := db.QueryContext(context.Background(), `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -166,8 +165,8 @@ func schemaTables(db *sql.DB) ([]string, error) {
 	return tables, rows.Err()
 }
 
-func schemaColumns(db *sql.DB, table string) ([]string, error) {
-	rows, err := db.Query(`PRAGMA table_info("` + table + `")`)
+func schemaColumns(db schemaQueryer, table string) ([]string, error) {
+	rows, err := db.QueryContext(context.Background(), `PRAGMA table_info("`+table+`")`)
 	if err != nil {
 		return nil, err
 	}

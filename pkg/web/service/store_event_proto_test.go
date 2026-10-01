@@ -1,9 +1,7 @@
 package service
 
 import (
-	"database/sql"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/chainreactors/cyber/aop"
@@ -11,7 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-func TestLegacyEventsRequireExplicitOfflineConversion(t *testing.T) {
+func TestSQLiteStoreMigratesEmptyLegacyEventsAtStartup(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
 	store, err := NewSQLiteStore(path)
 	if err != nil {
@@ -21,16 +19,13 @@ func TestLegacyEventsRequireExplicitOfflineConversion(t *testing.T) {
 		t.Fatal(err)
 	}
 	store.Close()
-	if _, err := NewSQLiteStore(path); err == nil || !strings.Contains(err.Error(), "migrate-events") {
-		t.Fatalf("legacy server open = %v", err)
-	}
-	db, err := sql.Open("sqlite", path)
+	store, err = NewSQLiteStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
-	if _, err := db.Exec(`SELECT event_json FROM chat_aop_events`); err != nil {
-		t.Fatalf("server changed the legacy schema: %v", err)
+	defer store.Close()
+	if err := validateSchema(store.db, coreSchema); err != nil {
+		t.Fatalf("startup did not migrate the legacy schema: %v", err)
 	}
 }
 
