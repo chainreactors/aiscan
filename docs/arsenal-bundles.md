@@ -18,7 +18,7 @@ Arsenal 在本仓库的 [arsenal.yaml](../tools/arsenal/arsenal.yaml) 统一维�
 
 空的平台条目使用 `asset_pattern`；特殊平台可以用 `asset` 指定文件名。声明了 `platforms` 的工具会在下载前拒绝未列出的平台。
 
-发行入口只选择工具名称：[aiscan](../cmd/aiscan/bundle.yaml) 选择 `rg`，[audit](../audit/cmd/cyber-audit/bundle.yaml) 按平台选择工具。audit 的完整清单为：
+发行入口只选择工具名称：[cyber-scan（源码入口仍为 cmd/aiscan）](../cmd/aiscan/bundle.yaml) 选择 `rg`，[cyber-audit](../audit/cmd/cyber-audit/bundle.yaml) 按平台选择工具。cyber-audit 的完整清单为：
 
 ```yaml
 id: cyber-audit
@@ -32,13 +32,13 @@ platforms:
 无需复制工具定义或维护另一份版本表。工具目录随 cyber-harness 版本维护，增删工具或更新版本无需修改 CRTM。生成器按名称取出默认版本与平台规则；`platforms` 是各平台在公共 `tools` 之上的增量选择。`id` 标识发行版，应跨应用版本保持不变。需要单独覆盖版本时，`tools` 也支持 `{rg: "15.2.0"}` 映射；未知名称在构建时失败。`catalog` 路径相对 bundle 清单。运行时由 `tools/arsenal` 嵌入同一份完整目录，所以未打包的工具仍可按需下载；生成元数据只保留选中工具定义。显式目录是完整目录，不隐式混入 CRTM 默认工具；省略目录时 CRTM 才使用自己的默认值。audit 的版本预检需要固定版本。
 
 ```sh
-make ARSENAL_EMBED=1
-make full ARSENAL_EMBED=1
+make scan ARSENAL_EMBED=1
+make full ARSENAL_EMBED=1  # legacy aiscan Web adapter
 make audit ARSENAL_EMBED=1
 make ARSENAL_EMBED=1 ARSENAL_CONFIG=path/to/tools.yaml
 ```
 
-aiscan 默认只包含 ripgrep；audit 使用 `AUDIT_ARSENAL_CONFIG` 覆盖选择清单。`ARSENAL_EMBED` 与扫描模板的 `EMBED` 开关独立，也可同时设置。普通构建只生成工具元数据，不下载二进制。最小 `agent` 发行版没有 arsenal 扩展。
+cyber-scan 默认只包含 ripgrep；cyber-audit 使用 `AUDIT_ARSENAL_CONFIG` 覆盖选择清单。`ARSENAL_EMBED` 与扫描模板的 `EMBED` 开关独立，也可同时设置。普通构建只生成工具元数据，不下载二进制。最小 `agent` 发行版没有 arsenal 扩展。
 
 两个构建模式都从同一选择清单生成 `bundle_spec_generated.go`，供运行时预检与安装使用。该小文件纳入版本控制，普通 `go build` 无需先下载工具。修改 YAML 后，`make` 会自动更新；直接调用 `go build` 时，先运行 `make arsenal-spec audit-arsenal-spec`。无需在 Go 中重复维护工具版本或解析构建 YAML。
 
@@ -46,7 +46,7 @@ aiscan 默认只包含 ripgrep；audit 使用 `AUDIT_ARSENAL_CONFIG` 覆盖选�
 
 ```powershell
 go run github.com/chainreactors/crtm/cmd/crtm-bundle -config cmd/aiscan/bundle.yaml -target windows/amd64 -output cmd/aiscan -package main
-go build -tags "forceposix emptytemplates noembed osusergo netgo arsenal_embed" -o bin/aiscan.exe ./cmd/aiscan
+go build -tags "forceposix emptytemplates noembed osusergo netgo arsenal_embed" -ldflags "-X main.productName=cyber-scan" -o bin/cyber-scan.exe ./cmd/aiscan
 ```
 
 交叉构建时，生成器在宿主平台运行，`-target` 指定资源平台，然后为同一目标编译应用：
@@ -56,10 +56,10 @@ go run github.com/chainreactors/crtm/cmd/crtm-bundle -config cmd/aiscan/bundle.y
 $env:GOOS = "linux"
 $env:GOARCH = "arm64"
 $env:CGO_ENABLED = "0"
-go build -tags "forceposix emptytemplates noembed osusergo netgo arsenal_embed" -o bin/aiscan-linux-arm64 ./cmd/aiscan
+go build -tags "forceposix emptytemplates noembed osusergo netgo arsenal_embed" -ldflags "-X main.productName=cyber-scan" -o bin/cyber-scan-linux-arm64 ./cmd/aiscan
 ```
 
-Makefile 会自动为生成器使用宿主平台、为资源使用编译目标。aiscan 的生成文件位于 `cmd/aiscan`，audit 的位于 `audit/internal/toolchain`；共享命令包 `tools/arsenal` 只嵌入目录，不携带任何发行版的工具载荷。压缩资源位于生成目录的 `assets` 子目录，资源和平台嵌入声明均忽略 Git 跟踪。两种发行版统一使用 `arsenal_embed`，每个目标只编译自己的嵌入声明；未生成相应平台资源时，编译失败。
+Makefile 会自动为生成器使用宿主平台、为资源使用编译目标。cyber-scan 的生成文件位于 `cmd/aiscan`，cyber-audit 的位于 `audit/internal/toolchain`；共享命令包 `tools/arsenal` 只嵌入目录，不携带任何发行版的工具载荷。压缩资源位于生成目录的 `assets` 子目录，资源和平台嵌入声明均忽略 Git 跟踪。两种发行版统一使用 `arsenal_embed`，每个目标只编译自己的嵌入声明；未生成相应平台资源时，编译失败。
 
 资源包目录按清单摘要命名，生成器完成全部工具的下载与校验后才发布新目录和嵌入声明。失败不会覆盖之前的完整资源包。资源更新后会留下旧目录，可以在没有构建进行时清理整个 `assets` 目录和生成文件，再重新生成。
 

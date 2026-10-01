@@ -20,7 +20,7 @@
 
 cyber-harness is an agent runtime for cybersecurity. Model reasoning, tool execution, knowledge, observation, and collaboration are assembled through the same extension lifecycle. Use the reference distribution or compose the capabilities your own Go application needs.
 
-`aiscan` packages the agent, core scanners, proxy routing, skills, and IOA collaboration. `aiscan-full` adds the Web workbench, browser automation, passive recon, and deep crawling.
+`cyber-scan` packages the agent, scanners, proxy routing, skills, browser automation, passive recon, deep crawling and IOA collaboration. `cyber-web` is a profile-neutral Web Hub: it manages sessions, events and artifacts for independent scan, audit or custom AOP nodes.
 
 [`cyber-audit`](audit/README.md) is the source-code audit distribution in an independent Go module. It combines model-led investigation with ripgrep, ast-grep, OSV-Scanner and proton, and supports interactive sessions, one-shot audits and evidence reports.
 
@@ -28,24 +28,28 @@ cyber-harness is an agent runtime for cybersecurity. Model reasoning, tool execu
 
 ## Start here
 
-Download the matching `aiscan` or `aiscan-full` archive from [GitHub Releases](https://github.com/chainreactors/cyber-harness/releases/latest), extract it, and add the executable to PATH. See [Getting started (中文)](docs/getting-started.md) for installation, PowerShell configuration, and a complete first run.
+For a Web deployment, download only the `cyber-web` archive from [GitHub Releases](https://github.com/chainreactors/cyber-harness/releases/latest). After login, its Quick Connect panel generates a one-line GitHub command that downloads and starts `cyber-scan` or `cyber-audit` on the execution host. Direct CLI use can still download those profile archives separately. See [Getting started (中文)](docs/getting-started.md) for installation, PowerShell configuration, and a complete first run.
 
 ```sh
 # With an LLM configured: run a local task and save its events
-aiscan agent -p "Read the current directory and explain its structure; do not modify files" -o first-run.jsonl
+cyber-scan agent -p "Read the current directory and explain its structure; do not modify files" -o first-run.jsonl
 
 # Run a deterministic scan against your own local lab, without AI verification
-aiscan scan -i http://127.0.0.1:3000 --verify=off
+cyber-scan scan -i http://127.0.0.1:3000 --verify=off
 
-# Full edition: start the Web workbench and sign in with the printed access key
-aiscan-full web
+# Start the Web Hub and sign in with the access key
+cyber-web --token replace-me
+
+# In another terminal, connect a scan or audit node
+cyber-scan agent --server-url http://replace-me@127.0.0.1:8080
+# cyber-audit --workdir /path/to/repository --server-url http://replace-me@127.0.0.1:8080
 ```
 
 The agent lets the model choose tool calls. The scan pipeline chooses work through rules and scan events, with optional AI stages. Both use the same underlying tool infrastructure.
 
 ## Configure a model
 
-Run `aiscan init` to configure your model in `~/.cyber/cyber.yaml`. For project overrides, use `aiscan init --project`. These are shared cyber-harness commands, also available in the minimal `agent` CLI. Existing files are preserved. [Configuration guide](docs/configuration.md).
+Run `cyber-web init` or `cyber-scan init` to configure your model in `~/.cyber/cyber.yaml`. For project overrides, add `--project`. These are shared cyber-harness commands, also available in the minimal `agent` CLI. Existing files are preserved. [Configuration guide](docs/configuration.md).
 
 Example `cyber.yaml`:
 

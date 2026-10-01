@@ -1,5 +1,8 @@
 export default {
   agentConsole: 'Agent 控制台',
+  management: 'Agent 管理',
+  terminal: '终端',
+  tools: '工具',
   noAgentSelected: '未选择 Agent',
   closeAgents: '关闭 Agent 面板',
   noAgentsConnected: '无 Agent 连接',

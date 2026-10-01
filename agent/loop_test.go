@@ -237,8 +237,10 @@ func TestRunEmitsTurnEndAfterToolResults(t *testing.T) {
 		"message",
 		"tool.call",
 		"tool.result",
+		"usage", // unknown usage is now reported explicitly with request counters
 		"status",
 		"message",
+		"usage",
 	}
 	if !reflect.DeepEqual(events, want) {
 		t.Fatalf("events = %#v, want %#v", events, want)
@@ -539,6 +541,27 @@ func TestOutputLimitToolCallIsRejectedAndRetried(t *testing.T) {
 	if errorResult == nil || !errorResult.IsError || !strings.Contains(coretool.ResultText(errorResult), "Retry") {
 		t.Fatalf("error tool result = %#v", errorResult)
 	}
+}
+
+func TestStreamedEmptyReasoningSurvivesToolContinuation(t *testing.T) {
+	echo := &recordingTool{name: "echo", output: "observed"}
+	llm := &scriptedProvider{streamEventBatches: [][]ChatCompletionStreamEvent{
+		{roleDelta("assistant"), {MessageDelta: &aop.MessageDelta{Value: &aop.MessageDelta_Reasoning{Reasoning: ""}}}, toolCallDelta(0, "c1", "echo", `{}`), {FinishReason: "tool_calls"}, {Done: true}},
+		{roleDelta("assistant"), textDelta("done"), {FinishReason: "stop"}, {Done: true}},
+	}}
+	result, err := NewAgent(Config{Loop: StandardLoop{}, Provider: llm, Tools: newTestTools(t, echo), Model: "test", Stream: true}).Run(t.Context(), TextInput("Read the observation."))
+	if err != nil || result.Output != "done" {
+		t.Fatalf("tool continuation failed: %v", err)
+	}
+	for _, msg := range result.Messages {
+		if len(provider.MessageToolCalls(msg)) > 0 {
+			if len(msg.Content) == 0 || msg.Content[0].GetReasoning() == nil {
+				t.Fatal("explicit empty reasoning lost in streamed history")
+			}
+			return
+		}
+	}
+	t.Fatal("tool call not recorded")
 }
 
 func TestStreamingOutputLimitToolCallPreservesFinishReason(t *testing.T) {

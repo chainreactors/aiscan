@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Box, Import, RefreshCw, Upload } from 'lucide-react'
-import { getSupportedCSTXArtifacts, importCSTXArtifact, listSCONodes, listCSTXOperations, cstxFailures, retryCSTXFailures, syncCSTXArtifacts, compareSCONodes, type ObservedOperation } from '../lib/cstx-runtime'
+import { Import, RefreshCw, Upload } from 'lucide-react'
+import { getSupportedCSTXArtifacts, importCSTXArtifact, listSCONodes, listCSTXOperations, cstxFailures, retryCSTXFailures, syncCSTXArtifacts, subscribeCSTXChanges, compareSCONodes, type ObservedOperation } from '../lib/cstx-runtime'
 import type { SCONode } from '@cyber/cstx-easm'
 import { CSTXTable } from '@cyber/cstx'
 import { CstxImportDialog, type ImportFileEntry, type ArtifactOption } from '@cyber/cstx'
@@ -16,7 +16,7 @@ import {
 } from '@cyber/ui'
 import { cn } from '@cyber/theme'
 import { useTableLabels } from '../i18n/useTableLabels'
-import { ToolDrawer } from './layout/ToolDrawer'
+import { copyToClipboard } from '../../cyber-ui/packages/template/src/clipboard'
 
 interface AssetPanelProps {
   open: boolean
@@ -148,8 +148,10 @@ export default function AssetPanel({ open, onClose, onSendToChat, onChanged }: A
   const [artifactsLoading, setArtifactsLoading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [droppedFiles, setDroppedFiles] = useState<File[]>([])
+  const [copiedValue, setCopiedValue] = useState('')
   const [activeType, setActiveType] = useState('all')
   const loadVersion = useRef(0)
+  const refreshFrame = useRef<number | null>(null)
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -169,8 +171,6 @@ export default function AssetPanel({ open, onClose, onSendToChat, onChanged }: A
     const version = ++loadVersion.current
     setLoading(true)
     setError(null)
-    setNodes([])
-    setBaseNodes([])
     setParseErrors([])
     try {
       await syncCSTXArtifacts()
@@ -201,7 +201,19 @@ export default function AssetPanel({ open, onClose, onSendToChat, onChanged }: A
 
   useEffect(() => {
     if (open) void load()
-    return () => { loadVersion.current++ }
+    const unsubscribe = open ? subscribeCSTXChanges(() => {
+      if (refreshFrame.current !== null) return
+      refreshFrame.current = window.requestAnimationFrame(() => {
+        refreshFrame.current = null
+        void load()
+      })
+    }) : undefined
+    return () => {
+      unsubscribe?.()
+      if (refreshFrame.current !== null) window.cancelAnimationFrame(refreshFrame.current)
+      refreshFrame.current = null
+      loadVersion.current++
+    }
   }, [open, load])
 
   useEffect(() => {
@@ -242,7 +254,12 @@ export default function AssetPanel({ open, onClose, onSendToChat, onChanged }: A
 
   const handleAction = useCallback((action: string, payload?: Record<string, unknown>) => {
     if (action === 'cellClick' && payload?.value) {
-      void navigator.clipboard?.writeText(String(payload.value))
+      const value = String(payload.value)
+      void copyToClipboard(value).then(success => {
+        if (!success) return
+        setCopiedValue(value)
+        window.setTimeout(() => setCopiedValue(current => current === value ? '' : current), 1600)
+      }).catch(() => {})
     }
     if (action === 'batchAction' && payload?.action === 'sendToChat' && onSendToChat) {
       const selected = payload.selectedRows as Record<string, unknown>[]
@@ -268,50 +285,22 @@ export default function AssetPanel({ open, onClose, onSendToChat, onChanged }: A
 
   return (
     <>
-      <ToolDrawer
-        open={open}
-        onClose={onClose}
-        icon={Box}
-        title={t('title')}
-        description={t('openAssets')}
-        titleMeta={(
-          <Badge variant="secondary" size="sm" className="py-0 font-mono font-normal">
-            {nodes.length}
-          </Badge>
-        )}
-        actions={(
-          <>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => setImportOpen(true)}
-              className="gap-1.5 text-muted-foreground"
-            >
-              <Import className="h-3.5 w-3.5" />
-              {t('import')}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={load}
-              disabled={loading}
-              className="text-muted-foreground"
-            >
+      <div className="relative flex h-full min-h-0 flex-col" data-testid="asset-library" aria-busy={loading}
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false) }} onDrop={handleDrop}>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-xs font-medium">{t('assetCount', { count: nodes.length })}</p>
+            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{t('description')}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button variant="outline" size="xs" onClick={() => setImportOpen(true)} className="gap-1.5"><Import className="h-3.5 w-3.5" />{t('import')}</Button>
+            <Button variant="ghost" size="icon-xs" onClick={load} disabled={loading} aria-label={t('refresh')}>
               <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
             </Button>
-          </>
-        )}
-        contentProps={{
-          onDragOver: (e: React.DragEvent) => { e.preventDefault(); setDragOver(true) },
-          onDragLeave: (e: React.DragEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false) },
-          onDrop: handleDrop,
-          // The import dialog is modal, so its focus trap reads as an outside
-          // interaction to this non-modal Sheet and dismisses the panel out from
-          // under the dialog. While the dialog is up, the drawer stays put.
-          onInteractOutside: (e: Event) => { if (importOpen) e.preventDefault() },
-        }}
-        bodyClassName="flex flex-col"
-      >
+          </div>
+        </div>
+        <div className="sr-only" role="status" aria-live="polite">{copiedValue ? t('copied') : ''}</div>
           <div className="flex flex-wrap gap-2 border-b border-border p-3">
             <select aria-label={t('observation')} className="min-w-0 flex-1 rounded border border-border bg-background p-1.5 text-xs" value={operationID} onChange={(event) => { setOperationID(event.target.value); setCompareID('') }}>
               <option value="">{t('allObservations')}</option>
@@ -367,7 +356,7 @@ export default function AssetPanel({ open, onClose, onSendToChat, onChanged }: A
                     </TabsList>
                   </div>
                 </Tabs>
-                <div className="min-h-0 flex-1 overflow-auto">
+                <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
                 <CSTXTable
                   key={activeType}
                   data={{ rows: visibleRows, total: visibleRows.length }}
@@ -413,7 +402,7 @@ export default function AssetPanel({ open, onClose, onSendToChat, onChanged }: A
               </div>
             )}
           </div>
-      </ToolDrawer>
+      </div>
 
       <CstxImportDialog
         open={importOpen}

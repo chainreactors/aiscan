@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import { LoaderCircle, Monitor, Search } from 'lucide-react'
+import { LoaderCircle, Monitor, Search, Terminal, Wrench } from 'lucide-react'
 import { timestampDate } from '@bufbuild/protobuf/wkt'
 import type { AgentView } from '../api'
 const terminalChunkReloadKey = 'cyber-terminal-chunk-reload'
@@ -28,8 +28,10 @@ import {
   Input,
   ListRow,
   StatusDot,
+  Tabs, TabsContent, TabsList, TabsTrigger,
 } from '@cyber/ui'
 import { ToolDrawer } from './layout/ToolDrawer'
+import ToolRegistryPanel from './ToolRegistryPanel'
 
 interface AgentPanelProps {
   open: boolean
@@ -50,7 +52,7 @@ export default function AgentPanel({ open, agents: rosterAgents, focusNodeID, on
       open={open}
       onClose={onClose}
       icon={Monitor}
-      title={t('agentConsole')}
+      title={t('management')}
       description={selected ? `${selected.hello?.name || ''} · ${selected.busy ? t('busy') : t('idle')}` : t('noAgentSelected')}
       titleMeta={(
         <Badge variant="secondary" size="sm" className="py-0 font-mono font-normal">
@@ -79,8 +81,15 @@ export default function AgentPanel({ open, agents: rosterAgents, focusNodeID, on
               onSelect={setSelectedNodeID}
             />
           )}
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {selected && (
+          {selected && <Tabs defaultValue="terminal" className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2">
+              <span className="min-w-0 flex-1 truncate text-xs font-medium" title={selected.hello?.nodeId}>{selected.hello?.name || selected.hello?.nodeId}</span>
+              <TabsList className="h-8 shrink-0">
+                <TabsTrigger value="terminal" className="gap-1.5 text-xs"><Terminal className="h-3.5 w-3.5" />{t('terminal')}</TabsTrigger>
+                <TabsTrigger value="tools" className="gap-1.5 text-xs"><Wrench className="h-3.5 w-3.5" />{t('tools')}<span className="font-mono text-[10px] text-muted-foreground">{(selected.hello?.tools.length || 0) + selected.commands.filter(command => command.name.startsWith('!') && command.name.length > 1).length}</span></TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="terminal" forceMount className="mt-0 flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
               <Suspense fallback={(
                 <div className="flex flex-1 items-center justify-center gap-2 text-xs text-muted-foreground" role="status">
                   <LoaderCircle className="h-4 w-4 animate-spin text-primary" aria-hidden="true" />
@@ -89,8 +98,11 @@ export default function AgentPanel({ open, agents: rosterAgents, focusNodeID, on
               )}>
                 <AgentTerminal agent={selected} />
               </Suspense>
-            )}
-          </section>
+            </TabsContent>
+            <TabsContent value="tools" className="mt-0 min-h-0 flex-1 overflow-hidden">
+              <ToolRegistryPanel key={selected.hello?.nodeId} agent={selected} />
+            </TabsContent>
+          </Tabs>}
         </div>
       )}
     </ToolDrawer>
@@ -202,7 +214,7 @@ function AgentList({
             >
               <span className="block truncate text-sm font-medium">{agent.hello?.name}</span>
               <span className="mt-0.5 block truncate text-xs">
-                {agent.busy ? t('busy') : t('idle')} · {formatRelativeTime(agent.connectedAt ? timestampDate(agent.connectedAt).toISOString() : '', t)}
+                {agent.busy ? t('busy') : t('idle')}{agent.connectedAt && <> · {formatRelativeTime(timestampDate(agent.connectedAt).toISOString(), t)}</>}
               </span>
             </ListRow>
           ))

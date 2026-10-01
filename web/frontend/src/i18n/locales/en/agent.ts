@@ -1,5 +1,8 @@
 export default {
   agentConsole: 'Agent Console',
+  management: 'Agent management',
+  terminal: 'Terminal',
+  tools: 'Tools',
   noAgentSelected: 'No agent selected',
   closeAgents: 'Close agents',
   noAgentsConnected: 'No agents connected',

@@ -108,7 +108,7 @@ func (e *Extension) Load(scope *extension.Scope) error {
 			}
 			return proto.Clone(event).(*aop.Event)
 		},
-	}, e)
+	}, e.consume)
 	if err != nil {
 		_ = file.Close()
 		e.file = nil
@@ -119,7 +119,7 @@ func (e *Extension) Load(scope *extension.Scope) error {
 	return nil
 }
 
-func (e *Extension) ConsumeEvent(event *aop.Event) error {
+func (e *Extension) consume(event *aop.Event) error {
 	if event == nil || event.Id == "" || event.Payload == nil {
 		return fmt.Errorf("event output requires id and typed payload")
 	}
@@ -214,5 +214,3 @@ func (e *Extension) Close(ctx context.Context) error {
 	e.file, e.path = nil, ""
 	return err
 }
-
-var _ coreevents.Consumer = (*Extension)(nil)

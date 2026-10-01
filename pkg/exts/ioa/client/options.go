@@ -6,7 +6,6 @@ import (
 	service "github.com/chainreactors/cyber/tools/ioa"
 	"github.com/chainreactors/ioa/protocols"
 	"net/url"
-	"strings"
 )
 
 const ConfigKey = "ioa.client"
@@ -16,7 +15,7 @@ var DefaultURL string
 var DefaultSpace = "default"
 
 type Options struct {
-	URL      string `long:"ioa-url" config:"url" json:"url" description:"IOA endpoint (defaults to <server-url>/ioa for Web agents)"`
+	URL      string `long:"ioa-url" config:"url" json:"url" description:"IOA endpoint (independent of the Web/AOP server)"`
 	Token    string `long:"server-token" config:"token" json:"token" description:"Server credential" default-mask:"***"`
 	NodeName string `no-flag:"true" config:"node_name" json:"node_name"`
 	Space    string `long:"space" config:"space" json:"space" description:"Collaboration space"`
@@ -61,12 +60,6 @@ func ReadOptions(option *cfg.Option) (Options, error) {
 	value = *decoded
 	if value.NodeName == "" {
 		value.NodeName = option.NodeName
-	}
-	if _, explicit := option.Extensions[ConfigKey]["url"]; !explicit && value.URL == "" && strings.TrimSpace(option.ServerURL) != "" {
-		if u, err := url.Parse(option.ServerURL); err == nil {
-			u.Path = strings.TrimRight(u.Path, "/") + "/ioa"
-			value.URL = u.String()
-		}
 	}
 	return value, nil
 }

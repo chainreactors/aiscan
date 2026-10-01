@@ -84,3 +84,11 @@ CLI 宿主在普通运行时解析前调用 `configuration.Run(ctx, args, config
 嵌入式宿主可直接调用 `config.ResolveRuntimeConfig`，通过 `Option.Context` 注入工作目录、用户目录、二进制路径和环境变量查询函数。`Context.Replacements` 只用于验证待保存的配置层，保留其他文件和运行时覆盖；不应把暂存文件当成新的 `-c`。构造和解析不会创建目录或启动资源。
 
 配置文件未知的基础字段会报错。未由当前宿主注册的扩展保留在文件中，并报告不可用，不加载对应代码。宿主注册扩展的字段仍严格校验。Web 编辑沿用现有配置协议，保存仅修改选定文件中的编辑值。
+
+## 通用 Web 托管
+
+`pkg/web/host.Serve` 接收监听地址、静态文件、`webext.Config` 与可选 Extension，统一管理 HTTP 和 Web Extension 的生命周期。`cyber-web` 使用这套机制作为独立 Hub，不加载产品 profile。
+
+执行节点通过 `node.RunWebSocket(ctx, constructor, option, logger)` 接入。constructor 接收 `profile.Request` 并返回产品自己的 `profile.Profile`；scan、audit 和自定义节点共用协议，无需在 Hub 注册产品名单。需要本地节点的宿主可提供 `host.Config.StartNode`；产品路由或应用 profile 通过 `Management` 和 `Extensions` 显式贡献。
+
+`host.FileConfigStore` 负责分层配置、密钥保留、暂存与原子提交。`SharedConfigCodec` 暴露公共配置；产品宿主可提供自己的 `ConfigCodec`。有效模型设置通过 `RuntimeLLM` 分发给节点，运行时凭据不会自动写回配置文件。

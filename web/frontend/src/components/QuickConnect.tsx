@@ -1,14 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, Check, Copy, Link, Loader2, RefreshCw } from 'lucide-react'
-import { Button, Tooltip, TooltipContent, TooltipTrigger } from '@cyber/ui'
+import { AlertTriangle, Check, Copy, Download, Link, Loader2, RefreshCw } from 'lucide-react'
+import { Button, Input, Tooltip, TooltipContent, TooltipTrigger } from '@cyber/ui'
 import { cn } from '@cyber/theme'
 import { copyToClipboard } from '../../cyber-ui/packages/template/src/clipboard'
 import { getAgentConnectToken } from '../api'
-
-type OS = 'linux' | 'darwin' | 'windows'
-type Arch = 'amd64' | 'arm64'
-type DownloadSource = 'global' | 'china'
+import { nodeCommands, nodeDownloadURL, type OS, type Arch, type DownloadSource, type Distribution } from '../lib/node-bootstrap'
 
 interface Platform {
   os: OS
@@ -23,18 +20,12 @@ const OS_OPTIONS: { value: OS; label: string }[] = [
 
 const ARCH_OPTIONS: { value: Arch; label: string; osFilter?: OS[] }[] = [
   { value: 'amd64', label: 'x86_64' },
-  { value: 'arm64', label: 'ARM64', osFilter: ['linux', 'darwin'] },
+  { value: 'arm64', label: 'ARM64' },
 ]
-
-const CHINA_MIRROR = 'https://ghfast.top/'
-const NODE_NAME_PLACEHOLDER = 'NODE_NAME'
-const DEFAULT_SPACE = 'default'
 
 interface Props {
   serverURL: string | undefined
   version: string | undefined
-  /** Collaboration space of the agents already here, so the new node lands beside them. */
-  space?: string
 }
 
 function detectPlatform(): Platform {
@@ -51,59 +42,15 @@ function archOptionsForOS(os: OS) {
   return ARCH_OPTIONS.filter((a) => !a.osFilter || a.osFilter.includes(os))
 }
 
-function binaryName(os: OS, arch: Arch): string {
-  return `aiscan-full_${os}_${arch}.zip`
-}
-
-function releaseTag(version?: string): string {
-  const value = version?.trim()
-  if (!value || value === 'dev') return 'latest'
-  return value.startsWith('v') ? value : `v${value}`
-}
-
-function releaseURL(os: OS, arch: Arch, source: DownloadSource, tag: string): string {
-  const base = tag !== 'latest'
-    ? `https://github.com/chainreactors/cyber-harness/releases/download/${tag}`
-    : `https://github.com/chainreactors/cyber-harness/releases/latest/download`
-  const url = `${base}/${binaryName(os, arch)}`
-  return source === 'china' ? CHINA_MIRROR + url : url
-}
-
-function authenticatedURL(rawURL: string, accessToken: string): string {
-  const url = new URL(rawURL, window.location.origin)
-  url.username = accessToken
-  url.password = ''
-  return url.toString().replace(/\/$/, '')
-}
-
-function agentArgs(serverURL: string, accessToken: string, space: string): string {
-  return `--server-url '${authenticatedURL(serverURL, accessToken)}' --space '${space}' --node-name '${NODE_NAME_PLACEHOLDER}'`
-}
-
-function connectCmd(os: OS, serverURL: string, accessToken: string, space: string): string {
-  const args = agentArgs(serverURL, accessToken, space)
-  if (os === 'windows') {
-    return `.\\aiscan-full.exe agent ${args}`
-  }
-  return `./aiscan-full agent ${args}`
-}
-
-function installCmd(os: OS, arch: Arch, serverURL: string, accessToken: string, space: string, source: DownloadSource, tag: string): string {
-  const dlURL = releaseURL(os, arch, source, tag)
-  const args = agentArgs(serverURL, accessToken, space)
-  if (os === 'windows') {
-    return `powershell -c "Invoke-WebRequest '${dlURL}' -OutFile aiscan.zip; Expand-Archive aiscan.zip -DestinationPath .; .\\aiscan-full.exe agent ${args}"`
-  }
-  const bin = 'aiscan-full'
-  return `curl -sL '${dlURL}' -o aiscan.zip && unzip -o aiscan.zip ${bin} && chmod +x ${bin} && ./${bin} agent ${args}`
-}
-
 type CopiedKey = string | null
 
-export default function QuickConnect({ serverURL, version, space }: Props) {
+export default function QuickConnect({ serverURL, version }: Props) {
   const { t } = useTranslation('app')
   const [open, setOpen] = useState(false)
   const [platform, setPlatform] = useState<Platform>(detectPlatform)
+  const [distribution, setDistribution] = useState<Distribution>('cyber-scan')
+  const [defaultNodeName] = useState(() => `node-${Math.random().toString(36).slice(2, 10)}`)
+  const [nodeName, setNodeName] = useState('')
   const [downloadSource, setDownloadSource] = useState<DownloadSource>('global')
   const [copied, setCopied] = useState<CopiedKey>(null)
   const [copyError, setCopyError] = useState(false)
@@ -196,9 +143,11 @@ export default function QuickConnect({ serverURL, version, space }: Props) {
   ]
 
   const tokenReady = accessToken !== null
-  const agentSpace = space?.trim() || DEFAULT_SPACE
-  const install = tokenReady ? installCmd(os, arch, serverURL, accessToken, agentSpace, downloadSource, releaseTag(version)) : ''
-  const connect = tokenReady ? connectCmd(os, serverURL, accessToken, agentSpace) : ''
+  const options = { os, arch, distribution, source: downloadSource, version,
+    serverURL: new URL(serverURL, window.location.origin).toString(), accessToken: accessToken ?? '',
+    nodeName: nodeName.trim() || defaultNodeName }
+  const { install, connect } = tokenReady ? nodeCommands(options) : { install: '', connect: '' }
+  const downloadURL = nodeDownloadURL(options)
 
   return (
     <div className="relative" ref={panelRef}>
@@ -282,6 +231,22 @@ export default function QuickConnect({ serverURL, version, space }: Props) {
             </div>
           </div>
 
+          <div role="group" aria-label={t('quickConnectProfile')} className="mb-3 flex items-center gap-2">
+            <span className="text-[11px] text-muted-foreground">{t('quickConnectProfile')}</span>
+            {(['cyber-scan', 'cyber-audit'] as const).map((value) => (
+              <Button key={value} type="button" size="xs" variant={distribution === value ? 'default' : 'outline'}
+                aria-pressed={distribution === value} onClick={() => { setDistribution(value); setCopied(null); setCopyError(false) }}>
+                {value}
+              </Button>
+            ))}
+          </div>
+
+          <label className="mb-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="shrink-0">{t('quickConnectNodeName')}</span>
+            <Input value={nodeName} placeholder={defaultNodeName} className="h-7 text-xs"
+              onChange={(event) => { setNodeName(event.target.value); setCopied(null); setCopyError(false) }} />
+          </label>
+
           {!tokenReady && !tokenError && (
             <div className="flex min-h-28 items-center justify-center gap-2 text-xs text-muted-foreground" role="status">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -341,6 +306,10 @@ export default function QuickConnect({ serverURL, version, space }: Props) {
                 copied={copied}
                 onCopy={handleCopy}
               />
+
+              <a href={downloadURL} className="mt-2 inline-flex items-center gap-1 text-[11px] text-primary hover:underline">
+                <Download className="h-3 w-3" />{t('quickConnectDownload')}
+              </a>
 
               <CommandRow
                 label={t('quickConnectOnly')}

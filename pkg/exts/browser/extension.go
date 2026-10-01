@@ -52,8 +52,6 @@ func (m *Extension) Load(scope *extension.Scope) error {
 		Name: command.Name(), Usage: command.Usage(),
 		DescriptionPath: "cyber://skills/runtime/playwright.md",
 		Run:             command.Run,
-		Choices:         command.Choices,
-		Contract:        playwright.ChoiceContract,
 	}); err != nil {
 		command.Close()
 		return err

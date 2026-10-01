@@ -6,6 +6,10 @@ import (
 
 	"github.com/chainreactors/cyber/agent"
 	agentsession "github.com/chainreactors/cyber/agent/session"
+	aop "github.com/chainreactors/cyber/aop"
+	filepb "github.com/chainreactors/cyber/aop/file"
+	operationpb "github.com/chainreactors/cyber/aop/operation"
+	"github.com/chainreactors/cyber/core/operation"
 	"github.com/chainreactors/cyber/core/telemetry"
 	cfg "github.com/chainreactors/cyber/pkg/config"
 	observeext "github.com/chainreactors/cyber/pkg/exts/observe"
@@ -100,3 +104,56 @@ func TestLoadedProfilePublishesItsApplicationAndRuntime(t *testing.T) {
 
 var _ = cfg.Option{}
 var _ = telemetry.NopLogger
+
+func TestSessionProfileObservesToolAndFileActivityByDefault(t *testing.T) {
+	for _, explicit := range []bool{false, true} {
+		t.Run(map[bool]string{false: "default", true: "explicit selection"}[explicit], func(t *testing.T) {
+			config := minimalConfig(&agentsession.Config{})
+			if explicit {
+				config.Observe = []observeext.Kind{observeext.Tools}
+			}
+			profile, err := buildAIScanProfile(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := profile.Load(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = profile.Close(context.Background()) })
+			runtime, err := profile.Runtime()
+			if err != nil {
+				t.Fatal(err)
+			}
+			stream, err := profile.Events()
+			if err != nil {
+				t.Fatal(err)
+			}
+			var events []*aop.Event
+			sub := stream.Observe(func(event *aop.Event) { events = append(events, event) })
+			defer sub.Cancel()
+			ctx := operation.ContextWithInvocation(t.Context(), operation.Invocation{SessionID: "observed-session", TurnID: "observed-turn", CallID: "observed-call", Emitter: "node"})
+			if _, err := runtime.Tools().ExecuteTool(ctx, "read", `{"path":"profile.go"}`); err != nil {
+				t.Fatal(err)
+			}
+			var started, completed, accesses int
+			for _, event := range events {
+				if event.SessionId != "observed-session" || event.TurnId != "observed-turn" || event.Emitter != "node" {
+					t.Fatalf("lost invocation: %v", event)
+				}
+				payload := event.GetExtension()
+				if payload.MessageIs(new(operationpb.Started)) {
+					started++
+				}
+				if payload.MessageIs(new(operationpb.Completed)) {
+					completed++
+				}
+				if payload.MessageIs(new(filepb.Access)) {
+					accesses++
+				}
+			}
+			if started != 1 || completed != 1 || (!explicit && accesses != 1) || (explicit && accesses != 0) {
+				t.Fatalf("observations: started=%d completed=%d files=%d", started, completed, accesses)
+			}
+		})
+	}
+}

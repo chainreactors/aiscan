@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/chainreactors/cyber/agent/provider"
 	"github.com/chainreactors/cyber/pkg/profile"
 	managementapi "github.com/chainreactors/cyber/pkg/web/api"
 	webservice "github.com/chainreactors/cyber/pkg/web/service"
@@ -34,6 +35,8 @@ type Config struct {
 	ConfigStore    webservice.ConfigStore
 	InitialProfile func(context.Context) (profile.Profile, error)
 	BuildProfile   func(context.Context, *webservice.PreparedConfig) (profile.Profile, error)
+	// RuntimeLLM supplies effective settings for a Hub without a local profile.
+	RuntimeLLM func() provider.ProviderConfig
 	// Scans mounts the scan console and its storage module; nil disables both.
 	Scans *webservice.ScanServiceConfig
 }
@@ -93,7 +96,8 @@ func (e *Extension) Load(scope *extension.Scope) error {
 	e.service = webservice.NewService(webservice.ServiceConfig{
 		Store: e.database, Profile: e.initial, AccessKey: e.config.AccessKey,
 		ConfigAPI: e.config.ConfigAPI, ConfigStore: e.config.ConfigStore, BuildProfile: e.config.BuildProfile,
-		Scans: e.config.Scans,
+		Scans:      e.config.Scans,
+		RuntimeLLM: e.config.RuntimeLLM,
 	})
 	e.initial = nil // Service owns initial and replacement profiles from here.
 	e.pool = webservice.NewAgentPool(e.service.Hub(), e.database, e.config.AllowedOrigins...)

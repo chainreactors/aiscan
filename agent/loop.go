@@ -450,9 +450,16 @@ func (t *transcript) recordTurnUsage(turn int, usage *aop.TokenUsage) {
 	t.totalUsage.InputTokens += usage.InputTokens
 	t.totalUsage.OutputTokens += usage.OutputTokens
 	t.totalUsage.TotalTokens += usage.TotalTokens
-	t.totalUsage.Detail["cache_read"] += usage.Detail["cache_read"]
-	t.totalUsage.Detail["cache_write"] += usage.Detail["cache_write"]
+	for key, value := range usage.Detail {
+		if key == "context_tokens" {
+			continue
+		}
+		t.totalUsage.Detail[key] += value
+	}
 	t.contextTokens = provider.UsageTotalTokens(usage)
+	if last, ok := usage.Detail["context_tokens"]; ok {
+		t.contextTokens = int(last)
+	}
 	// Provider usage covers the request plus the assistant response that will be
 	// appended immediately after this call.
 	t.usageMessageCount = len(t.messages) + 1
@@ -662,10 +669,11 @@ func logUsage(logger telemetry.Logger, usage *aop.TokenUsage) {
 
 // messageBuilder accumulates streamed deltas into one assistant message.
 type messageBuilder struct {
-	role      string
-	content   strings.Builder
-	reasoning strings.Builder
-	toolCalls map[int]*streamedToolCall
+	role         string
+	content      strings.Builder
+	reasoning    strings.Builder
+	hasReasoning bool
+	toolCalls    map[int]*streamedToolCall
 }
 
 type streamedToolCall struct {
@@ -691,6 +699,7 @@ func (b *messageBuilder) Apply(event ChatCompletionStreamEvent) {
 		case *aop.MessageDelta_Text:
 			b.content.WriteString(value.Text)
 		case *aop.MessageDelta_Reasoning:
+			b.hasReasoning = true
 			b.reasoning.WriteString(value.Reasoning)
 		}
 	}
@@ -715,8 +724,8 @@ func (b *messageBuilder) Apply(event ChatCompletionStreamEvent) {
 
 func (b *messageBuilder) Message() *aop.Message {
 	msg := &aop.Message{Role: b.role}
-	if reasoning := b.reasoning.String(); reasoning != "" {
-		msg.Content = append(msg.Content, aop.Reasoning(reasoning))
+	if b.hasReasoning {
+		msg.Content = append(msg.Content, aop.Reasoning(b.reasoning.String()))
 	}
 	if content := b.content.String(); content != "" {
 		msg.Content = append(msg.Content, aop.Text(content))

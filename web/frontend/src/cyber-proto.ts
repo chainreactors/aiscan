@@ -23,6 +23,7 @@ export {
   CommandDetailSchema,
   CompactDetailSchema,
   DelegationDetailSchema,
+  RecapSchema,
   EvalDetailSchema,
   WebMessageMetadataSchema,
   type AgentListMetadata,

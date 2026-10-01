@@ -1,4 +1,6 @@
 export default {
+  ips: 'IPs', ports: 'Ports', apps: 'Apps', urls: 'URLs', frameworks: 'Frameworks', vulns: 'Vulnerabilities', details: 'Details',
+  request: 'Request', response: 'Response',
   rawEvidence: 'Request and response evidence',
   evidenceRecords: '{{count}} original evidence records',
   verification_confirmed: 'Confirmed',

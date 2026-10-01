@@ -18,6 +18,10 @@ func WithFrameObserver(ctx context.Context, observer func(RawFrame)) context.Con
 	if observer == nil {
 		return ctx
 	}
+	if previous, ok := ctx.Value(frameObserverKey{}).(func(RawFrame)); ok {
+		next := observer
+		observer = func(frame RawFrame) { previous(frame); next(frame) }
+	}
 	return context.WithValue(ctx, frameObserverKey{}, observer)
 }
 

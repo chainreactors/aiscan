@@ -1,6 +1,6 @@
 version: 2
 
-project_name: aiscan
+project_name: cyber-harness
 
 # This file is the build definition for the release workflow, which drives it
 # one target at a time:
@@ -8,7 +8,7 @@ project_name: aiscan
 #     GOOS=<goos> GOARCH=<goarch> goreleaser build --id <id> --single-target
 #
 # `goreleaser build` keeps ldflags, build tags and the CGO switch in one place
-# instead of spelling them out per profile in release-build.yml. Both editions
+# instead of spelling them out per profile in release-build.yml. All three distributions
 # are pure Go and can be cross-compiled without a platform C toolchain.
 #
 # Packaging and publishing are deliberately absent. release-build.yml still
@@ -26,32 +26,10 @@ project_name: aiscan
 dist: .cache/goreleaser
 
 builds:
-  - id: aiscan
+  - id: cyber-scan
     main: ./cmd/aiscan
-    binary: aiscan
+    binary: cyber-scan
     env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-    flags:
-      - -trimpath
-      - -buildvcs=false
-    tags:
-      - '{{ .Env.STANDARD_TAGS }}'
-    ldflags:
-      - -s -w -X github.com/chainreactors/cyber/pkg/config.Version={{ .Version }}
-
-  - id: aiscan-full
-    main: ./cmd/aiscan
-    binary: aiscan-full
-    env:
-      # CSTX runs in the browser through the TypeScript/WASM package; RE2 uses
-      # the dependency's pure-Go backend.
       - CGO_ENABLED=0
     goos:
       - linux
@@ -65,6 +43,26 @@ builds:
       - -buildvcs=false
     tags:
       - '{{ .Env.FULL_TAGS }}'
+    ldflags:
+      - -s -w -X github.com/chainreactors/cyber/pkg/config.Version={{ .Version }} -X main.productName=cyber-scan
+
+  - id: cyber-web
+    main: ./cmd/cyber-web
+    binary: cyber-web
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+      - -buildvcs=false
+    tags:
+      - '{{ .Env.WEB_TAGS }}'
     ldflags:
       - -s -w -X github.com/chainreactors/cyber/pkg/config.Version={{ .Version }}
 

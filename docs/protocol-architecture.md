@@ -21,7 +21,7 @@ CSTX 独占安全事实模型：IP、Port、URL/Web、App、Framework、Vulnerab
 
 该边界按“语义”而不是按“调用者”划分：Runner 只通过 WebSocket 接入 Web；浏览器的管理/历史查询走 ConnectRPC，但浏览器的实时 Session/Turn、命令、文件与 PTY 也走 WebSocket。Web 服务拥有 Agent Pool、调度、持久化和管理 RPC，节点只拥有自身 Runtime、工具与执行状态。
 
-Agent 对外只使用 `--server-url` 作为 Cyber Web/AOP 基址。IOA 使用独立的 `--ioa-url`；Web 默认托管同源 IOA，因此 Web Agent 未指定 `--ioa-url` 时自动使用 `<server-url>/ioa`。
+Agent 对外使用 `--server-url` 作为 Cyber Web/AOP 基址，使用独立的 `--ioa-url` 连接 IOA。通用 Web Host 不托管或推导 IOA 地址；需要同源 IOA 的旧版内嵌适配器会显式传入 `<server-url>/ioa`。
 
 ## 3. Namespace 所有权
 

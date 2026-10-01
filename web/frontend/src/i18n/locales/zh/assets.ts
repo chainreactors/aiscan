@@ -17,6 +17,7 @@ export default {
   noAssets: '尚未发现资产',
   noAssetsHint: '执行一次扫描以填充资产池。',
   sendToChat: '发送到聊天',
+  copied: '已复制',
   sendSelected: '发送 {{count}} 项',
   assetCount: '{{count}} 项资产',
   refreshing: '刷新中…',

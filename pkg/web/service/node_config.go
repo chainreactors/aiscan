@@ -65,5 +65,8 @@ func (s *Service) runtimeLLMConfig() provider.ProviderConfig {
 		_, effective := providers.Current()
 		return effective
 	}
+	if s.runtimeLLM != nil {
+		return s.runtimeLLM()
+	}
 	return provider.ProviderConfig{}
 }

@@ -110,7 +110,7 @@ test('operator completes a full Cyber Web journey', async ({ page, request }) =>
     await expect.poll(compactTerminalText).toContain(E2E_MODEL.replace(/\s+/g, ''))
 
     await page.getByRole('button', { name: 'Show details' }).click()
-    const agentDrawer = page.getByRole('dialog').filter({ hasText: 'Agent Console' })
+    const agentDrawer = page.getByRole('dialog', { name: 'Agent management', exact: true })
     await expect(agentDrawer).toContainText('e2e-node')
     await expect(agentDrawer).toContainText('openai')
     await expect(agentDrawer).toContainText(E2E_MODEL)
@@ -126,8 +126,9 @@ test('operator completes a full Cyber Web journey', async ({ page, request }) =>
     await expect(ioaDrawer).toContainText('No messages in this space')
     await page.getByRole('button', { name: 'Close' }).last().click()
 
-    await page.getByRole('button', { name: 'Asset pool' }).click()
-    const assetDrawer = page.getByRole('dialog').filter({ hasText: 'Assets' })
+    await page.getByRole('button', { name: /View observations/ }).click()
+    const assetDrawer = page.getByRole('dialog', { name: 'Observability', exact: true })
+    await assetDrawer.getByRole('tab', { name: /Asset library/ }).click()
     await expect(assetDrawer).toContainText('No assets discovered yet')
     await page.getByRole('button', { name: 'Close' }).last().click()
 
@@ -143,7 +144,7 @@ test('operator completes a full Cyber Web journey', async ({ page, request }) =>
       expect(command).not.toContain('--web-url')
       expect(command).not.toContain('ACCESS_TOKEN')
       expect(command).toContain(`http://${API_TOKEN}@`)
-      expect(command).toContain('NODE_NAME')
+      expect(command).not.toContain('NODE_NAME')
     }
     await page.keyboard.press('Escape')
     await expect(quickConnect).toBeHidden()

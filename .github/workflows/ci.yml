@@ -90,22 +90,31 @@ jobs:
 
       # The retained native CSTX Extension is not part of any product edition;
       # browser builds use @cyber/cstx WASM.
-      - name: Ensure aiscan does not depend on libcstx
+      - name: Ensure cyber-scan does not depend on libcstx
         run: |
           if CGO_ENABLED=0 go list -deps \
             -tags "$STANDARD_TAGS" ./cmd/aiscan \
             | grep -q '^github.com/chainreactors/libcstx/go$'; then
-            echo "::error::aiscan reaches the dormant native CSTX Extension"
+            echo "::error::cyber-scan reaches the dormant native CSTX Extension"
             exit 1
           fi
           for cgo in 0 1; do
             if CGO_ENABLED="$cgo" go list -deps \
               -tags "$FULL_TAGS" ./cmd/aiscan \
               | grep -q '^github.com/chainreactors/libcstx/go$'; then
-              echo "::error::aiscan-full reaches the dormant native CSTX Extension with CGO_ENABLED=$cgo"
+              echo "::error::cyber-scan (full capabilities) reaches the dormant native CSTX Extension with CGO_ENABLED=$cgo"
               exit 1
             fi
           done
+
+      - name: Build the profile-neutral Web Hub
+        run: |
+          CGO_ENABLED=0 go build -tags "$WEB_TAGS" -o /dev/null ./cmd/cyber-web
+          if CGO_ENABLED=0 go list -deps -tags "$WEB_TAGS" ./cmd/cyber-web | grep -Eq '^github\.com/chainreactors/cyber/(pkg/exts|tools)/(scanner|search|proxy|ioa|browser|record|scan|audit)(/|$)'; then
+            echo "::error::cyber-web reaches a product execution capability"
+            exit 1
+          fi
+          CGO_ENABLED=0 go test -count=1 -tags "$WEB_TAGS" ./cmd/cyber-web ./pkg/web/host
 
       - name: Enforce native Extension ownership
         run: |
@@ -264,7 +273,7 @@ jobs:
         run: grep -Ev '^[[:space:]]*(#|$)' editions.env >> "$GITHUB_ENV"
 
       - name: Run Windows package tests
-        run: go test -count=1 ./agent/... ./cmd/aiscan/... ./pkg/web/...
+        run: go test -count=1 ./agent/... ./cmd/aiscan/... ./cmd/cyber-web ./pkg/web/...
 
       - name: Compile and test the full CLI without cgo on Windows
         run: go test -count=1 -tags "$env:FULL_TAGS" ./cmd/aiscan
@@ -444,6 +453,12 @@ jobs:
       - name: Run frontend Playwright E2E
         working-directory: web/frontend
         run: npm run test:e2e
+
+      - name: Test the standalone Web Hub
+        working-directory: web/frontend
+        env:
+          CYBER_E2E_HUB: "1"
+        run: npx playwright test e2e/cyber-web.spec.ts --grep 'quick connect|profile-neutral Hub'
 
       - name: Run cyber-ui viewer tests
         working-directory: web/frontend/cyber-ui

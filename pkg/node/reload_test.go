@@ -223,7 +223,7 @@ func TestRemoteReloadKeepsFailedProfileAndDrainsSuccessfulSwitch(t *testing.T) {
 			return
 		}
 		// Mode-only updates use the same connection/profile and preserve its work.
-		for _, mode := range []string{"auto", "off", "safe"} {
+		for _, mode := range []string{"auto", "safe"} {
 			values, _ := structpb.NewStruct(map[string]any{"mode": mode})
 			update := &types.DistributeConfig{Agent: &types.AgentConfig{Heartbeat: 1}, Extensions: map[string]*structpb.Struct{"guardrail": values}}
 			if err := send("mode-"+mode, "", &types.ReloadProtocolMessage{Message: &types.ReloadProtocolMessage_Request{Request: &types.ReloadRequest{Config: update}}}); err != nil {

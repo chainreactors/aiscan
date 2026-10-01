@@ -20,7 +20,6 @@ import (
 	agentsession "github.com/chainreactors/cyber/agent/session"
 	aop "github.com/chainreactors/cyber/aop"
 	"github.com/chainreactors/cyber/core/eventbus"
-	coreevents "github.com/chainreactors/cyber/core/events"
 	types "github.com/chainreactors/cyber/core/types"
 	cfg "github.com/chainreactors/cyber/pkg/config"
 	consoleapi "github.com/chainreactors/cyber/pkg/console/api"
@@ -139,9 +138,9 @@ func newAgentConsole(ctx context.Context, rt *agentsession.Runtime, session *age
 		stdout:       stdout,
 		stderr:       stderr,
 	}
-	if isTerminal && isLocalAgentTerminal(t) && resolveRenderMode(renderModeValue(option)) == ModeInteractive {
+	if isTerminal && !repl.fastInputEnabled() && resolveRenderMode(renderModeValue(option)) == ModeInteractive {
 		bridge := newReadlineConsoleBridge(c.Shell(), t.Out)
-		output.SetReadlineMode(bridge)
+		output.recapWriter = bridge
 		repl.readlineBridge = bridge
 		c.Shell().OnReadlineReady = func() {
 			bridge.SetReady(true)
@@ -149,14 +148,17 @@ func newAgentConsole(ctx context.Context, rt *agentsession.Runtime, session *age
 		c.Shell().OnReadlineDone = func() {
 			bridge.SetReady(false)
 		}
-		repl.stdout = bridge
-		repl.stderr = bridge
+		if isLocalAgentTerminal(t) {
+			output.SetReadlineMode(bridge)
+			repl.stdout = bridge
+			repl.stderr = bridge
+		}
 	}
 	menu.Prompt().Primary = func() string {
 		return agentComposerPrompt(output, repl.readlineBridge)
 	}
 	repl.workMu.Lock()
-	repl.subscription = rt.Observe(coreevents.ObserverFunc(repl.handleEvent))
+	repl.subscription = rt.Observe(repl.handleEvent)
 	repl.workMu.Unlock()
 	repl.configureCompletionKey()
 	repl.configureInterruptKey()
@@ -478,7 +480,12 @@ func (r *AgentConsole) allCommands() []*cobra.Command {
 	if r.bindings != nil && r.bindings.Commands != nil {
 		cmds = append(cmds, r.bindings.Commands(consoleapi.View{Out: r.stdout, Err: r.stderr, Table: r.printBoxTable,
 			Command: r.command, RefreshStatus: func() { fmt.Fprint(r.stdout, r.renderStatus()) },
-			SessionID: func() string { if r.session != nil { return r.session.ID() }; return "" },
+			SessionID: func() string {
+				if r.session != nil {
+					return r.session.ID()
+				}
+				return ""
+			},
 		})...)
 	}
 	return cmds
@@ -576,7 +583,7 @@ func (r *AgentConsole) ensureOutput() *AgentOutput {
 }
 
 func (r *AgentConsole) refreshPromptAfterAsyncRun() {
-	if r == nil || r.readlineBridge != nil || !r.readlineActive.Load() {
+	if r == nil || !r.readlineActive.Load() || (r.output != nil && r.output.readline) {
 		return
 	}
 	if r.ctx != nil && r.ctx.Err() != nil {

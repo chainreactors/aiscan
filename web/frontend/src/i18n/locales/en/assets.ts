@@ -17,6 +17,7 @@ export default {
   noAssets: 'No assets discovered yet',
   noAssetsHint: 'Run a scan to populate the asset pool.',
   sendToChat: 'Send to chat',
+  copied: 'Copied',
   sendSelected: 'Send {{count}} selected',
   assetCount: '{{count}} asset(s)',
   refreshing: 'Refreshing…',

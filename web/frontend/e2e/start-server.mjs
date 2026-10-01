@@ -11,6 +11,8 @@ const webPort = Number(process.env.CYBER_E2E_PORT || 38080)
 const root = resolve(fileURLToPath(new URL('../../..', import.meta.url)))
 const workDir = await mkdtemp(join(tmpdir(), 'cyber-web-e2e-'))
 const binary = join(workDir, process.platform === 'win32' ? 'cyber-e2e.exe' : 'cyber-e2e')
+const hubMode = process.env.CYBER_E2E_HUB === '1'
+const hubBinary = join(workDir, process.platform === 'win32' ? 'cyber-web.exe' : 'cyber-web')
 
 const externalLLM = {
   baseURL: process.env.CYBER_E2E_LLM_BASE_URL?.trim() || '',
@@ -141,10 +143,23 @@ if (build.status !== 0) {
   process.exit(build.status ?? 1)
 }
 
-const child = spawn(binary, [
+if (hubMode) {
+  const hubBuild = spawnSync('go', [
+    'build', '-tags', editionValue('WEB_TAGS'),
+    '-ldflags', '-X github.com/chainreactors/cyber/pkg/config.Version=1.0.0-rc1',
+    '-o', hubBinary, './cmd/cyber-web',
+  ], { cwd: root, stdio: 'inherit', env: { ...process.env, CGO_ENABLED: editionValue('WEB_CGO') } })
+  if (hubBuild.status !== 0) {
+    mockLLM?.close()
+    await rm(workDir, { recursive: true, force: true })
+    process.exit(hubBuild.status ?? 1)
+  }
+}
+
+const child = spawn(hubMode ? hubBinary : binary, [
   '--config', configPath,
   '--data-dir', join(workDir, 'data'),
-  'web',
+  ...(hubMode ? [] : ['web']),
   '--addr', `${host}:${webPort}`,
   '--db', join(workDir, 'cyber-web.db'),
   '--token', 'test-token',
@@ -173,6 +188,7 @@ async function launchRemoteAgent() {
     '--data-dir', join(workDir, 'agent-data'),
     'agent',
     '--server-url', `http://test-token@${host}:${webPort}`,
+    ...(hubMode ? [] : ['--ioa-url', `http://test-token@${host}:${webPort}/ioa`]),
     '--node-name', 'e2e-node',
   ], {
     cwd: root,

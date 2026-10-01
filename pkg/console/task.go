@@ -84,7 +84,7 @@ func RunTask(ctx context.Context, rt *agentsession.Runtime, option *cfg.Option, 
 		}
 	}
 	selector := &taskEventSelector{deliver: handle}
-	unsubscribe := rt.Observe(selector)
+	unsubscribe := rt.Observe(selector.observe)
 	var session *agentsession.Session
 	defer func() {
 		if session != nil {
@@ -172,7 +172,7 @@ type taskEventSelector struct {
 	deliver   func(*aop.Event)
 }
 
-func (s *taskEventSelector) ObserveEvent(event *aop.Event) {
+func (s *taskEventSelector) observe(event *aop.Event) {
 	if s == nil || event == nil {
 		return
 	}

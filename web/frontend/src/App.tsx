@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Box, LogOut, Menu, Monitor, Network, Settings, Wrench } from 'lucide-react'
+import { Activity, LogOut, Menu, Monitor, Network, Settings } from 'lucide-react'
 import SessionList from './components/SessionList'
 import ChatPanel from './components/ChatPanel'
 import ConfigPanel from './components/ConfigPanel'
 import AgentPanel from './components/AgentPanel'
-import ToolRegistryPanel from './components/ToolRegistryPanel'
-import AssetPanel, { assetMentionables } from './components/AssetPanel'
+import ObservabilityPanel from './components/ObservabilityPanel'
+import { useObservations } from '@/viewer'
+import { assetMentionables } from './components/AssetPanel'
 import MentionPicker from './components/MentionPicker'
 import LLMHealth from './components/LLMHealth'
 import QuickConnect from './components/QuickConnect'
@@ -30,7 +31,7 @@ import { listSCONodes, subscribeCSTXChanges, syncCSTXArtifacts } from './lib/cst
 const sidebarStorageKey = 'cyber-sidebar-open'
 
 const EMPTY_SEED = { text: '', nonce: 0 }
-type ToolPanel = 'assets' | 'ioa' | 'agents' | 'tools' | 'settings'
+type ToolPanel = 'ioa' | 'agents' | 'observability' | 'settings'
 
 // Respect a previously-chosen theme on boot. ThemeProvider's own initializer is
 // short-circuited by the `initial` prop (it returns `initial` before ever reading
@@ -53,8 +54,10 @@ function getInitialSidebarOpen() {
 export default function App() {
   const { t } = useTranslation('app')
   const { t: tc } = useTranslation('chat')
+  const { t: to } = useTranslation('observe')
   const confirm = useConfirm()
   const chat = useChatSession()
+  const observations = useObservations(chat.aopEvents)
   const guardrailSessions = useMemo(() => {
     const online = new Set(chat.agents.map(agent => agent.hello?.nodeId))
     const ids = chat.sessions.filter(record => online.has(record.session?.nodeId) && record.session?.state !== 'closed')
@@ -115,6 +118,7 @@ export default function App() {
   // nodes/messages. Both refresh when the timeline advances — a finished scan or
   // agent turn often means new assets landed or new IOA traffic was exchanged.
   const [scoNodes, setScoNodes] = useState<SCONode[]>([])
+  const [ioaAvailable, setIoaAvailable] = useState(false)
   const [ioaNodes, setIoaNodes] = useState<IOANode[]>([])
   const [ioaMessages, setIoaMessages] = useState<IOAMessage[]>([])
   const [composerSeed, setComposerSeed] = useState(EMPTY_SEED)
@@ -129,9 +133,10 @@ export default function App() {
   const refreshIOA = useCallback(async () => {
     try {
       const overview = await getIOAOverview()
+      setIoaAvailable(true)
       setIoaNodes(overview.nodes)
       setIoaMessages(overview.messages)
-    } catch { /* non-critical — the hub may be unconfigured or offline */ }
+    } catch { setIoaAvailable(false) }
   }, [])
 
   useEffect(() => {
@@ -162,13 +167,6 @@ export default function App() {
   )
 
   const model = serverStatus?.llmModel || ''
-  // Agents that already joined a collaboration space are where a newly connected
-  // node belongs; with none connected there is nothing to align to.
-  const agentSpace = chat.agents.find((a) => a.status?.space)?.status?.space
-  const bashToolCount = useMemo(() => chat.agents.reduce(
-    (total, agent) => total + agent.commands.filter((command) => command.name.startsWith('!')).length,
-    0,
-  ), [chat.agents])
 
   const handleSwitchLLM = useCallback(async (profileID: string) => {
     if (!profileID || profileID === activeLLMProfile) return
@@ -273,18 +271,25 @@ export default function App() {
           </div>
           <div className="flex items-center gap-0.5 sm:gap-2">
             <GuardrailToggle disabled={activeToolPanel === 'settings'} onConfigure={() => openSettings('jev')} />
-            <AssetPoolButton count={scoNodes.length} open={activeToolPanel === 'assets'} onClick={() => toggleToolPanel('assets')} />
-            <IOAConsoleButton open={activeToolPanel === 'ioa'} onClick={() => {
+            <span className="relative">
+              <HeaderIconButton label={to('open', { count: observations.length })} active={activeToolPanel === 'observability'} toolDrawerTrigger onClick={() => toggleToolPanel('observability')}>
+                <Activity className="h-3.5 w-3.5" />
+              </HeaderIconButton>
+              {observations.length > 0 && <span className="pointer-events-none absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full bg-primary" />}
+            </span>
+            {ioaAvailable && <IOAConsoleButton open={activeToolPanel === 'ioa'} onClick={() => {
               setIOAConsoleTarget(null)
               toggleToolPanel('ioa')
-            }} />
+            }} />}
             <AgentsButton count={chat.agents.length} open={activeToolPanel === 'agents'} onClick={handleOpenAgentPanel} />
-            <ToolsButton count={bashToolCount} open={activeToolPanel === 'tools'} onClick={() => toggleToolPanel('tools')} />
-            <QuickConnect serverURL={serverStatus?.serverUrl} version={serverStatus?.version} space={agentSpace} />
-            {/* Separate workspace nav (assets / IOA / agents / connect) from the
+            <QuickConnect serverURL={serverStatus?.serverUrl} version={serverStatus?.version} />
+            {/* Separate workspace nav (observations / IOA / agents / connect) from the
                 account utilities (settings / logout) so the row reads as two groups. */}
             <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-border/70 sm:block" aria-hidden="true" />
-            <HeaderIconButton label={t('openSettings')} active={activeToolPanel === 'settings'} toolDrawerTrigger onClick={() => toggleToolPanel('settings')}>
+            <HeaderIconButton label={t('openSettings')} active={activeToolPanel === 'settings'} toolDrawerTrigger onClick={() => {
+              if (activeToolPanel === 'settings') setActiveToolPanel(null)
+              else openSettings()
+            }}>
               <Settings className="h-3.5 w-3.5" />
             </HeaderIconButton>
             <HeaderIconButton label={t('logout')} onClick={() => { void logout() }}>
@@ -304,13 +309,12 @@ export default function App() {
             onFilter={chat.filterSessions}
             onUpdateSession={chat.updateSession}
             activeSessionID={chat.activeSessionID}
+            activeSessionNodeID={activeSession?.session?.nodeId || null}
+            activeSessionBusy={chat.busy}
             selectedNodeID={chat.selectedNodeID}
-            terminalNodeID={activeToolPanel === 'agents' ? agentPanelFocusNodeID : null}
-            onSelectNode={chat.selectNode}
             onSelectSession={handleSelectSession}
             onCreateSession={handleCreateSession}
             onDeleteSession={handleDeleteSession}
-            onOpenTerminal={handleOpenTerminal}
           />
 
           <ChatPanel
@@ -357,18 +361,9 @@ export default function App() {
         onClose={() => setActiveToolPanel(null)}
       />
 
-      <ToolRegistryPanel
-        open={activeToolPanel === 'tools'}
-        agents={chat.agents}
-        onClose={() => setActiveToolPanel(null)}
-      />
-
-      <AssetPanel
-        open={activeToolPanel === 'assets'}
-        onClose={() => setActiveToolPanel(null)}
-        onSendToChat={handleAssetSendToChat}
-        onChanged={refreshSCONodes}
-      />
+      <ObservabilityPanel key={chat.activeSessionID || 'no-session'} open={activeToolPanel === 'observability'}
+        events={chat.aopEvents} sessionID={chat.activeSessionID} assetCount={scoNodes.length}
+        onClose={() => setActiveToolPanel(null)} onSendToChat={handleAssetSendToChat} onAssetsChanged={refreshSCONodes} />
 
       {activeToolPanel === 'ioa' && (
         <Suspense fallback={null}>
@@ -427,36 +422,6 @@ function LLMProfileSwitcher({
   )
 }
 
-function AssetPoolButton({ count, open, onClick }: { count: number; open: boolean; onClick: () => void }) {
-  const { t } = useTranslation('assets')
-  const active = count > 0
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          active={open}
-          data-tool-drawer-trigger
-          onClick={onClick}
-          aria-label={t('openAssets')}
-          className={cn(
-            'h-7 w-7 shrink-0 cursor-pointer gap-0 rounded-md border px-0 hover:opacity-80 sm:w-auto sm:gap-1.5 sm:px-2.5',
-            active
-              ? 'border-primary/30'
-              : 'border-border bg-secondary/50 text-muted-foreground hover:bg-secondary/50 hover:text-muted-foreground',
-          )}
-        >
-          <Box className="h-3 w-3" aria-hidden="true" />
-          <span className="hidden font-mono sm:inline" aria-hidden="true">{count}</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{t('openAssets')}</TooltipContent>
-    </Tooltip>
-  )
-}
-
 function AgentsButton({ count, open, onClick }: { count: number; open: boolean; onClick: () => void }) {
   const { t } = useTranslation('app')
   const active = count > 0
@@ -485,36 +450,6 @@ function AgentsButton({ count, open, onClick }: { count: number; open: boolean; 
         </Button>
       </TooltipTrigger>
       <TooltipContent>{active ? t('agentsConnected', { count }) : t('noAgents')}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-function ToolsButton({ count, open, onClick }: { count: number; open: boolean; onClick: () => void }) {
-  const { t } = useTranslation('tools')
-  const active = count > 0
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          active={open}
-          data-tool-drawer-trigger
-          onClick={onClick}
-          aria-label={active ? t('toolsAvailable', { count }) : t('noTools')}
-          className={cn(
-            'h-7 w-7 shrink-0 cursor-pointer gap-0 rounded-md border px-0 hover:opacity-80 sm:w-auto sm:gap-1.5 sm:px-2.5',
-            active
-              ? 'border-primary/30'
-              : 'border-border bg-secondary/50 text-muted-foreground hover:bg-secondary/50 hover:text-muted-foreground',
-          )}
-        >
-          <Wrench className="h-3 w-3" aria-hidden="true" />
-          <span className="hidden font-mono sm:inline" aria-hidden="true">{count}</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{t('openTools')}</TooltipContent>
     </Tooltip>
   )
 }

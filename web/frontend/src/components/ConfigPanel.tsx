@@ -320,7 +320,7 @@ export default function ConfigPanel({ open, status, initialSection = 'llm', onCl
     >
       <form onSubmit={handleSave} className="flex h-full min-h-0 w-full flex-col">
         <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-4 py-1">
-          {TABS.map((tab) => (
+          {TABS.filter(tab => tab.key === 'llm' || tab.key === 'agent' || !!cs?.extensions[tab.key === 'ioa' ? 'ioa.client' : tab.key]).map((tab) => (
             <Button
               key={tab.key} type="button" variant="ghost" size="sm"
               active={activeTab === tab.key} onClick={() => setActiveTab(tab.key)}
@@ -644,7 +644,7 @@ function LLMTab({
             placeholder={configuredProfile?.apiKeyConfigured ? t('configuredKeep') : t('apiKeyRequired')} />
         </Field>
       </div>
-      <div className="sm:col-span-2">
+      {cs?.extensions.jev && <div className="sm:col-span-2">
         <Field label={t('jevApiKey')} hint={t('jevKeyInLLMHint')}>
           <Input
             ref={jevInputRef}
@@ -659,7 +659,7 @@ function LLMTab({
             placeholder={cs?.extensions.jev?.configuredSecrets.includes('api_key') ? t('configuredKeep') : 'TYPESAFE_API_KEY'}
           />
         </Field>
-      </div>
+      </div>}
       <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
         <Button type="button" variant="outline" size="sm" onClick={handleTest} disabled={testing || !profile.model.trim()}>
           {testing ? <ProbePulse /> : <Zap className="h-4 w-4" />}

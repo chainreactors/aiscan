@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chainreactors/cyber/agent/provider"
 	"github.com/chainreactors/cyber/core/extension"
 	types "github.com/chainreactors/cyber/core/types"
 	"github.com/chainreactors/cyber/pkg/config"
@@ -35,6 +36,7 @@ type ServiceConfig struct {
 	BuildProfile func(ctx context.Context, prepared *PreparedConfig) (profile.Profile, error)
 	Scans        *ScanServiceConfig
 	AccessKey    string
+	RuntimeLLM   func() provider.ProviderConfig
 }
 
 type Service struct {
@@ -47,6 +49,7 @@ type Service struct {
 	configGate   chan struct{}
 	configStore  ConfigStore
 	buildProfile func(context.Context, *PreparedConfig) (profile.Profile, error)
+	runtimeLLM   func() provider.ProviderConfig
 	pending      profile.Profile
 	store        *SQLiteStore
 	appMu        sync.Mutex
@@ -75,6 +78,7 @@ func NewService(cfg ServiceConfig) *Service {
 		configGate:   make(chan struct{}, 1),
 		configStore:  cfg.ConfigStore,
 		buildProfile: cfg.BuildProfile,
+		runtimeLLM:   cfg.RuntimeLLM,
 		store:        cfg.Store,
 		hub:          NewHub(),
 		auth:         NewAuth(cfg.AccessKey),
@@ -209,6 +213,11 @@ func (s *Service) Status() *types.SystemStatus {
 		status.LlmProvider = providerConfig.Provider
 		status.LlmModel = providerConfig.Model
 		status.LlmApiKeyConfigured = strings.TrimSpace(providerConfig.APIKey) != ""
+	}
+	if providers == nil {
+		effective := s.runtimeLLMConfig()
+		status.LlmProvider, status.LlmModel = effective.Provider, effective.Model
+		status.LlmApiKeyConfigured = strings.TrimSpace(effective.APIKey) != ""
 	}
 	if response, err := s.api.Config.GetConfig(context.Background(), &types.GetConfigRequest{}); err == nil {
 		view := response.GetConfig()

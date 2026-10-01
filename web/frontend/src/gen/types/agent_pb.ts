@@ -16,7 +16,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file types/agent.proto.
  */
 export const file_types_agent: GenFile = /*@__PURE__*/
-  fileDesc("ChF0eXBlcy9hZ2VudC5wcm90bxILY3liZXIuYWdlbnQi4QEKCUFnZW50VmlldxIeCgVoZWxsbxgBIAEoCzIPLmFvcC5BZ2VudEhlbGxvEiAKBnN0YXR1cxgCIAEoCzIQLmFvcC5BZ2VudFN0YXR1cxIeCgVzdGF0cxgDIAEoCzIPLmFvcC5BZ2VudFN0YXRzEjAKDGNvbm5lY3RlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIY29tbWFuZHMYBiADKAsyGi5jeWJlci5jb21tYW5kLkNvbW1hbmRTcGVjEgwKBGJ1c3kYByABKAhKBAgEEAUiEwoRTGlzdEFnZW50c1JlcXVlc3QiPAoSTGlzdEFnZW50c1Jlc3BvbnNlEiYKBmFnZW50cxgBIAMoCzIWLmN5YmVyLmFnZW50LkFnZW50VmlldyJUCg9BZ2VudFJ1bk9wdGlvbnMSFQoNZXZhbF9jcml0ZXJpYRgBIAEoCRITCgtldmFsX3JvdW5kcxgDIAEoCUoECAIQA1IPZXZhbF9tYXhfcm91bmRzIjMKDUNvbW1hbmREZXRhaWwSDAoEbGluZRgBIAEoCRIUCgxwcmVzZW50YXRpb24YAiABKAkiYgoNQ29tcGFjdERldGFpbBINCgVlcnJvchgBIAEoCRIVCg1rZXB0X21lc3NhZ2VzGAIgASgEEhQKDHRva2Vuc19hZnRlchgDIAEoBBIVCg10b2tlbnNfYmVmb3JlGAQgASgEIoIBChBEZWxlZ2F0aW9uRGV0YWlsEhAKCGFnZW50X2lkGAEgASgJEhIKCmFnZW50X25hbWUYAiABKAkSEgoKYWdlbnRfdHlwZRgDIAEoCRIUCgxjb250ZXh0X21vZGUYBCABKAkSEAoIcnVuX21vZGUYBSABKAkSDAoEdGFzaxgGIAEoCSJcCgpFdmFsRGV0YWlsEg0KBWVycm9yGAEgASgJEhIKCm1heF9yb3VuZHMYAiABKA0SDAoEcGFzcxgDIAEoCBIOCgZyZWFzb24YBCABKAkSDQoFcm91bmQYBSABKA0iPQoNQnVkZ2V0V2FybmluZxIWCg5jb250ZXh0X3Rva2VucxgBIAEoBBIUCgx0b2tlbl9idWRnZXQYAiABKAQiVwoQTExNUmVxdWVzdERldGFpbBINCgVtb2RlbBgBIAEoCRIQCghtZXNzYWdlcxgCIAEoDRISCgptYXhfdG9rZW5zGAMgASgNEg4KBnN0cmVhbRgEIAEoCCJeCg5BZ2VudExpc3RFbnRyeRIMCgRuYW1lGAEgASgJEg8KB25vZGVfaWQYAiABKAkSDAoEYnVzeRgDIAEoCBIQCghwcm92aWRlchgEIAEoCRINCgVtb2RlbBgFIAEoCSJAChFBZ2VudExpc3RNZXRhZGF0YRIrCgZhZ2VudHMYASADKAsyGy5jeWJlci5hZ2VudC5BZ2VudExpc3RFbnRyeSK+AQoSV2ViTWVzc2FnZU1ldGFkYXRhEg8KB25vZGVfaWQYASABKAkSDAoEY29kZRgCIAEoCRInCgZwYXJhbXMYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EjIKCmFnZW50X2xpc3QYBCABKAsyHi5jeWJlci5hZ2VudC5BZ2VudExpc3RNZXRhZGF0YRIsCghjb21tYW5kcxgFIAMoCzIaLmN5YmVyLmNvbW1hbmQuQ29tbWFuZFNwZWNCMVovZ2l0aHViLmNvbS9jaGFpbnJlYWN0b3JzL2N5YmVyL2NvcmUvdHlwZXM7dHlwZXNiBnByb3RvMw", [file_aop_protocol, file_types_command, file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("ChF0eXBlcy9hZ2VudC5wcm90bxILY3liZXIuYWdlbnQi4QEKCUFnZW50VmlldxIeCgVoZWxsbxgBIAEoCzIPLmFvcC5BZ2VudEhlbGxvEiAKBnN0YXR1cxgCIAEoCzIQLmFvcC5BZ2VudFN0YXR1cxIeCgVzdGF0cxgDIAEoCzIPLmFvcC5BZ2VudFN0YXRzEjAKDGNvbm5lY3RlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIY29tbWFuZHMYBiADKAsyGi5jeWJlci5jb21tYW5kLkNvbW1hbmRTcGVjEgwKBGJ1c3kYByABKAhKBAgEEAUiEwoRTGlzdEFnZW50c1JlcXVlc3QiPAoSTGlzdEFnZW50c1Jlc3BvbnNlEiYKBmFnZW50cxgBIAMoCzIWLmN5YmVyLmFnZW50LkFnZW50VmlldyJUCg9BZ2VudFJ1bk9wdGlvbnMSFQoNZXZhbF9jcml0ZXJpYRgBIAEoCRITCgtldmFsX3JvdW5kcxgDIAEoCUoECAIQA1IPZXZhbF9tYXhfcm91bmRzIjMKDUNvbW1hbmREZXRhaWwSDAoEbGluZRgBIAEoCRIUCgxwcmVzZW50YXRpb24YAiABKAkiYgoNQ29tcGFjdERldGFpbBINCgVlcnJvchgBIAEoCRIVCg1rZXB0X21lc3NhZ2VzGAIgASgEEhQKDHRva2Vuc19hZnRlchgDIAEoBBIVCg10b2tlbnNfYmVmb3JlGAQgASgEIhUKBVJlY2FwEgwKBHRleHQYASABKAkiggEKEERlbGVnYXRpb25EZXRhaWwSEAoIYWdlbnRfaWQYASABKAkSEgoKYWdlbnRfbmFtZRgCIAEoCRISCgphZ2VudF90eXBlGAMgASgJEhQKDGNvbnRleHRfbW9kZRgEIAEoCRIQCghydW5fbW9kZRgFIAEoCRIMCgR0YXNrGAYgASgJIlwKCkV2YWxEZXRhaWwSDQoFZXJyb3IYASABKAkSEgoKbWF4X3JvdW5kcxgCIAEoDRIMCgRwYXNzGAMgASgIEg4KBnJlYXNvbhgEIAEoCRINCgVyb3VuZBgFIAEoDSI9Cg1CdWRnZXRXYXJuaW5nEhYKDmNvbnRleHRfdG9rZW5zGAEgASgEEhQKDHRva2VuX2J1ZGdldBgCIAEoBCJXChBMTE1SZXF1ZXN0RGV0YWlsEg0KBW1vZGVsGAEgASgJEhAKCG1lc3NhZ2VzGAIgASgNEhIKCm1heF90b2tlbnMYAyABKA0SDgoGc3RyZWFtGAQgASgIIl4KDkFnZW50TGlzdEVudHJ5EgwKBG5hbWUYASABKAkSDwoHbm9kZV9pZBgCIAEoCRIMCgRidXN5GAMgASgIEhAKCHByb3ZpZGVyGAQgASgJEg0KBW1vZGVsGAUgASgJIkAKEUFnZW50TGlzdE1ldGFkYXRhEisKBmFnZW50cxgBIAMoCzIbLmN5YmVyLmFnZW50LkFnZW50TGlzdEVudHJ5Ir4BChJXZWJNZXNzYWdlTWV0YWRhdGESDwoHbm9kZV9pZBgBIAEoCRIMCgRjb2RlGAIgASgJEicKBnBhcmFtcxgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSMgoKYWdlbnRfbGlzdBgEIAEoCzIeLmN5YmVyLmFnZW50LkFnZW50TGlzdE1ldGFkYXRhEiwKCGNvbW1hbmRzGAUgAygLMhouY3liZXIuY29tbWFuZC5Db21tYW5kU3BlY0IxWi9naXRodWIuY29tL2NoYWlucmVhY3RvcnMvY3liZXIvY29yZS90eXBlczt0eXBlc2IGcHJvdG8z", [file_aop_protocol, file_types_command, file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message cyber.agent.AgentView
@@ -170,6 +170,25 @@ export const CompactDetailSchema: GenMessage<CompactDetail> = /*@__PURE__*/
   messageDesc(file_types_agent, 5);
 
 /**
+ * Display-only task recap. Correlation and time belong to the AOP envelope.
+ *
+ * @generated from message cyber.agent.Recap
+ */
+export type Recap = Message<"cyber.agent.Recap"> & {
+  /**
+   * @generated from field: string text = 1;
+   */
+  text: string;
+};
+
+/**
+ * Describes the message cyber.agent.Recap.
+ * Use `create(RecapSchema)` to create a new message.
+ */
+export const RecapSchema: GenMessage<Recap> = /*@__PURE__*/
+  messageDesc(file_types_agent, 6);
+
+/**
  * @generated from message cyber.agent.DelegationDetail
  */
 export type DelegationDetail = Message<"cyber.agent.DelegationDetail"> & {
@@ -209,7 +228,7 @@ export type DelegationDetail = Message<"cyber.agent.DelegationDetail"> & {
  * Use `create(DelegationDetailSchema)` to create a new message.
  */
 export const DelegationDetailSchema: GenMessage<DelegationDetail> = /*@__PURE__*/
-  messageDesc(file_types_agent, 6);
+  messageDesc(file_types_agent, 7);
 
 /**
  * @generated from message cyber.agent.EvalDetail
@@ -246,7 +265,7 @@ export type EvalDetail = Message<"cyber.agent.EvalDetail"> & {
  * Use `create(EvalDetailSchema)` to create a new message.
  */
 export const EvalDetailSchema: GenMessage<EvalDetail> = /*@__PURE__*/
-  messageDesc(file_types_agent, 7);
+  messageDesc(file_types_agent, 8);
 
 /**
  * @generated from message cyber.agent.BudgetWarning
@@ -268,7 +287,7 @@ export type BudgetWarning = Message<"cyber.agent.BudgetWarning"> & {
  * Use `create(BudgetWarningSchema)` to create a new message.
  */
 export const BudgetWarningSchema: GenMessage<BudgetWarning> = /*@__PURE__*/
-  messageDesc(file_types_agent, 8);
+  messageDesc(file_types_agent, 9);
 
 /**
  * @generated from message cyber.agent.LLMRequestDetail
@@ -300,7 +319,7 @@ export type LLMRequestDetail = Message<"cyber.agent.LLMRequestDetail"> & {
  * Use `create(LLMRequestDetailSchema)` to create a new message.
  */
 export const LLMRequestDetailSchema: GenMessage<LLMRequestDetail> = /*@__PURE__*/
-  messageDesc(file_types_agent, 9);
+  messageDesc(file_types_agent, 10);
 
 /**
  * @generated from message cyber.agent.AgentListEntry
@@ -337,7 +356,7 @@ export type AgentListEntry = Message<"cyber.agent.AgentListEntry"> & {
  * Use `create(AgentListEntrySchema)` to create a new message.
  */
 export const AgentListEntrySchema: GenMessage<AgentListEntry> = /*@__PURE__*/
-  messageDesc(file_types_agent, 10);
+  messageDesc(file_types_agent, 11);
 
 /**
  * @generated from message cyber.agent.AgentListMetadata
@@ -354,7 +373,7 @@ export type AgentListMetadata = Message<"cyber.agent.AgentListMetadata"> & {
  * Use `create(AgentListMetadataSchema)` to create a new message.
  */
 export const AgentListMetadataSchema: GenMessage<AgentListMetadata> = /*@__PURE__*/
-  messageDesc(file_types_agent, 11);
+  messageDesc(file_types_agent, 12);
 
 /**
  * @generated from message cyber.agent.WebMessageMetadata
@@ -395,4 +414,4 @@ export type WebMessageMetadata = Message<"cyber.agent.WebMessageMetadata"> & {
  * Use `create(WebMessageMetadataSchema)` to create a new message.
  */
 export const WebMessageMetadataSchema: GenMessage<WebMessageMetadata> = /*@__PURE__*/
-  messageDesc(file_types_agent, 12);
+  messageDesc(file_types_agent, 13);

@@ -43,6 +43,11 @@ message CompactDetail {
   uint64 tokens_before = 4;
 }
 
+// Display-only task recap. Correlation and time belong to the AOP envelope.
+message Recap {
+  string text = 1;
+}
+
 message DelegationDetail {
   string agent_id = 1;
   string agent_name = 2;

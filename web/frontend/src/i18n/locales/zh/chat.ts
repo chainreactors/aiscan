@@ -1,4 +1,11 @@
 export default {
+  record: {
+    title: '屏幕捕获', desktop: '桌面', window: '窗口', empty: '暂无录制',
+    download: '下载', openImage: '打开截图', duration: '{{seconds}} 秒', frames: '{{count}} 帧',
+    unavailable: '当前会话无法读取媒体。', loadFailed: '媒体加载失败，请重新连接节点后重试。',
+    actions: { screenshot: '截图', record: '录制视频', start: '开始录制', stop: '停止录制', status: '录制状态' },
+    states: { starting: '准备中', recording: '录制中', stopping: '停止中', completed: '已完成', failed: '失败' },
+  },
   connectNodeHint: '输入目标即可开始；请先在节点面板连接执行节点。',
   chat: '对话',
   terminal: '终端',

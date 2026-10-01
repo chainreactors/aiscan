@@ -24,6 +24,10 @@ import enTools from './locales/en/tools'
 import zhTools from './locales/zh/tools'
 import enTable from './locales/en/table'
 import zhTable from './locales/zh/table'
+import enTraffic from './locales/en/traffic'
+import zhTraffic from './locales/zh/traffic'
+import enObserve from './locales/en/observe'
+import zhObserve from './locales/zh/observe'
 
 export const STORAGE_KEY = 'cyber-locale'
 export const SUPPORTED_LOCALES = ['en', 'zh'] as const
@@ -43,6 +47,8 @@ export const resources = {
     ioa: enIOA,
     tools: enTools,
     table: enTable,
+    traffic: enTraffic,
+    observe: enObserve,
   },
   zh: {
     app: zhApp,
@@ -56,6 +62,8 @@ export const resources = {
     ioa: zhIOA,
     tools: zhTools,
     table: zhTable,
+    traffic: zhTraffic,
+    observe: zhObserve,
   },
 } as const
 
@@ -76,7 +84,7 @@ void i18n
     fallbackLng: 'en',
     supportedLngs: SUPPORTED_LOCALES as unknown as string[],
     nonExplicitSupportedLngs: true,
-    ns: ['app', 'sidebar', 'scan', 'findings', 'chat', 'agent', 'config', 'assets', 'ioa', 'tools', 'table'],
+    ns: ['app', 'sidebar', 'scan', 'findings', 'chat', 'agent', 'config', 'assets', 'ioa', 'tools', 'table', 'traffic', 'observe'],
     defaultNS,
     interpolation: { escapeValue: false },
     detection: {

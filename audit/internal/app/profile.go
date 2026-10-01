@@ -56,6 +56,10 @@ func newAuditProfile(request profile.Request, workDir string, bashTimeout int, r
 		return nil, fmt.Errorf("audit profile requires a session")
 	}
 	option := *request.Option
+	arsenal, err := arsenalext.FromManager(manager)
+	if err != nil {
+		return nil, err
+	}
 	sessionConfig := *request.Session
 	sessionConfig.NodeName = cfg.ResolveNodeName(option.NodeName)
 	sessionConfig = sessionext.ConfigFromOption(&option, sessionConfig)
@@ -107,7 +111,7 @@ func newAuditProfile(request profile.Request, workDir string, bashTimeout int, r
 		values = append(values, recorder)
 	}
 	values = append(values,
-		arsenalext.New(manager), okfext.New(),
+		arsenal, okfext.New(),
 		extension.Func{LoadFunc: func(scope *extension.Scope) error { return extension.Add(scope, reportCommand(reportDir)) }},
 		protonext.New(protonext.Config{Directory: workDir, ExcludePaths: []string{filepath.Join(workDir, ".cyber"), filepath.Join(workDir, ".git")}}),
 		auditext.New(auditext.Config{Workspace: workDir, ReportDir: reportDir, ToolSummary: summary.String(), SearchExclusions: exclusions}),

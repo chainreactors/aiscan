@@ -53,10 +53,13 @@ import { BudgetWarningSchema, CommandDetailSchema, CompactDetailSchema, Delegati
 import { anyUnpack } from '@bufbuild/protobuf/wkt'
 import type { AgentListMetadata, CommandSpec } from '../api'
 import type { ChatMessage, TimelineItem } from '../hooks/useChatSession'
-import ScannerToolCall from './chat/ScannerToolCall'
+import { ToolResultsProvider, ToolCallResult } from './chat/ToolCallResult'
+import { ObservedEvent } from './ObservabilityPanel'
+import { observation } from '@/viewer'
 import SubagentRunCard from './chat/SubagentRunCard'
 import { GuardrailReviewCard } from './GuardrailReviews'
 import { groupGuardrailTurns, guardrailTimelineEvents, isGuardrailBoundary, withGuardrailReviews } from '../lib/guardrail-view'
+import { withRecaps } from '../lib/recap-view'
 import { ReviewState, type Review } from '../cyber-proto'
 import type { IOAConsoleTarget } from '../lib/ioa-navigation'
 
@@ -491,9 +494,9 @@ export default function ChatPanel({
     }
     const visibleAopItems = aopItems.filter((item) => !matchedEchoes.has(item))
 
-    return groupGuardrailTurns(withGuardrailReviews([...platformItems, ...visibleAopItems].sort(
+    return withRecaps(groupGuardrailTurns(withGuardrailReviews([...platformItems, ...visibleAopItems].sort(
       (left, right) => left.timestamp - right.timestamp || left.id.localeCompare(right.id),
-    ), guardrailReviews, aopEvents, !guardrailUnavailable))
+    ), guardrailReviews, aopEvents, !guardrailUnavailable)), aopEvents)
   }, [agentEvents, aopEvents, aopReducers, isBusy, liveThinkingItem, timeline, guardrailReviews, guardrailUnavailable])
   // Keep the transcript geometry stable as IOA messages arrive. The right rail
   // is part of the desktop workspace even when the current session has no IOA
@@ -702,6 +705,7 @@ export default function ChatPanel({
   ) : null
 
   return (
+    <ToolResultsProvider sessionID={activeSessionID}>
     <ViewerChatPanel
       timeline={viewerTimeline as unknown as CyberTimelineItem[]}
       className="min-w-0 bg-transparent"
@@ -808,6 +812,7 @@ export default function ChatPanel({
         </div>
       )}
     </ViewerChatPanel>
+    </ToolResultsProvider>
   )
 }
 
@@ -849,11 +854,14 @@ function timelineContent(
 
     case 'tool_call':
       return (
-        <ScannerToolCall
+        <ToolCallResult
           id={item.toolCall.id}
           toolName={item.toolCall.toolName}
           toolArgs={item.toolCall.toolArgs}
           result={item.toolCall.result}
+          toolResult={item.toolCall.toolResult}
+          resultEventId={item.toolCall.resultEventId}
+          observations={item.toolCall.observations}
           pending={item.toolCall.pending}
           error={item.toolCall.error}
         />
@@ -869,6 +877,7 @@ function timelineContent(
       )
 
     case 'extension': {
+      if (item.event && observation(item.event)) return <ObservedEvent event={item.event} />
       if (item.extensionType === 'eval') {
         return (
           <EvalNote
@@ -1091,12 +1100,15 @@ function AssistantResponseEntry({
       tools={toolCount > 0 ? (
         <div className="space-y-2">
           {response.tools.map((tool) => (
-            <ScannerToolCall
+            <ToolCallResult
               key={tool.id}
               id={tool.id}
               toolName={tool.toolName}
               toolArgs={tool.toolArgs}
               result={tool.result}
+              toolResult={tool.toolResult}
+              resultEventId={tool.resultEventId}
+              observations={tool.observations}
               pending={tool.pending}
               error={tool.error}
             />
@@ -1104,6 +1116,8 @@ function AssistantResponseEntry({
         </div>
       ) : undefined}
       response={hasResponse ? <MarkdownContent content={trimDisplayContent(message?.content || '')} compact /> : undefined}
+      footer={!embedded && typeof message?.metadata?.recap === 'string'
+        ? <span data-testid="task-recap">{message.metadata.recap}</span> : undefined}
       labels={{ tools: toolsLabel, thinking: t('thinkingLabel'), response: t('responseLabel') }}
       headerClassName="xl:hidden"
       timeLabel={formatRailTime(response)}

@@ -1,4 +1,11 @@
 export default {
+  record: {
+    title: 'Screen capture', desktop: 'Desktop', window: 'Window', empty: 'No recordings',
+    download: 'Download', openImage: 'Open screenshot', duration: '{{seconds}} s', frames: '{{count}} frames',
+    unavailable: 'Media is unavailable in this session.', loadFailed: 'Could not load media. Reconnect the node and try again.',
+    actions: { screenshot: 'Screenshot', record: 'Record video', start: 'Start recording', stop: 'Stop recording', status: 'Recording status' },
+    states: { starting: 'Starting', recording: 'Recording', stopping: 'Stopping', completed: 'Completed', failed: 'Failed' },
+  },
   connectNodeHint: 'Enter a target to begin. Connect an execution node in the node panel first.',
   chat: 'Chat',
   terminal: 'Terminal',

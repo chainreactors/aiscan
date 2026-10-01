@@ -5,6 +5,7 @@ import { findingTargetURL, PRIORITY_ORDER, type FindingItem, type FindingPriorit
 import { severityTone } from '../lib/tones'
 import { cn } from '@cyber/theme'
 import { Badge, Chip, EmptyState } from '@cyber/ui'
+import { HttpEvidenceView } from '@cyber/traffic'
 
 interface FindingsPanelProps {
   findings: FindingItem[]
@@ -117,7 +118,7 @@ function FindingCard({ item }: { item: FindingItem }) {
       {item.detail && (
         <details className="mt-2 text-muted-foreground">
           <summary className="cursor-pointer text-[11px]">{t('rawEvidence')}</summary>
-          <pre className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded border border-border p-2 font-mono text-xs">{item.detail}</pre>
+          <HttpEvidenceView request={item.detail.request} response={item.detail.response} requestTitle={t('request')} responseTitle={t('response')} />
         </details>
       )}
     </div>

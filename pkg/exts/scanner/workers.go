@@ -59,26 +59,6 @@ func scannerSubagent(name, description string, systemTarget, requestTarget promp
 	}
 }
 
-func scannerWorker(executor subagent.Executor, defaults agent.Config) scan.Worker {
-	return func(ctx context.Context, name string, loot parsers.Loot) (string, error) {
-		cfg := defaults
-		if caller, ok := agent.ToolAgentConfig(ctx); ok {
-			cfg = caller
-		}
-		if cfg.Provider == nil {
-			return "", fmt.Errorf("scanner subagent %q requires a model provider", name)
-		}
-		result, err := executor.Execute(ctx, cfg, subagent.Request{Name: name, Input: subagent.Input{Payload: loot}})
-		if err != nil {
-			return "", err
-		}
-		if result == nil {
-			return "", nil
-		}
-		return result.Output, nil
-	}
-}
-
 func resolveWorkerPrompt(ctx context.Context, resolver prompt.Resolver, input prompt.Context, logger telemetry.Logger) (string, error) {
 	if resolver == nil {
 		return "", fmt.Errorf("scanner prompt resolver is unavailable")

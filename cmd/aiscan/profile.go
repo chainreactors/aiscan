@@ -32,6 +32,7 @@ import (
 	observeext "github.com/chainreactors/cyber/pkg/exts/observe"
 	proxyext "github.com/chainreactors/cyber/pkg/exts/proxy"
 	ptyext "github.com/chainreactors/cyber/pkg/exts/pty"
+	recapext "github.com/chainreactors/cyber/pkg/exts/recap"
 	sessionext "github.com/chainreactors/cyber/pkg/exts/session"
 	subagentext "github.com/chainreactors/cyber/pkg/exts/subagent"
 	telemetryext "github.com/chainreactors/cyber/pkg/exts/telemetry"
@@ -186,8 +187,14 @@ func buildAIScanProfile(config config) (*aiscanProfile, error) {
 		}
 		values = append(values, output)
 	}
-	if len(config.Observe) > 0 {
-		observer, err := observeext.New(observeext.Options{Kinds: config.Observe})
+	observeKinds := config.Observe
+	// Session clients expose tool activity and captured data to their WebUI through the
+	// existing observation stream. Explicit --observe selections remain exact.
+	if config.Session != nil && len(observeKinds) == 0 {
+		observeKinds = []observeext.Kind{observeext.Tools, observeext.Commands, observeext.Processes, observeext.Files, observeext.HTTP}
+	}
+	if len(observeKinds) > 0 {
+		observer, err := observeext.New(observeext.Options{Kinds: observeKinds})
 		if err != nil {
 			return nil, err
 		}
@@ -211,7 +218,7 @@ func buildAIScanProfile(config config) (*aiscanProfile, error) {
 		values = append(values, ioaclient.NewConsole(ioaclient.ConsoleConfig{Space: config.IOA.Space, Endpoint: config.IOA.URL}))
 	}
 	if config.Session != nil {
-		values = append(values, ptyext.New())
+		values = append(values, ptyext.New(), recapext.New())
 		agentConfig := *config.Session
 		agentConfig.NodeName = nodeName
 		agentConfig = sessionext.ConfigFromOption(config.Option, agentConfig)

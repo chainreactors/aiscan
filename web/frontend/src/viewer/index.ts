@@ -34,12 +34,18 @@ export {
 
 export { default as MessageBubble, StreamingCursor } from '../../cyber-ui/packages/viewer/src/components/chat/MessageBubble'
 export { default as ToolCallDisplay, CodeCallDisplay, BlockingOutputDisplay, OutputSection } from '../../cyber-ui/packages/viewer/src/components/chat/ToolCallDisplay'
+export { ToolResultDisplay, type ToolResultDisplayProps } from '../../cyber-ui/packages/viewer/src/components/chat/ToolResultDisplay'
+export { ToolDefinitionCard } from '../../cyber-ui/packages/viewer/src/components/chat/ToolDefinitionCard'
 export { default as ChatThinking, ThinkingDots } from '../../cyber-ui/packages/viewer/src/components/chat/ChatThinking'
 export { default as AssistantResponse } from '../../cyber-ui/packages/viewer/src/components/chat/AssistantResponse'
 export { default as ChatInput } from '../../cyber-ui/packages/viewer/src/components/chat/ChatInput'
 export { AgentVoiceCard } from '../../cyber-ui/packages/viewer/src/components/chat/AgentVoiceCard'
 export { ChatPanel } from '../../cyber-ui/packages/viewer/src/components/chat/ChatPanel'
 export { createAOPTimelineReducer, reduceAOPToTimeline } from '../../cyber-ui/packages/viewer/src/lib/aop-reducer'
+export { observation, observationRef, observationKind, createObservationReducer } from '../../cyber-ui/packages/viewer/src/lib/observations'
+export { useObservations } from '../../cyber-ui/packages/viewer/src/lib/use-observations'
+export { ObservationDisplay, type ObservationLabels } from '../../cyber-ui/packages/viewer/src/components/observability/ObservationDisplay'
+export { ObservabilityPanel } from '../../cyber-ui/packages/viewer/src/components/observability/ObservabilityPanel'
 
 export type {
   TimelineRendererConfig,

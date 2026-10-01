@@ -9,7 +9,7 @@
 对你有权测试的本地靶场执行：
 
 ```sh
-aiscan scan -i http://127.0.0.1:3000 --verify=off -o lab-scan.jsonl
+cyber-scan scan -i http://127.0.0.1:3000 --verify=off -o lab-scan.jsonl
 ```
 
 URL 直接进入 Web 探测；IP、IP:port 和 CIDR 会按目标类型进入服务发现或相应探测。可以重复 `-i`，或用 `-l targets.txt` 从每行一个目标的文件读取。扫描会产生主动探测，也可能包含认证检测。
@@ -44,11 +44,11 @@ flowchart TD
 默认 `quick` 包含服务发现、Web 探测、爬取、认证检测及按指纹选择的 POC。`full` 增加 common、bak、active 插件和默认字典路径探测，并将默认端口范围从资源定义的 `all` 改为 `-` 全端口。更大范围意味着更多请求和更长时间。
 
 ```sh
-aiscan scan -i 127.0.0.1 --ports 80,443,3000 --verify=off
-aiscan scan -i http://127.0.0.1:3000 --mode full --verify=off
+cyber-scan scan -i 127.0.0.1 --ports 80,443,3000 --verify=off
+cyber-scan scan -i http://127.0.0.1:3000 --mode full --verify=off
 ```
 
-扫描模式 full 和发行版 aiscan-full 是两个选择。完整发行版另外编译 Katana：quick 加入普通爬取，full 再加入浏览器深度爬取。浏览器爬取仍依赖可用的浏览器运行环境。
+`cyber-scan` 编译完整扫描能力，包括 Katana。扫描模式控制执行深度：quick 加入普通爬取，full 再加入浏览器深度爬取。浏览器爬取仍依赖可用的浏览器运行环境。
 
 ## 规则与资源
 
@@ -69,8 +69,8 @@ neutron 默认根据识别到的指纹选择模板，并受每个指纹的模板
 `--verify` 仅接受 `on` 或 `off`。本次参数优先于执行节点的 `scan.verify`；两者都未指定时，有模型默认开启，无模型默认关闭。Web 的默认值由实际执行节点解析。
 
 ```sh
-aiscan scan -i http://127.0.0.1:3000 --verify=on
-aiscan scan -i http://127.0.0.1:3000 --verify=off
+cyber-scan scan -i http://127.0.0.1:3000 --verify=on
+cyber-scan scan -i http://127.0.0.1:3000 --verify=off
 ```
 
 开启后，验证所有漏洞与弱口令发现，不按严重性过滤；指纹不属于漏洞验证候选。显式开启但无模型会在探测前报错。模型认证、网络或解析失败会保留原始证据并标注验证未得出结论，不会悄悄关闭验证。`confirmed` 表示已确认，`not_confirmed` 表示本次未确认，`inconclusive` 表示未能完成判断；未验证不等于安全。
@@ -88,8 +88,8 @@ aiscan scan -i http://127.0.0.1:3000 --verify=off
 `-o` 保存实际发出的 AOP 事件和结构化产物到新文件。回放只读取记录，不重复探测：
 
 ```sh
-aiscan -F lab-scan.jsonl
-aiscan -F lab-scan.jsonl --view-format markdown -f lab-scan.md
+cyber-scan -F lab-scan.jsonl
+cyber-scan -F lab-scan.jsonl --view-format markdown -f lab-scan.md
 ```
 
 `-f` 是回放的渲染文件。当前 scan 参数解析器没有 `--report`，需要 Markdown 时使用上述回放渲染入口；得到的是事件记录的可读版本，不是额外一次模型审计报告。事件、原生产物与 Web 资产的关系见[事件与数据](architecture/data.md)。

@@ -109,6 +109,11 @@ func ManagementRoutes(service Service) []Route {
 	if handler := service.NodeWebSocketHandler(); handler != nil {
 		routes = append(routes, Route{Pattern: NodeWebSocketPath, Handler: handler})
 	}
+	if media, ok := service.(interface{ SessionMediaHandler() http.Handler }); ok {
+		if handler := media.SessionMediaHandler(); handler != nil {
+			routes = append(routes, Route{Pattern: "GET /api/sessions/{sessionID}/media/{eventID}/{index}", Handler: handler})
+		}
+	}
 	return routes
 }
 

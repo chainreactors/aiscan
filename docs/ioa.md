@@ -16,7 +16,7 @@ Agent 已加入配置的空间，常用操作只有五项：
 
 跨进程协作时，在两个终端分别运行 `aiscan ioa serve` 和配置好模型的 `aiscan agent --ioa-url http://127.0.0.1:8765 --space lab`。后者在没有任务输入时保持交互会话；带 `-p` 时是一次性任务。
 
-IOA 是可插拔的 Agent 协作扩展。产品默认安装客户端扩展：未配置 URL 时使用 SDK Service、SQLite `:memory:` 和 Hub，在进程内调用，不监听 HTTP 端口；配置 URL 时连接外部 IOA。外部故障不会降级成隔离的内存空间。Web Agent 的默认地址仍为 `<server-url>/ioa`。
+IOA 是可插拔的 Agent 协作扩展。产品默认安装客户端扩展：未配置 URL 时使用 SDK Service、SQLite `:memory:` 和 Hub，在进程内调用，不监听 HTTP 端口；配置 URL 时连接外部 IOA。外部故障不会降级成隔离的内存空间。`--server-url` 与 `--ioa-url` 始终独立；只有显式配置 `--ioa-url` 时，Agent 才连接外部 IOA。旧版内嵌 Web 适配器会为本地节点显式配置同源 `/ioa`，这不影响通用 Web Host。
 
 | 扩展 | 所有权 | 对外能力 |
 | --- | --- | --- |

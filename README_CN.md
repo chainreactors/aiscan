@@ -20,30 +20,33 @@
 
 cyber-harness 是面向网络安全的 Agent 运行框架。它把模型循环、工具执行、知识、观测和协作按同一套 Extension 生命周期组装；你可以使用现成发行版，也可以在 Go 应用里选择自己的能力组合。
 
-`aiscan` 是参考发行版：Agent、核心扫描器、代理、Skills 和 IOA 协作；`aiscan-full` 进一步提供 Web 工作台、浏览器自动化、被动测绘和深度爬取。
+`cyber-scan` 是扫描发行版，包含 Agent、扫描器、代理、Skills、浏览器自动化、被动测绘、深度爬取和 IOA 协作。`cyber-audit` 提供源码与二进制审计。`cyber-web` 是通用 Web Hub，通过 AOP 接入独立的 scan、audit 或自定义 profile 节点，统一管理会话、事件和产物。
 
 > 请只在明确授权的目标上使用。
 
 ## 开始使用
 
-从 [GitHub Releases](https://github.com/chainreactors/cyber-harness/releases/latest) 下载对应平台的 `aiscan` 或 `aiscan-full`，解压并加入 PATH。安装、PowerShell 配置、模型连接和首个任务的完整步骤见 [快速上手](docs/getting-started.md)。
+部署 Web 时只需从 [GitHub Releases](https://github.com/chainreactors/cyber-harness/releases/latest) 下载 `cyber-web`。登录后，快速连接面板会生成一行 GitHub 命令，在执行节点所在机器上自动下载并启动 `cyber-scan` 或 `cyber-audit`；直接使用 CLI 时仍可单独下载对应 profile。安装、PowerShell 配置、模型连接和首个任务的完整步骤见 [快速上手](docs/getting-started.md)。
 
 ```sh
 # 已配置模型后：完成一次 Agent 任务，保存事件记录
-aiscan agent -p "只读查看当前目录并解释文件结构" -o first-run.jsonl
+cyber-scan agent -p "只读查看当前目录并解释文件结构" -o first-run.jsonl
 
 # 对自己的本地靶场执行规则扫描，关闭 AI 验证
-aiscan scan -i http://127.0.0.1:3000 --verify=off
+cyber-scan scan -i http://127.0.0.1:3000 --verify=off
 
-# 完整版：启动 Web 工作台，使用启动时打印的 access key 登录
-aiscan-full web
+# 启动通用 Web Hub，使用 access key 登录
+cyber-web --token replace-me
+
+# 另开终端连接扫描节点；审计节点使用 cyber-audit --server-url
+cyber-scan agent --server-url http://replace-me@127.0.0.1:8080
 ```
 
 Agent 由模型决定下一步工具调用；`scan` 由规则和扫描事件驱动，可按需启用 AI 阶段。二者的关系见 [概念与执行全景](docs/concepts.md)。
 
 ## 模型配置
 
-运行 `aiscan init` 配置用户级模型（`~/.cyber/cyber.yaml`）；项目覆盖使用 `aiscan init --project`。这些是 cyber-harness 公共命令，通用 `agent` CLI 同样支持；重复初始化保留已有文件。详见[配置与初始化](docs/configuration.md)。
+运行 `cyber-scan init` 配置用户级模型（`~/.cyber/cyber.yaml`）；项目覆盖使用 `cyber-scan init --project`。这些是 cyber-harness 公共命令，通用 `agent` CLI 同样支持；重复初始化保留已有文件。详见[配置与初始化](docs/configuration.md)。
 
 `cyber.yaml` 示例：
 
@@ -81,7 +84,7 @@ make ARSENAL_EMBED=1 # 下载工具并嵌入，运行时自动释放
 
 Go 版本见 [go.mod](go.mod)；full 还需要 Node.js/npm，standard 与 full 均使用 CGO_ENABLED=0。构建标签由 [editions.env](editions.env) 定义；原生录屏需要 CGO，另见 [record](docs/record.md)。工具清单、离线分发和版本跟随见 [内嵌 Arsenal 工具](docs/arsenal-bundles.md)。
 
-自定义发行版使用 `harness.BaseExtensions(config)` 取得基础扩展，追加自己的扩展后交给 `extension.New`，由宿主持有 Load/Close；完整参考发行版的组装位于 [cmd/aiscan](cmd/aiscan)。嵌入方可用 [pkg/harness](pkg/harness) 构造通用宿主，或自行组合扩展；它不等价于完整 aiscan 发行版。可运行例子见 [examples/custom](examples/custom)，注册工具的最小示例见 [扩展开发](docs/development.md)。
+自定义发行版使用 `harness.BaseExtensions(config)` 取得基础扩展，追加自己的扩展后交给 `extension.New`，由宿主持有 Load/Close；完整参考发行版的组装位于 [cmd/aiscan](cmd/aiscan)。嵌入方可用 [pkg/harness](pkg/harness) 构造通用宿主，或自行组合扩展；它不等价于完整 cyber-scan 发行版。可运行例子见 [examples/custom](examples/custom)，注册工具的最小示例见 [扩展开发](docs/development.md)。
 
 ## 贡献
 

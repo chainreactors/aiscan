@@ -101,7 +101,7 @@ func TestConfigKeepsSettingsTheSharedProtoDoesNotModel(t *testing.T) {
 	}
 }
 
-func TestGeneratedDefaultsKeepSameOriginDerivation(t *testing.T) {
+func TestGeneratedDefaultsKeepIOAIndependent(t *testing.T) {
 	var document map[string]any
 	if err := yaml.Unmarshal([]byte(defaultConfig()), &document); err != nil {
 		t.Fatal(err)
@@ -112,8 +112,8 @@ func TestGeneratedDefaultsKeepSameOriginDerivation(t *testing.T) {
 	}
 	option := &cfg.Option{AgentOptions: cfg.AgentOptions{ServerURL: "http://web.test"}, Extensions: values}
 	value, err := ioaclient.ReadOptions(option)
-	if err != nil || value.URL != "http://web.test/ioa" {
-		t.Fatalf("generated defaults disabled embedded IOA: %+v, %v", value, err)
+	if err != nil || value.URL != "" {
+		t.Fatalf("generated defaults unexpectedly coupled IOA to Web: %+v, %v", value, err)
 	}
 }
 
@@ -214,7 +214,8 @@ func TestConfigSaveStaysReadableByTheFlagsLoader(t *testing.T) {
 // A full reference fixture for extension round-trip tests; init emits only explicit values.
 func defaultConfig() string {
 	defaults := defaultSections().Defaults()
-	// Omission keeps same-origin URL derivation; an explicit empty URL disables it.
+	// Omission keeps the IOA client independent; an explicit empty URL remains
+	// available for callers that want to force the local client mode.
 	if defaults[ioaclient.ConfigKey]["url"] == "" {
 		delete(defaults[ioaclient.ConfigKey], "url")
 	}

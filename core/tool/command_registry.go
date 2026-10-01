@@ -2,15 +2,12 @@ package tool
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
 	"strings"
 	"time"
-
-	aop "github.com/chainreactors/cyber/aop"
 
 	operationpb "github.com/chainreactors/cyber/aop/operation"
 	"github.com/chainreactors/cyber/core/extension"
@@ -128,36 +125,6 @@ func (r *CommandRegistry) DescriptionPath(name string) string {
 		return ""
 	}
 	return entry.Value.DescriptionPath
-}
-
-// ChoiceCommands shares the command registration lifetime; it is not another
-// registry. Consumers cannot retain callbacks beyond an acquired observation.
-func (r *CommandRegistry) ChoiceCommands() map[string]string {
-	result := make(map[string]string)
-	for _, entry := range r.store.Entries() {
-		if entry.Value.Choices != nil && entry.Value.Contract != "" {
-			result[entry.Name] = entry.Value.Contract
-		}
-	}
-	return result
-}
-
-func (r *CommandRegistry) Choices(ctx context.Context, name string, messages []*aop.Message) (state json.RawMessage, choices map[string]*aop.Content, err error) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			state, choices, err = nil, nil, operation.PanicError("command observation", name)
-			slog.ErrorContext(ctx, "command observation panicked", "command", name, "error", recovered, "stack", string(debug.Stack()))
-		}
-	}()
-	entry, call, release, err := r.store.Acquire(ctx, name)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer release()
-	if entry.Value.Choices == nil {
-		return nil, nil, nil
-	}
-	return entry.Value.Choices(call, messages)
 }
 
 func (r *CommandRegistry) Execute(ctx context.Context, name string, execution *Execution) (result any, err error) {

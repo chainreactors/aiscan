@@ -997,8 +997,8 @@ func TestUsageUnmarshalDeepSeek(t *testing.T) {
 	if u.CacheReadTokens != 80 {
 		t.Errorf("CacheReadTokens: want 80, got %d", u.CacheReadTokens)
 	}
-	if u.CacheWriteTokens != 20 {
-		t.Errorf("CacheWriteTokens: want 20, got %d", u.CacheWriteTokens)
+	if u.CacheWriteTokens != 0 || u.CacheMissTokens == nil || *u.CacheMissTokens != 20 {
+		t.Errorf("DeepSeek cache misses are not cache writes: %+v", u)
 	}
 }
 

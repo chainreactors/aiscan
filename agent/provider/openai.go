@@ -29,6 +29,9 @@ func (p *OpenAIProvider) Name() string {
 	return p.config.Provider
 }
 
+// Identity excludes credentials while distinguishing deployments of one model.
+func (p *OpenAIProvider) Identity() string { return p.Name() + "/" + p.config.BaseURL }
+
 func (p *OpenAIProvider) supportsImages() bool {
 	if p.config.Images != nil {
 		return *p.config.Images
@@ -144,7 +147,7 @@ type openAIMessage struct {
 	Name             string           `json:"name,omitempty"`
 	Role             string           `json:"role"`
 	Content          any              `json:"content"`
-	ReasoningContent string           `json:"reasoning_content,omitempty"`
+	ReasoningContent *string          `json:"reasoning_content,omitempty"`
 	ToolCalls        []openAIToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string           `json:"tool_call_id,omitempty"`
 }
@@ -201,7 +204,7 @@ func aopToOpenAIMessages(messages []*aop.Message) []openAIMessage {
 					text.WriteString(value.Text.Text)
 				}
 			case *aop.Content_Reasoning:
-				wire.ReasoningContent = value.Reasoning.Text
+				wire.ReasoningContent = &value.Reasoning.Text
 			case *aop.Content_Media:
 				if media := value.Media; media.Kind == "image" && media.Resource != nil {
 					if data := media.Resource.GetData(); len(data) > 0 {
@@ -301,11 +304,13 @@ func marshalOpenAIRequest(req *ChatCompletionRequest) ([]byte, error) {
 // --- OpenAI response parsing ---
 
 type openAIUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
-	CacheReadTokens  int `json:"cache_read_tokens,omitempty"`
-	CacheWriteTokens int `json:"cache_write_tokens,omitempty"`
+	PromptTokens     int  `json:"prompt_tokens"`
+	CompletionTokens int  `json:"completion_tokens"`
+	TotalTokens      int  `json:"total_tokens"`
+	CacheReadTokens  int  `json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens int  `json:"cache_write_tokens,omitempty"`
+	CacheMissTokens  *int `json:"prompt_cache_miss_tokens,omitempty"`
+	ReasoningTokens  *int `json:"reasoning_tokens,omitempty"`
 }
 
 func (u *openAIUsage) UnmarshalJSON(data []byte) error {
@@ -318,6 +323,9 @@ func (u *openAIUsage) UnmarshalJSON(data []byte) error {
 			CacheWriteTokens int `json:"cache_write_tokens"`
 		} `json:"prompt_tokens_details,omitempty"`
 		// DeepSeek format
+		CompletionTokensDetails *struct {
+			ReasoningTokens *int `json:"reasoning_tokens"`
+		} `json:"completion_tokens_details"`
 		PromptCacheHitTokens  *int `json:"prompt_cache_hit_tokens,omitempty"`
 		PromptCacheMissTokens *int `json:"prompt_cache_miss_tokens,omitempty"`
 	}
@@ -330,9 +338,10 @@ func (u *openAIUsage) UnmarshalJSON(data []byte) error {
 		u.CacheWriteTokens = raw.PromptTokensDetails.CacheWriteTokens
 	} else if raw.PromptCacheHitTokens != nil {
 		u.CacheReadTokens = *raw.PromptCacheHitTokens
-		if raw.PromptCacheMissTokens != nil {
-			u.CacheWriteTokens = *raw.PromptCacheMissTokens
-		}
+	}
+	u.CacheMissTokens = raw.PromptCacheMissTokens
+	if raw.CompletionTokensDetails != nil {
+		u.ReasoningTokens = raw.CompletionTokensDetails.ReasoningTokens
 	}
 	return nil
 }
@@ -341,7 +350,14 @@ func (u *openAIUsage) toProto() *aop.TokenUsage {
 	if u == nil {
 		return nil
 	}
-	return TokenUsage(u.PromptTokens, u.CompletionTokens, u.TotalTokens, u.CacheReadTokens, u.CacheWriteTokens)
+	out := TokenUsage(u.PromptTokens, u.CompletionTokens, u.TotalTokens, u.CacheReadTokens, u.CacheWriteTokens)
+	if u.CacheMissTokens != nil {
+		out.Detail["cache_miss"] = uint64(max(0, *u.CacheMissTokens))
+	}
+	if u.ReasoningTokens != nil {
+		out.Detail["reasoning"] = uint64(max(0, *u.ReasoningTokens))
+	}
+	return out
 }
 
 type openAIResponseMessage struct {
@@ -356,7 +372,9 @@ func openAIMessageToAOP(msg *openAIResponseMessage) *aop.Message {
 		msg.Role = "assistant"
 	}
 	out := &aop.Message{Role: msg.Role}
-	if msg.ReasoningContent != nil && *msg.ReasoningContent != "" {
+	// An explicitly empty reasoning field is still part of the provider's
+	// history contract (notably DeepSeek's successive tool calls).
+	if msg.ReasoningContent != nil {
 		out.Content = append(out.Content, aop.Reasoning(*msg.ReasoningContent))
 	}
 	if msg.Content != nil && *msg.Content != "" {
@@ -451,7 +469,7 @@ func parseOpenAIStreamChunk(data []byte) (ChatCompletionStreamEvent, error) {
 			Operation: aop.DeltaOperation_DELTA_OPERATION_APPEND,
 			Value:     &aop.MessageDelta_Text{Text: *delta.Content},
 		}
-	} else if delta.ReasoningContent != nil && *delta.ReasoningContent != "" {
+	} else if delta.ReasoningContent != nil {
 		event.MessageDelta = &aop.MessageDelta{
 			Operation: aop.DeltaOperation_DELTA_OPERATION_APPEND,
 			Value:     &aop.MessageDelta_Reasoning{Reasoning: *delta.ReasoningContent},

@@ -1,5 +1,5 @@
 import type { ResultEvidence } from './cstx-runtime'
-import type { SCOResultModel } from '@cyber/cstx-easm'
+import type { SCOResultModel, Vuln } from '@cyber/cstx-easm'
 
 export type { SCOResultModel, SCOHostGroup, SCOPortNode, SCOMetrics } from '@cyber/cstx-easm'
 
@@ -32,7 +32,7 @@ export type FindingItem = {
   status?: string
   evidence?: ResultEvidence[]
   tags: string[]
-  detail?: string
+  detail?: Vuln
 }
 
 /**
@@ -74,7 +74,7 @@ export function buildFindingsFromSCO(model: SCOResultModel): FindingItem[] {
           target,
           description: vuln.vuln_id && vuln.vuln_id !== title ? vuln.vuln_id : undefined,
           tags: vuln.tags || [],
-          detail: [vuln.request, vuln.response].filter(Boolean).join('\n\n') || undefined,
+          detail: vuln.request || vuln.response ? vuln : undefined,
         })
       }
     }

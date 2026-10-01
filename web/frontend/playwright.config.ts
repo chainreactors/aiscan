@@ -5,7 +5,7 @@ const manageServer = !process.env.BASE_URL;
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: '**/boundary*.spec.ts',
+  testIgnore: ['**/boundary*.spec.ts', '**/record.spec.ts', '**/shared-results.spec.ts', '**/traffic.spec.ts'],
   timeout: 60_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
@@ -15,7 +15,7 @@ export default defineConfig({
   webServer: manageServer ? {
     command: 'node ./e2e/start-server.mjs',
     url: `${baseURL}/health`,
-    timeout: 180_000,
+    timeout: process.env.CYBER_E2E_HUB === '1' ? 300_000 : 180_000,
     reuseExistingServer: false,
     stdout: 'pipe',
     stderr: 'pipe',

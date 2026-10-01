@@ -141,3 +141,35 @@ Native smoke tests are opt-in because they require an interactive desktop/X11 se
 ```bash
 go test -tags "record record_integration" ./pkg/exts/record
 ```
+
+## WebUI results
+
+The conversation displays `record` tool results: screenshot previews with an
+original-image download, completed MP4 playback/download, recording status,
+and capture errors. History replay uses the same typed AOP results. The WebUI
+does not add capture controls.
+
+`@cyber/viewer` owns the record/media presentation and retains the original
+`ToolResult` in its existing timeline entries. File download cards come from
+`@cyber/file-manager`; asset details use `@cyber/cstx-easm`; raw request/response
+evidence uses `@cyber/traffic`. aiscan supplies translations, data loading and
+authenticated media URLs without introducing another result DTO.
+
+URI resources are served through
+`GET /api/sessions/{sessionID}/media/{eventID}/{outputIndex}`. The server resolves
+the persisted result and its assigned node, then reads the resource using
+bounded `aop.file` requests. HTTP Range supports video seeking; `?download=1`
+downloads the original file. Remote files require the assigned node to remain
+connected.
+
+Run frontend checks from `web/frontend`:
+
+```bash
+npm run build
+npm run test:e2e:record
+```
+
+The browser suite covers record previews, playback, seeking, downloads, status,
+errors and replay, plus the standalone cyber-ui file, tool, EASM and traffic
+components. Node/media transport checks run with
+`go test ./pkg/node ./pkg/web/service` from the repository root.

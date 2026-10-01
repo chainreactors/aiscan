@@ -1,4 +1,6 @@
 export default {
+  ips: 'IP', ports: '端口', apps: '应用', urls: 'URL', frameworks: '框架', vulns: '漏洞', details: '详情',
+  request: '请求', response: '响应',
   rawEvidence: '请求与响应证据',
   evidenceRecords: '{{count}} 条原始证据',
   verification_confirmed: '已确认',

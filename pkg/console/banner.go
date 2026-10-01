@@ -29,7 +29,7 @@ func (r *AgentConsole) renderBanner() {
 func (r *AgentConsole) bannerOutput() string {
 	colorEnabled := r.output != nil && r.output.color.Enabled
 	provider, model := r.providerModel()
-	modelText := "not configured - run `aiscan --init`"
+	modelText := "not configured - run `aiscan init`"
 	modelStyle := ansiWarn
 	switch {
 	case provider != "" && model != "":

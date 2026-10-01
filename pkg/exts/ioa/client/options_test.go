@@ -16,7 +16,7 @@ func TestClientOptionsAreExplicitAndIndependent(t *testing.T) {
 		want      string
 	}{
 		{"absent", "", nil, ""},
-		{"same origin", "https://token@example.test/base", nil, "https://token@example.test/base/ioa"},
+		{"web does not imply IOA", "https://token@example.test/base", nil, ""},
 		{"independent", "http://web.test", map[string]any{"url": "https://other@ioa.test"}, "https://other@ioa.test"},
 		{"explicit memory", "http://web.test", map[string]any{"url": ""}, ""},
 	} {

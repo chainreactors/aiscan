@@ -66,6 +66,7 @@ cyber-audit --workdir /path/to/repository
 cyber-audit --workdir /path/to/repository -p "Audit authentication and tenant isolation"
 cyber-audit --workdir /path/to/repository --task-file audit-task.txt
 cyber-audit --workdir /path/to/repository --resume /path/to/report/session.jsonl
+cyber-audit --workdir /path/to/repository --server-url http://access-key@127.0.0.1:8080 --node-name audit-1
 cyber-audit tools install
 cyber-audit doctor
 cyber-audit validate /path/to/report

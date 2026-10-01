@@ -36,6 +36,8 @@ func (p *AnthropicProvider) Name() string {
 	return p.config.Provider
 }
 
+func (p *AnthropicProvider) Identity() string { return p.Name() + "/" + p.config.BaseURL }
+
 func (p *AnthropicProvider) supportsImages() bool {
 	if p.config.Images != nil {
 		return *p.config.Images

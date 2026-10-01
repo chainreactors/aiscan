@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/chainreactors/cyber/core/extension"
+	"github.com/chainreactors/cyber/core/hooks"
 	coretool "github.com/chainreactors/cyber/core/tool"
 )
 
@@ -17,7 +18,7 @@ func TestExtensionOwnsRecordTool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	set, err := extension.New(registry, instance)
+	set, err := extension.New(extension.Provided[*hooks.Registry](hooks.New()), registry, instance)
 	if err != nil {
 		t.Fatal(err)
 	}

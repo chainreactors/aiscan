@@ -107,7 +107,7 @@ func TestBuildManifestIsConsistent(t *testing.T) {
 	values := readBuildManifest(t)
 	base := sortedTags(manifestValue(t, values, "BASE_TAGS"))
 
-	for _, manifest := range []string{"STANDARD", "FULL", "RECORD"} {
+	for _, manifest := range []string{"STANDARD", "FULL", "RECORD", "WEB"} {
 		full := sortedTags(manifestValue(t, values, manifest+"_TAGS"))
 		caps := sortedTags(manifestValue(t, values, manifest+"_CAPS_TAGS"))
 
@@ -124,7 +124,7 @@ func TestBuildManifestIsConsistent(t *testing.T) {
 	widest := sortedTags(manifestValue(t, values, "RECORD_TAGS"))
 	for _, key := range []string{
 		"BASE_TAGS", "STANDARD_CAPS_TAGS", "FULL_CAPS_TAGS", "RECORD_CAPS_TAGS",
-		"STANDARD_TAGS", "FULL_TAGS",
+		"STANDARD_TAGS", "FULL_TAGS", "WEB_TAGS", "WEB_CAPS_TAGS",
 	} {
 		for _, tag := range sortedTags(manifestValue(t, values, key)) {
 			if !slices.Contains(widest, tag) {

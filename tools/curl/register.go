@@ -12,7 +12,5 @@ func NewCommand(logger telemetry.Logger, proxy string, events aop.EventPublisher
 		Name: impl.Name(), Usage: impl.Usage(), QuickReference: impl.QuickReference(),
 		DescriptionPath: "cyber://skills/cyber/okf/easm/curl.md",
 		Run:             impl.Run,
-		Choices:         impl.Choices,
-		Contract:        "curl-known-read-v1",
 	}
 }

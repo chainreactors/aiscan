@@ -193,7 +193,7 @@ func runDirectScannerMode(ctx context.Context, newProfile func(profile.Request) 
 		return runScannerWithAgent(ctx, option, runtime, scannerArgs, logger, outputTask, finish)
 	}
 
-	if option.NoColor && scannerArgs[0] == "scan" && !hasScannerFlag(scannerArgs[1:], "--no-color") {
+	if option.NoColor && scannerArgs[0] == "scan" && !toolargs.HasFlag(scannerArgs[1:], "--no-color") {
 		scannerArgs = append(scannerArgs, "--no-color")
 	}
 	sessionID := fmt.Sprintf("scan-%d", time.Now().UnixNano())

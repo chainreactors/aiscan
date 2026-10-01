@@ -1,4 +1,4 @@
-.DEFAULT_GOAL := standard
+.DEFAULT_GOAL := scan
 
 GO ?= go
 BASH ?= $(dir $(shell command -v sh))bash
@@ -42,6 +42,8 @@ endif
 
 STANDARD_BIN ?= $(BIN_DIR)/aiscan$(EXE)
 FULL_BIN ?= $(BIN_DIR)/aiscan-full$(EXE)
+SCAN_BIN ?= $(BIN_DIR)/cyber-scan$(EXE)
+WEB_BIN ?= $(BIN_DIR)/cyber-web$(EXE)
 RECORD_BIN ?= $(BIN_DIR)/aiscan-record$(EXE)
 AGENT_BIN ?= $(BIN_DIR)/agent$(EXE)
 AUDIT_BIN ?= $(BIN_DIR)/cyber-audit$(EXE)
@@ -111,16 +113,16 @@ endif
 RECORD_PREFIX := $(if $(CYBER_RECORD_PREFIX),$(CYBER_RECORD_PREFIX),$(PROJECT_ROOT)/.cache/native/record/$(RECORD_PLATFORM)_$(RECORD_ARCH))
 RECORD_BUILD_ENV := CGO_LDFLAGS="-L$(RECORD_PREFIX)/lib $(RECORD_EXTRA_LDFLAGS)"
 
-.PHONY: help prepare frontend proto-gen standard agent full record record-native web-build web-run web all clean harness harness-llm check-architecture embed-resources ldflags
+.PHONY: help prepare frontend proto-gen standard scan agent full record record-native web-build web-run web all clean harness harness-llm check-architecture embed-resources ldflags
 
 help:
-	@echo "aiscan build targets:"
-	@echo "  make / make standard  Build the standard aiscan edition"
+	@echo "Cyber build targets:"
+	@echo "  make / make scan      Build cyber-scan with all scanner capabilities"
 	@echo "  make agent            Build the minimal local agent binary"
 	@echo "  make audit ARSENAL_EMBED=1  Build audit with all required external tools"
-	@echo "  make full             Build frontend, then build the full edition"
+	@echo "  make full             Build the legacy aiscan-full adapter"
 	@echo "  make record           Build the record-enabled edition (supported platforms only)"
-	@echo "  make web              Build the full edition and start the Web UI"
+	@echo "  make web              Build cyber-web and start the profile-neutral Hub"
 	@echo "  make frontend         Build only web/frontend into web/static"
 	@echo "  make embed-arsenal    Download tools and generate target-specific embedding"
 	@echo "  make record-native    Install the recorder SDK"
@@ -129,7 +131,7 @@ help:
 	@echo "  make harness-llm      Run real LLM scenarios (requires explicit credentials)"
 	@echo "  make check-architecture  Run static repository and dependency guards"
 	@echo "  make ldflags          Print the -ldflags the build targets use"
-	@echo "  make all              Build the standard and full editions"
+	@echo "  make all              Build cyber-scan, cyber-web and cyber-audit"
 	@echo ""
 	@echo "Variables:"
 	@echo "  EMBED=1               Generate and embed resources instead of loading them"
@@ -216,15 +218,20 @@ record: $(EMBED_PREREQ) frontend record-native prepare
 	@echo "Built record-enabled edition: $(RECORD_BIN)"
 endif
 
-web-build: full
+scan: $(EMBED_PREREQ) frontend prepare
+	CGO_ENABLED=$(FULL_CGO) $(GO) build $(BUILD_FLAGS) -ldflags "$(GO_LDFLAGS) -X main.productName=cyber-scan" -tags "$(FULL_TAGS)" -o "$(SCAN_BIN)" ./cmd/aiscan
+	@echo "Built cyber-scan: $(SCAN_BIN)"
+
+web-build: frontend prepare
+	CGO_ENABLED=$(WEB_CGO) $(GO) build $(BUILD_FLAGS) -ldflags "$(GO_LDFLAGS)" -tags "$(WEB_TAGS)" -o "$(WEB_BIN)" ./cmd/cyber-web
 
 web-run:
-	"$(FULL_BIN)" web --addr "$(WEB_ADDR)" $(if $(strip $(WEB_TOKEN)),--token "$(WEB_TOKEN)",)
+	"$(WEB_BIN)" --addr "$(WEB_ADDR)" $(if $(strip $(WEB_TOKEN)),--token "$(WEB_TOKEN)",)
 
-web: full
-	"$(FULL_BIN)" web --addr "$(WEB_ADDR)" $(if $(strip $(WEB_TOKEN)),--token "$(WEB_TOKEN)",)
+web: web-build
+	"$(WEB_BIN)" --addr "$(WEB_ADDR)" $(if $(strip $(WEB_TOKEN)),--token "$(WEB_TOKEN)",)
 
-all: standard agent full
+all: scan web-build audit
 
 clean:
-	rm -f "$(STANDARD_BIN)" "$(FULL_BIN)" "$(RECORD_BIN)" "$(AGENT_BIN)"
+	rm -f "$(STANDARD_BIN)" "$(FULL_BIN)" "$(RECORD_BIN)" "$(AGENT_BIN)" "$(SCAN_BIN)" "$(WEB_BIN)" "$(AUDIT_BIN)"

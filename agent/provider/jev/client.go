@@ -5,6 +5,7 @@ package jev
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -83,7 +84,24 @@ func New(key, model string, timeout time.Duration) *Client {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
-	return &Client{APIKey: key, Model: model, Endpoint: Endpoint, Timeout: timeout, http: &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	// The deployed inference endpoint can stall HTTP/2 streams after accepting
+	// TLS. Keep this provider on HTTP/1.1 with connection reuse; changing the
+	// process-wide transport or increasing every request deadline hides the
+	// failure and would affect unrelated model/tool traffic.
+	transport := http.DefaultTransport
+	if native, ok := transport.(*http.Transport); ok {
+		native = native.Clone()
+		native.Protocols = new(http.Protocols)
+		native.Protocols.SetHTTP1(true)
+		if native.TLSClientConfig == nil {
+			native.TLSClientConfig = &tls.Config{}
+		}
+		// Clone can carry the default transport's already initialized h2 ALPN.
+		// The TLS negotiation must agree with the selected HTTP protocol.
+		native.TLSClientConfig.NextProtos = []string{"http/1.1"}
+		transport = native
+	}
+	return &Client{APIKey: key, Model: model, Endpoint: Endpoint, Timeout: timeout, http: &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 func (c *Client) Close() { c.http.CloseIdleConnections() }
 
@@ -120,6 +138,15 @@ func (c *Client) Exchange(ctx context.Context, input Request) (response *Respons
 		body = bytes.ReplaceAll(body, []byte(c.APIKey), []byte("[REDACTED]"))
 	}
 	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			timer := time.NewTimer(time.Duration(1<<(attempt-1)) * 250 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return nil, ctx.Err()
+			case <-timer.C:
+			}
+		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Endpoint, bytes.NewReader(body))
 		if err != nil {
 			return nil, err
@@ -134,6 +161,11 @@ func (c *Client) Exchange(ctx context.Context, input Request) (response *Respons
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
+			// A dropped connection does not produce a judgment. Retry this
+			// inference only, within the same request budget; no tool is replayed.
+			if attempt < 2 && (errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)) {
+				continue
+			}
 			message := err.Error()
 			if c.APIKey != "" {
 				message = strings.ReplaceAll(message, c.APIKey, "[REDACTED]")
@@ -144,17 +176,16 @@ func (c *Client) Exchange(ctx context.Context, input Request) (response *Respons
 		res.Body.Close()
 		if readErr != nil || len(raw) > 1<<20 {
 			c.missing.Add(1)
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			if attempt < 2 && (errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF)) {
+				continue
+			}
 			return nil, errors.New("invalid JEV response body")
 		}
 		if (res.StatusCode == 429 || res.StatusCode == 529) && attempt < 2 {
 			c.missing.Add(1)
-			timer := time.NewTimer(time.Duration(1<<attempt) * 250 * time.Millisecond)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return nil, ctx.Err()
-			case <-timer.C:
-			}
 			continue
 		}
 		if res.StatusCode != 200 {

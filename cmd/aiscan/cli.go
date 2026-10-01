@@ -26,6 +26,9 @@ import (
 
 const runModeWeb cfg.RunMode = "web"
 
+// Release builds select the distribution name without changing legacy hosts.
+var productName = "aiscan"
+
 func cliCommandSummary() string {
 	base := "agent, web, serve"
 	summaries := scannerext.Names()
@@ -83,7 +86,7 @@ func cyber() {
 
 // runCLI returns only after resources have closed. Process exit belongs to main.
 func runCLI(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, setInterrupt func(func() bool)) (resultErr error) {
-	if handled, err := configuration.Run(ctx, args, configuration.Host{Name: "aiscan", Sections: defaultSections(), Checks: configChecks, Out: stdout, Err: stderr}); handled {
+	if handled, err := configuration.Run(ctx, args, configuration.Host{Name: productName, Sections: defaultSections(), Checks: configChecks, Out: stdout, Err: stderr}); handled {
 		return err
 	}
 	if len(args) == 0 {
@@ -104,7 +107,7 @@ func runCLI(ctx context.Context, args []string, stdin io.Reader, stdout, stderr 
 	}
 	explicitOption := option
 	if option.Version {
-		_, err := fmt.Fprintf(stdout, "aiscan v%s\n", cfg.Version)
+		_, err := fmt.Fprintf(stdout, "%s v%s\n", productName, cfg.Version)
 		return err
 	}
 	if option.ViewFile != "" {
@@ -278,7 +281,7 @@ func parseScannerCLI(scannerName string, rootArgs, scannerRest []string, stdout 
 	} else {
 		scannerArgs = append([]string(nil), scannerRest...)
 	}
-	if boolFlagEnabled(scannerArgs, "--debug") {
+	if scannerBoolFlagEnabled(scannerArgs, "--debug") {
 		option.Debug = true
 	}
 	if err := validateOutputFlags(&option); err != nil {
@@ -369,6 +372,7 @@ func buildOption(cli *cliOptions, parser *goflags.Parser) cfg.Option {
 
 func newCLIParser(cli *cliOptions, options goflags.Options) *goflags.Parser {
 	parser := goflags.NewParser(cli, options)
+	parser.Name = productName
 	configuration.RegisterHelp(parser)
 	for _, name := range scannerext.Names() {
 		if _, err := parser.AddCommand(name, scannerext.Description(name), "", &struct{}{}); err != nil {
@@ -403,6 +407,7 @@ Examples:
   aiscan agent -p "find web services and check vulnerabilities" -i 192.168.1.0/24
   aiscan web --addr 0.0.0.0:8080
   aiscan serve --token mykey --addr 0.0.0.0:8765`, strings.Join(scannerext.UsageLines(), "\n"))
+	parser.Usage = strings.ReplaceAll(parser.Usage, "aiscan", productName)
 	return parser
 }
 
@@ -688,19 +693,6 @@ func truthyFlagValue(value string) bool {
 	default:
 		return false
 	}
-}
-
-func boolFlagEnabled(args []string, flag string) bool {
-	for _, arg := range args {
-		if arg == flag {
-			return true
-		}
-		if strings.HasPrefix(arg, flag+"=") {
-			v := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(arg, flag+"=")))
-			return v != "false" && v != "0" && v != "no"
-		}
-	}
-	return false
 }
 
 type signalHandler struct {
