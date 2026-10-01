@@ -49,7 +49,7 @@ ioa send <session-id-or-name> "remote follow-up" --ref-nodes <node_id>
 ioa read --message <dispatch_message_id>
 ```
 
-名称在目标 Node 的活跃 Session 中唯一时可用；Session ID 精确匹配优先，重名拒绝投递。Session ID 可从派发返回值和 `subagent list` 获取。跨 Node 发送时增加 `--ref-nodes <node_id>`。旧 `--target-session` 保留兼容。
+名称在目标 Node 的活跃 Session 中唯一时可用；Session ID 精确匹配优先，重名拒绝投递。Session ID 可从派发返回值和 `subagent list` 获取。跨 Node 发送时增加 `--ref-nodes <node_id>`。JSON 消息使用 `ioa send SESSION --content JSON`，协议消息使用 `ioa send SESSION PROTOCOL [options]`。协议名作为正文时用 JSON 消息，避免与协议命令歧义。
 
 短命令将文本封装为 JSON，继续使用 SDK 发送。名称解析复用扩展现有 Session 路由。源 Session 从执行上下文注入，目标 Session 写入 IOA metadata；消息关联沿用 Refs.Messages，仅在正文提及 ID 不会建立回复链。同 Node 定向消息不会被自身发送者过滤。没有目标 Session 的外部消息只进入主会话或唯一普通会话，歧义时拒绝投递。
 

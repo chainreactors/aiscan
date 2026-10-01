@@ -55,8 +55,23 @@ func migrateSchema(ctx context.Context, orm *bun.DB, schema SchemaModule) error 
 				return fmt.Errorf("migrate %s: %w", table, err)
 			}
 		}
+		if err := migrateSessionRecords(ctx, tx); err != nil {
+			return fmt.Errorf("migrate session records: %w", err)
+		}
 		return validateSchema(tx, schema)
 	})
+}
+
+// Scan associations are read from session_scans. Retire their old JSON copies
+// once at startup so normal session reads use the current protobuf directly.
+func migrateSessionRecords(ctx context.Context, tx bun.Tx) error {
+	_, err := tx.ExecContext(ctx, `UPDATE chat_sessions
+		SET session_json = json_remove(session_json, '$.scan_ids', '$.scanIds')
+		WHERE CASE WHEN json_valid(session_json) THEN
+			json_type(session_json, '$.scan_ids') IS NOT NULL OR
+			json_type(session_json, '$.scanIds') IS NOT NULL
+		ELSE false END`)
+	return err
 }
 
 func checkMigrationTriggers(ctx context.Context, tx bun.Tx, table string) error {

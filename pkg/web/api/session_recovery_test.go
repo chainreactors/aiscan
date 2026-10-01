@@ -10,11 +10,11 @@ import (
 
 type terminalSessionStore struct {
 	*sessionTestStore
-	events []*aop.EventDelivery
+	ended bool
 }
 
-func (s *terminalSessionStore) ListAOPEventsAfter(context.Context, string, int64, int) ([]*aop.EventDelivery, error) {
-	return s.events, nil
+func (s *terminalSessionStore) HasTurnEnded(context.Context, string, string) (bool, error) {
+	return s.ended, nil
 }
 
 type finishedSessionRuntime struct {
@@ -29,9 +29,7 @@ func TestCancelFinishedTurnConvergesAfterProviderFailureOrDisconnect(t *testing.
 		for _, terminalTurn := range []string{"requested", "another-turn", ""} {
 			t.Run(runtimeErr.Error()+"/"+terminalTurn, func(t *testing.T) {
 				store := &terminalSessionStore{sessionTestStore: &sessionTestStore{session: &types.SessionRecord{Session: &aop.Session{Id: "session", NodeId: "node"}}}}
-				if terminalTurn != "" {
-					store.events = []*aop.EventDelivery{{Event: &aop.Event{SessionId: "session", TurnId: terminalTurn, Payload: &aop.Event_TurnEnded{TurnEnded: &aop.TurnEnded{StopReason: "error"}}}}}
-				}
+				store.ended = terminalTurn == "requested"
 				sessions := NewSessions(store, &finishedSessionRuntime{sessionTestRuntime: &sessionTestRuntime{}, err: runtimeErr}, nil)
 				response, err := sessions.CancelTurn(t.Context(), "cancel", &aop.CancelTurnRequest{SessionId: "session", TurnId: "requested"})
 				if terminalTurn == "requested" {

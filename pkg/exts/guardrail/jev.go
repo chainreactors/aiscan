@@ -36,7 +36,7 @@ func (c JEVConfig) validate() error {
 	if _, ok := presets[c.Level]; !ok {
 		return fmt.Errorf("invalid JEV risk level")
 	}
-	if action(c.OnError) == Action_ACTION_UNSPECIFIED {
+	if c.OnError != "review" && c.OnError != "block" {
 		return fmt.Errorf("invalid JEV error policy")
 	}
 	for k, v := range c.Criteria {
@@ -80,11 +80,7 @@ func (e *jevPolicy) evaluate(ctx context.Context, ev toolhooks.CallEvent, conseq
 	if err != nil {
 		// Do not expose response bodies, provider errors, URLs, or credentials.
 		fallback := action(e.config.OnError)
-		// Unavailability is not evidence that execution is harmless. Legacy
-		// record fallback now requires review; automatic confirmation fails closed.
-		if fallback == Action_ACTION_RECORD {
-			fallback = Action_ACTION_REVIEW
-		}
+		// Unavailability is not evidence that execution is harmless.
 		if consequence {
 			fallback = Action_ACTION_BLOCK
 		}

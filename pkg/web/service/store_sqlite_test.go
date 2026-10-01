@@ -101,7 +101,8 @@ func TestSQLiteStoreCoreSchemaOnly(t *testing.T) {
 }
 
 func TestSessionScanAssociationsAreReadOnlyExtensions(t *testing.T) {
-	store, err := NewSQLiteStore(filepath.Join(t.TempDir(), "session-scan.db"), ScanSchema)
+	storePath := filepath.Join(t.TempDir(), "session-scan.db")
+	store, err := NewSQLiteStore(storePath, ScanSchema)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,14 +152,39 @@ func TestSessionScanAssociationsAreReadOnlyExtensions(t *testing.T) {
 		t.Fatalf("derived scan association persisted: %s", raw)
 	}
 	saved["scanIds"] = json.RawMessage(`["old-scan"]`)
+	saved["scan_ids"] = json.RawMessage(`["another-old-scan"]`)
 	legacy, _ := json.Marshal(saved)
 	if _, err := store.db.Exec(`UPDATE chat_sessions SET session_json = ? WHERE id = ?`, string(legacy), "session-1"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := sessionFromJSON(string(legacy)); err == nil {
+		t.Fatal("session reader accepted retired fields")
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = NewSQLiteStore(storePath, ScanSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
 	if loaded, err := store.GetSession(ctx, "session-1"); err != nil {
 		t.Fatal(err)
 	} else {
 		assertLinked(loaded)
+	}
+	if err := store.db.QueryRow(`SELECT session_json FROM chat_sessions WHERE id = 'session-1'`).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	saved = nil
+	if err := json.Unmarshal([]byte(raw), &saved); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := saved["scanIds"]; exists {
+		t.Fatal("startup retained scanIds")
+	}
+	if _, exists := saved["scan_ids"]; exists {
+		t.Fatal("startup retained scan_ids")
 	}
 	saved["unexpectedField"] = json.RawMessage(`true`)
 	invalid, _ := json.Marshal(saved)

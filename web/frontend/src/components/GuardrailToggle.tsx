@@ -7,6 +7,7 @@ import { CONFIG_CHANGED_EVENT, getConfigStatus, setGuardrailMode } from '../api'
 
 export function GuardrailToggle({ disabled = false, onConfigure }: { disabled?: boolean; onConfigure: () => void }) {
   const { t } = useTranslation('app')
+  const [available, setAvailable] = useState(true)
   const [enabled, setEnabled] = useState<boolean | null>(null)
   const [mode, setMode] = useState<'safe' | 'auto'>('auto')
   const [open, setOpen] = useState(false)
@@ -17,8 +18,9 @@ export function GuardrailToggle({ disabled = false, onConfigure }: { disabled?: 
     const refresh = () => {
       void getConfigStatus().then(config => {
         if (!disposed) {
+          setAvailable(!!config.extensions.guardrail)
           setError('')
-          setEnabled(config.extensions.jev?.configuredSecrets.includes('api_key') === true)
+          setEnabled(config.extensions.guardrail?.values?.provider === 'jev' && config.extensions.jev?.configuredSecrets.includes('api_key') === true)
           setMode(config.extensions.guardrail?.values?.mode === 'safe' ? 'safe' : 'auto')
         }
       }).catch(cause => { if (!disposed) setError(cause instanceof Error ? cause.message : String(cause)) })
@@ -34,11 +36,12 @@ export function GuardrailToggle({ disabled = false, onConfigure }: { disabled?: 
     setError('')
     try {
       const config = await setGuardrailMode(nextMode)
-      setEnabled(config.extensions.jev?.configuredSecrets.includes('api_key') === true)
+      setEnabled(config.extensions.guardrail?.values?.provider === 'jev' && config.extensions.jev?.configuredSecrets.includes('api_key') === true)
       setMode(config.extensions.guardrail?.values?.mode === 'safe' ? 'safe' : 'auto')
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)) }
     finally { setSaving(false) }
   }
+  if (!available) return null
   const value = enabled ? mode : 'unconfigured'
   const label = t(saving ? 'guardrailSaving' : enabled === null ? 'guardrailLoading' : 'guardrailChoice_' + value)
   const Icon = enabled ? ShieldCheck : ShieldOff

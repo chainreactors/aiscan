@@ -68,3 +68,44 @@ func TestBeforeModelFailureReturnsToModel(t *testing.T) {
 		t.Fatalf("%v %v", result, err)
 	}
 }
+
+func TestAfterModelObservesCompleteOutputAndCannotRewriteTranscript(t *testing.T) {
+	registry := corehooks.New()
+	echo := &recordingTool{name: "echo", output: "ok"}
+	llm := &scriptedProvider{streamEventBatches: [][]ChatCompletionStreamEvent{
+		{roleDelta("assistant"), toolCallDelta(0, "one", "echo", `{"value":`), toolCallDelta(0, "", "", `"x"}`), toolCallDelta(1, "two", "echo", `{"value":"y"}`), {Done: true}},
+		{roleDelta("assistant"), textDelta("fi"), textDelta("nal"), {Done: true}},
+	}}
+	calls := 0
+	hooks.AfterModel.On(registry, "observe", func(ctx context.Context, ev hooks.ContextEvent) (struct{}, error) {
+		calls++
+		cfg, ok := ToolAgentConfig(ctx)
+		if !ok || cfg.Provider == nil {
+			t.Error("hook has no borrowed model configuration")
+		}
+		last := ev.Messages[len(ev.Messages)-1]
+		if calls == 1 && len(provider.MessageToolCalls(last)) != 2 {
+			t.Error("tool batch was split or incomplete")
+		}
+		if calls == 2 && provider.MessageText(last) != "final" {
+			t.Error("final text incomplete")
+		}
+		last.Content = []*aop.Content{aop.Text("corrupted")}
+		return struct{}{}, errors.New("observer failure")
+	})
+	result, err := NewAgent(Config{Loop: StandardLoop{}, Provider: llm, Tools: newTestTools(t, echo), Hooks: registry, Stream: true}).Run(t.Context(), TextInput("Use both calls"))
+	if err != nil || result.Output != "final" || calls != 2 || len(echo.callsSnapshot()) != 2 {
+		t.Fatalf("result=%v error=%v hooks=%d", result, err, calls)
+	}
+}
+
+func TestAfterModelDoesNotObserveFailedStreamRetry(t *testing.T) {
+	registry := corehooks.New()
+	calls := 0
+	hooks.AfterModel.On(registry, "observe", func(context.Context, hooks.ContextEvent) (struct{}, error) { calls++; return struct{}{}, nil })
+	llm := &flakyStreamProvider{events: []ChatCompletionStreamEvent{roleDelta("assistant"), textDelta("done"), {Done: true}}}
+	_, err := NewAgent(Config{Loop: StandardLoop{}, Provider: llm, Hooks: registry, Stream: true, MaxRetries: 1}).Run(t.Context(), TextInput("task"))
+	if err != nil || calls != 1 || llm.calls.Load() != 2 {
+		t.Fatalf("err=%v hooks=%d requests=%d", err, calls, llm.calls.Load())
+	}
+}

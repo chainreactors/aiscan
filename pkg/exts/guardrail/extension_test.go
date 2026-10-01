@@ -140,7 +140,9 @@ func TestInteractionModeConfiguration(t *testing.T) {
 			t.Errorf("valid mode %q rejected: %v", mode, err)
 		}
 	}
-	if _, err := (Config{Mode: "unknown"}).timeout(); err == nil {
-		t.Fatal("invalid interaction mode accepted")
+	for _, config := range []Config{{Mode: "unknown"}, {Mode: "off"}, {JEV: JEVConfig{OnError: "record"}}} {
+		if _, err := config.timeout(); err == nil {
+			t.Fatal("invalid guardrail configuration accepted")
+		}
 	}
 }

@@ -248,37 +248,3 @@ func TestSessionOperationScopeUsesTheCanonicalSessionID(t *testing.T) {
 		t.Fatal("whitespace bypassed same-session serialization")
 	}
 }
-
-type turnReplayStore struct {
-	*sessionTestStore
-	events []*aop.EventDelivery
-}
-
-func (s *turnReplayStore) ListAOPEventsAfter(context.Context, string, int64, int) ([]*aop.EventDelivery, error) {
-	return s.events, nil
-}
-
-func TestLegacyStoreTerminalLookupMatchesOriginAndExecutionGeneration(t *testing.T) {
-	rootEnd := &aop.EventDelivery{Event: &aop.Event{SessionId: "root", TurnId: "turn", Payload: &aop.Event_TurnEnded{TurnEnded: &aop.TurnEnded{}}}}
-	childEnd := &aop.EventDelivery{Event: &aop.Event{SessionId: "child", TurnId: "turn", Payload: &aop.Event_TurnEnded{TurnEnded: &aop.TurnEnded{}}}}
-	rootStart := &aop.EventDelivery{Event: &aop.Event{SessionId: "root", TurnId: "turn", Payload: &aop.Event_TurnStarted{TurnStarted: &aop.TurnStarted{}}}}
-	for _, scenario := range []struct {
-		name   string
-		events []*aop.EventDelivery
-		ended  bool
-	}{
-		{"root completed", []*aop.EventDelivery{rootEnd}, true},
-		{"child completed only", []*aop.EventDelivery{childEnd}, false},
-		{"new generation running", []*aop.EventDelivery{rootEnd, rootStart, childEnd}, false},
-		{"new generation completed", []*aop.EventDelivery{rootEnd, rootStart, childEnd, rootEnd}, true},
-	} {
-		t.Run(scenario.name, func(t *testing.T) {
-			store := &turnReplayStore{sessionTestStore: &sessionTestStore{}, events: scenario.events}
-			sessions := NewSessions(store, nil, nil)
-			ended, err := sessions.turnEnded(t.Context(), "root", "turn")
-			if err != nil || ended != scenario.ended {
-				t.Fatalf("ended=%v error=%v", ended, err)
-			}
-		})
-	}
-}

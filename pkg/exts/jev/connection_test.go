@@ -24,7 +24,7 @@ func TestConnectionEnvironmentAndSecretPrecedence(t *testing.T) {
 		{"incoming", "fixture-stored-key", "fixture-incoming-key", "fixture-incoming-key"},
 	}
 	config := func(key string) *types.DistributeConfig {
-		fields, err := structpb.NewStruct(map[string]any{"api_key": key, "on_error": "record"})
+		fields, err := structpb.NewStruct(map[string]any{"api_key": key})
 		if err != nil {
 			t.Fatal(err)
 		}

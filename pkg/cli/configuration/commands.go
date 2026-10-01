@@ -77,15 +77,12 @@ func RegisterHelp(parser *flags.Parser) {
 	_, _ = parser.AddCommand("doctor", "Check configuration and host dependencies", "", &doctorOptions{})
 }
 
-func selected(args []string) (string, bool) {
+func selected(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		key, _, inline := strings.Cut(arg, "=")
-		if key == "--init" {
-			return "init", true
-		}
 		if !strings.HasPrefix(arg, "-") {
-			return arg, false
+			return arg
 		}
 		switch key {
 		case "--config", "-c", "--workdir", "--data-dir", "--profile", "--provider", "--model", "--base-url", "--api-key", "--llm-proxy", "--max-tokens", "--context-window":
@@ -94,14 +91,14 @@ func selected(args []string) (string, bool) {
 			}
 		case "--json":
 		default:
-			return "", false
+			return ""
 		}
 	}
-	return "", false
+	return ""
 }
 
 func Run(ctx context.Context, args []string, host Host) (bool, error) {
-	name, legacy := selected(args)
+	name := selected(args)
 	if name != "init" && name != "config" && name != "doctor" {
 		return false, nil
 	}
@@ -120,17 +117,6 @@ func Run(ctx context.Context, args []string, host Host) (bool, error) {
 	if host.Sections == nil {
 		host.Sections = cfg.NewSections()
 	}
-	if legacy {
-		args = append([]string(nil), args...)
-		for i, a := range args {
-			if a == "--init" {
-				args[i] = "init"
-				break
-			}
-		}
-		args = append(args, "--non-interactive")
-		fmt.Fprintf(host.Err, "--init is deprecated; use %s init --project --non-interactive\n", host.Name)
-	}
 	var parsed commandOptions
 	parser := flags.NewParser(&parsed, flags.Default&^flags.PrintErrors)
 	parser.Name = host.Name
@@ -140,9 +126,6 @@ func Run(ctx context.Context, args []string, host Host) (bool, error) {
 			return true, nil
 		}
 		return true, err
-	}
-	if legacy && parsed.Config == "" {
-		parsed.Init.Project = true
 	}
 	var environment cfg.Context
 	if host.Context != nil {

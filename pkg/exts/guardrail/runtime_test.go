@@ -401,7 +401,7 @@ func TestModeChangesPreserveWaitingInvocation(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { _, err := toolhooks.Execute(callContext(), registry, "bash", "{}", run); done <- err }()
 	pending := nextReview(t, reviews)
-	for _, mode := range []Mode{ModeAuto, ModeOff, ModeSafe} {
+	for _, mode := range []Mode{ModeAuto, ModeSafe} {
 		if err := r.SetMode(mode); err != nil {
 			t.Fatal(err)
 		}
@@ -431,11 +431,8 @@ func TestModeChangesPreserveWaitingInvocation(t *testing.T) {
 	if terminal := nextReview(t, reviews); terminal.ResolutionSource != "control" {
 		t.Fatal("resolution source missing")
 	}
-	if err := r.SetMode(ModeOff); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := toolhooks.Execute(callContext(), registry, "bash", "{}", run); !errors.Is(err, operation.ErrDenied) || executions.Load() != 1 {
-		t.Fatal("legacy off bypassed mandatory screening")
+	if err := r.SetMode("off"); err == nil {
+		t.Fatal("removed off mode accepted")
 	}
 	if err := r.SetMode("invalid"); err == nil {
 		t.Fatal("invalid mode accepted")

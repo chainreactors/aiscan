@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestSharedLLMEnvironmentAndLegacyFallback(t *testing.T) {
+func TestSharedLLMEnvironment(t *testing.T) {
 	for _, suffix := range []string{"API_KEY", "BASE_URL", "MODEL", "PROVIDER"} {
 		t.Setenv("CYBER_"+suffix, "shared-"+suffix)
 		t.Setenv("CYBER_HARNESS_LLM_"+suffix, "legacy-"+suffix)
@@ -20,11 +20,7 @@ func TestSharedLLMEnvironmentAndLegacyFallback(t *testing.T) {
 		for _, include := range []bool{false, true} {
 			env := strings.Join(testEnvironment(include), "\n")
 			for _, suffix := range []string{"API_KEY", "BASE_URL", "MODEL", "PROVIDER"} {
-				prefix := "legacy-"
-				if shared {
-					prefix = "shared-"
-				}
-				if strings.Contains(env, "CYBER_"+suffix+"="+prefix+suffix) != include {
+				if strings.Contains(env, "CYBER_"+suffix+"=shared-"+suffix) != (include && shared) {
 					t.Fatalf("include=%v shared=%v suffix=%s", include, shared, suffix)
 				}
 			}
@@ -35,12 +31,11 @@ func TestSharedLLMEnvironmentAndLegacyFallback(t *testing.T) {
 	}
 }
 
-func TestRedactionCoversSharedAndLegacyKeys(t *testing.T) {
+func TestRedactionCoversSharedKey(t *testing.T) {
 	t.Setenv("CYBER_API_KEY", `shared-"key`)
-	t.Setenv("CYBER_HARNESS_LLM_API_KEY", "old-test-key")
 	encoded, _ := json.Marshal(`shared-"key`)
-	got := string(redactSecrets([]byte(`shared-"key old-test-key ` + string(encoded))))
-	if strings.Contains(got, "shared-") || strings.Contains(got, "old-test-key") || strings.Count(got, "[REDACTED]") != 3 {
+	got := string(redactSecrets([]byte(`shared-"key ` + string(encoded))))
+	if strings.Contains(got, "shared-") || strings.Count(got, "[REDACTED]") != 2 {
 		t.Fatalf("redaction failed: %s", got)
 	}
 }

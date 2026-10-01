@@ -35,7 +35,7 @@ func runLiveSiblings(t *testing.T, memory bool) {
 	// Subtasks are given to the parent as user instructions. Only the real
 	// parent's subagent tool may create them; the harness sends one root turn.
 	common := `Use only bash IOA commands, timeout=10. Ongoing messages arrive as user messages with origin="peer", message_id, and source_session_id. Send exactly with:
-ioa send --content '{"text":"TEXT"}' --target-session SESSION --ref-messages MESSAGE
+ioa send SESSION --content '{"text":"TEXT"}' --ref-messages MESSAGE
 For the initial offer omit --ref-messages. While awaiting an Inbox message, call ioa space nodes to keep running; do not return final text until the exchange is complete. Never invent IDs or nonce. No shell operators, files, external hosts, or extra tools.`
 	jobA := "HARNESS_A\n" + common + "\nUse ioa read --all --limit 20 to find worker-b's delegate handoff meta.subagent.session_id. Send offer:" + nonce + " targeted to that Session. Await reply:" + nonce + " in your peer Inbox. Send ack:" + nonce + " targeted to reply's source_session_id and referencing its message_id. Finish A_DONE:" + nonce + "."
 	jobB := "HARNESS_B\n" + common + "\nDo not use ioa read: discover the nonce only from offer:NONCE in your peer Inbox. Send reply:NONCE targeted to its source_session_id and referencing its message_id. Await ack:NONCE in peer Inbox, then finish B_DONE:NONCE."

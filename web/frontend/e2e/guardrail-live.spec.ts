@@ -21,7 +21,7 @@ async function rpc(request: APIRequestContext, service: string, method: string, 
   return response.json()
 }
 
-// Teardown has its own timeout and restores both provider policy and core mode.
+// Teardown has its own timeout and restores both provider policy and interaction mode.
 test.afterEach(async ({ request }) => {
   if (!original) return
   test.setTimeout(30_000)
@@ -30,8 +30,8 @@ test.afterEach(async ({ request }) => {
   const before = await agent()
   await rpc(request, 'config.ConfigService', 'UpdateConfig', { config: { extensions: original } })
   const restored = (await rpc(request, 'config.ConfigService', 'GetConfig', {})).config.extensions
-  expect(restored.jev.values.criteria || {}).toEqual(original.jev.criteria || {})
-  expect(restored.jev.values.enabled).toBe(original.jev.enabled)
+  expect(restored.guardrail.values.jev || {}).toEqual(original.guardrail.jev || {})
+  expect(restored.guardrail.values.provider).toBe(original.guardrail.provider || 'none')
   expect(restored.guardrail?.values?.mode || 'auto').toBe(original.guardrail.mode || 'auto')
   original = undefined
   await expect.poll(async () => {
@@ -68,8 +68,8 @@ test('live JEV: safe authorization and automatic agent continuation', async ({ p
   }
   await rpc(page.request, 'config.ConfigService', 'UpdateConfig', {
     config: { extensions: {
-      jev: { ...original.jev, enabled: true, on_error: 'block', criteria },
-      guardrail: { ...original.guardrail, mode: 'safe' },
+      jev: original.jev,
+      guardrail: { ...original.guardrail, provider: 'jev', mode: 'safe', jev: { on_error: 'block', criteria } },
     } },
   })
   await waitForReload(previous)
@@ -78,8 +78,8 @@ test('live JEV: safe authorization and automatic agent continuation', async ({ p
   if (await expand.isVisible()) await expand.click()
   await expect(page.locator('[data-guardrail-control]')).toHaveCount(1)
   for (const selection of [
-    { option: 'Automatic mode', enabled: true, mode: 'auto' },
-    { option: 'Safe mode', enabled: true, mode: 'safe' },
+    { option: 'Automatic mode', mode: 'auto' },
+    { option: 'Safe mode', mode: 'safe' },
   ]) {
     const before = await agent()
     let updates = 0
@@ -94,9 +94,9 @@ test('live JEV: safe authorization and automatic agent continuation', async ({ p
     page.off('request', countUpdate)
     expect(updates, 'changing mode applies one configuration update').toBe(1)
     const saved = (await rpc(page.request, 'config.ConfigService', 'GetConfig', {})).config.extensions
-    expect(saved.jev.values.enabled).toBe(selection.enabled)
+    expect(saved.guardrail.values.provider).toBe('jev')
     expect(saved.guardrail.values.mode).toBe(selection.mode)
-    expect(saved.jev.values.criteria).toEqual(criteria)
+    expect(saved.guardrail.values.jev.criteria).toEqual(criteria)
     await expect(page.locator('[data-guardrail-control]')).toHaveCount(1)
   }
   const results: object[] = []
@@ -117,7 +117,7 @@ test('live JEV: safe authorization and automatic agent continuation', async ({ p
       await expect(page.getByRole('button', { name: 'Guardrail: Automatic mode', exact: true })).toBeVisible()
       const saved = (await rpc(page.request, 'config.ConfigService', 'GetConfig', {})).config.extensions
       expect(saved.guardrail.values.mode).toBe('auto')
-      expect(saved.jev.values.criteria).toEqual(criteria)
+      expect(saved.guardrail.values.jev.criteria).toEqual(criteria)
       mode = scenario.mode
     }
     const previousURL = page.url()

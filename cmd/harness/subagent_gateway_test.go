@@ -558,8 +558,8 @@ func (g *subagentGateway) validateCommand(role, command string) error {
 		texts = []string{"reply:" + g.nonce}
 	}
 	for _, text := range texts {
-		prefix := `ioa send --content '{"text":"` + text + `"}'`
-		if regexp.MustCompile("^" + regexp.QuoteMeta(prefix) + ` --target-session [a-f0-9]{16,40}( --ref-messages [a-f0-9]{20,40})?$`).MatchString(command) {
+		body := ` --content '{"text":"` + text + `"}'`
+		if regexp.MustCompile(`^ioa send [a-f0-9]{16,40}` + regexp.QuoteMeta(body) + `( --ref-messages [a-f0-9]{20,40})?$`).MatchString(command) {
 			return nil
 		}
 	}

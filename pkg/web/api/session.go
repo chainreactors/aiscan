@@ -40,6 +40,7 @@ type SessionStore interface {
 	DeleteSession(context.Context, string) error
 	LinkScanToSession(context.Context, string, string) error
 	ListAOPEventsAfter(context.Context, string, int64, int) ([]*aop.EventDelivery, error)
+	HasTurnEnded(context.Context, string, string) (bool, error)
 }
 
 // SessionRuntime is the Agent/AOP execution boundary. Sessions owns request
@@ -387,7 +388,7 @@ func (s *Sessions) CancelTurn(ctx context.Context, requestID string, request *ao
 			// the control request, so the runtime quite correctly reports that no
 			// run is active anymore. Treat the durable terminal as success and
 			// let the client converge its busy state.
-			ended, lookupErr := s.turnEnded(ctx, request.SessionId, request.TurnId)
+			ended, lookupErr := s.store.HasTurnEnded(ctx, request.SessionId, request.TurnId)
 			if lookupErr != nil {
 				return nil, fmt.Errorf("check turn state: %w", lookupErr)
 			}
@@ -407,35 +408,6 @@ func (s *Sessions) CancelTurn(ctx context.Context, requestID string, request *ao
 		TurnId:    request.TurnId,
 		State:     "canceled",
 	}}})
-}
-
-func (s *Sessions) turnEnded(ctx context.Context, sessionID, turnID string) (bool, error) {
-	if indexed, ok := s.store.(interface {
-		HasTurnEnded(context.Context, string, string) (bool, error)
-	}); ok {
-		return indexed.HasTurnEnded(ctx, sessionID, turnID)
-	}
-	items, err := s.store.ListAOPEventsAfter(ctx, sessionID, 0, 0)
-	if err != nil {
-		return false, err
-	}
-	for index := len(items) - 1; index >= 0; index-- {
-		item := items[index]
-		if item == nil || item.Event == nil || item.Event.TurnId != turnID {
-			continue
-		}
-		event := item.Event
-		if event.SessionId != "" && event.SessionId != sessionID {
-			continue
-		}
-		if event.GetTurnEnded() != nil {
-			return true, nil
-		}
-		if event.GetTurnStarted() != nil {
-			return false, nil
-		}
-	}
-	return false, nil
 }
 
 func (s *Sessions) CloseSession(ctx context.Context, requestID string, request *aop.CloseSessionRequest) (*aop.CloseSessionResponse, error) {

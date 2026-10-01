@@ -152,20 +152,8 @@ func buildAIScanProfile(config config) (*aiscanProfile, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Normalize legacy risk settings once, independently of acceleration mode.
+	// Screening is selected explicitly and independently of acceleration.
 	guardrailValue := *guardrailConfig
-	if guardrailValue.Provider == "" && (jevConfig.Enabled || strings.TrimSpace(jevConfig.APIKey) != "") {
-		guardrailValue.Provider = "jev"
-		if guardrailValue.JEV.Level == "" {
-			guardrailValue.JEV.Level = jevConfig.Level
-		}
-		if guardrailValue.JEV.OnError == "" {
-			guardrailValue.JEV.OnError = jevConfig.OnError
-		}
-		if guardrailValue.JEV.Criteria == nil {
-			guardrailValue.JEV.Criteria = jevConfig.Criteria
-		}
-	}
 	graph, err := extensions(config.Base, loop, workDir, proxyExtension, guardrailValue)
 	if err != nil {
 		return nil, fmt.Errorf("construct Cyber application: %w", err)

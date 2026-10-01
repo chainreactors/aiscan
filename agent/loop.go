@@ -196,6 +196,7 @@ func (StandardLoop) Run(ctx context.Context, cfg Config) (*Result, error) {
 			return end(result, result.Err, StopReasonBudget)
 		}
 		transcript.append(assistant.message)
+		afterModelHook(ctx, cfg, transcript.messages, turn)
 		decisionPrepared = false
 
 		if cfg.TokenBudget > 0 {

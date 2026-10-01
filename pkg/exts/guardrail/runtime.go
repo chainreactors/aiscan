@@ -29,8 +29,6 @@ type Mode string
 const (
 	ModeSafe Mode = "safe"
 	ModeAuto Mode = "auto"
-	// ModeOff is a legacy value. It now selects automatic review, never bypasses checks.
-	ModeOff Mode = "off"
 )
 
 type pending struct {
@@ -59,7 +57,7 @@ func newRuntime(parent context.Context, stream *events.Stream, timeout time.Dura
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
 	}
-	if mode == "" || mode == ModeOff {
+	if mode == "" {
 		mode = ModeAuto
 	}
 	ctx, cancel := context.WithCancel(parent)
@@ -187,7 +185,7 @@ func (r *Runtime) Admit(ctx context.Context, ev toolhooks.CallEvent) (toolhooks.
 
 // SetMode affects future invocations only. It never releases existing reviews.
 func (r *Runtime) SetMode(mode Mode) error {
-	if mode == "" || mode == ModeOff {
+	if mode == "" {
 		mode = ModeAuto
 	}
 	if mode != ModeSafe && mode != ModeAuto {

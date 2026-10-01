@@ -69,7 +69,7 @@ func TestConfiguredKeyAlwaysInstallsTwoStageChecks(t *testing.T) {
 				extension.Provided[*hooks.Registry](registry),
 				extension.Provided[*events.Stream](events.New()),
 				extension.Provided[*jevapi.Client](client),
-				New(Config{Provider: "jev", JEV: JEVConfig{OnError: "record", Criteria: map[string]string{"review": "operator screening marker"}}}),
+				New(Config{Provider: "jev", JEV: JEVConfig{OnError: "review", Criteria: map[string]string{"review": "operator screening marker"}}}),
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -155,19 +155,16 @@ func TestProviderFailureFallbackAndCancellation(t *testing.T) {
 				fmt.Fprint(w, failure.body)
 			}))
 			defer server.Close()
-			for _, fallback := range []string{"record", "review", "block"} {
+			for _, fallback := range []string{"review", "block"} {
 				e := testPolicy(policyConfig{OnError: fallback})
 				e.client.Endpoint = server.URL
 				d, err := e.check(t.Context(), call())
 				want := action(fallback)
-				if fallback == "record" {
-					want = Action_ACTION_REVIEW
-				}
 				if err != nil || d.Action != want || strings.Contains(d.Reason, "private") {
 					t.Fatalf("decision=%v err=%v", d, err)
 				}
 			}
-			if calls.Load() != 3 {
+			if calls.Load() != 2 {
 				t.Fatalf("non-transient failures retried: %d", calls.Load())
 			}
 		})
@@ -180,7 +177,7 @@ func TestProviderFailureFallbackAndCancellation(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	e := testPolicy(policyConfig{Timeout: "30ms", OnError: "record"})
+	e := testPolicy(policyConfig{Timeout: "30ms", OnError: "review"})
 	e.client.Endpoint = server.URL
 	d, err := e.check(t.Context(), call())
 	if err != nil || d.Action != Action_ACTION_REVIEW {

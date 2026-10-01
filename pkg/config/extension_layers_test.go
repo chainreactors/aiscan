@@ -17,13 +17,6 @@ func TestLayeredExtensionDeclarationContract(t *testing.T) {
 			_, err := sections.Add(Section{
 				Key: "fixture", Aliases: []string{"old_fixture"}, Secrets: []string{"auth.token"},
 				New: func() any { return &fixtureOptions{Name: "default", Count: 3, Enabled: true} },
-				AliasFields: func(fields map[string]any) (map[string]any, error) {
-					if value, ok := fields["legacy_count"]; ok {
-						fields["count"] = value
-						delete(fields, "legacy_count")
-					}
-					return fields, nil
-				},
 				Environment: func(s Sources) (map[string]any, map[string]any, error) {
 					var overrides, fallbacks map[string]any
 					if v, ok := s.LookupEnv("FIXTURE_NAME"); ok {
@@ -54,7 +47,7 @@ func TestLayeredExtensionDeclarationContract(t *testing.T) {
 				wantName, wantCount = "fallback", 5
 			}
 			if mode == "files" || mode == "environment" || mode == "cli" {
-				putConfig(t, c.UserFile(), "old_fixture:\n  name: user\n  legacy_count: 7\n  auth:\n    token: inherited-secret\n")
+				putConfig(t, c.UserFile(), "old_fixture:\n  name: user\n  count: 7\n  auth:\n    token: inherited-secret\n")
 				putConfig(t, filepath.Join(c.Directory, DefaultConfigName), "extensions:\n  fixture:\n    name: ' project '\n    count: 0\n    enabled: false\n")
 				wantName, wantCount, wantEnabled = "project", 0, false
 			}
@@ -98,6 +91,7 @@ func TestLayeredExtensionDeclarationContract(t *testing.T) {
 func TestLayeredExtensionRejectsInvalidDeclarations(t *testing.T) {
 	for name, body := range map[string]string{
 		"unknown field":  "extensions:\n  fixture:\n    typo: true\n",
+		"retired field":  "old_fixture:\n  legacy_count: 7\n",
 		"invalid type":   "extensions:\n  fixture:\n    count: wrong\n",
 		"invalid value":  "extensions:\n  fixture:\n    count: -1\n",
 		"alias conflict": "old_fixture:\n  count: 2\nextensions:\n  fixture:\n    count: 3\n",

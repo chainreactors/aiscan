@@ -1,5 +1,5 @@
 // Package guardrail implements tool admission as an optional extension over
-// the native JEV API. It has no dependency on Reflex learning or execution.
+// the native JEV API. It has no dependency on Reflex declaration or execution.
 package guardrail
 
 import (
@@ -20,7 +20,7 @@ import (
 const ConfigKey = "guardrail"
 
 type Config struct {
-	Provider      string    `config:"provider" json:"provider" description:"none or jev; empty retains legacy configuration migration"`
+	Provider      string    `config:"provider" json:"provider" description:"none (default) or jev"`
 	JEV           JEVConfig `config:"jev" json:"jev"`
 	Mode          Mode      `config:"mode" json:"mode" description:"auto asks the policy provider to assess consequences (default); safe asks a human; screening always applies"`
 	ReviewTimeout string    `config:"review_timeout" json:"review_timeout" description:"Maximum wait for tool approval (default 5m)"`
@@ -33,8 +33,8 @@ func (c Config) timeout() (time.Duration, error) {
 	if err := c.JEV.validate(); err != nil {
 		return 0, err
 	}
-	if c.Mode != "" && c.Mode != ModeSafe && c.Mode != ModeAuto && c.Mode != ModeOff {
-		return 0, fmt.Errorf("guardrail mode must be safe, auto or off")
+	if c.Mode != "" && c.Mode != ModeSafe && c.Mode != ModeAuto {
+		return 0, fmt.Errorf("guardrail mode must be safe or auto")
 	}
 	if c.ReviewTimeout == "" {
 		return 5 * time.Minute, nil
@@ -47,7 +47,7 @@ func (c Config) timeout() (time.Duration, error) {
 }
 
 func Declare(resources *resource.Registry) error {
-	_, err := resource.Add[cfg.Section](resources, cfg.Section{Key: ConfigKey, New: func() any { return &Config{Mode: ModeAuto, ReviewTimeout: "5m"} }, Validate: func(v any) error { _, err := v.(*Config).timeout(); return err }})
+	_, err := resource.Add[cfg.Section](resources, cfg.Section{Key: ConfigKey, New: func() any { return &Config{Provider: "none", Mode: ModeAuto, ReviewTimeout: "5m"} }, Validate: func(v any) error { _, err := v.(*Config).timeout(); return err }})
 	return err
 }
 

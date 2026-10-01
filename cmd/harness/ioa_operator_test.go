@@ -251,7 +251,7 @@ func (o *ioaOperator) operate(t *testing.T, op ioaOperation) (string, error) {
 			}
 			// This operator reads IOA explicitly outside the application Agent.
 			// Address that external recipient without waking an internal Session.
-			command += " --ref-nodes " + op.Node + " --target-session external-operator"
+			command = strings.Replace(command, "ioa send ", "ioa send external-operator ", 1) + " --ref-nodes " + op.Node
 		}
 	default:
 		return "", fmt.Errorf("unknown IOA operation")

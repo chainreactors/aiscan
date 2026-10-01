@@ -14,7 +14,9 @@ aiscan init --project
 
 `init --project` 在当前目录创建最小 `cyber.yaml`，不复制用户模型、个人凭据或运行时配置。未填写的示例保持注释，不会阻止 `OPENAI_*`、`ANTHROPIC_*` 补齐配置。
 
-已有文件默认保持不变。`--force` 创建独立备份后原子替换；失败保留旧文件。`-c <path> init` 创建指定文件，不能与 `--project` 同用。旧 `--init` 兼容当前目录、非交互初始化，并提示使用新命令；它也不再直接覆盖文件。
+已有文件默认保持不变。`--force` 创建独立备份后原子替换；失败保留旧文件。`-c <path> init` 创建指定文件，不能与 `--project` 同用。
+
+初始化统一使用 `init` 子命令。护栏通过 `extensions.guardrail.provider: jev` 显式启用，风险等级和失败策略放在 `extensions.guardrail.jev`；`extensions.jev` 只保存共享凭据、模型和 Reflex 加速配置。
 
 ## 文件与优先级
 

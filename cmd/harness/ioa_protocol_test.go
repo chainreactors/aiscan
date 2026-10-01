@@ -63,7 +63,7 @@ func TestUserIOAMemoryCommandRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := sendIOAFromProcess(t, p, `ioa send --content '{"text":"memory-root"}'`)
-	reply := sendIOAFromProcess(t, p, `ioa send --content '{"text":"memory-reply"}' --target-session closed-session --ref-messages `+first.ID)
+	reply := sendIOAFromProcess(t, p, `ioa send closed-session --content '{"text":"memory-reply"}' --ref-messages `+first.ID)
 	assertClosedIOATarget(t, filepath.Join(w.dir, "memory", "stderr.log"))
 	history := readIOAMessages(t, p, "ioa read --all --limit 20")
 	if len(history) != 2 || reply.Sender != first.Sender || len(reply.Refs.Messages) != 1 || reply.Refs.Messages[0] != first.ID || len(reply.Refs.Nodes) != 1 || reply.Refs.Nodes[0] != first.Sender {
@@ -102,8 +102,8 @@ func TestUserIOAExternalProcessesRoundTrip(t *testing.T) {
 	if got := readIOAMessages(t, b, "ioa read --all --limit 20"); len(got) != 1 || got[0].ID != first.ID {
 		t.Fatalf("late join cannot read prior context: %+v", got)
 	}
-	reply := sendIOAFromProcess(t, b, `ioa send --content '{"text":"external-reply"}' --target-session closed-session --ref-nodes `+first.Sender+` --ref-messages `+first.ID)
-	ack := sendIOAFromProcess(t, a, `ioa send --content '{"text":"external-ack"}' --target-session closed-session --ref-nodes `+reply.Sender+` --ref-messages `+reply.ID)
+	reply := sendIOAFromProcess(t, b, `ioa send closed-session --content '{"text":"external-reply"}' --ref-nodes `+first.Sender+` --ref-messages `+first.ID)
+	ack := sendIOAFromProcess(t, a, `ioa send closed-session --content '{"text":"external-ack"}' --ref-nodes `+reply.Sender+` --ref-messages `+reply.ID)
 	assertClosedIOATarget(t, filepath.Join(w.dir, "a", "stderr.log"))
 	assertClosedIOATarget(t, filepath.Join(w.dir, "b", "stderr.log"))
 	if first.Sender == reply.Sender || ack.Sender != first.Sender {

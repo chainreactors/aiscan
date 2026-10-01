@@ -13,7 +13,7 @@ func GuardrailModeChange(current, next *types.DistributeConfig) (string, bool) {
 	}
 	section := next.GetExtensions()["guardrail"]
 	mode := section.GetFields()["mode"].GetStringValue()
-	if mode != "safe" && mode != "auto" && mode != "off" {
+	if mode != "safe" && mode != "auto" {
 		return "", false
 	}
 	left, right := proto.CloneOf(current), proto.CloneOf(next)

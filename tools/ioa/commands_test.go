@@ -744,7 +744,7 @@ func TestSendAddsSessionProvenance(t *testing.T) {
 	defer resource.Close(context.Background())
 	commands := resource.Service.Commands()
 	ctx := operation.ContextWithInvocation(t.Context(), operation.Invocation{SessionID: "source"})
-	if err := findSubCmd(t, commands, "send").Execute(ctx, []string{"--target-session", "child", "--content", `{"text":"hello"}`, "--meta", `{"source_session_id":"forged","target_session_id":"wrong"}`}); err != nil {
+	if err := findSubCmd(t, commands, "send").Execute(ctx, []string{"child", "--content", `{"text":"hello"}`, "--meta", `{"source_session_id":"forged","target_session_id":"wrong"}`}); err != nil {
 		t.Fatal(err)
 	}
 	messages, err := resource.Service.Client().Read(ctx, resource.Service.ReceiveSpace(), protocols.ReadOptions{All: true})
@@ -758,11 +758,11 @@ func TestSendAddsSessionProvenance(t *testing.T) {
 	if m.Meta["interrupt"] != nil {
 		t.Fatal("ordinary send requests interruption")
 	}
-	if err := findSubCmd(t, commands, "send").Execute(ctx, []string{"handoff", "--target-session=child", "--interrupt", "--title", "task", "--message", "work"}); err != nil {
+	if err := findSubCmd(t, commands, "send").Execute(ctx, []string{"child", "handoff", "--interrupt", "--title", "task", "--message", "work"}); err != nil {
 		t.Fatal(err)
 	}
 	messages, err = resource.Service.Client().Read(ctx, resource.Service.ReceiveSpace(), protocols.ReadOptions{All: true})
-	if err != nil || len(messages) != 2 || messages[1].Meta["source_session_id"] != "source" || messages[1].Meta["interrupt"] != true {
+	if err != nil || len(messages) != 2 || messages[1].Meta["source_session_id"] != "source" || messages[1].Meta["target_session_id"] != "child" || messages[1].Meta["interrupt"] != true {
 		t.Fatalf("typed send: %v %v", messages, err)
 	}
 }
@@ -780,12 +780,13 @@ func TestSendShortForm(t *testing.T) {
 		{name: "interrupt", args: []string{"white", "change course", "--interrupt"}, text: "change course", interrupt: true},
 		{name: "JSON", args: []string{"white", "--content", `{"text":"hello"}`}, text: "hello"},
 		{name: "protocol name as recipient", args: []string{"handoff", "hello"}, text: "hello"},
+		{name: "protocol name as JSON text", args: []string{"white", "--content", `{"text":"handoff"}`}, text: "handoff"},
 		{name: "flag text in JSON", args: []string{"white", "--content", `{"text":"--interrupt"}`}, text: "--interrupt"},
 		{name: "missing text", args: []string{"white"}, invalid: true},
 		{name: "empty recipient", args: []string{"", "hello"}, invalid: true},
 		{name: "two targets", args: []string{"white", "hello", "--target-session", "black"}, invalid: true},
 		{name: "extra text", args: []string{"white", "hello", "extra"}, invalid: true},
-		{name: "empty legacy target", args: []string{"--target-session=", "--content", `{"text":"hello"}`}, invalid: true},
+		{name: "retired recipient flag", args: []string{"--target-session=white", "--content", `{"text":"hello"}`}, invalid: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			resource := New(Config{}, nil)
@@ -824,11 +825,11 @@ func TestSendProtocolBooleanAndHelp(t *testing.T) {
 	}
 	defer resource.Close(context.Background())
 	command := findSubCmd(t, resource.Service.Commands(), "send")
-	if err := command.Execute(t.Context(), []string{"swarm", "--task", "--interrupt", "--target-session", "worker", "--content=--interrupt"}); err != nil {
+	if err := command.Execute(t.Context(), []string{"worker", "swarm", "--task", "--interrupt", "--content=--interrupt"}); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := resource.Service.Client().Read(t.Context(), resource.Service.ReceiveSpace(), protocols.ReadOptions{All: true})
-	if err != nil || len(rows) != 1 || rows[0].Meta["interrupt"] != true || rows[0].Content["content"] != "--interrupt" {
+	if err != nil || len(rows) != 1 || rows[0].Meta["target_session_id"] != "worker" || rows[0].Meta["interrupt"] != true || rows[0].Content["content"] != "--interrupt" {
 		t.Fatalf("protocol flags: %v %v", rows, err)
 	}
 	if err := command.Execute(t.Context(), []string{"handoff", "--help"}); err != nil {

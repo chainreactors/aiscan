@@ -37,12 +37,12 @@ func TestConfigurationUsesSecretAndEnvironment(t *testing.T) {
 	if err := Declare(resources); err != nil {
 		t.Fatal(err)
 	}
-	resolved, err := sections.ResolveValues(cfg.Values{ConfigKey: {"enabled": true}}, nil, func(key string) (string, bool) { return "fixture-env-key", key == "TYPESAFE_API_KEY" })
+	resolved, err := sections.ResolveValues(cfg.Values{ConfigKey: {"mode": "auto"}}, nil, func(key string) (string, bool) { return "fixture-env-key", key == "TYPESAFE_API_KEY" })
 	if err != nil {
 		t.Fatal(err)
 	}
 	config, err := cfg.Get[*Config](resolved, ConfigKey)
-	if err != nil || config.APIKey != "fixture-env-key" || config.Model != jevapi.DefaultModel || config.OnError != "block" {
+	if err != nil || config.APIKey != "fixture-env-key" || config.Model != jevapi.DefaultModel || config.Mode != "auto" {
 		t.Fatalf("config failed: %v", err)
 	}
 	view, secrets := sections.View(resolved.Values())
@@ -53,9 +53,14 @@ func TestConfigurationUsesSecretAndEnvironment(t *testing.T) {
 	if preserved[ConfigKey]["api_key"] != "fixture-env-key" {
 		t.Fatal("configuration roundtrip lost secret")
 	}
-	for _, bad := range []Config{{Level: "unknown"}, {Timeout: "0s"}, {OnError: "allow"}, {Criteria: map[string]string{"allow": "bad"}}} {
+	for _, bad := range []Config{{Mode: "unknown"}, {Timeout: "0s"}} {
 		if bad.validate() == nil {
 			t.Error("invalid configuration accepted")
+		}
+	}
+	for key, value := range map[string]any{"enabled": true, "level": "standard", "on_error": "block", "criteria": map[string]string{"review": "policy"}} {
+		if _, err := sections.Decode(ConfigKey, map[string]any{key: value}); err == nil {
+			t.Errorf("retired jev.%s configuration accepted", key)
 		}
 	}
 }

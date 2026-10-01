@@ -9,7 +9,7 @@ owns the HTTP protocol, retries, request timeout and usage accounting. `score`
 returns a weighted level index; `noul` returns a probability. Their interpretation
 belongs to consumers. See the [native API](https://docs.typesafe.ai/api).
 
-`pkg/exts/jev` defines Reflex and its learning/execution loop over `choice`.
+`pkg/exts/jev` defines Claim/Compile/Reflex and its execution loop over `choice`.
 `pkg/exts/guardrail` is an independent consumer: it calls native `choice` directly,
 without compiling or invoking a Reflex. Its `record/review/block` options, risk
 presets and fallback semantics are extension policy, never provider abstractions.
@@ -36,8 +36,8 @@ be erased by another hook. JEV has no executor access.
 Decision and Review remain protobuf messages in the `cyber.guardrail` namespace.
 Go bindings live in the Guardrail extension; message names, fields and AOP wire
 identity are unchanged. Review reuses `aop.ToolCall` and `aop.operation.Ref`.
-The extension owns the interaction mode (`auto` or `safe`; legacy `off` maps to
-`auto`), lifecycle and approval state. The core Agent has no Guardrail dependency.
+The extension owns the interaction mode (`auto` or `safe`), lifecycle and
+approval state. The core Agent has no Guardrail dependency.
 
 ## Admission and review
 
@@ -81,8 +81,8 @@ The extension owns the interaction mode (`auto` or `safe`; legacy `off` maps to
 Guardrail and Reflex are selected independently. `guardrail.provider: jev`
 installs JEV screening; `none` disables that policy. `jev.mode` controls only the
 Reflex extension. The shared credential comes from `TYPESAFE_API_KEY` or
-`extensions.jev.api_key`. Legacy `jev.enabled/level/on_error/criteria` values are
-migrated by the AIScan composition root when no Guardrail provider is selected.
+`extensions.jev.api_key`. Risk level, error policy and criteria belong to
+`extensions.guardrail.jev`; a credential alone does not enable screening.
 
     extensions:
       jev:
@@ -116,8 +116,8 @@ JEV uses https://api.typesafe.ai/v1/systemone with Bearer authentication. The
 timeout applies separately to each stage, including at most two retries, only on
 HTTP 429/529. Redirects are refused. Responses are bounded to 1 MiB. Tool inputs
 over 64 KiB take the configured fallback instead of losing a dangerous suffix.
-Screening failures use on_error (review/block, default block); legacy record now
-requires review. Second-stage failures always deny. Invocation or profile
+Screening failures use on_error (review/block, default block).
+Second-stage failures always deny. Invocation or profile
 cancellation always prevents execution. Provider failure never silently allows a call.
 
 Requests contain readable tool arguments and compact invocation context, not
@@ -180,10 +180,9 @@ actionable approval. Older decisions dropped before this event fix cannot be
 reconstructed and are not fabricated.
 
 The header has one guardrail menu: automatic (default) or safe. Once JEV is configured,
-mode-only saves update the current core runtime through the existing config path
+mode-only saves update the current Guardrail runtime through the existing config path
 on the server and remote nodes, preserving connections, running sessions and
-pending reviews. Legacy off settings select automatic mode and cannot bypass
-screening. Environment-key presence appears only as secret metadata, never as
+pending reviews. Environment-key presence appears only as secret metadata, never as
 an editable credential value. Initial provider activation and policy/credential changes
 still build and validate a new profile.
 Settings → Guardrail configures the interaction mode, policy, model, timeouts, provider
@@ -194,8 +193,8 @@ a successful connection.
 
 ## Recovery and feedback
 
-Guardrail Decision and Review payloads are persisted as canonical protobuf JSON
-in SQLite chat_aop_events.event_json through the existing AOP archive. No separate
+Guardrail Decision and Review payloads are persisted as canonical protobuf messages
+in SQLite chat_aop_events.event_proto through the existing AOP archive. No separate
 approval table is needed. Records retain session/turn/operation identity, command,
 screening and consequence policies, state, event time and resolution source.
 The database write precedes live publication; replay deduplicates event IDs and

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -260,19 +259,7 @@ func sessionsFromModels(models []sessionModel) ([]*types.SessionRecord, error) {
 
 func sessionFromJSON(raw string) (*types.SessionRecord, error) {
 	session := new(types.SessionRecord)
-	// Older records stored a scan association in the shared message. The
-	// association now comes from session_scans; ignore only that retired key.
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
-		return nil, fmt.Errorf("decode session: %w", err)
-	}
-	delete(fields, "scan_ids")
-	delete(fields, "scanIds")
-	clean, err := json.Marshal(fields)
-	if err != nil {
-		return nil, err
-	}
-	if err := unmarshalProtoJSON(string(clean), session, "session"); err != nil {
+	if err := unmarshalProtoJSON(raw, session, "session"); err != nil {
 		return nil, err
 	}
 	return session, nil

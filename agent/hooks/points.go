@@ -74,6 +74,11 @@ var BeforeModel = corehooks.NewPoint[ContextEvent, []*Msg]("before_model").WithR
 	}),
 )
 
+// AfterModel observes each accepted, complete model output once, outside retry.
+// Messages ends with that assistant output. Handlers receive an isolated snapshot
+// and cannot replace the output or dispatch its tool calls.
+var AfterModel = corehooks.NewPoint[ContextEvent, struct{}]("after_model")
+
 // ContextResult replaces the whole message list; nil means unchanged.
 type ContextResult struct {
 	Messages []*Msg

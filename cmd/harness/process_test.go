@@ -215,28 +215,19 @@ func readFile(t *testing.T, path string) []byte {
 }
 
 func redactSecrets(data []byte) []byte {
-	for _, name := range []string{"CYBER_API_KEY", "CYBER_HARNESS_LLM_API_KEY"} {
-		key := strings.TrimSpace(os.Getenv(name))
-		if key == "" {
-			continue
-		}
-		// Match both plaintext logs and JSON-escaped error bodies.
-		encoded, _ := json.Marshal(key)
-		data = bytes.ReplaceAll(data, encoded[1:len(encoded)-1], []byte("[REDACTED]"))
-		data = bytes.ReplaceAll(data, []byte(key), []byte("[REDACTED]"))
+	key := strings.TrimSpace(os.Getenv("CYBER_API_KEY"))
+	if key == "" {
+		return data
 	}
-	return data
+	// Match both plaintext logs and JSON-escaped error bodies.
+	encoded, _ := json.Marshal(key)
+	data = bytes.ReplaceAll(data, encoded[1:len(encoded)-1], []byte("[REDACTED]"))
+	return bytes.ReplaceAll(data, []byte(key), []byte("[REDACTED]"))
 }
 
-// Model settings are shared by every Cyber binary and opt-in live test. Retain
-// the old harness names as fallbacks for existing test deployments.
+// Model settings are shared by every Cyber binary and opt-in live test.
 func liveLLMEnv(suffix string) string {
-	for _, prefix := range []string{"CYBER_", "CYBER_HARNESS_LLM_"} {
-		if value := strings.TrimSpace(os.Getenv(prefix + suffix)); value != "" {
-			return value
-		}
-	}
-	return ""
+	return strings.TrimSpace(os.Getenv("CYBER_" + suffix))
 }
 
 // Buffer complete log lines so a credential split across Write calls cannot

@@ -80,6 +80,6 @@ IndexedDB 分别保存全局资产、每次 operation 自己的节点观测、�
 
 Session 就是用户持续处理的一项任务，沿用既有消息、执行与节点绑定。标题、归档状态、搜索和分组属于展示元数据；归档不会停止运行或删除历史。目标分组来自关联 Scan 的目标，不从模型总结猜测。首页与会话页使用同一个输入框；快捷卡片只填入可编辑草稿。发送失败保留草稿与附件，重试沿用会话、已成功上传的文件和请求 ID。
 
-Web 数据库在启动时自动迁移已支持的旧结构：`chat_aop_events.event_json` 转为 protobuf 二进制，`scans.scan_json` 转为关系字段，并保留事件 ID、cursor、扫描记录与会话关联。已迁移的数据库再次启动时不会重复转换；所有迁移在同一事务内完成，转换失败会回滚并停止启动。其他不受支持的旧结构仍会报错，程序不会自动删除已有数据库。浏览器 IndexedDB 是派生缓存，版本升级时会重新消费服务端归档。
+Web 数据库在启动时自动迁移已支持的旧结构：`chat_aop_events.event_json` 转为 protobuf 二进制，`scans.scan_json` 转为关系字段，并从会话 JSON 中移除旧 `scan_ids` / `scanIds` 副本；会话关联统一读取 `session_scans`。迁移保留事件 ID、cursor、扫描记录与会话关联。已迁移的数据库再次启动时不会重复转换；所有迁移在同一事务内完成，转换失败会回滚并停止启动。其他不受支持的旧结构仍会报错，程序不会自动删除已有数据库。浏览器 IndexedDB 是派生缓存，版本升级时会重新消费服务端归档。
 
 实现：[事件流](../../core/events)、[telemetry 扩展](../../pkg/exts/telemetry/extension.go)、[会话 JSONL](../../agent/session/session_jsonl.go)、[Web 存储](../../pkg/web/service/store_sqlite.go)、[浏览器 CSTX](../../web/frontend/src/lib/cstx-runtime.ts)。验证入口：[历史记录测试](../../agent/session/session_jsonl_test.go)、[artifact API 测试](../../pkg/web/api/artifact_test.go)。

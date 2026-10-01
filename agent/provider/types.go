@@ -22,14 +22,15 @@ const (
 // back into aop types; nothing upstream of this package sees vendor JSON.
 
 type ChatCompletionRequest struct {
-	Model          string
-	Messages       []*aop.Message
-	Tools          []*aop.ToolDefinition
-	MaxTokens      int
-	Temperature    *float64
-	Stream         bool
-	CacheRetention CacheRetention
-	SessionID      string
+	Model           string
+	Messages        []*aop.Message
+	Tools           []*aop.ToolDefinition
+	MaxTokens       int
+	Temperature     *float64
+	Stream          bool
+	CacheRetention  CacheRetention
+	SessionID       string
+	ReasoningEffort string // Optional inference hint; empty uses the provider default.
 }
 
 type ChatCompletionResponse struct {

@@ -96,7 +96,8 @@ Call the inbox_wait tool to wait; no polling or extra listener is needed.
 Names are local to a node; use --ref-nodes ID to address another node.
 Send returns a saved message ID, not a delivery receipt.
 
-Advanced: send --content JSON; send <protocol> --help; read --help;
+Advanced: send <session> --content JSON; send <session> <protocol> [options];
+send --content JSON broadcasts; send <protocol> --help; read --help;
 space list|nodes|topics. Reference: cyber://skills/ioa/SKILL.md`
 }
 
@@ -130,8 +131,7 @@ func (c *rootCommand) dispatchCLI(ctx context.Context, execution *coretool.Execu
 	}
 	target := ""
 	var delivery struct {
-		Target    string `long:"target-session" description:"Session ID or unique name (also accepted as first positional argument)"`
-		Interrupt bool   `long:"interrupt" description:"Redirect current work without canceling the task or running commands"`
+		Interrupt bool `long:"interrupt" description:"Redirect current work without canceling the task or running commands"`
 	}
 	opts := &ioaclient.CommandOptions{}
 	parser := ioaclient.NewCommandParser(opts)
@@ -139,8 +139,8 @@ func (c *rootCommand) dispatchCLI(ctx context.Context, execution *coretool.Execu
 	if _, err := send.AddGroup("Session delivery", "", &delivery); err != nil {
 		return err
 	}
-	// Normalize the short form for the SDK. Two positional values mean a peer
-	// and text; otherwise preserve registered protocol commands.
+	// A recipient precedes either text, JSON content or a registered protocol.
+	// Protocol names used as message text can be sent through --content JSON.
 	if args[0] == "send" && len(args) > 1 && !strings.HasPrefix(args[1], "-") {
 		plain := len(args) > 2 && !strings.HasPrefix(args[2], "-")
 		if plain || send.Find(args[1]) == nil {
@@ -148,7 +148,9 @@ func (c *rootCommand) dispatchCLI(ctx context.Context, execution *coretool.Execu
 			if strings.TrimSpace(target) == "" {
 				return fmt.Errorf("recipient cannot be empty: ioa send <session> \"message\"")
 			}
-			if plain {
+			if plain && send.Find(args[2]) != nil {
+				args = append([]string{"send"}, args[2:]...)
+			} else if plain {
 				body, _ := json.Marshal(map[string]string{"text": args[2]})
 				args = append([]string{"send", "--content", string(body)}, args[3:]...)
 			} else {
@@ -169,15 +171,6 @@ func (c *rootCommand) dispatchCLI(ctx context.Context, execution *coretool.Execu
 			return err
 		}
 		return fmt.Errorf("ioa %s: %w", args[0], err)
-	}
-	if target != "" && delivery.Target != "" {
-		return fmt.Errorf("specify one recipient: ioa send <session> \"message\"")
-	}
-	if args[0] == "send" && delivery.Target == "" && send.FindOptionByLongName("target-session").IsSet() {
-		return fmt.Errorf("recipient cannot be empty: ioa send <session> \"message\"")
-	}
-	if target == "" {
-		target = delivery.Target
 	}
 	if len(remaining) > 0 {
 		return fmt.Errorf("ioa %s: unknown subcommand or argument %q", args[0], remaining[0])

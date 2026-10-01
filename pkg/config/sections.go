@@ -26,7 +26,6 @@ type Section struct {
 	New         func() any
 	Validate    func(any) error
 	Secrets     []string
-	AliasFields func(map[string]any) (map[string]any, error)
 	Environment func(Sources) (overrides, fallbacks map[string]any, err error)
 	Normalize   func(any) error
 }
@@ -176,13 +175,6 @@ func (r *Sections) Normalize(document map[string]any) (Values, error) {
 				return nil, fmt.Errorf("configuration %s must be an object", alias)
 			}
 			fields = CloneDocument(fields)
-			var err error
-			if transform := r.declarations[key].AliasFields; transform != nil {
-				fields, err = transform(fields)
-				if err != nil {
-					return nil, fmt.Errorf("configuration %s: %w", alias, err)
-				}
-			}
 			if existing, ok := out[key]; ok {
 				if fields == nil {
 					fields = map[string]any{}

@@ -10,6 +10,24 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func afterModelHook(ctx context.Context, cfg Config, messages []*aop.Message, turn int) {
+	if !hooks.AfterModel.Has(cfg.Hooks) {
+		return
+	}
+	snapshot := make([]*aop.Message, len(messages))
+	for i, message := range messages {
+		snapshot[i] = proto.CloneOf(message)
+	}
+	cfg.Messages = snapshot
+	ctx = ContextWithToolAgentConfig(ctx, cfg)
+	_, err := hooks.AfterModel.Emit(ctx, cfg.Hooks, hooks.ContextEvent{
+		SessionID: cfg.SessionID, TurnID: cfg.TurnID, Turn: turn, Messages: snapshot,
+	})
+	if err != nil {
+		cfg.Logger.Warnf("after model: %v", err)
+	}
+}
+
 func appendModelHook(ctx context.Context, cfg Config, messages []*aop.Message, turn int) []*aop.Message {
 	if !hooks.BeforeModel.Has(cfg.Hooks) {
 		return nil

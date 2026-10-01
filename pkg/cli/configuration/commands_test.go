@@ -128,12 +128,12 @@ func TestConfigurationCommandDispatchDoesNotStealPrompts(t *testing.T) {
 			t.Fatalf("stole %v", args)
 		}
 	}
-	runCommand(t, host, "--init")
+	runCommand(t, host, "init", "--project", "--non-interactive")
 	if _, err := os.Stat(filepath.Join(host.Context.Directory, cfg.DefaultConfigName)); err != nil {
 		t.Fatal(err)
 	}
-	runCommand(t, host, "-c", "legacy-custom.yaml", "--init")
-	if _, err := os.Stat(filepath.Join(host.Context.Directory, "legacy-custom.yaml")); err != nil {
+	runCommand(t, host, "-c", "custom.yaml", "init", "--non-interactive")
+	if _, err := os.Stat(filepath.Join(host.Context.Directory, "custom.yaml")); err != nil {
 		t.Fatal(err)
 	}
 }

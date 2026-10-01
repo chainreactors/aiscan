@@ -17,7 +17,7 @@ func liveLLMRequest(t *testing.T) map[string]any {
 	provider := liveLLMEnv("PROVIDER")
 	baseURL := liveLLMEnv("BASE_URL")
 	if key == "" || model == "" || baseURL == "" {
-		t.Fatal("live_llm requires CYBER_API_KEY, CYBER_MODEL and CYBER_BASE_URL (legacy CYBER_HARNESS_LLM_* aliases are also supported)")
+		t.Fatal("live_llm requires CYBER_API_KEY, CYBER_MODEL and CYBER_BASE_URL")
 	}
 	endpoint, err := url.Parse(baseURL)
 	if err != nil || endpoint.Host == "" || (endpoint.Scheme != "https" && endpoint.Scheme != "http") || endpoint.User != nil || endpoint.RawQuery != "" {

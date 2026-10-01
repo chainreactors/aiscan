@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, Plus, Settings, Trash2, Zap } from 'lucide-react'
-import { create, equals } from '@bufbuild/protobuf'
+import { create, equals, type JsonObject } from '@bufbuild/protobuf'
 import { AgentConfigSchema, ConnectionCheckSchema, DistributeConfigSchema, LLMProbeResultSchema } from '../cyber-proto'
 import { getConfigStatus, llmConfigured, saveConfig, testLLM, testConn, listLLMModels } from '../api'
 import type { ConfigView, ConnectionCheck, DistributeConfig, LLMProbeResult, ServerStatus } from '../api'
@@ -235,7 +235,7 @@ function sectionStatus(
       return [tag('Tavily', !!cs?.extensions.search?.configuredSecrets.includes('tavily_keys'))]
     case 'guardrail':
       // The settings view contains stored values; an environment key stays server-side.
-      return cs?.extensions.jev?.configuredSecrets.includes('api_key') ? [tag('JEV', true)] : []
+      return cs?.extensions.guardrail?.values?.provider === 'jev' && cs.extensions.jev?.configuredSecrets.includes('api_key') ? [tag('JEV', true)] : []
     case 'ioa': {
       const ioa = cs?.extensions['ioa.client']
       return [tag('Server', !!(ioa?.values?.url && ioa.configuredSecrets.includes('token')))]
@@ -772,13 +772,26 @@ function IOATab({ form, setForm, cs }: TabProps) {
 function GuardrailTab({ form, setForm, onConfigureJEV }: TabProps & { onConfigureJEV: () => void }) {
   const { t } = useTranslation('config')
   const jev = form.extensions.jev ?? {}
+  const policy = (form.extensions.guardrail?.jev ?? {}) as JsonObject
   const update = (key: string, value: string | boolean) => setForm(f => ({
     ...f, extensions: { ...f.extensions, jev: { ...f.extensions.jev, [key]: value } },
   }))
   const value = (key: string, fallback = '') => typeof jev[key] === 'string' ? jev[key] as string : fallback
+  const policyValue = (key: string, fallback: string) => typeof policy[key] === 'string' ? policy[key] as string : fallback
+  const updatePolicy = (key: string, value: string) => setForm(f => ({
+    ...f, extensions: { ...f.extensions, guardrail: {
+      ...f.extensions.guardrail,
+      jev: { ...(f.extensions.guardrail?.jev as JsonObject | undefined), [key]: value },
+    } },
+  }))
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <Callout className="sm:col-span-2">{t('guardrailReloadHint')}</Callout>
+      <Field label={t('guardrailEnabled')}>
+        <Switch checked={form.extensions.guardrail?.provider === 'jev'} onCheckedChange={enabled => {
+          setForm(f => ({ ...f, extensions: { ...f.extensions, guardrail: { ...f.extensions.guardrail, provider: enabled ? 'jev' : 'none' } } }))
+        }} />
+      </Field>
       <div className="sm:col-span-2">
         <Button type="button" variant="outline" size="sm" onClick={onConfigureJEV}>
           <Settings className="h-4 w-4" />{t('configureJEV')}
@@ -794,13 +807,13 @@ function GuardrailTab({ form, setForm, onConfigureJEV }: TabProps & { onConfigur
       </Field>
       <p className="self-center text-xs text-muted-foreground">{t('guardrailModeHint_' + (form.extensions.guardrail?.mode === 'safe' ? 'safe' : 'auto'))}</p>
       <Field label={t('guardrailLevel')}>
-        <Select value={value('level', 'standard')} onValueChange={v => update('level', v)}>
+        <Select value={policyValue('level', 'standard')} onValueChange={v => updatePolicy('level', v)}>
           <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
           <SelectContent>{['permissive', 'standard', 'strict'].map(v => <SelectItem key={v} value={v}>{t('guardrailLevel_' + v)}</SelectItem>)}</SelectContent>
         </Select>
       </Field>
       <Field label={t('guardrailOnError')}>
-        <Select value={value('on_error', 'block') === 'record' ? 'review' : value('on_error', 'block')} onValueChange={v => update('on_error', v)}>
+        <Select value={policyValue('on_error', 'block')} onValueChange={v => updatePolicy('on_error', v)}>
           <SelectTrigger className="h-9 w-full"><SelectValue /></SelectTrigger>
           <SelectContent>{['block', 'review'].map(v => <SelectItem key={v} value={v}>{t('guardrailAction_' + v)}</SelectItem>)}</SelectContent>
         </Select>

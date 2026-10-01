@@ -283,6 +283,9 @@ func marshalOpenAIRequest(req *ChatCompletionRequest) ([]byte, error) {
 	if req.Temperature != nil {
 		body["temperature"] = *req.Temperature
 	}
+	if req.ReasoningEffort != "" {
+		body["reasoning_effort"] = req.ReasoningEffort
+	}
 	if req.Stream {
 		body["stream_options"] = map[string]any{"include_usage": true}
 	}

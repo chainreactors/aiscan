@@ -87,6 +87,10 @@ func (*sessionTestStore) ListAOPEventsAfter(context.Context, string, int64, int)
 	return nil, nil
 }
 
+func (*sessionTestStore) HasTurnEnded(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
 type sessionTestRuntime struct {
 	connected bool
 	started   *aop.RunTurnRequest

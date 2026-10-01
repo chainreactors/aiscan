@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -93,14 +91,6 @@ func testInstallationWithExtensions(t *testing.T, config Config, client *jevapi.
 	})
 	return e, agent.Config{Loop: agent.StandardLoop{}, Tools: tools, Hooks: registry, Model: "test", SystemPrompt: "Use supplied tools to complete the task. Observe the result before reporting success.", MaxTokens: agent.DefaultMaxTokens, MaxTurns: 20, MaxRetries: -1}, cmds
 }
-func awaitLearning(t *testing.T, e *Extension) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
-	defer cancel()
-	if err := e.WaitLearning(ctx); err != nil {
-		t.Fatal(err)
-	}
-}
 func fakeJEV(t *testing.T, choose func(jevapi.Request) map[string]jevapi.Answer) *jevapi.Client {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -119,158 +109,6 @@ func fakeJEV(t *testing.T, choose func(jevapi.Request) map[string]jevapi.Answer)
 	return client
 }
 func answer(id string) jevapi.Answer { return jevapi.Answer{Type: "choice", Choice: id} }
-func testPrices() map[string]map[string]float64 {
-	return map[string]map[string]float64{"test": {"input": 2, "output": 8, "cache_read": 1}, "test-jev": {"input": 1, "output": 1, "cache_read": 1}}
-}
-
-func TestEmptyLibraryAutomaticallyLearnsValidatesAndAccelerates(t *testing.T) {
-	var position, observations, modelCalls, compilations atomic.Int64
-	command := coretool.Command{Name: "advance", Contract: "advance-v1", Usage: "advance <current-step>", Run: func(ctx context.Context, ex *coretool.Execution) (any, error) {
-		if len(ex.Args) != 1 || ex.Args[0] != strconv.Itoa(int(position.Load())) {
-			return nil, coretool.ErrStaleChoice
-		}
-		_, err := fmt.Fprintf(ex.Stdout, "step=%d", position.Add(1))
-		return nil, err
-	}, Choices: func(context.Context, []*aop.Message) (json.RawMessage, map[string]*aop.Content, error) {
-		observations.Add(1)
-		step := position.Load()
-		choices := map[string]*aop.Content{}
-		if step < 4 {
-			choices[fmt.Sprintf("step-%d", step)] = action(fmt.Sprintf("advance %d", step))
-		}
-		return json.RawMessage(fmt.Sprintf(`{"step":%d}`, step)), choices, nil
-	}}
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
-		if len(req.Questions) != 2 {
-			t.Errorf("entry and speculative selection must share one request: %d", len(req.Questions))
-		}
-		out := map[string]jevapi.Answer{"entry": answer(Defer)}
-		for id, q := range req.Questions {
-			if id == "entry" {
-				continue
-			}
-			out[id] = answer(Defer)
-			for choice := range q.Criteria.(map[string]any) {
-				if choice != Defer {
-					out["entry"], out[id] = answer(id), answer(choice)
-					break
-				}
-			}
-		}
-		return out
-	})
-	e, cfg, _ := testInstallation(t, Config{Mode: "auto", Prices: testPrices()}, client, command)
-	cfg.Provider = testProvider(func(ctx context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
-		first := provider.MessageText(req.Messages[0])
-		if first == compilerPrompt {
-			compilations.Add(1)
-			if strings.Contains(provider.MessageText(req.Messages[1]), `"source":"context"`) {
-				return reply(provider.TextMessage("assistant", `[]`)), nil
-			}
-			return reply(provider.TextMessage("assistant", `[{"enter":"The task requests advancing through the available finite steps; a next action exists.","decide":"Select the current next step. Defer after the last step."}]`)), nil
-		}
-		select {
-		case <-time.After(12 * time.Millisecond):
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-		// Replay derives the decision from its historical prefix, never from the
-		// live fixture that may already have completed a different task.
-		step := 0
-		for _, m := range req.Messages {
-			if result := provider.MessageToolResult(m); result != nil {
-				_, _ = fmt.Sscanf(coretool.ResultText(result), "step=%d", &step)
-			}
-			if m.Name == "jev" {
-				for n := 1; n <= 4; n++ {
-					if strings.Contains(provider.MessageText(m), fmt.Sprintf("step=%d", n)) {
-						step = n
-					}
-				}
-			}
-		}
-		if req.SessionID != "" {
-			modelCalls.Add(1)
-		}
-		if step >= 4 {
-			return reply(provider.TextMessage("assistant", "All four steps observed.")), nil
-		}
-		return reply(&aop.Message{Role: "assistant", Content: []*aop.Content{action(fmt.Sprintf("advance %d", step))}}), nil
-	})
-	if len(e.Rules()) != 0 {
-		t.Fatal("test must start with an empty library")
-	}
-	for task := 0; task < 14; task++ {
-		position.Store(0)
-		cfg.SessionID = fmt.Sprintf("training-%d", task)
-		result, err := agent.NewAgent(cfg).Run(t.Context(), agent.TextInput("Advance through all four available steps and report the observed result."))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if position.Load() != 4 {
-			t.Fatalf("ordinary task outcome failed: task=%d position=%d stop=%v", task, position.Load(), result.Stop)
-		}
-		awaitLearning(t, e)
-	}
-	active := 0
-	for _, r := range e.Rules() {
-		if r.Phase != "active" {
-			continue
-		}
-		active++
-		if !passes(r.Checks) {
-			t.Fatal("activation bypassed validation")
-		}
-		for _, c := range r.Checks {
-			if contains(r.TrainingTasks, c.Task) {
-				t.Fatal("training task leaked into validation")
-			}
-		}
-	}
-	if active == 0 || compilations.Load() == 0 {
-		t.Fatalf("automatic path never activated: %+v", e.Rules())
-	}
-	beforeCalls, beforeObs := modelCalls.Load(), observations.Load()
-	position.Store(0)
-	cfg.SessionID = "holdout"
-	result, err := agent.NewAgent(cfg).Run(t.Context(), agent.TextInput("Advance through all four available steps and report the observed result."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	awaitLearning(t, e)
-	if position.Load() != 4 || modelCalls.Load()-beforeCalls >= 5 {
-		t.Fatalf("not accelerated: position=%d L2=%d", position.Load(), modelCalls.Load()-beforeCalls)
-	}
-	if observations.Load()-beforeObs < 5 {
-		t.Fatal("candidates were not refreshed after each action")
-	}
-	for _, m := range result.Messages {
-		if m.Name == "jev" && (m.Role != "user" || m.Id == "") {
-			t.Fatal("invalid receipt")
-		}
-		if m.Name == "jev" && !strings.Contains(provider.MessageText(m), `Executed ["bash",`) {
-			t.Fatal("takeover receipt omitted the dispatched call; model cannot identify completed effects")
-		}
-		if m.Role == "tool" {
-			callID := provider.MessageToolResult(m).CallId
-			found := false
-			for _, prev := range result.Messages {
-				for _, c := range provider.MessageToolCalls(prev) {
-					found = found || c.Id == callID
-				}
-			}
-			if !found {
-				t.Fatal("orphan tool result leaked into model history")
-			}
-		}
-	}
-	files, _ := filepath.Glob(filepath.Join(e.config.Directory, "execution-*.jsonl"))
-	if len(files) == 0 {
-		t.Fatal("missing separate execution evidence")
-	}
-	t.Logf("mechanism fixture only: warm L2 calls=%d vs 5; real speedup requires live A/B/C", modelCalls.Load()-beforeCalls)
-}
-
 func TestOffNeedsNoCapabilitiesAndAddsNothing(t *testing.T) {
 	e := New(Config{Mode: "off"})
 	set, err := extension.New(e)
@@ -288,30 +126,36 @@ func TestOffNeedsNoCapabilitiesAndAddsNothing(t *testing.T) {
 	}
 }
 
-func seedActive(e *Extension, cfg agent.Config, source string, labels map[string]string) *Reflex {
-	cfg.SystemPrompt += "\n\n" + Prompt
-	r := &Reflex{Source: source, Contract: source + "-v1", Enter: "Eligible finite step", Decide: "Select current action", Labels: labels, Environment: environment(cfg, e.clientIdentity()), Phase: "active"}
-	r.ID = ruleID(r)
-	e.mu.Lock()
-	e.rules[r.ID] = r
-	e.mu.Unlock()
-	return r
+func TestAutoLoadsWithoutObserverProtocol(t *testing.T) {
+	e := New(Config{Mode: "auto", Directory: t.TempDir()})
+	client := fakeJEV(t, func(jevapi.Request) map[string]jevapi.Answer {
+		t.Error("inactive extension called JEV")
+		return nil
+	})
+	// A native executor does not need a command registry or an Observe protocol.
+	set, err := extension.New(extension.Provided[*corehooks.Registry](corehooks.New()),
+		extension.Provided[*jevapi.Client](client), e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := set.Load(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if e.cancel == nil || len(e.subs) == 0 {
+		t.Fatal("generic executor failed to acquire controller hooks")
+	}
+	if err := set.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestTakeoverUsesGuardrailAndYieldsAfterDenial(t *testing.T) {
 	var executions atomic.Int64
 	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
-		out := map[string]jevapi.Answer{}
-		for id := range req.Questions {
-			if id != "entry" {
-				out["entry"], out[id] = answer(id), answer("go")
-			}
-		}
-		return out
+		return runtimeAnswers(req, "protected/go")
 	})
-	e, cfg, registry := testInstallation(t, Config{Mode: "auto"}, client, coretool.Command{Name: "protected", Contract: "protected-v1", Run: func(context.Context, *coretool.Execution) (any, error) { executions.Add(1); return "executed", nil }, Choices: func(context.Context, []*aop.Message) (json.RawMessage, map[string]*aop.Content, error) {
-		return json.RawMessage(`{}`), map[string]*aop.Content{"go": action("protected")}, nil
-	}})
+	e, cfg, registry := testInstallation(t, Config{Mode: "auto"}, client, coretool.Command{Name: "protected", Run: func(context.Context, *coretool.Execution) (any, error) { executions.Add(1); return "executed", nil }})
+	installReflex(e, "protected")
 	cfg.Provider = testProvider(func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 		if len(req.Messages) != 3 || req.Messages[2].Name != "jev" {
 			t.Fatal("denial receipt missing")
@@ -321,7 +165,6 @@ func TestTakeoverUsesGuardrailAndYieldsAfterDenial(t *testing.T) {
 		}
 		return reply(provider.TextMessage("assistant", "Action was denied.")), nil
 	})
-	seedActive(e, cfg, "protected", nil)
 	guardClient := fakeJEV(t, func(jevapi.Request) map[string]jevapi.Answer {
 		return map[string]jevapi.Answer{"action": answer("block")}
 	})
@@ -342,9 +185,10 @@ func TestTakeoverUsesGuardrailAndYieldsAfterDenial(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if executions.Load() != 0 || client.Usage().Detail["requests"] != 1 {
+	if executions.Load() != 0 {
 		t.Fatalf("denial bypass: executions=%d requests=%d", executions.Load(), client.Usage().Detail["requests"])
 	}
+	settle(t, e)
 }
 
 func TestLongContextProjectionPreservesConstraintsWithoutChangingHistory(t *testing.T) {
@@ -367,57 +211,219 @@ func TestLongContextProjectionPreservesConstraintsWithoutChangingHistory(t *test
 	}
 }
 
-func TestImportClearsEvidenceAndEnvironment(t *testing.T) {
-	e := New(Config{Directory: t.TempDir()})
-	r := &Reflex{Source: "test", Contract: "test-v1", Enter: "condition", Decide: "decision", Phase: "active", Environment: "deployment-a", Uses: 10, TrainingTasks: []string{"private-task"}, Checks: []check{{Task: "private-validation"}}}
-	r.ID = ruleID(r)
-	e.rules[r.ID] = r
-	data, err := e.Export()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(data), "private-") || strings.Contains(string(data), "deployment-a") {
-		t.Fatal("export leaked evidence")
-	}
-	other := New(Config{Directory: t.TempDir()})
-	if err = other.Import(data); err != nil {
-		t.Fatal(err)
-	}
-	for _, r := range other.Rules() {
-		if r.Phase != "validating" || len(r.Checks) != 0 || r.Environment != "" || r.Uses != 0 {
-			t.Fatal("import trusted old activation")
-		}
-	}
-	if _, err = os.Stat(filepath.Join(other.config.Directory, "reflex-"+other.Rules()[0].ID+".json")); err != nil {
-		t.Fatal(err)
+// Every fresh task can bypass all four intermediate model decisions. No task
+// -specific state survives, and a changing rendered system prompt is harmless.
+func TestReflexShortCircuitsAcrossFreshTasks(t *testing.T) {
+	for _, mode := range []string{"off", "auto"} {
+		t.Run(mode, func(t *testing.T) {
+			var position, observations atomic.Int64
+			command := coretool.Command{Name: "advance", Run: func(_ context.Context, ex *coretool.Execution) (any, error) {
+				if len(ex.Args) != 1 || ex.Args[0] != strconv.Itoa(int(position.Load())) {
+					return nil, coretool.ErrStaleChoice
+				}
+				_, err := fmt.Fprintf(ex.Stdout, "step=%d", position.Add(1))
+				return nil, err
+			}}
+			client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer { return runtimeAnswers(req, "advance/go") })
+			e, cfg, _ := testInstallation(t, Config{Mode: mode}, client, command)
+			installReflex(e, "advance")
+			cfg.Provider = testProvider(func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+				if position.Load() == 4 {
+					if mode == "auto" && !strings.Contains(provider.MessageText(req.Messages[len(req.Messages)-1]), `"step":4`) {
+						t.Error("final observation was lost")
+					}
+					return reply(provider.TextMessage("assistant", "done")), nil
+				}
+				return reply(&aop.Message{Role: "assistant", Content: []*aop.Content{action(fmt.Sprintf("advance %d", position.Load()))}}), nil
+			})
+			for n := 0; n < 3; n++ {
+				position.Store(0)
+				cfg.SystemPrompt = fmt.Sprintf("Complete the task. Current Time: %d", n)
+				cfg.SessionID = fmt.Sprintf("task-%d", n)
+				r, err := agent.NewAgent(cfg).Run(t.Context(), agent.TextInput("Advance through four steps."))
+				if err != nil || r.Output != "done" {
+					t.Fatalf("result=%v error=%v", r, err)
+				}
+				want := 5
+				if mode == "auto" {
+					want = 1
+				}
+				if r.Turns != want {
+					t.Fatalf("turns=%d want=%d", r.Turns, want)
+				}
+			}
+			if mode == "off" && (observations.Load() != 0 || client.Usage().Detail["requests"] != 0) {
+				t.Fatal("off performed work")
+			}
+
+		})
 	}
 }
 
-func TestSelectedAnswerOnlyAndUnknownBindingFailsClosed(t *testing.T) {
-	for _, invalid := range []bool{false, true} {
-		t.Run(fmt.Sprint(invalid), func(t *testing.T) {
-			client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
-				choice := "yes"
-				if invalid {
-					choice = "unbound"
-				}
-				return map[string]jevapi.Answer{"entry": answer("one"), "one": answer(choice), "two": {Type: "broken", Choice: "nonexistent"}}
-			})
-			e := New(Config{Directory: t.TempDir()})
-			e.client = client
-			rules := []*Reflex{{ID: "one", Enter: "one", Decide: "one"}, {ID: "two", Enter: "two", Decide: "two"}}
-			samples := map[string]sample{"one": {State: json.RawMessage(`{}`), Choices: map[string]*aop.Content{"yes": aop.Text("known conclusion")}}, "two": {State: json.RawMessage(`{}`)}}
-			id, choice, _, err := e.decide(t.Context(), rules, samples, "test")
-			if invalid {
-				if err == nil {
-					t.Fatal("unbound choice accepted")
-				}
-			} else if err != nil || id != "one" || choice != "yes" {
-				t.Fatalf("unused speculative answer rejected: %s %s %v", id, choice, err)
+func TestAllCapabilitiesShareOneCurrentDecision(t *testing.T) {
+	var calls atomic.Int64
+	makeCommand := func(name string) coretool.Command {
+		return coretool.Command{Name: name, Run: func(_ context.Context, ex *coretool.Execution) (any, error) {
+			if name != "second" {
+				t.Error("wrong capability chosen")
 			}
-			if client.Usage().Detail["requests"] != 1 {
-				t.Fatal("decision split into multiple requests")
+			calls.Add(1)
+			return nil, nil
+		}}
+	}
+	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+		if runtimeRequest(req) {
+			for id, q := range req.Questions {
+				if strings.HasPrefix(id, "r") {
+					choices := q.Criteria.(map[string]any)
+					hasFirst, hasSecond := false, false
+					for key := range choices {
+						hasFirst = hasFirst || strings.HasSuffix(key, "/first/go")
+						hasSecond = hasSecond || strings.HasSuffix(key, "/second/go")
+					}
+					if choices[report] == nil || choices[Defer] == nil || (calls.Load() == 0 && (!hasFirst || !hasSecond)) {
+						t.Error("missing live capability")
+					}
+				}
+			}
+		}
+		return runtimeAnswers(req, "second/go")
+	})
+	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client, makeCommand("first"), makeCommand("second"))
+	installReflex(e, "first", "second")
+	cfg.Provider = testProvider(func(context.Context, *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+		return reply(provider.TextMessage("assistant", "done")), nil
+	})
+	if _, err := agent.NewAgent(cfg).Run(t.Context(), agent.TextInput("Use second")); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 1 {
+		t.Fatal("wrong number of calls")
+	}
+}
+
+func TestDeferAndInvalidAnswerLeaveHistoryUntouched(t *testing.T) {
+	for _, choice := range []string{Defer, "unbound"} {
+		t.Run(choice, func(t *testing.T) {
+			client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+				return runtimeAnswers(req, choice)
+			})
+			e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client, coretool.Command{Name: "step", Run: func(context.Context, *coretool.Execution) (any, error) { t.Error("unexpected action"); return nil, nil }})
+			installReflex(e, "step")
+			cfg.Provider = testProvider(func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+				if len(req.Messages) != 2 || req.Messages[1].Name != "" || provider.MessageText(req.Messages[1]) != "Do the task" {
+					t.Error("fallback changed history")
+				}
+				return reply(provider.TextMessage("assistant", "done")), nil
+			})
+			if _, err := agent.NewAgent(cfg).Run(t.Context(), agent.TextInput("Do the task")); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}
+}
+
+// Unit execution tests install a scene to isolate the executor; automatic
+// declaration/compilation is covered separately from an empty library.
+func installReflex(e *Extension, sources ...string) {
+	code := constantObserve(`{}`, map[string]string{})
+	calls := map[string]string{}
+	for _, source := range sources {
+		calls[source+"/go"] = source
+	}
+	code = constantObserve(`{}`, calls)
+	if len(sources) == 1 && (sources[0] == "advance" || sources[0] == "workflow") {
+		code = stepObserve(sources[0], sources[0] == "advance")
+	}
+	installObserve(e, code)
+}
+
+func installObserve(e *Extension, code string) Reflex {
+	r := Reflex{When: "The task can progress through the supplied native tools.", Decide: "Select the bound operation matching the current user goal. Report observed completion; defer for missing input or strategy.", Observe: code}
+	if err := r.validate(); err != nil {
+		panic(err)
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.library.Reflexes["r"+digest(r)[:16]] = reflexRecord{Reflex: r}
+	return r
+}
+
+func constantObserve(state string, calls map[string]string) string {
+	candidates := map[string]any{}
+	for id, command := range calls {
+		candidates[id] = map[string]any{"name": "bash", "arguments": map[string]string{"command": command}, "read": false}
+	}
+	data, _ := json.Marshal(candidates)
+	return "js:({state: JSON.parse(" + strconv.Quote(state) + "), candidates: JSON.parse(" + strconv.Quote(string(data)) + ")})"
+}
+
+func stepObserve(command string, withArgument bool) string {
+	binding := strconv.Quote(command)
+	if withArgument {
+		binding += ` + " " + String(step)`
+	}
+	return `js:(() => {
+const results = messages.filter(m => m.call_id != null && !m.is_error && /step=([0-9]+)/.test(m.text || ""));
+const step = results.length === 0 ? 0 : Number(results[results.length - 1].text.match(/step=([0-9]+)/)[1]);
+return {state: {step: step}, candidates: step < 4 ? {` + strconv.Quote(command+"/go") + `: bind("bash", {command: ` + binding + `}, false)} : {}};
+})()`
+}
+func runtimeRequest(req jevapi.Request) bool {
+	if _, ok := req.Questions["entry"]; ok {
+		return true
+	}
+	for id := range req.Questions {
+		if strings.HasPrefix(id, "r") {
+			return true
+		}
+	}
+	return false
+}
+
+func candidateBySuffix(candidates map[string]string, suffix string) string {
+	for key, call := range candidates {
+		if strings.HasSuffix(key, "/"+suffix) {
+			return call
+		}
+	}
+	return ""
+}
+func runtimeAnswers(req jevapi.Request, choice string) map[string]jevapi.Answer {
+	var state struct {
+		Candidates map[string]string `json:"candidates"`
+	}
+	_ = json.Unmarshal(req.State, &state)
+	for key := range state.Candidates {
+		if strings.HasSuffix(key, "/"+choice) {
+			choice = key
+			break
+		}
+	}
+	out := map[string]jevapi.Answer{}
+	for id := range req.Questions {
+		out[id] = answer(Defer)
+	}
+	if !runtimeRequest(req) {
+		return out
+	}
+	if _, ok := req.Questions["generation"]; ok {
+		out["generation"] = answer("ready")
+	}
+	for id := range req.Questions {
+		if strings.HasPrefix(id, "r") {
+			if _, ok := req.Questions["entry"]; ok {
+				out["entry"] = answer(id)
+			}
+			out[id] = answer(choice)
+			return out
+		}
+	}
+	for id := range req.Questions {
+		if id != "entry" {
+			out["entry"], out[id] = answer(id), answer(choice)
+			break
+		}
+	}
+	return out
 }

@@ -19,6 +19,7 @@ reply link; mentioning an ID in the text alone does not create that link.
 For advanced messages:
 
 - `ioa send SESSION --content '{"text":"Ready"}'` accepts a JSON body.
+- `ioa send SESSION <protocol> [options]` addresses a typed message to a Session.
 - `ioa send --content '{"text":"Update"}'` publishes a node broadcast.
 - `ioa send <protocol> --help` describes typed sends. Use a protocol only when
   the task requires it; schemas are in `ioa://skills/<protocol>/SKILL.md`
@@ -26,4 +27,4 @@ For advanced messages:
 
 The configured space is already joined. `ioa space NAME "description"` switches
 it. Names must be unique on the addressed node; use a Session ID when ambiguous.
-The legacy `--target-session SESSION` option remains compatible.
+To send a protocol name as text, use `--content` with a JSON body.

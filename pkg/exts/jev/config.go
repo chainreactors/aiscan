@@ -2,8 +2,6 @@ package jev
 
 import (
 	"fmt"
-	"maps"
-	"math"
 	"strings"
 	"time"
 
@@ -15,16 +13,12 @@ import (
 const ConfigKey = "jev"
 
 type Config struct {
-	Enabled   bool                          `config:"enabled" json:"enabled" description:"Legacy risk-screen activation; acceleration requires mode learn or auto"`
-	APIKey    string                        `config:"api_key" json:"api_key" description:"TypeSafe API key (or TYPESAFE_API_KEY)"`
-	Model     string                        `config:"model" json:"model"`
-	Level     string                        `config:"level" json:"level" description:"permissive, standard, or strict"`
-	Timeout   string                        `config:"timeout" json:"timeout" description:"Total request budget including retries"`
-	OnError   string                        `config:"on_error" json:"on_error" description:"review or block on screening failure; automatic consequence assessment always fails closed"`
-	Criteria  map[string]string             `config:"criteria" json:"criteria" description:"Stage 1 risk-screen overrides for record/review/block criteria"`
-	Mode      string                        `config:"mode" json:"mode" description:"Optional accelerator: off (default), learn, auto"`
-	Directory string                        `config:"directory" json:"directory" description:"Workspace Reflex directory; default .cyber/jev"`
-	Prices    map[string]map[string]float64 `config:"prices" json:"prices" description:"Per-model input/output/cache_read prices per million tokens; missing prices prevent activation"`
+	APIKey            string `config:"api_key" json:"api_key" description:"TypeSafe API key (or TYPESAFE_API_KEY)"`
+	Model             string `config:"model" json:"model"`
+	Timeout           string `config:"timeout" json:"timeout" description:"Total request budget including retries"`
+	Mode              string `config:"mode" json:"mode" description:"Optional accelerator: off (default), auto"`
+	Directory         string `config:"directory" json:"directory" description:"Claim/Reflex library and execution evidence directory; default .cyber/jev"`
+	DeclarationEffort string `config:"declaration_effort" json:"declaration_effort,omitempty" description:"Optional provider reasoning effort for background Claim/Compile; empty uses provider default"`
 }
 
 func defaults(c Config) Config {
@@ -34,49 +28,19 @@ func defaults(c Config) Config {
 	if c.Model == "" {
 		c.Model = jevapi.DefaultModel
 	}
-	if c.Level == "" {
-		c.Level = "standard"
-	}
 	if c.Timeout == "" {
 		c.Timeout = "10s"
-	}
-	if c.OnError == "" {
-		c.OnError = "block"
-	}
-	c.Criteria = maps.Clone(c.Criteria)
-	c.Prices = maps.Clone(c.Prices)
-	for model, prices := range c.Prices {
-		c.Prices[model] = maps.Clone(prices)
 	}
 	return c
 }
 
 func (c Config) validate() error {
 	c = defaults(c)
-	if c.Mode != "off" && c.Mode != "learn" && c.Mode != "auto" {
-		return fmt.Errorf("jev mode must be off, learn, or auto")
-	}
-	if c.Level != "standard" && c.Level != "strict" && c.Level != "permissive" {
-		return fmt.Errorf("invalid legacy jev level")
-	}
-	validAction := func(v string) bool { return v == "record" || v == "review" || v == "block" }
-	if !validAction(c.OnError) {
-		return fmt.Errorf("invalid legacy jev on_error")
-	}
-	for k, v := range c.Criteria {
-		if !validAction(k) || strings.TrimSpace(v) == "" {
-			return fmt.Errorf("invalid legacy jev criteria")
-		}
+	if c.Mode != "off" && c.Mode != "auto" {
+		return fmt.Errorf("jev mode must be off or auto")
 	}
 	if d, err := time.ParseDuration(c.Timeout); err != nil || d <= 0 {
 		return fmt.Errorf("jev timeout must be positive")
-	}
-	for model, prices := range c.Prices {
-		for key, value := range prices {
-			if (key != "input" && key != "output" && key != "cache_read" && key != "cache_write") || value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
-				return fmt.Errorf("invalid jev price %s/%s", model, key)
-			}
-		}
 	}
 	return nil
 }

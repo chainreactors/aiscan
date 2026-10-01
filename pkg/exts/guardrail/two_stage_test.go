@@ -13,7 +13,7 @@ import (
 )
 
 func TestTwoStageAdmission(t *testing.T) {
-	for _, mode := range []Mode{"", ModeAuto, ModeOff, ModeSafe} {
+	for _, mode := range []Mode{"", ModeAuto, ModeSafe} {
 		for _, risk := range []Action{Action_ACTION_RECORD, Action_ACTION_REVIEW, Action_ACTION_BLOCK} {
 			for _, consequence := range []Action{Action_ACTION_RECORD, Action_ACTION_REVIEW, Action_ACTION_BLOCK} {
 				t.Run(string(mode)+risk.String()+consequence.String(), func(t *testing.T) {
