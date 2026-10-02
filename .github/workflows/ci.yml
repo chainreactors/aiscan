@@ -277,6 +277,15 @@ jobs:
       - name: Run Windows package tests
         run: go test -count=1 ./agent/... ./cmd/aiscan/... ./cmd/cyber-web ./pkg/web/...
 
+      - name: Set up Node.js for bootstrap tests
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Test PowerShell node bootstrap
+        working-directory: web/frontend
+        run: npm run test:bootstrap
+
       - name: Compile and test the full CLI without cgo on Windows
         run: go test -count=1 -tags "$env:FULL_TAGS" ./cmd/aiscan
         env:
@@ -416,6 +425,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm --prefix web/frontend ci
+
+      - name: Test POSIX node bootstrap
+        run: npm --prefix web/frontend run test:bootstrap
 
       - name: Regenerate protobuf bindings
         run: go run ./cmd/gen

@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "test:bootstrap": "node --experimental-strip-types --test e2e/node-bootstrap.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:record": "playwright test -c e2e/record.config.ts",
     "test:e2e:headed": "playwright test --headed"
