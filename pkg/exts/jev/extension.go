@@ -92,6 +92,10 @@ func (e *Extension) Load(scope *extension.Scope) error {
 			return struct{}{}, nil
 		}),
 		hooks.RunEnd.On(registry, "jev", func(_ context.Context, ev hooks.RunEndEvent) (struct{}, error) {
+			// RunEnd usage covers the foreground Agent model. Background Claim /
+			// Reflex generation and native JEV judgments are audited at their own
+			// boundaries, so the three token sources remain additive and separate.
+			_ = e.audit("foreground_llm", map[string]any{"session_id": ev.SessionID, "turn_id": ev.TurnID, "usage": ev.Usage, "usage_missing": ev.Usage == nil})
 			e.mu.Lock()
 			delete(e.tasks, digest([]string{ev.SessionID, ev.TurnID}))
 			e.mu.Unlock()

@@ -301,13 +301,24 @@ func requestAssistantMessageWithUsage(ctx context.Context, cfg Config, em *aopEm
 	if err != nil {
 		return nil, usage, fmt.Errorf("LLM call failed at turn %d: %w", turn, err)
 	}
-	if resp == nil || len(resp.Choices) == 0 {
+	if resp == nil {
+		// A nil response is different from a successful HTTP response with an
+		// invalid shape. Providers may use nil for a transient transport result,
+		// so preserve the existing retry behavior for that case.
 		return nil, usage, fmt.Errorf("%w at turn %d", errEmptyResponse, turn)
+	}
+	if len(resp.Choices) == 0 {
+		// A 2xx response without choices is a protocol violation. Retrying the
+		// same request cannot repair its shape and only burns another model call.
+		return nil, usage, fmt.Errorf("LLM protocol error at turn %d: response has no choices", turn)
 	}
 	choice := resp.Choices[0]
 	msg := choice.Message
 	if msg == nil {
-		msg = &aop.Message{Role: "assistant"}
+		return nil, usage, fmt.Errorf("LLM protocol error at turn %d: choice 0 has no message", turn)
+	}
+	if provider.MessageText(msg) == "" && len(provider.MessageToolCalls(msg)) == 0 {
+		return nil, usage, fmt.Errorf("LLM protocol error at turn %d: response message has no final text or tool call", turn)
 	}
 	msg.Id = messageID
 	if len(msg.Content) > 0 {
@@ -402,6 +413,9 @@ streamDone:
 	}
 
 	msg := builder.Message()
+	if provider.MessageText(msg) == "" && len(provider.MessageToolCalls(msg)) == 0 {
+		return nil, usage, fmt.Errorf("LLM protocol error at turn %d: stream ended without final text or tool call", turn)
+	}
 	msg.Id = messageID
 	if len(msg.Content) > 0 {
 		em.messageProto(msg)

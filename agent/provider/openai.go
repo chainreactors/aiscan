@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	aop "github.com/chainreactors/cyber/aop"
@@ -361,21 +362,39 @@ func (u *openAIUsage) toProto() *aop.TokenUsage {
 }
 
 type openAIResponseMessage struct {
-	Role             string           `json:"role"`
-	Content          *string          `json:"content"`
-	ReasoningContent *string          `json:"reasoning_content,omitempty"`
-	ToolCalls        []openAIToolCall `json:"tool_calls,omitempty"`
+	Role             string  `json:"role"`
+	Content          *string `json:"content"`
+	ReasoningContent *string `json:"reasoning_content,omitempty"`
+	// Some DeepSeek-compatible gateways expose the same field as `reasoning`.
+	// Keep the alias private to this adapter and always serialize the canonical
+	// reasoning_content field on the next request.
+	Reasoning *string          `json:"reasoning,omitempty"`
+	ToolCalls []openAIToolCall `json:"tool_calls,omitempty"`
 }
 
-func openAIMessageToAOP(msg *openAIResponseMessage) *aop.Message {
+func (msg *openAIResponseMessage) reasoning() (*string, error) {
+	if msg.ReasoningContent != nil && msg.Reasoning != nil && *msg.ReasoningContent != *msg.Reasoning {
+		return nil, fmt.Errorf("OpenAI response protocol error: conflicting reasoning and reasoning_content fields")
+	}
+	if msg.ReasoningContent != nil {
+		return msg.ReasoningContent, nil
+	}
+	return msg.Reasoning, nil
+}
+
+func openAIMessageToAOP(msg *openAIResponseMessage) (*aop.Message, error) {
 	if msg.Role == "" {
 		msg.Role = "assistant"
 	}
 	out := &aop.Message{Role: msg.Role}
 	// An explicitly empty reasoning field is still part of the provider's
 	// history contract (notably DeepSeek's successive tool calls).
-	if msg.ReasoningContent != nil {
-		out.Content = append(out.Content, aop.Reasoning(*msg.ReasoningContent))
+	reasoning, err := msg.reasoning()
+	if err != nil {
+		return nil, err
+	}
+	if reasoning != nil {
+		out.Content = append(out.Content, aop.Reasoning(*reasoning))
 	}
 	if msg.Content != nil && *msg.Content != "" {
 		out.Content = append(out.Content, aop.Text(*msg.Content))
@@ -393,30 +412,71 @@ func openAIMessageToAOP(msg *openAIResponseMessage) *aop.Message {
 			Id: tc.ID, Name: tc.Function.Name, Kind: kind, Arguments: arguments,
 		}}})
 	}
-	return out
+	return out, nil
+}
+
+type openAIResponseBody struct {
+	ID      string `json:"id"`
+	Choices []struct {
+		Message      *openAIResponseMessage `json:"message"`
+		FinishReason string                 `json:"finish_reason"`
+	} `json:"choices"`
+	Usage *openAIUsage        `json:"usage,omitempty"`
+	Error *APIError           `json:"error,omitempty"`
+	Data  *openAIResponseBody `json:"data,omitempty"`
+}
+
+func jsonObjectKeys(data []byte) []string {
+	var object map[string]json.RawMessage
+	if json.Unmarshal(data, &object) != nil {
+		return nil
+	}
+	keys := make([]string, 0, len(object))
+	for key := range object {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func parseOpenAIResponse(data []byte) (*ChatCompletionResponse, error) {
-	var raw struct {
-		ID      string `json:"id"`
-		Choices []struct {
-			Message      openAIResponseMessage `json:"message"`
-			FinishReason string                `json:"finish_reason"`
-		} `json:"choices"`
-		Usage *openAIUsage `json:"usage,omitempty"`
-		Error *APIError    `json:"error,omitempty"`
-	}
+	var raw openAIResponseBody
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 	if raw.Error != nil {
 		return nil, raw.Error
 	}
-	result := &ChatCompletionResponse{ID: raw.ID, Usage: raw.Usage.toProto()}
-	for _, choice := range raw.Choices {
-		msg := choice.Message
+	if len(raw.Choices) > 0 && raw.Data != nil && len(raw.Data.Choices) > 0 {
+		return nil, fmt.Errorf("OpenAI response protocol error: ambiguous root and data choices")
+	}
+	body := raw
+	if len(raw.Choices) == 0 && raw.Data != nil {
+		body = *raw.Data
+		if body.ID == "" {
+			body.ID = raw.ID
+		}
+		if body.Usage == nil {
+			body.Usage = raw.Usage
+		}
+	}
+	if body.Error != nil {
+		return nil, body.Error
+	}
+	if len(body.Choices) == 0 {
+		return nil, fmt.Errorf("OpenAI response protocol error: response has no choices (fields=%s)", strings.Join(jsonObjectKeys(data), ","))
+	}
+	result := &ChatCompletionResponse{ID: body.ID, Usage: body.Usage.toProto()}
+	for index, choice := range body.Choices {
+		if choice.Message == nil {
+			return nil, fmt.Errorf("OpenAI response protocol error: choice %d has no message", index)
+		}
+		converted, err := openAIMessageToAOP(choice.Message)
+		if err != nil {
+			return nil, err
+		}
 		result.Choices = append(result.Choices, Choice{
-			Message:      openAIMessageToAOP(&msg),
+			Message:      converted,
 			FinishReason: choice.FinishReason,
 		})
 	}
@@ -429,6 +489,7 @@ type openAIStreamDelta struct {
 	Role             string  `json:"role,omitempty"`
 	Content          *string `json:"content"`
 	ReasoningContent *string `json:"reasoning_content,omitempty"`
+	Reasoning        *string `json:"reasoning,omitempty"`
 	ToolCalls        []struct {
 		Index    int    `json:"index,omitempty"`
 		ID       string `json:"id,omitempty"`
@@ -445,14 +506,31 @@ type openAIStreamChunk struct {
 		Delta        openAIStreamDelta `json:"delta"`
 		FinishReason string            `json:"finish_reason"`
 	} `json:"choices"`
-	Usage *openAIUsage `json:"usage,omitempty"`
-	Error *APIError    `json:"error,omitempty"`
+	Usage *openAIUsage       `json:"usage,omitempty"`
+	Error *APIError          `json:"error,omitempty"`
+	Data  *openAIStreamChunk `json:"data,omitempty"`
 }
 
 func parseOpenAIStreamChunk(data []byte) (ChatCompletionStreamEvent, error) {
 	var chunk openAIStreamChunk
 	if err := json.Unmarshal(data, &chunk); err != nil {
 		return ChatCompletionStreamEvent{}, fmt.Errorf("unmarshal stream chunk: %w", err)
+	}
+	if chunk.Error != nil {
+		return ChatCompletionStreamEvent{}, chunk.Error
+	}
+	if len(chunk.Choices) > 0 && chunk.Data != nil && len(chunk.Data.Choices) > 0 {
+		return ChatCompletionStreamEvent{}, fmt.Errorf("OpenAI stream protocol error: ambiguous root and data choices")
+	}
+	if len(chunk.Choices) == 0 && chunk.Data != nil {
+		dataChunk := *chunk.Data
+		if dataChunk.Data != nil {
+			return ChatCompletionStreamEvent{}, fmt.Errorf("OpenAI stream protocol error: nested data wrapper is unsupported")
+		}
+		if dataChunk.Usage == nil {
+			dataChunk.Usage = chunk.Usage
+		}
+		chunk = dataChunk
 	}
 	if chunk.Error != nil {
 		return ChatCompletionStreamEvent{}, chunk.Error
@@ -464,15 +542,22 @@ func parseOpenAIStreamChunk(data []byte) (ChatCompletionStreamEvent, error) {
 	delta := chunk.Choices[0].Delta
 	event.Role = delta.Role
 	event.FinishReason = chunk.Choices[0].FinishReason
+	if delta.ReasoningContent != nil && delta.Reasoning != nil && *delta.ReasoningContent != *delta.Reasoning {
+		return ChatCompletionStreamEvent{}, fmt.Errorf("OpenAI stream protocol error: conflicting reasoning and reasoning_content fields")
+	}
 	if delta.Content != nil && *delta.Content != "" {
 		event.MessageDelta = &aop.MessageDelta{
 			Operation: aop.DeltaOperation_DELTA_OPERATION_APPEND,
 			Value:     &aop.MessageDelta_Text{Text: *delta.Content},
 		}
-	} else if delta.ReasoningContent != nil {
+	} else if delta.ReasoningContent != nil || delta.Reasoning != nil {
+		reasoning := delta.ReasoningContent
+		if reasoning == nil {
+			reasoning = delta.Reasoning
+		}
 		event.MessageDelta = &aop.MessageDelta{
 			Operation: aop.DeltaOperation_DELTA_OPERATION_APPEND,
-			Value:     &aop.MessageDelta_Reasoning{Reasoning: *delta.ReasoningContent},
+			Value:     &aop.MessageDelta_Reasoning{Reasoning: *reasoning},
 		}
 	}
 	for _, tc := range delta.ToolCalls {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 
+	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 	"github.com/dop251/goja"
 )
 
@@ -43,6 +44,16 @@ type library struct {
 	Claims   map[string]claimRecord  `json:"claims"`
 	Reflexes map[string]reflexRecord `json:"reflexes"`
 	Compiled map[string]bool         `json:"compiled"`
+}
+
+// native projects Claim semantics directly into JEV's native choice protocol.
+func (c Claim) native() jevapi.Question {
+	return jevapi.Question{Type: "choice", Instructions: c.Question, Criteria: c.Options}
+}
+
+// native projects a Reflex judgment with options bound from current facts.
+func (r Reflex) native(options map[string]string) jevapi.Question {
+	return (Claim{Question: decisionInstructions + r.Decide, Options: options}).native()
 }
 
 func (c Claim) validate() error {

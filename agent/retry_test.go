@@ -44,6 +44,85 @@ func TestRetryOnTransientError(t *testing.T) {
 	}
 }
 
+func TestProtocolResponseWithNoChoicesFailsWithoutRetry(t *testing.T) {
+	callCount := 0
+	llm := &callbackProvider{fn: func(context.Context, *ChatCompletionRequest) (*ChatCompletionResponse, error) {
+		callCount++
+		return &ChatCompletionResponse{}, nil
+	}}
+	result, err := NewAgent(Config{
+		Loop:       StandardLoop{},
+		Provider:   llm,
+		Tools:      newTestTools(t),
+		Model:      "test",
+		MaxRetries: 4,
+	}).Run(t.Context(), TextInput("hello"))
+	if err == nil || !strings.Contains(err.Error(), "LLM protocol error") || !strings.Contains(err.Error(), "no choices") {
+		t.Fatalf("Run() error = %v, want protocol error", err)
+	}
+	if result == nil || result.Stop != StopReasonError {
+		t.Fatalf("result = %#v, want protocol stop", result)
+	}
+	if callCount != 1 {
+		t.Fatalf("provider calls = %d, want one; malformed response must not retry", callCount)
+	}
+}
+
+func TestProtocolResponseWithNilMessageFailsWithoutFabricatingAssistant(t *testing.T) {
+	callCount := 0
+	llm := &callbackProvider{fn: func(context.Context, *ChatCompletionRequest) (*ChatCompletionResponse, error) {
+		callCount++
+		return &ChatCompletionResponse{Choices: []Choice{{Message: nil}}}, nil
+	}}
+	_, err := NewAgent(Config{
+		Loop:       StandardLoop{},
+		Provider:   llm,
+		Tools:      newTestTools(t),
+		Model:      "test",
+		MaxRetries: 2,
+	}).Run(t.Context(), TextInput("hello"))
+	if err == nil || !strings.Contains(err.Error(), "choice 0 has no message") {
+		t.Fatalf("Run() error = %v, want nil-message protocol error", err)
+	}
+	if callCount != 1 {
+		t.Fatalf("provider calls = %d, want one", callCount)
+	}
+}
+
+func TestReasoningOnlyResponseFailsWithoutFinalTextOrToolCall(t *testing.T) {
+	llm := &scriptedProvider{responses: []*ChatCompletionResponse{{
+		Choices: []Choice{{Message: &aop.Message{Role: "assistant", Content: []*aop.Content{aop.Reasoning("thinking")}}}},
+	}}}
+	_, err := NewAgent(Config{
+		Loop:       StandardLoop{},
+		Provider:   llm,
+		Tools:      newTestTools(t),
+		Model:      "test",
+		MaxRetries: 1,
+	}).Run(t.Context(), TextInput("hello"))
+	if err == nil || !strings.Contains(err.Error(), "no final text or tool call") {
+		t.Fatalf("Run() error = %v, want empty-final protocol error", err)
+	}
+}
+
+func TestEmptyStreamFailsAsProtocolError(t *testing.T) {
+	llm := &scriptedProvider{streamEvents: []ChatCompletionStreamEvent{{Done: true}}}
+	_, err := NewAgent(Config{
+		Loop:       StandardLoop{},
+		Provider:   llm,
+		Tools:      newTestTools(t),
+		Model:      "test",
+		Stream:     true,
+		MaxRetries: 2,
+	}).Run(t.Context(), TextInput("hello"))
+	if err == nil || !strings.Contains(err.Error(), "stream ended without final text") {
+		t.Fatalf("Run() error = %v, want empty-stream protocol error", err)
+	}
+	if requests := llm.requestsSnapshot(); len(requests) != 1 {
+		t.Fatalf("stream requests = %d, want one", len(requests))
+	}
+}
+
 func TestClampMaxTokens(t *testing.T) {
 	tests := []struct {
 		name                     string

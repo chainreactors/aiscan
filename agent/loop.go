@@ -503,7 +503,7 @@ func executeToolCalls(ctx context.Context, cfg Config, em *aopEmitter, assistant
 	}
 	for i, tc := range toolCalls {
 		if reason := assistant.rejected[i]; reason != "" {
-			results[i] = rejectedToolResult(tc, reason)
+			results[i] = semanticRejectedToolResult(tc, reason)
 			cfg.Logger.Warnf("[turn %d] rejected unsafe tool call name=%s reason=%s", turn, tc.Name, reason)
 			continue
 		}
@@ -562,6 +562,65 @@ func rejectedToolResult(call *aop.ToolCall, message string) *aop.ToolResult {
 	return result
 }
 
+func semanticRejectedToolResult(call *aop.ToolCall, message string) *aop.ToolResult {
+	code := "invalid_tool_call"
+	if message == truncatedToolCallError {
+		code = "truncated_tool_call"
+	}
+	return semanticToolErrorResult(call, code, message, nil)
+}
+
+func semanticToolErrorResult(call *aop.ToolCall, code, message string, fields map[string]any) *aop.ToolResult {
+	arguments := string(call.GetArguments().GetData())
+	var semanticArguments any = arguments
+	var decoded any
+	if json.Unmarshal([]byte(arguments), &decoded) == nil {
+		semanticArguments = decoded
+	}
+	payload := map[string]any{
+		"ok": false,
+		"error": map[string]string{
+			"code":    code,
+			"message": message,
+		},
+		"requested": map[string]any{
+			"name":      call.Name,
+			"arguments": semanticArguments,
+		},
+	}
+	for key, value := range fields {
+		payload[key] = value
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		data = []byte(fmt.Sprintf(`{"ok":false,"error":{"code":%q,"message":%q}}`, code, message))
+	}
+	result := coretool.ErrorResult(string(data))
+	result.CallId, result.Name = call.Id, call.Name
+	return result
+}
+
+// unknownToolResult keeps an invalid model call in the normal tool-result
+// channel. The model receives the semantic request and the registered tool
+// affordances, so it can correct its own name without the agent guessing or
+// rewriting a potentially state-changing call.
+func unknownToolResult(call *aop.ToolCall, definitions []*aop.ToolDefinition) *aop.ToolResult {
+	available := make([]map[string]string, 0, len(definitions))
+	for _, definition := range definitions {
+		if definition == nil || strings.TrimSpace(definition.Name) == "" {
+			continue
+		}
+		available = append(available, map[string]string{
+			"name":        definition.Name,
+			"description": definition.Description,
+		})
+	}
+	sort.Slice(available, func(i, j int) bool { return available[i]["name"] < available[j]["name"] })
+	return semanticToolErrorResult(call, "unknown_tool", "requested tool is not registered; choose one of the available tools", map[string]any{
+		"available_tools": available,
+	})
+}
+
 func runToolCallSafely(ctx context.Context, cfg Config, tc *aop.ToolCall, turn int) (result *aop.ToolResult) {
 	startedAt := time.Now()
 	defer func() {
@@ -590,6 +649,19 @@ func runToolCallSafely(ctx context.Context, cfg Config, tc *aop.ToolCall, turn i
 	toolCtx = ContextWithToolAgentConfig(toolCtx, cfg)
 	toolCtx = inbox.ContextWithInbox(toolCtx, cfg.Inbox)
 	arguments := string(tc.GetArguments().GetData())
+	definitions := cfg.Tools.ToolDefinitions()
+	known := false
+	for _, definition := range definitions {
+		if definition != nil && definition.Name == tc.Name {
+			known = true
+			break
+		}
+	}
+	if !known {
+		result = unknownToolResult(tc, definitions)
+		cfg.Logger.Warnf("[turn %d] unknown tool name=%s; returned semantic correction result", turn, tc.Name)
+		return result
+	}
 	result, err := cfg.Tools.ExecuteTool(toolCtx, tc.Name, arguments)
 	if result == nil {
 		result = &aop.ToolResult{}
