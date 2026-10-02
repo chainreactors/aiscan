@@ -161,6 +161,11 @@ func RunWebSocketWithCapabilities(ctx context.Context, newProfile func(profile.R
 				// new one.
 				before, after := proto.CloneOf(currentConfig), proto.CloneOf(nextConfig)
 				before.Llm, after.Llm = nil, nil
+				// A node enrolls with its provider deliberately disabled. The first
+				// server config therefore has to build a provider-owned profile when
+				// the only graph change is the LLM section and the profile has no
+				// in-place reload hook. Profiles that do provide the hook can still
+				// activate their first provider without a rebuild.
 				if !unchanged && proto.Equal(before, after) {
 					if reloader, ok := current.(interface {
 						ReloadProvider(context.Context, agent.ProviderConfig) error
@@ -174,7 +179,9 @@ func RunWebSocketWithCapabilities(ctx context.Context, newProfile func(profile.R
 						}
 						return reloadStatus(current)
 					}
-					return &types.ReloadResult{Error: "provider extension does not support live configuration; restart the node to apply it"}, nil
+					if configured {
+						return &types.ReloadResult{Error: "provider extension does not support live configuration; restart the node to apply it"}, nil
+					}
 				}
 				mode := profile.ProviderOptional
 				if len(distributed.GetLlm().GetProviders()) == 0 {
