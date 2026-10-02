@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -77,8 +79,10 @@ func TestCompileFailureDoesNotMarkGroupComplete(t *testing.T) {
 	id := "c" + digest(claims[0])[:16]
 	e.library.Claims[id] = claimRecord{Claim: claims[0]}
 	// A legacy attempt marker without a published scene must not survive load.
-	e.library.Compiled[digest(map[string]Claim{id: claims[0]})] = true
-	if err := e.saveLibrary(); err != nil {
+	legacy := e.snapshot()
+	legacy.Compiled[digest(map[string]Claim{id: claims[0]})] = true
+	data, _ := json.Marshal(legacy)
+	if err := os.WriteFile(filepath.Join(e.config.Directory, "library.json"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.loadLibrary(); err != nil || len(e.snapshot().Compiled) != 0 {
@@ -352,7 +356,6 @@ func TestMatchedSceneRepairsMissingEntryFromOrdinaryEvidence(t *testing.T) {
 	old := Reflex{When: "Advancement with an existing handle", Decide: "Use current state", Observe: `js:({state:{},candidates:{}})`}
 	repairID = "r" + digest(old)[:16]
 	e.library.Reflexes[repairID] = reflexRecord{Reflex: old, Claims: []string{cid}}
-	e.library.Compiled[digest(map[string]Claim{cid: claims[0]})] = true
 	cfg.Provider = testProvider(func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 		generated++
 		if provider.MessageText(req.Messages[0]) != compilePrompt || !strings.Contains(provider.MessageText(req.Messages[1]), "recorded handoff BEFORE") {

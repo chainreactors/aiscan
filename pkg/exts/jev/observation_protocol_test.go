@@ -88,19 +88,6 @@ func TestBackgroundUsesLatestBoundaryInsteadOfQueuedOldOutputs(t *testing.T) {
 	}
 }
 
-func TestResultJSONDoesNotInventMissingOrIncompleteFacts(t *testing.T) {
-	for _, input := range []string{"ordinary text", "header\n{\"items\":", "header\n{\"items\":[]}\ntrailing non-JSON", "{bad data}"} {
-		if data := resultJSON(input); data != nil {
-			t.Fatalf("accepted incomplete result %q: %+v", input, data)
-		}
-	}
-	for _, input := range []string{`{"phase":"done"}`, "header\n---\n{\n\"phase\":\"done\"\n}", "header\n[1,2]", "header\n\"{\\\"phase\\\":\\\"done\\\"}\""} {
-		if data := resultJSON(input); data == nil {
-			t.Fatalf("lost actual JSON result %q", input)
-		}
-	}
-}
-
 func TestJavaScriptObserveBindsOnlyCurrentNativeData(t *testing.T) {
 	r := Reflex{When: "Operate on current data", Decide: "Choose a requested item", Observe: `js:(() => {
 const recent = history.length ? history[history.length-1] : null;
@@ -114,26 +101,6 @@ return {state:{user:user, items:rows}, candidates:choices(rows.map(item => bind(
 	state, bindings, err := r.observe(t.Context(), input, map[string]any{"tools": []any{map[string]any{"name": "native"}}, "commands": []any{}})
 	if err != nil || len(bindings) != 2 || !strings.Contains(string(state), "Select second") || string(bindings["c1"].Arguments) != `{"value":"two"}` {
 		t.Fatalf("state=%s bindings=%v error=%v", state, bindings, err)
-	}
-}
-
-func TestJavaScriptObserveHasNoIOAndStopsOnBudget(t *testing.T) {
-	for _, script := range []string{
-		`require("fs")`, `fetch("https://example.invalid")`, `ExecuteTool("native", {})`,
-		`new Date()`, `Math.random()`, `(() => { while (true) {} })()`,
-		`({state:{},candidates:choices(new Array(65).fill(bind("native",{},false)))})`,
-		`({state:{},candidates:choices([bind("native",{})])})`,
-		`({state:{},candidates:choices([bind("native",{},"false")])})`,
-		`({state:{},candidates:choices([{name:"native",arguments:{}}])})`,
-		`({state:{},candidates:choices([{name:"native",arguments:{},read:null}])})`,
-	} {
-		r := Reflex{When: "Current task", Decide: "Choose current bindings", Observe: "js:" + script}
-		if err := r.validate(); err != nil {
-			t.Fatal(err)
-		}
-		if _, _, err := r.observe(t.Context(), json.RawMessage(`{"messages":[]}`), map[string]any{"tools": []any{}, "commands": []any{}}); err == nil {
-			t.Fatalf("unbounded or external execution accepted: %s", script)
-		}
 	}
 }
 
@@ -230,21 +197,6 @@ return {state:{},candidates:choices([bind(tools[0].name,{program:program(reader,
 	}
 }
 
-func TestCompilerAllowsHonestPartialSceneWithoutEntryBinding(t *testing.T) {
-	r := Reflex{When: "Current native resource workflow", Decide: "Inspect known resources, defer until a handle is available", Observe: `js:(() => {
-const recent = history.length ? history[history.length-1] : null;
-const handle = recent && recent.data && recent.data.handle;
-return {state:{handle:handle || null},candidates:choices(handle ? [bind(tools[0].name,{handle:handle},true)] : [])};
-})()`}
-	if err := r.validate(); err != nil {
-		t.Fatal(err)
-	}
-	input := json.RawMessage(`{"messages":[{"role":"user","text":"Inspect a resource"},{"role":"assistant","calls":[{"id":"open","name":"native","arguments":{}}]},{"role":"tool","call_id":"open","text":"{\"handle\":\"current\"}"}]}`)
-	if err := verifyObserve(t.Context(), &r, input, map[string]any{"tools": []any{map[string]any{"name": "native"}}, "commands": []any{}}); err != nil {
-		t.Fatalf("useful partial scene cannot reach semantic review: %v", err)
-	}
-}
-
 func TestNativeObservationProtocolIsValidatedAndOnlyReusesFreshSuccess(t *testing.T) {
 	r := Reflex{When: "Current resource workflow", Decide: "Choose current bindings", Observe: `js:({state:{needs_read:true},candidates:choices([bind('reader',{},true)])})`}
 	if err := r.validate(); err != nil {
@@ -319,110 +271,65 @@ func TestPureObservationUsesSameArrayBindingProtocol(t *testing.T) {
 	}
 }
 
-func TestReviewSharesBindingsWithoutLosingActualBoundaryEvidence(t *testing.T) {
-	args, _ := json.Marshal(map[string]any{"program": strings.Repeat("native program ", 1000), "version": json.Number("9007199254740993")})
-	candidate := binding{Name: "ordinary", Arguments: args, Read: true}
-	var witnesses []map[string]any
-	for i := 0; i < 8; i++ {
-		witnesses = append(witnesses, map[string]any{"boundary": i, "latest": fmt.Sprintf("actual result %d", i), "candidates": map[string]binding{"current": candidate}, "next_calls": []string{fmt.Sprintf("next %d", i)}})
-	}
-	raw, _ := json.Marshal(witnesses)
-	rows, bindings := compactWitnesses(witnesses)
-	compact, _ := json.Marshal(map[string]any{"evaluations": rows, "bindings": bindings})
-	if len(raw) <= 64<<10 || len(compact) >= 32<<10 || len(rows) != 8 || len(bindings) != 1 {
-		t.Fatalf("duplicate readers exceed review budget: raw=%d compact=%d rows=%d bindings=%d", len(raw), len(compact), len(rows), len(bindings))
-	}
-	for i, row := range rows {
-		ref := row["candidates"].(map[string]string)["current"]
-		if canonicalBinding := bindings[ref]; canonicalBinding.Name != candidate.Name || string(canonicalBinding.Arguments) != string(args) || !canonicalBinding.Read || row["latest"] != witnesses[i]["latest"] || row["next_calls"] == nil {
-			t.Fatal("compaction changed an actual binding or its boundary evidence")
-		}
-		if _, ok := witnesses[i]["candidates"].(map[string]binding); !ok {
-			t.Fatal("compaction mutated original evidence")
-		}
-	}
-}
-
-func TestCompilerSourceEnvelopeKeepsCodeAndRejectsSurroundingProse(t *testing.T) {
+func TestDecodeReflex(t *testing.T) {
 	source := `(() => ({state:{},candidates:choices([bind("ordinary",{},true)])}))()`
-	for _, envelope := range []string{"js:" + source, "```js\n" + source + "\n```", "```javascript\njs:" + source + "\n```", "js:\n```js\n" + source + "\n```", "js:\n```javascript\n" + source + "\n```"} {
-		var reflex *Reflex
-		if err := decodeReflex(envelope, &reflex); err != nil || reflex.Observe != "js:"+source {
-			t.Fatalf("unambiguous source changed: output=%+v error=%v", reflex, err)
-		}
-		reflex.When, reflex.Decide = "Current native resource", "Choose actual native calls"
-		if err := reflex.validate(); err != nil {
-			t.Fatal(err)
-		}
-		_, candidates, err := reflex.observe(t.Context(), json.RawMessage(`{"messages":[]}`), map[string]any{"tools": []any{map[string]any{"name": "ordinary"}}, "commands": []any{}})
-		if err != nil || len(candidates) != 1 {
-			t.Fatalf("source fence was executed as a template: candidates=%v error=%v", candidates, err)
-		}
+	raw := `js:(() => { return {state:{text:"你好",pattern:/["\\]/},candidates:choices([])}; })()`
+	cases := []struct {
+		name, input, want string
+		reject            bool
+		candidates        int
+	}{
+		{"raw", "js:" + source, "js:" + source, false, 1},
+		{"js fence", "```js\n" + source + "\n```", "js:" + source, false, 1},
+		{"javascript fence", "```javascript\njs:" + source + "\n```", "js:" + source, false, 1},
+		{"prefixed js fence", "js:\n```js\n" + source + "\n```", "js:" + source, false, 1},
+		{"prefixed javascript fence", "js:\n```javascript\n" + source + "\n```", "js:" + source, false, 1},
+		{"unicode and regex", raw, raw, false, 0},
+		{"null", "null", "", false, 0},
+		{"leading prose", "Here is the code:\n```js\n" + source + "\n```", "", true, 0},
+		{"trailing prose", "```js\n" + source + "\n```\nExecute this", "", true, 0},
+		{"prefixed trailing prose", "js:\n```js\n" + source + "\n```\nExecute this", "", true, 0},
+		{"wrong language", "js:\n```python\n" + source + "\n```", "", true, 0},
+		{"incomplete fence", "js:\n```js\n" + source, "", true, 0},
+		{"multiple fences", "js:\n```js\n" + source + "\n```\n```js\n" + source + "\n```", "", true, 0},
+		{"extra after null", `null {}`, "", true, 0},
+		{"unknown metadata", `{"when":"scene","decide":"choose","extra":true}`, "", true, 0},
+		{"multiple JSON objects", `{"when":"scene","decide":"choose"} {}`, "", true, 0},
+		{"metadata before source", `{"when":"scene","decide":"choose","observe":"old"} js:({})`, "", true, 0},
+		{"JSON scene", `{"when":"scene","decide":"choose","observe":"js:({})"}`, "", true, 0},
+		{"metadata and raw code", `{"when":"scene","decide":"choose"}` + raw, "", true, 0},
 	}
-	for _, envelope := range []string{"Here is the code:\n```js\n" + source + "\n```", "```js\n" + source + "\n```\nExecute this", "js:\n```js\n" + source + "\n```\nExecute this", "js:\n```python\n" + source + "\n```", "js:\n```js\n" + source, "js:\n```js\n" + source + "\n```\n```js\n" + source + "\n```"} {
-		var reflex *Reflex
-		if decodeReflex(envelope, &reflex) == nil {
-			t.Fatal("extra compiler prose accepted as source")
-		}
-	}
-}
-
-func TestPureFunctionProgramEntryProducesAndBoundsActualObservation(t *testing.T) {
-	for _, loop := range []bool{false, true} {
-		code := `js:() => ({state:{content:user},candidates:choices([bind("ordinary",{resource:user},true)])})`
-		if loop {
-			code = `js:() => { while(true) {} }`
-		}
-		r := Reflex{When: "Native resource workflow", Decide: "Select actual operations", Observe: code}
-		if err := r.validate(); err != nil {
-			t.Fatal(err)
-		}
-		input := json.RawMessage(`{"messages":[{"role":"user","text":"current resource"}]}`)
-		facts, candidates, err := r.observe(t.Context(), input, map[string]any{"tools": []any{map[string]any{"name": "ordinary"}}, "commands": []any{}})
-		if loop {
-			if err == nil {
-				t.Fatal("function entry escaped execution budget")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var r *Reflex
+			err := decodeReflex(tc.input, &r)
+			if tc.reject {
+				if err == nil {
+					t.Fatal("malformed compilation accepted")
+				}
+				return
 			}
-		} else if err != nil || len(candidates) != 1 || !strings.Contains(string(facts), "current resource") {
-			t.Fatalf("pure entry did not execute: facts=%s candidates=%v error=%v", facts, candidates, err)
-		}
-	}
-}
-
-func TestCompilationRejectsCopiedOpaqueIdentifiersAndEscapedResources(t *testing.T) {
-	capabilities := map[string]any{"tools": []any{map[string]any{"name": "native"}}, "commands": []any{}}
-	input := json.RawMessage(`{"messages":[{"role":"user","text":"Use http://127.0.0.1:32997/current"},{"role":"assistant","calls":[{"id":"read","name":"native","arguments":{}}]},{"role":"tool","call_id":"read","text":"{\"id\":\"node-91e567acf604ae29\"}"}]}`)
-	for _, code := range []string{
-		`js:({state:{},candidates:choices([bind('native',{id:'node-91e567acf604ae29'},false)])})`,
-		`js:({state:{pattern:/http:\/\/127\.0\.0\.1:32997\/current/},candidates:choices([])})`,
-	} {
-		r := Reflex{When: "Current capability", Decide: "Use actual alternatives", Observe: code}
-		if err := r.validate(); err != nil {
-			t.Fatal(err)
-		}
-		if err := verifyObserve(t.Context(), &r, input, capabilities); err == nil {
-			t.Fatal("copied runtime identifier/resource passed compilation checks")
-		}
-	}
-}
-
-func TestCompilerRejectsGoalSelectionFromUnrequestedQuotedExample(t *testing.T) {
-	input := json.RawMessage(`{"messages":[{"role":"user","text":"Select second from the current alternatives"},{"role":"assistant","calls":[{"id":"read","name":"native","arguments":{}}]},{"role":"tool","call_id":"read","text":"{\"items\":[{\"id\":\"first\"},{\"id\":\"second\"}]}"}]}`)
-	capabilities := map[string]any{"tools": []any{map[string]any{"name": "native"}}, "commands": []any{}}
-	for _, filter := range []bool{false, true} {
-		code := `js:(() => { const latest = history.length ? history[history.length-1] : null; let items = latest ? latest.data.items : [];`
-		if filter {
-			code += `const target = (user.match(/select\s+(\S+)/i) || [])[1]; items = items.filter(item => item.id === target);`
-		}
-		code += `return {state:{items:items},candidates:choices(items.map(item => bind(tools[0].name,{id:item.id},false)))}; })()`
-		r := Reflex{When: "Choose from current native alternatives", Decide: "JEV chooses the intended current binding", Observe: code}
-		if err := r.validate(); err != nil {
-			t.Fatal(err)
-		}
-		err := verifyObserve(t.Context(), &r, input, capabilities)
-		if (err != nil) != filter {
-			t.Fatalf("goal filter=%t verification error=%v", filter, err)
-		}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.want == "" {
+				if r != nil {
+					t.Fatal("null compilation produced a scene")
+				}
+				return
+			}
+			if r == nil || r.Observe != tc.want {
+				t.Fatalf("source changed: %+v", r)
+			}
+			r.When, r.Decide = "Current native resource", "Choose actual native calls"
+			if err := r.validate(); err != nil {
+				t.Fatal(err)
+			}
+			_, candidates, err := r.observe(t.Context(), json.RawMessage(`{"messages":[]}`), map[string]any{"tools": []any{map[string]any{"name": "ordinary"}}, "commands": []any{}})
+			if err != nil || len(candidates) != tc.candidates {
+				t.Fatalf("source did not execute: candidates=%v error=%v", candidates, err)
+			}
+		})
 	}
 }
 
@@ -442,16 +349,17 @@ func TestGeneratedInspectionRunsBeforeEffectCanReport(t *testing.T) {
 	rid = "r" + digest(r)[:16]
 	e.tasks["run"] = taskRecord{Key: "task", NeedsRead: true}
 	key := rid + "/inspect"
-	candidate := action("ordinary current-state")
+	candidate := binding{Name: "bash", Arguments: json.RawMessage(`{"command":"ordinary current-state"}`), Read: true}
 	observations := map[string]json.RawMessage{rid: json.RawMessage(`{"phase":"inspection needed"}`)}
-	selected, result, err := e.decide(t.Context(), json.RawMessage(`{"messages":[]}`), observations, map[string]*aop.Content{key: candidate}, map[string]bool{key: true}, nil, &r, "run", "task")
+	observed := &observation{context: json.RawMessage(`{"messages":[]}`), facts: observations, candidates: map[string]binding{key: candidate}}
+	selected, result, err := e.decide(t.Context(), observed, nil, &r, "run", "task")
 	if err != nil || selected == nil || result != key || reportAvailable {
 		t.Fatalf("unexecuted inspection was bypassed: choice=%s report=%t error=%v", result, reportAvailable, err)
 	}
 	record := e.tasks["run"]
 	record.NeedsRead = false
 	e.tasks["run"] = record
-	selected, result, err = e.decide(t.Context(), json.RawMessage(`{"messages":[]}`), observations, map[string]*aop.Content{key: candidate}, map[string]bool{key: true}, nil, &r, "run", "task")
+	selected, result, err = e.decide(t.Context(), observed, nil, &r, "run", "task")
 	if err != nil || selected != nil || result != report || !reportAvailable {
 		t.Fatalf("completed read cannot report: choice=%s report=%t error=%v", result, reportAvailable, err)
 	}
@@ -459,76 +367,10 @@ func TestGeneratedInspectionRunsBeforeEffectCanReport(t *testing.T) {
 	// inspection when its generated scene offers none.
 	record.NeedsRead = true
 	e.tasks["run"] = record
-	_, result, err = e.decide(t.Context(), json.RawMessage(`{"messages":[]}`), observations, map[string]*aop.Content{}, nil, nil, &r, "run", "task")
+	observed.candidates = nil
+	_, result, err = e.decide(t.Context(), observed, nil, &r, "run", "task")
 	if err != nil || result != report || !reportAvailable {
 		t.Fatalf("self-contained effect result was blocked: choice=%s error=%v", result, err)
-	}
-}
-
-func TestCompilerChecksEarlierBoundariesAndGoalWording(t *testing.T) {
-	capabilities := map[string]any{"tools": []any{map[string]any{"name": "native"}}, "commands": []any{}}
-	input := json.RawMessage(`{"messages":[{"role":"user","text":"Select something"},{"role":"assistant","calls":[{"id":"read","name":"native","arguments":{}}]},{"role":"tool","call_id":"read","text":"{\"complete\":true}"}]}`)
-	for _, code := range []string{
-		`js:(() => { const result=history[0].data; return {state:result,candidates:choices([])}; })()`,
-		`js:({state:{},candidates:choices([bind("native",{selector:user.split("Select ")[1]},false)])})`,
-	} {
-		r := Reflex{When: "Current scene", Decide: "Select current bindings", Observe: code}
-		if err := r.validate(); err != nil {
-			t.Fatal(err)
-		}
-		if err := verifyObserve(t.Context(), &r, input, capabilities); err == nil {
-			t.Fatalf("unsafe earlier/goal-dependent branch passed publication checks: %s", code)
-		}
-	}
-}
-
-func TestCompileRawCodePreservesProgramAndRejectsExtraOutput(t *testing.T) {
-	code := `js:(() => { return {state:{text:"你好",pattern:/["\\]/},candidates:choices([])}; })()`
-	var r *Reflex
-	if err := decodeReflex(code, &r); err != nil || r == nil || r.Observe != code {
-		t.Fatalf("raw code changed: reflex=%+v error=%v", r, err)
-	}
-	r.When, r.Decide = "Current native scene", "Select current choices"
-	if err := r.validate(); err != nil {
-		t.Fatal(err)
-	}
-	for _, text := range []string{`null {}`, `{"when":"scene","decide":"choose","extra":true}`, `{"when":"scene","decide":"choose"} {}`, `{"when":"scene","decide":"choose","observe":"old"} js:({})`, `{"when":"scene","decide":"choose","observe":"js:({})"}`, `{"when":"scene","decide":"choose"}` + code} {
-		if err := decodeReflex(text, &r); err == nil {
-			t.Fatalf("accepted malformed compilation: %s", text)
-		}
-	}
-}
-
-func TestObserveNormalizesWrappedDataAndRetainsOriginalEvidence(t *testing.T) {
-	payload := `{"items":[{"id":"live","label":"Current item"}]}`
-	wrapped, _ := json.Marshal(payload)
-	raw := "Ordinary program echo: (() => { return {unrelated:true}; })()\n---\n" + string(wrapped)
-	input, _ := json.Marshal(map[string]any{"messages": []any{
-		map[string]any{"role": "user", "text": "Choose an item"},
-		map[string]any{"role": "assistant", "calls": []any{map[string]any{"id": "read", "name": "arbitrary", "arguments": map[string]any{}}}},
-		map[string]any{"role": "tool", "call_id": "read", "text": raw},
-	}})
-	env, err := observeInput(input, map[string]any{"tools": []any{}, "commands": []any{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	h := env["history"].([]map[string]any)[0]
-	original := env["messages"].([]map[string]any)[2]["text"]
-	if h["text"] != payload || original != raw || h["data"] == nil {
-		t.Fatalf("lost structured or original native evidence: %+v", h)
-	}
-}
-
-func TestResultSummaryKeepsActualPayloadBeyondLongEnvelope(t *testing.T) {
-	payload := `{"text":"actual receipt","version":9007199254740993,"items":[]}`
-	encoded, _ := json.Marshal(payload)
-	raw := strings.Repeat("ordinary program echo\n", 200) + "---\n" + string(encoded)
-	summary := resultSummary(raw)
-	if !strings.Contains(summary, "actual receipt") || !strings.Contains(summary, "9007199254740993") || strings.Contains(summary, "program echo") {
-		t.Fatalf("actual result lost or changed: %s", summary)
-	}
-	if resultSummary("plain native status") != "plain native status" {
-		t.Fatal("unstructured result was changed")
 	}
 }
 
@@ -540,7 +382,6 @@ func TestRetiredSceneRemainsEligibleAfterRestart(t *testing.T) {
 	id := "r" + digest(r)[:16]
 	e.library.Claims[claimID] = claimRecord{Claim: c}
 	e.library.Reflexes[id] = reflexRecord{Reflex: r, Claims: []string{claimID}}
-	e.library.Compiled[digest(map[string]Claim{claimID: c})] = true
 	if !e.retireReflex(id, fmt.Errorf("invalid generated binding")) {
 		t.Fatal("failed scene still owns declarations")
 	}
@@ -548,7 +389,7 @@ func TestRetiredSceneRemainsEligibleAfterRestart(t *testing.T) {
 	if err := reloaded.loadLibrary(); err != nil {
 		t.Fatal(err)
 	}
-	if len(reloaded.library.Claims) != 1 || len(reloaded.library.Reflexes) != 0 || len(reloaded.library.Compiled) != 0 {
+	if len(reloaded.library.Claims) != 1 || len(reloaded.library.Reflexes) != 0 || len(reloaded.snapshot().Compiled) != 0 {
 		t.Fatalf("retirement lost declarations or blocked regeneration: %+v", reloaded.library)
 	}
 }

@@ -24,19 +24,24 @@ type binding struct {
 	Read      bool            `json:"read,omitempty"`
 }
 
+func (b binding) call() *aop.ToolCall {
+	return &aop.ToolCall{Name: b.Name, Arguments: &aop.EncodedValue{Data: b.Arguments, MediaType: aop.JSONMediaType}}
+}
+
+func (b binding) canonical() string { return canonical(b.call()) }
+
 type observation struct {
-	context json.RawMessage
-	facts   map[string]json.RawMessage
-	choices map[string]*aop.Content
-	reads   map[string]bool
+	context    json.RawMessage
+	facts      map[string]json.RawMessage
+	candidates map[string]binding
 }
 
 // Capture the actual controller boundary before the model supplements it. Later
 // successful model calls cannot retroactively make a missing binding complete.
 func (o *observation) handoffSnapshot() json.RawMessage {
 	bindings := map[string]string{}
-	for key, content := range o.choices {
-		bindings[key] = canonical(content.GetToolCall())
+	for key, candidate := range o.candidates {
+		bindings[key] = candidate.canonical()
 	}
 	data, err := json.Marshal(map[string]any{"context": o.context, "observations": o.facts, "candidates": bindings})
 	if err != nil || len(data) > 56<<10 {
@@ -122,15 +127,7 @@ func observeInput(state json.RawMessage, capabilities map[string]any) (map[strin
 		}
 		call := calls[id]
 		text, _ := message["text"].(string)
-		data := resultJSON(text)
-		normalized := text
-		if data != nil {
-			encoded, err := json.Marshal(data)
-			if err != nil {
-				return nil, err
-			}
-			normalized = string(encoded)
-		}
+		normalized, data := normalizedResult(text)
 		history = append(history, map[string]any{"name": call["name"], "arguments": call["arguments"], "text": normalized, "data": data, "is_error": message["is_error"], "terminate": message["terminate"]})
 	}
 	env["history"] = history
@@ -146,9 +143,14 @@ func (r *Reflex) observe(ctx context.Context, state json.RawMessage, capabilitie
 	if err != nil {
 		return nil, nil, err
 	}
+	return r.observeData(ctx, input, capabilities)
+}
+
+func (r *Reflex) observeData(ctx context.Context, input, capabilities map[string]any) (json.RawMessage, map[string]binding, error) {
 	ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 	defer cancel()
 	var output any
+	var err error
 	// A runtime-generated native reader may already return the ordinary
 	// observation protocol. Preserve its actual alternatives instead of
 	// asking each generated program to implement the consumer again.
@@ -318,10 +320,15 @@ func resultJSON(text string) any {
 // Prefer the actual structured result over an arbitrary envelope/program echo.
 // Raw native output remains unchanged in the evidence log and private history.
 func resultSummary(text string) string {
+	text, _ = normalizedResult(text)
+	return clip(text, 2048)
+}
+
+func normalizedResult(text string) (string, any) {
 	if data := resultJSON(text); data != nil {
 		if encoded, err := json.Marshal(data); err == nil {
-			return clip(string(encoded), 2048)
+			return string(encoded), data
 		}
 	}
-	return clip(text, 2048)
+	return text, nil
 }

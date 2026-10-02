@@ -75,14 +75,15 @@ func TestLiveBrowserReflexPrerequisite(t *testing.T) {
 			scene := compiled
 			inspect := func() *observation {
 				observed := e.observe(ctx, cfg, messages, &scene)
-				if observed == nil || len(observed.choices) != 1 {
+				if observed == nil || len(observed.candidates) != 1 {
 					t.Fatal("missing native inspection binding")
 				}
-				for key, content := range observed.choices {
-					if !observed.reads[key] {
+				for _, candidate := range observed.candidates {
+					if !candidate.Read {
 						t.Fatal("inspection was not declared as a read")
 					}
-					call := content.GetToolCall()
+					call := candidate.call()
+					call.Id = aop.EnvelopeID()
 					result, err := cfg.Tools.ExecuteTool(ctx, call.Name, string(call.GetArguments().GetData()))
 					if err != nil || result == nil || result.IsError {
 						t.Fatalf("inspect: result=%v err=%v", result, err)
@@ -99,7 +100,7 @@ func TestLiveBrowserReflexPrerequisite(t *testing.T) {
 			if !strings.Contains(string(observed.facts["r"+digest(scene)[:16]]), `"selector":"#reference"`) {
 				t.Fatalf("missing real browser observation: %s", observed.facts)
 			}
-			_, selected, err := e.decide(ctx, observed.context, observed.facts, observed.choices, observed.reads, map[string]bool{}, &scene, "browser-regression", "task")
+			_, selected, err := e.decide(ctx, observed, map[string]bool{}, &scene, "browser-regression", "task")
 			if err != nil || selected != Defer {
 				audit, _ := os.ReadFile(filepath.Join(e.config.Directory, "decisions.jsonl"))
 				t.Logf("judgments: %s", audit)
@@ -117,7 +118,7 @@ func TestLiveBrowserReflexPrerequisite(t *testing.T) {
 			if !strings.Contains(string(observed.facts["r"+digest(scene)[:16]]), fmt.Sprintf(`"value":"review-%d"`, index)) {
 				t.Fatalf("field was not filled in real browser: %s", observed.facts)
 			}
-			content, selected, err := e.decide(ctx, observed.context, observed.facts, observed.choices, observed.reads, map[string]bool{}, &scene, "browser-regression", "task")
+			content, selected, err := e.decide(ctx, observed, map[string]bool{}, &scene, "browser-regression", "task")
 			if err != nil || content == nil || content.GetToolCall() == nil || canonical(content.GetToolCall()) != canonical(action("playwright click current '#next-0'").GetToolCall()) {
 				t.Errorf("filled prerequisite did not resume: selected=%q content=%v err=%v", selected, content, err)
 			}

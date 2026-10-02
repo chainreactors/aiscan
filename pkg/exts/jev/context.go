@@ -25,6 +25,16 @@ type taskRecord struct {
 	Seen      map[string]bool
 }
 
+func (e *Extension) updateTask(run, task string, update func(*taskRecord)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	record := e.tasks[run]
+	if record.Key == task {
+		update(&record)
+		e.tasks[run] = record
+	}
+}
+
 // Keep the bounded private cache free of successful program echoes. Original
 // messages and the execution ledger retain the full native result. Correlation,
 // arguments, error/termination flags and media are never rewritten.
@@ -42,10 +52,8 @@ func evidenceMessages(messages []*aop.Message) []*aop.Message {
 		if media {
 			continue
 		}
-		if data := resultJSON(coretool.ResultText(result)); data != nil {
-			if encoded, err := json.Marshal(data); err == nil {
-				result.Output = coretool.TextResult(string(encoded)).Output
-			}
+		if text, data := normalizedResult(coretool.ResultText(result)); data != nil {
+			result.Output = coretool.TextResult(text).Output
 		}
 	}
 	return messages
@@ -112,11 +120,7 @@ func contextState(messages []*aop.Message) (json.RawMessage, bool) {
 			// its entire program around a structured result; counting that echo
 			// can evict earlier actual handle/entry evidence. The original tool
 			// result and model history remain unchanged.
-			if data := resultJSON(text); data != nil {
-				if encoded, err := json.Marshal(data); err == nil {
-					text = string(encoded)
-				}
-			}
+			text, _ = normalizedResult(text)
 			item["text"], item["call_id"], item["is_error"] = text, result.CallId, result.IsError
 			if result.Terminate {
 				item["terminate"] = true

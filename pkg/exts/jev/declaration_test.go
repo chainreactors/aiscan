@@ -20,47 +20,6 @@ import (
 	coretool "github.com/chainreactors/cyber/core/tool"
 )
 
-const fixtureClaim = `[{"when":"A task requires finite step advancement","question":"Can the task advance now?","options":{"advance":"A known step can advance the task","defer":"Missing information or a completed task"}}]`
-
-var fixtureReflex = stepObserve("advance", true)
-
-func declarationAnswers(req jevapi.Request, compile bool) map[string]jevapi.Answer {
-	out := map[string]jevapi.Answer{}
-	if runtimeRequest(req) {
-		return runtimeAnswers(req, "advance/go")
-	}
-	for id, q := range req.Questions {
-		choice := Defer
-		if strings.HasPrefix(id, "claim") {
-			choice = "new"
-			for key := range q.Criteria.(map[string]any) {
-				if strings.HasPrefix(key, "c") {
-					choice = key
-					break
-				}
-			}
-		} else if id == "ownership" {
-			choice = "whole"
-		} else if strings.HasPrefix(id, "compile") || strings.HasPrefix(id, "coverage") {
-			if compile {
-				choice = "compile"
-			}
-		} else if strings.HasPrefix(id, "c") {
-			choice = "include"
-		}
-		out[id] = answer(choice)
-	}
-	return out
-}
-func settle(t *testing.T, e *Extension) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	if err := e.WaitIdle(ctx); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestEmptyLibraryLearnsCompletedRunAndTakesOverNextTask(t *testing.T) {
 	compiling, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
@@ -326,6 +285,14 @@ func TestCloseCancelsBackgroundModelCall(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("background call did not start")
 	}
+	e.enqueue(cfg, hooks.ContextEvent{SessionID: "queued", TurnID: "t", Messages: []*aop.Message{provider.TextMessage("assistant", "Queued boundary")}})
+	e.enqueue(cfg, hooks.ContextEvent{SessionID: "queued", TurnID: "t", Messages: []*aop.Message{provider.TextMessage("assistant", "Latest queued boundary")}})
+	e.mu.Lock()
+	pending := e.pending
+	e.mu.Unlock()
+	if pending != 2 {
+		t.Fatalf("queued snapshots were not merged: pending=%d", pending)
+	}
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	if err := e.Close(ctx); err != nil {
@@ -333,6 +300,9 @@ func TestCloseCancelsBackgroundModelCall(t *testing.T) {
 	}
 	if err := e.WaitIdle(ctx); err != nil {
 		t.Fatal(err)
+	}
+	if e.pending != 0 || len(e.queue) != 0 || len(e.queued) != 0 {
+		t.Fatal("close did not settle and drain admitted work")
 	}
 }
 

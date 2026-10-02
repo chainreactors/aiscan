@@ -91,11 +91,16 @@ func (r *Extension) audit(kind string, value any) error {
 func (e *Extension) snapshot() library {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	out := e.library.clone()
+	out.Compiled = publishedGroups(out)
+	return out
+}
+
+func (lib library) clone() library {
 	out := library{
-		Version:  e.library.Version,
-		Claims:   maps.Clone(e.library.Claims),
-		Reflexes: maps.Clone(e.library.Reflexes),
-		Compiled: maps.Clone(e.library.Compiled),
+		Version:  lib.Version,
+		Claims:   maps.Clone(lib.Claims),
+		Reflexes: maps.Clone(lib.Reflexes),
 	}
 	for id, claim := range out.Claims {
 		claim.Options = maps.Clone(claim.Options)
@@ -107,6 +112,23 @@ func (e *Extension) snapshot() library {
 	}
 	return out
 }
+
+// Hold the same lock through publication so readers only see durable definitions.
+func (e *Extension) updateLibrary(change func(*library) (bool, error)) (bool, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	next := e.library.clone()
+	changed, err := change(&next)
+	if err != nil || !changed {
+		return false, err
+	}
+	if err := e.saveLibrary(next); err != nil {
+		return false, err
+	}
+	e.library = next
+	return true, nil
+}
+
 func (e *Extension) loadLibrary() error {
 	data, err := os.ReadFile(filepath.Join(e.config.Directory, "library.json"))
 	if errors.Is(err, os.ErrNotExist) {
@@ -124,17 +146,12 @@ func (e *Extension) loadLibrary() error {
 			return fmt.Errorf("invalid Claim %s", id)
 		}
 	}
-	// Older libraries marked an attempted generation complete before publishing
-	// a Reflex. Derive completion from durable scenes so those attempts cannot
-	// permanently prevent compilation after a restart.
-	lib.Compiled = map[string]bool{}
+	lib.Compiled = nil
 	for id, r := range lib.Reflexes {
-		members := map[string]Claim{}
 		for _, claim := range r.Claims {
 			if _, ok := lib.Claims[claim]; !ok {
 				return errors.New("Reflex references missing Claim")
 			}
-			members[claim] = lib.Claims[claim].Claim
 		}
 		if lib.Version < libraryVersion && !strings.HasPrefix(strings.TrimSpace(r.Observe), "js:") {
 			// Retire tool-bound and Expr scenes at startup. Their declarations
@@ -145,27 +162,21 @@ func (e *Extension) loadLibrary() error {
 		if r.validate() != nil || id != "r"+digest(r.Reflex)[:16] {
 			return fmt.Errorf("invalid Reflex %s", id)
 		}
-		if len(members) > 0 {
-			lib.Compiled[digest(members)] = true
-		}
 		lib.Reflexes[id] = r
 	}
 	version := lib.Version
 	lib.Version = libraryVersion
-	previous := e.library
-	e.library = lib
 	if version != libraryVersion {
 		// Preserve the exact old library before atomically replacing it. This
 		// also retains scenes without Claims for manual conversion if needed.
 		if err := e.backupLibrary(data, version); err != nil {
-			e.library = previous
 			return fmt.Errorf("back up JEV library: %w", err)
 		}
-		if err := e.saveLibrary(); err != nil {
-			e.library = previous
+		if err := e.saveLibrary(lib); err != nil {
 			return fmt.Errorf("migrate JEV library: %w", err)
 		}
 	}
+	e.library = lib
 	return nil
 }
 
@@ -180,9 +191,9 @@ func (e *Extension) backupLibrary(data []byte, version int) error {
 	return errors.Join(err, f.Close())
 }
 
-// saveLibrary must be called with mu held. Callers roll back on failure.
-func (e *Extension) saveLibrary() error {
-	data, err := json.MarshalIndent(e.library, "", "  ")
+func (e *Extension) saveLibrary(lib library) error {
+	lib.Compiled = publishedGroups(lib)
+	data, err := json.MarshalIndent(lib, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -209,22 +220,17 @@ func (e *Extension) saveLibrary() error {
 // Preserve Claims and actual execution evidence; later ordinary boundaries can
 // regenerate the scene. Retirement never retries a native action.
 func (e *Extension) retireReflex(id string, reason error) bool {
-	e.mu.Lock()
-	previous, exists := e.library.Reflexes[id]
-	if !exists {
-		e.mu.Unlock()
-		return false
+	var previous reflexRecord
+	changed, err := e.updateLibrary(func(lib *library) (bool, error) {
+		var exists bool
+		previous, exists = lib.Reflexes[id]
+		delete(lib.Reflexes, id)
+		return exists, nil
+	})
+	if previous.Observe != "" {
+		_ = e.audit("reflex_retired", map[string]any{"reflex": previous, "reason": reason.Error(), "save_error": err})
 	}
-	compiled := e.library.Compiled
-	delete(e.library.Reflexes, id)
-	e.library.Compiled = publishedGroups(e.library)
-	err := e.saveLibrary()
-	if err != nil {
-		e.library.Reflexes[id], e.library.Compiled = previous, compiled
-	}
-	e.mu.Unlock()
-	_ = e.audit("reflex_retired", map[string]any{"reflex": previous, "reason": reason.Error(), "save_error": err})
-	return err == nil
+	return changed
 }
 
 func publishedGroups(lib library) map[string]bool {

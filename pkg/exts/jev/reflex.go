@@ -43,7 +43,7 @@ type library struct {
 	Version  int                     `json:"version"`
 	Claims   map[string]claimRecord  `json:"claims"`
 	Reflexes map[string]reflexRecord `json:"reflexes"`
-	Compiled map[string]bool         `json:"compiled"`
+	Compiled map[string]bool         `json:"compiled"` // Derived compatibility field, never an execution index.
 }
 
 // native projects Claim semantics directly into JEV's native choice protocol.

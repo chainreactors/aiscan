@@ -55,7 +55,7 @@ func TestLiveReflexGenerationBoundary(t *testing.T) {
 			if observed == nil {
 				t.Fatal("observation failed")
 			}
-			_, selected, err := e.decide(t.Context(), observed.context, observed.facts, observed.choices, observed.reads, map[string]bool{}, &scene, "regression", "task")
+			_, selected, err := e.decide(t.Context(), observed, map[string]bool{}, &scene, "regression", "task")
 			matches := selected == tc.want || (tc.want != Defer && strings.HasSuffix(selected, "/"+tc.want))
 			if err != nil || !matches {
 				audit, _ := os.ReadFile(filepath.Join(e.config.Directory, "decisions.jsonl"))

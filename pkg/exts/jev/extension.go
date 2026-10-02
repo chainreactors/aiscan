@@ -35,7 +35,7 @@ type Extension struct {
 	mu       sync.Mutex
 	library  library
 	tasks    map[string]taskRecord
-	queue    chan declaration
+	queue    chan string
 	queued   map[string]declaration
 	done     chan struct{}
 	idle     chan struct{}
@@ -45,8 +45,8 @@ type Extension struct {
 func New(config Config) *Extension {
 	idle := make(chan struct{})
 	close(idle)
-	return &Extension{config: defaults(config), tasks: map[string]taskRecord{}, queued: map[string]declaration{}, queue: make(chan declaration, 64), idle: idle,
-		library: library{Version: libraryVersion, Claims: map[string]claimRecord{}, Reflexes: map[string]reflexRecord{}, Compiled: map[string]bool{}}}
+	return &Extension{config: defaults(config), tasks: map[string]taskRecord{}, queued: map[string]declaration{}, queue: make(chan string, 64), idle: idle,
+		library: library{Version: libraryVersion, Claims: map[string]claimRecord{}, Reflexes: map[string]reflexRecord{}}}
 }
 
 func (e *Extension) Load(scope *extension.Scope) error {
