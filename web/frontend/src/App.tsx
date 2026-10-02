@@ -154,6 +154,9 @@ export default function App() {
   // agent turn often means new assets landed or new IOA traffic was exchanged.
   const [scoNodes, setScoNodes] = useState<SCONode[]>([])
   const [ioaAvailable, setIoaAvailable] = useState(false)
+  // Route ownership comes from the Hub manifest. A transient data fetch
+  // failure must not remove an installed console from navigation.
+  const ioaEnabled = capabilityManifest?.capabilities.some(item => item.id === 'ioa') || ioaAvailable
   const [ioaNodes, setIoaNodes] = useState<IOANode[]>([])
   const [ioaMessages, setIoaMessages] = useState<IOAMessage[]>([])
   const [composerSeed, setComposerSeed] = useState(EMPTY_SEED)
@@ -314,7 +317,7 @@ export default function App() {
               </HeaderIconButton>
               {observations.length > 0 && <span className="pointer-events-none absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full bg-primary" />}
             </span>
-            {ioaAvailable && <IOAConsoleButton open={activeToolPanel === 'ioa'} onClick={() => {
+            {ioaEnabled && <IOAConsoleButton open={activeToolPanel === 'ioa'} onClick={() => {
               setIOAConsoleTarget(null)
               toggleToolPanel('ioa')
             }} />}

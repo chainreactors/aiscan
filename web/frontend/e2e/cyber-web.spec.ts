@@ -109,6 +109,20 @@ test.describe('HTTP shell and authentication', () => {
     await expect(shell).toHaveAttribute('data-cyber-capabilities', /(^|,)core(,|$)/)
   })
 
+  test('installed IOA console remains visible when its data request fails', async ({ page, request }) => {
+    test.skip(process.env.CYBER_E2E_HUB !== '1', 'uses the standalone Hub manifest')
+    const response = await request.get('/api/manifest', { headers: apiHeaders() })
+    expect(response.ok()).toBeTruthy()
+    expect((await response.json()).capabilities).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'ioa' })]))
+    await page.route('**/ioa/**', route => route.fulfill({ status: 503, body: 'IOA temporarily unavailable' }))
+    await openAuthenticatedApp(page)
+    const trigger = page.getByRole('button', { name: 'Open IOA Console', exact: true })
+    await expect(trigger).toBeVisible()
+    await trigger.click()
+    await expect(page.getByRole('dialog', { name: 'IOA Console', exact: true })).toBeVisible()
+    await expect(trigger).toBeVisible()
+  })
+
   test('advertises the active profile capability on the node', async ({ request }) => {
     test.skip(process.env.CYBER_E2E_HUB === '1', 'the generic Hub E2E uses a capability-neutral agent')
     const agents = await requireRegisteredAgents(request)
