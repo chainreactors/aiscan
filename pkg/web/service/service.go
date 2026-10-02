@@ -37,6 +37,7 @@ type ServiceConfig struct {
 	Scans        *ScanServiceConfig
 	AccessKey    string
 	RuntimeLLM   func() provider.ProviderConfig
+	Capabilities []Capability
 }
 
 type Service struct {
@@ -67,8 +68,9 @@ type Service struct {
 	scanNodeIDs  map[string]string
 	taskSessions map[string]string // taskID → sessionID
 
-	eventMu    sync.Mutex
-	eventState map[string]*sessionEventState
+	eventMu      sync.Mutex
+	eventState   map[string]*sessionEventState
+	capabilities []Capability
 }
 
 func NewService(cfg ServiceConfig) *Service {
@@ -86,6 +88,7 @@ func NewService(cfg ServiceConfig) *Service {
 		scanNodeIDs:  make(map[string]string),
 		taskSessions: make(map[string]string),
 		eventState:   make(map[string]*sessionEventState),
+		capabilities: append([]Capability(nil), cfg.Capabilities...),
 	}
 	if cfg.Profile != nil {
 		svc.profile = cfg.Profile
@@ -117,6 +120,14 @@ func NewService(cfg ServiceConfig) *Service {
 }
 
 func (s *Service) Hub() *Hub { return s.hub }
+
+// Capabilities returns the immutable capability set selected at startup.
+func (s *Service) Capabilities() []Capability {
+	if s == nil {
+		return nil
+	}
+	return append([]Capability(nil), s.capabilities...)
+}
 
 func (s *Service) SetAgentPool(pool *AgentPool) {
 	s.agents = pool
@@ -172,6 +183,11 @@ func (s *Service) Close(ctx context.Context) (resultErr error) {
 			s.appMu.Lock()
 			s.profile = nil
 			s.appMu.Unlock()
+		}
+	}
+	for i := len(s.capabilities) - 1; i >= 0; i-- {
+		if s.capabilities[i] != nil {
+			resultErr = errors.Join(resultErr, s.capabilities[i].Close(ctx))
 		}
 	}
 	return resultErr

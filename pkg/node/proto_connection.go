@@ -112,7 +112,7 @@ func serveAgentConnection(ctx context.Context, cc connectionConfig, logger telem
 	if executor == nil {
 		executor = coretool.EmptyExecutor()
 	}
-	hello, err := BuildHello(cc.Name, executor, cc.NodeID, cc.Runtime)
+	hello, err := BuildHelloWithCapabilities(cc.Name, executor, cc.NodeID, cc.Runtime, cc.Capabilities...)
 	if err != nil {
 		return err
 	}

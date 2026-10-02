@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -233,6 +234,25 @@ func TestAgentHelloOmitsFileManagementCapabilities(t *testing.T) {
 		if capability == "file.list" || capability == "file.mkdir" {
 			t.Fatalf("regular agent advertised runner-only capability %q", capability)
 		}
+	}
+}
+
+func TestBuildHelloAddsProfileCapabilitiesWithoutDuplicates(t *testing.T) {
+	hello, err := BuildHelloWithCapabilities("agent", coretool.EmptyExecutor(), "agent", nil, "scan", "scan", "audit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(hello.Capabilities, "scan") || !slices.Contains(hello.Capabilities, "audit") {
+		t.Fatalf("profile capabilities = %v", hello.Capabilities)
+	}
+	count := 0
+	for _, capability := range hello.Capabilities {
+		if capability == "scan" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("scan capability duplicated: %v", hello.Capabilities)
 	}
 }
 

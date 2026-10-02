@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { writeFileSync } from 'node:fs'
 import path from 'path'
 
 const backendURL = process.env.CYBER_BACKEND_URL || 'http://127.0.0.1:8080'
@@ -9,9 +10,20 @@ const backendURL = process.env.CYBER_BACKEND_URL || 'http://127.0.0.1:8080'
 // remaining composite views (markdown/viewer) stay vendored under @/ because
 // cyber still diverges them.
 const cyberUI = path.resolve(__dirname, './cyber-ui/packages')
+const staticDir = path.resolve(__dirname, '../static')
+
+// Vite clears the embed directory before writing hashed assets. Recreate the
+// tracked directory marker after every build so a build followed by `go test`
+// remains valid even when the output contains no generated files yet.
+const preserveStaticDirectory = {
+  name: 'preserve-embedded-static-directory',
+  closeBundle() {
+    writeFileSync(path.join(staticDir, '.gitkeep'), '\n')
+  },
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), preserveStaticDirectory],
   resolve: {
     dedupe: ['react', 'react-dom'],
     alias: {

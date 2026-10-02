@@ -237,6 +237,16 @@ func TestAuditCLIEnrollsAsNodeWithoutLocalReport(t *testing.T) {
 		if hello.NodeId != "audit-worker" {
 			t.Fatalf("node ID = %q", hello.NodeId)
 		}
+		foundAudit := false
+		for _, capability := range hello.Capabilities {
+			if capability == "audit" {
+				foundAudit = true
+				break
+			}
+		}
+		if !foundAudit {
+			t.Fatalf("audit capability missing from node hello: %v", hello.Capabilities)
+		}
 	default:
 		t.Fatal("audit node did not enroll")
 	}

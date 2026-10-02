@@ -84,9 +84,18 @@ const cyberRPC = {
 }
 const aopClient = new AOPClient()
   .register(CommandProtocolMessageSchema)
-  .register(ScanProtocolMessageSchema)
   .register(ReloadProtocolMessageSchema)
   .register(GuardrailProtocolMessageSchema)
+
+const registeredCapabilities = new Set<string>()
+// Protocol packages are mounted from the server manifest. A profile-neutral
+// Hub therefore does not register or dispatch scan messages unless the Hub or
+// a connected profile advertises the scan capability.
+export function registerCapabilityProtocols(capability: string): void {
+  if (registeredCapabilities.has(capability)) return
+  if (capability === 'scan') aopClient.register(ScanProtocolMessageSchema)
+  registeredCapabilities.add(capability)
+}
 
 export const AUTH_REQUIRED_EVENT = 'cyber:auth-required'
 export const CONFIG_CHANGED_EVENT = 'cyber:config-changed'

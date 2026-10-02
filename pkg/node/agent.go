@@ -20,6 +20,13 @@ import (
 )
 
 func RunWebSocket(ctx context.Context, newProfile func(profile.Request) (profile.Profile, error), option *cfg.Option, logger telemetry.Logger) error {
+	return RunWebSocketWithCapabilities(ctx, newProfile, option, logger)
+}
+
+// RunWebSocketWithCapabilities is the profile-aware transport entry point.
+// Capabilities travel in the enrollment hello and remain independent of the
+// core node protocol.
+func RunWebSocketWithCapabilities(ctx context.Context, newProfile func(profile.Request) (profile.Profile, error), option *cfg.Option, logger telemetry.Logger, capabilities ...string) error {
 	if err := cfg.ResolveAgentServerURLs(option); err != nil {
 		return fmt.Errorf("resolve remote agent URLs: %w", err)
 	}
@@ -200,7 +207,8 @@ func RunWebSocket(ctx context.Context, newProfile func(profile.Request) (profile
 			return connect(connectionCtx, connectionConfig{
 				ServerURL: option.ServerURL, Name: rt.NodeName(), Executor: rt.Tools(), Events: events,
 				Progress: progress, Logger: logger, Upload: uploadNodeFile, ReloadConfig: reload, CommitReload: commit, NodeID: nodeID, Runtime: DefaultRuntimeInfo(),
-				Status: current.AgentStatus, Menu: func() []*types.CommandSpec { return CommandSpecs(rt) }, RegisterNamespaces: current.RegisterNamespaces,
+				Capabilities: capabilities,
+				Status:       current.AgentStatus, Menu: func() []*types.CommandSpec { return CommandSpecs(rt) }, RegisterNamespaces: current.RegisterNamespaces,
 			})
 		}()
 		if candidate == nil {

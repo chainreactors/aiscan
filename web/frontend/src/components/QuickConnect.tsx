@@ -26,7 +26,13 @@ const ARCH_OPTIONS: { value: Arch; label: string; osFilter?: OS[] }[] = [
 interface Props {
   serverURL: string | undefined
   version: string | undefined
+  profiles?: Array<{ id: string; title?: string }>
 }
+
+const DEFAULT_PROFILES = [
+  { id: 'cyber-scan', title: 'Cyber Scan' },
+  { id: 'cyber-audit', title: 'Cyber Audit' },
+]
 
 function detectPlatform(): Platform {
   const ua = navigator.userAgent.toLowerCase()
@@ -44,7 +50,7 @@ function archOptionsForOS(os: OS) {
 
 type CopiedKey = string | null
 
-export default function QuickConnect({ serverURL, version }: Props) {
+export default function QuickConnect({ serverURL, version, profiles }: Props) {
   const { t } = useTranslation('app')
   const [open, setOpen] = useState(false)
   const [platform, setPlatform] = useState<Platform>(detectPlatform)
@@ -59,6 +65,14 @@ export default function QuickConnect({ serverURL, version }: Props) {
   const [tokenError, setTokenError] = useState(false)
   const [tokenRequest, setTokenRequest] = useState(0)
   const panelRef = useRef<HTMLDivElement>(null)
+  const availableProfiles = profiles?.length ? profiles : DEFAULT_PROFILES
+
+  useEffect(() => {
+    if (availableProfiles.some((profile) => profile.id === distribution)) return
+    setDistribution(availableProfiles[0].id as Distribution)
+    setCopied(null)
+    setCopyError(false)
+  }, [availableProfiles, distribution])
 
   const closePanel = useCallback(() => {
     if (copyResetTimer.current) clearTimeout(copyResetTimer.current)
@@ -233,10 +247,11 @@ export default function QuickConnect({ serverURL, version }: Props) {
 
           <div role="group" aria-label={t('quickConnectProfile')} className="mb-3 flex items-center gap-2">
             <span className="text-[11px] text-muted-foreground">{t('quickConnectProfile')}</span>
-            {(['cyber-scan', 'cyber-audit'] as const).map((value) => (
-              <Button key={value} type="button" size="xs" variant={distribution === value ? 'default' : 'outline'}
-                aria-pressed={distribution === value} onClick={() => { setDistribution(value); setCopied(null); setCopyError(false) }}>
-                {value}
+            {availableProfiles.map((profile) => (
+              <Button key={profile.id} type="button" size="xs" variant={distribution === profile.id ? 'default' : 'outline'}
+                aria-label={profile.id} aria-pressed={distribution === profile.id}
+                onClick={() => { setDistribution(profile.id as Distribution); setCopied(null); setCopyError(false) }}>
+                {profile.title || profile.id}
               </Button>
             ))}
           </div>

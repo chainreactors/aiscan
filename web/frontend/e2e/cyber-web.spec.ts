@@ -55,6 +55,20 @@ async function deleteSession(request: APIRequestContext, sessionID: string) {
 }
 
 test.describe('HTTP shell and authentication', () => {
+
+  test('publishes a capability manifest for the browser runtime', async ({ request }) => {
+    const response = await request.get('/api/manifest', { headers: apiHeaders() })
+    expect(response.ok()).toBeTruthy()
+    const manifest = await response.json()
+    expect(manifest.product).toBeTruthy()
+    expect(manifest.capabilities).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'core' })]))
+    expect(manifest.capabilities.every((capability: { id?: unknown }) => typeof capability.id === 'string')).toBeTruthy()
+    expect(manifest.profiles).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'cyber-scan' }),
+      expect.objectContaining({ id: 'cyber-audit' }),
+    ]))
+  })
+
   test('health and static assets are served', async ({ request }) => {
     const health = await request.get('/health')
     expect(health.ok()).toBeTruthy()
@@ -86,6 +100,19 @@ test.describe('HTTP shell and authentication', () => {
     expect(ioa.status).toBe(200)
     expect(Array.isArray(ioa.nodes)).toBeTruthy()
     expect(ioa.nodes.some((node: { name?: string }) => node.name === 'cyber.web')).toBeTruthy()
+  })
+
+  test('mounts the browser runtime from the server manifest', async ({ page }) => {
+    await openAuthenticatedApp(page)
+    const shell = page.locator('[data-cyber-product]')
+    await expect(shell).toHaveAttribute('data-cyber-product', /.+/)
+    await expect(shell).toHaveAttribute('data-cyber-capabilities', /(^|,)core(,|$)/)
+  })
+
+  test('advertises the active profile capability on the node', async ({ request }) => {
+    test.skip(process.env.CYBER_E2E_HUB === '1', 'the generic Hub E2E uses a capability-neutral agent')
+    const agents = await requireRegisteredAgents(request)
+    expect(agents.some((agent) => agent.hello?.capabilities?.includes('scan'))).toBeTruthy()
   })
 
   test('mobile header fits and the session drawer can close', async ({ page }) => {
@@ -305,7 +332,7 @@ test.describe('single AOP WebSocket browser plane', () => {
     expect(connectCommand).toContain(`http://${API_TOKEN}@`)
     expect(connectCommand).not.toContain('ACCESS_TOKEN')
     expect(connectCommand).not.toContain('NODE_NAME')
-    await expect(quickConnect.getByRole('textbox', { name: 'Node name' })).toHaveValue(/node-/)
+    await expect(quickConnect.getByRole('textbox', { name: 'Node name' })).toHaveAttribute('placeholder', /node-/)
 
     await quickConnect.locator('button').last().click()
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(connectCommand)

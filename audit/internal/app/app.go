@@ -144,7 +144,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, ensure fu
 		build := func(request profilepkg.Request) (profilepkg.Profile, error) {
 			return newAuditProfile(request, workDir, parsed.BashTimeout, nil, manager.Manager, statuses)
 		}
-		return node.RunWebSocket(ctx, build, &option, logger)
+		return node.RunWebSocketWithCapabilities(ctx, build, &option, logger, "audit")
 	}
 	report, err := newReport(ctx, workDir, parsed.ReportDir, task, option.Resume, statuses)
 	if err != nil {

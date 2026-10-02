@@ -22,6 +22,7 @@ import (
 	node "github.com/chainreactors/cyber/pkg/node"
 	profile "github.com/chainreactors/cyber/pkg/profile"
 
+	webpkg "github.com/chainreactors/cyber/pkg/web"
 	webhost "github.com/chainreactors/cyber/pkg/web/host"
 	webservice "github.com/chainreactors/cyber/pkg/web/service"
 	ioaservice "github.com/chainreactors/cyber/tools/ioa/server"
@@ -35,6 +36,8 @@ func serveWeb(ctx context.Context, option, explicitOption *cfg.Option, opts webC
 		accessKey = protocols.NewToken()
 	}
 	webConfig := webext.Config{
+		Product:  productName,
+		Profiles: []webpkg.Profile{{ID: "cyber-scan", Title: "Cyber Scan"}, {ID: "cyber-audit", Title: "Cyber Audit"}},
 		Database: opts.DB,
 		InitialProfile: func(ctx context.Context) (profile.Profile, error) {
 			p, err := initWebProfile(ctx, option, logger)
@@ -88,7 +91,7 @@ func serveWeb(ctx context.Context, option, explicitOption *cfg.Option, opts webC
 			if err != nil {
 				return err
 			}
-			return node.RunWebSocket(ctx, newAIScanProfile, &agentOption, logger)
+			return node.RunWebSocketWithCapabilities(ctx, newAIScanProfile, &agentOption, logger, "scan")
 		}
 	}
 	return webhost.Serve(ctx, config)

@@ -23,6 +23,7 @@ type connectionConfig struct {
 	ReloadConfig func(*types.DistributeConfig) (*types.ReloadResult, *aop.AgentStatus)
 	CommitReload func()
 	NodeID       string
+	Capabilities []string
 	Runtime      *aop.AgentRuntimeInfo
 	Status       func() *aop.AgentStatus
 	Menu         func() []*types.CommandSpec

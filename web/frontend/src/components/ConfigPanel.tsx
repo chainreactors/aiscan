@@ -39,7 +39,7 @@ interface ConfigFormState {
   extensions: DistributeConfig['extensions']
 }
 
-function formToDistributeConfig(form: ConfigFormState, original?: ConfigFormState): DistributeConfig {
+function formToDistributeConfig(form: ConfigFormState, original?: ConfigFormState, scanEnabled = false): DistributeConfig {
   // Opening LLM settings must not materialize empty defaults in every other
   // extension. Those apparent graph changes used to cancel active sessions.
   const extensions = { ...form.extensions }
@@ -50,7 +50,7 @@ function formToDistributeConfig(form: ConfigFormState, original?: ConfigFormStat
   }
   editSection('cyberhub', form.cyberhub, original?.cyberhub)
   editSection('recon', form.recon, original?.recon, { ...form.recon, limit: form.recon.limit ?? 0 })
-  editSection('scan', form.scan, original?.scan)
+  if (scanEnabled) editSection('scan', form.scan, original?.scan)
   editSection('search', form.search, original?.search)
   editSection('ioa.client', form.ioa, original?.ioa, {
     url: form.ioa.url, token: form.ioa.token, node_name: form.ioa.node_name, space: form.ioa.space,
@@ -81,6 +81,7 @@ function formToDistributeConfig(form: ConfigFormState, original?: ConfigFormStat
 interface ConfigPanelProps {
   open: boolean
   status: ServerStatus | null
+  capabilities?: readonly string[]
   initialSection?: 'llm' | 'jev'
   onClose: () => void
   onSaved: () => void
@@ -245,7 +246,7 @@ function sectionStatus(
   }
 }
 
-export default function ConfigPanel({ open, status, initialSection = 'llm', onClose, onSaved }: ConfigPanelProps) {
+export default function ConfigPanel({ open, status, capabilities = [], initialSection = 'llm', onClose, onSaved }: ConfigPanelProps) {
   const { t } = useTranslation('config')
   const [cs, setCs] = useState<ConfigView | null>(null)
   const [form, setForm] = useState<ConfigFormState>(() => emptyForm(t('newProfileName')))
@@ -257,6 +258,7 @@ export default function ConfigPanel({ open, status, initialSection = 'llm', onCl
   const [invalidModelProfileID, setInvalidModelProfileID] = useState('')
   const jevInputRef = useRef<HTMLInputElement>(null)
   const [focusJEV, setFocusJEV] = useState(false)
+  const scanEnabled = capabilities.includes('scan')
 
   useEffect(() => {
     if (!open) return
@@ -298,7 +300,7 @@ export default function ConfigPanel({ open, status, initialSection = 'llm', onCl
     setSaving(true)
     setError('')
     try {
-      await saveConfig(formToDistributeConfig(form, cs ? statusToForm(cs) : undefined))
+      await saveConfig(formToDistributeConfig(form, cs ? statusToForm(cs) : undefined, scanEnabled))
       onSaved()
       onClose()
     } catch (err: unknown) {
@@ -320,7 +322,7 @@ export default function ConfigPanel({ open, status, initialSection = 'llm', onCl
     >
       <form onSubmit={handleSave} className="flex h-full min-h-0 w-full flex-col">
         <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-4 py-1">
-          {TABS.filter(tab => tab.key === 'llm' || tab.key === 'agent' || !!cs?.extensions[tab.key === 'ioa' ? 'ioa.client' : tab.key]).map((tab) => (
+          {TABS.filter(tab => (tab.key === 'llm' || tab.key === 'agent' || !!cs?.extensions[tab.key === 'ioa' ? 'ioa.client' : tab.key]) && (tab.key !== 'scan' || scanEnabled)).map((tab) => (
             <Button
               key={tab.key} type="button" variant="ghost" size="sm"
               active={activeTab === tab.key} onClick={() => setActiveTab(tab.key)}

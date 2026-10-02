@@ -17,6 +17,7 @@ import (
 	"github.com/chainreactors/cyber/core/extension"
 	coreregistry "github.com/chainreactors/cyber/core/registry"
 	"github.com/chainreactors/cyber/core/resource"
+	cfg "github.com/chainreactors/cyber/pkg/config"
 	webpkg "github.com/chainreactors/cyber/pkg/web"
 )
 
@@ -28,6 +29,13 @@ import (
 // third copy of it. The route pattern is the name.
 // Config selects resources; no live business instance is accepted from a host.
 type Config struct {
+	// Product and Manifest describe the host to the browser. Product features
+	// are contributed by profiles; the Web extension only publishes the
+	// resulting capability set.
+	Product        string
+	Manifest       []webpkg.Capability
+	Profiles       []webpkg.Profile
+	Capabilities   []webservice.Capability
 	Database       string
 	AccessKey      string
 	AllowedOrigins []string
@@ -57,7 +65,13 @@ type Extension struct {
 type request struct{ _ byte }
 
 func New(config Config) *Extension {
+	if strings.TrimSpace(config.Product) == "" {
+		config.Product = "cyber-harness"
+	}
 	config.AllowedOrigins = append([]string(nil), config.AllowedOrigins...)
+	config.Manifest = append([]webpkg.Capability(nil), config.Manifest...)
+	config.Profiles = append([]webpkg.Profile(nil), config.Profiles...)
+	config.Capabilities = append([]webservice.Capability(nil), config.Capabilities...)
 	return &Extension{config: config, store: coreregistry.New[webpkg.Route](), requests: make(map[*request]context.CancelFunc)}
 }
 
@@ -77,6 +91,12 @@ func (e *Extension) Load(scope *extension.Scope) error {
 	}
 	var err error
 	var modules []webservice.SchemaModule
+	for _, capability := range e.config.Capabilities {
+		if capability == nil {
+			return fmt.Errorf("nil web capability")
+		}
+		modules = append(modules, capability.SchemaModules()...)
+	}
 	if e.config.Scans != nil {
 		modules = append(modules, webservice.ScanSchema)
 	}
@@ -96,8 +116,9 @@ func (e *Extension) Load(scope *extension.Scope) error {
 	e.service = webservice.NewService(webservice.ServiceConfig{
 		Store: e.database, Profile: e.initial, AccessKey: e.config.AccessKey,
 		ConfigAPI: e.config.ConfigAPI, ConfigStore: e.config.ConfigStore, BuildProfile: e.config.BuildProfile,
-		Scans:      e.config.Scans,
-		RuntimeLLM: e.config.RuntimeLLM,
+		Scans:        e.config.Scans,
+		RuntimeLLM:   e.config.RuntimeLLM,
+		Capabilities: e.config.Capabilities,
 	})
 	e.initial = nil // Service owns initial and replacement profiles from here.
 	e.pool = webservice.NewAgentPool(e.service.Hub(), e.database, e.config.AllowedOrigins...)
@@ -112,6 +133,29 @@ func (e *Extension) Load(scope *extension.Scope) error {
 		return err
 	}
 	if err := extension.Add(scope, webpkg.ManagementRoutes(e.service)...); err != nil {
+		return err
+	}
+	for _, capability := range e.config.Capabilities {
+		if err := extension.Add(scope, capability.Routes(e.service.API())...); err != nil {
+			return err
+		}
+	}
+	manifest := webpkg.Manifest{Product: e.config.Product, Version: cfg.Version, Profiles: e.config.Profiles}
+	manifest.Capabilities = append(manifest.Capabilities, webpkg.Capability{
+		ID: "core", Title: "Cyber Harness", APIRoutes: []string{"SessionService", "AgentService", "ConfigService", "SystemService", "ArtifactService"},
+		UIContribs: []string{"sessions", "chat", "agents", "settings"},
+	})
+	if e.config.Scans != nil {
+		manifest.Capabilities = append(manifest.Capabilities, webpkg.Capability{
+			ID: "scan", Title: "Scan", APIRoutes: []string{"ScanService"},
+			AOPTypes: []string{"cyber.scan.ProtocolMessage"}, UIContribs: []string{"scan-results", "assets", "findings"},
+		})
+	}
+	manifest.Capabilities = append(manifest.Capabilities, e.config.Manifest...)
+	for _, capability := range e.config.Capabilities {
+		manifest.Capabilities = append(manifest.Capabilities, capability.Manifest())
+	}
+	if _, err := e.store.Add(coreregistry.Value[webpkg.Route]{Name: "GET /api/manifest", Value: webpkg.ManifestRoute(manifest)}); err != nil {
 		return err
 	}
 	return e.store.Activate(scope.Init())

@@ -10,15 +10,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/chainreactors/cyber/core/telemetry"
 	"github.com/chainreactors/cyber/pkg/cli/configuration"
 	cfg "github.com/chainreactors/cyber/pkg/config"
 	webext "github.com/chainreactors/cyber/pkg/exts/web"
+	webpkg "github.com/chainreactors/cyber/pkg/web"
 	managementapi "github.com/chainreactors/cyber/pkg/web/api"
 	webhost "github.com/chainreactors/cyber/pkg/web/host"
-	webservice "github.com/chainreactors/cyber/pkg/web/service"
 	webstatic "github.com/chainreactors/cyber/web"
 	flags "github.com/jessevdk/go-flags"
 )
@@ -27,8 +26,6 @@ type options struct {
 	Addr            string `long:"addr" default:"127.0.0.1:8080" description:"HTTP listen address"`
 	DB              string `long:"db" default:"cyber-web.db" description:"SQLite database path"`
 	Token           string `long:"token" description:"Access key (auto-generated if empty)"`
-	MaxScans        int    `long:"max-scans" default:"3" description:"Maximum concurrent scans on connected scan nodes"`
-	ScanTimeout     int    `long:"scan-timeout" default:"600" description:"Maximum scan runtime in seconds"`
 	cfg.LLMOptions  `group:"Shared model settings"`
 	cfg.MiscOptions `group:"Options"`
 }
@@ -69,9 +66,6 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		_, err := fmt.Fprintf(stdout, "cyber-web v%s\n", cfg.Version)
 		return err
 	}
-	if opts.MaxScans <= 0 || opts.ScanTimeout <= 0 {
-		return fmt.Errorf("--max-scans and --scan-timeout must be positive")
-	}
 	explicit := cfg.Option{LLMOptions: opts.LLMOptions, MiscOptions: opts.MiscOptions, Sections: codec.Sections}
 	cfg.CaptureExplicitFlags(&explicit, parser)
 	option := explicit
@@ -96,9 +90,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	return webhost.Serve(ctx, webhost.Config{
 		Addr: opts.Addr, Static: static, Logger: logger,
 		Management: webext.Config{
-			Database: opts.DB, AccessKey: key, ConfigStore: store,
+			Product: "cyber-harness", Profiles: []webpkg.Profile{{ID: "cyber-scan", Title: "Cyber Scan"}, {ID: "cyber-audit", Title: "Cyber Audit"}}, Database: opts.DB, AccessKey: key, ConfigStore: store,
 			ConfigAPI: managementapi.ConfigOptions{Sections: codec.Sections}, RuntimeLLM: store.RuntimeLLM,
-			Scans: &webservice.ScanServiceConfig{MaxConcurrent: opts.MaxScans, ScanTimeout: time.Duration(opts.ScanTimeout) * time.Second},
 		},
 	})
 }

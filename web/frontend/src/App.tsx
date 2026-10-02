@@ -15,7 +15,7 @@ import BrandLogo from './components/brand/BrandLogo'
 const IOAConsole = lazy(() => import('./components/IOAConsole'))
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, useConfirm } from '@cyber/ui'
 import { ThemeProvider } from '@cyber/theme'
-import { activateLLMProfile, getConfigStatus, getIOAOverview, getStatus, logout } from './api'
+import { activateLLMProfile, getConfigStatus, getIOAOverview, getStatus, logout, registerCapabilityProtocols } from './api'
 import type { IOAMessage, IOANode, LLMProviderView, ServerStatus } from './api'
 import type { SCONode } from '@cyber/cstx-easm'
 import type { MentionPopupApi } from './viewer'
@@ -27,8 +27,10 @@ import { isSessionAgentOnline } from './lib/session-agent'
 import type { IOAConsoleTarget } from './lib/ioa-navigation'
 import { cn } from '@cyber/theme'
 import { listSCONodes, subscribeCSTXChanges, syncCSTXArtifacts } from './lib/cstx-runtime'
+import { capabilityPlugin, loadCapabilityManifest, WebPluginRuntime, type CapabilityManifest } from './lib/plugin-runtime'
 
 const sidebarStorageKey = 'cyber-sidebar-open'
+const NODE_TRANSPORT_CAPABILITIES = new Set(['repl', 'pty', 'tmux', 'file', 'sco'])
 
 const EMPTY_SEED = { text: '', nonce: 0 }
 type ToolPanel = 'ioa' | 'agents' | 'observability' | 'settings'
@@ -78,6 +80,42 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(getInitialSidebarOpen)
   // Bumped after a settings save so the header LLM health dot re-probes.
   const [healthNonce, setHealthNonce] = useState(0)
+  const [capabilityManifest, setCapabilityManifest] = useState<CapabilityManifest | null>(null)
+  // A profile can contribute a capability through its connected node. The
+  // server manifest describes mounted Hub services; node hello capabilities
+  // describe external profile services. The runtime sees the union.
+  const effectiveManifest = useMemo<CapabilityManifest | null>(() => {
+    if (!capabilityManifest) return null
+    const ids = new Set(capabilityManifest.capabilities.map(item => item.id))
+    for (const agent of chat.agents) {
+      for (const id of agent.hello?.capabilities || []) {
+        if (!NODE_TRANSPORT_CAPABILITIES.has(id)) ids.add(id)
+      }
+    }
+    return { ...capabilityManifest, capabilities: [...ids].map(id => capabilityManifest.capabilities.find(item => item.id === id) || { id }) }
+  }, [capabilityManifest, chat.agents])
+  const pluginRuntime = useMemo(() => effectiveManifest ? new WebPluginRuntime(effectiveManifest) : null, [effectiveManifest])
+  const capabilityIDs = useMemo(() => effectiveManifest?.capabilities.map(item => item.id) || [], [effectiveManifest])
+  const scanEnabled = capabilityIDs.includes('scan')
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void loadCapabilityManifest(controller.signal).then(setCapabilityManifest).catch(() => {
+      // Older hubs have no manifest endpoint; the core shell remains usable.
+      setCapabilityManifest({ product: 'cyber-harness', capabilities: [{ id: 'core' }] })
+    })
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    if (!pluginRuntime) return
+    pluginRuntime.mount([
+      capabilityPlugin('scan-protocol', ['scan'], () => {
+        registerCapabilityProtocols('scan')
+      }),
+    ])
+    return () => pluginRuntime.dispose()
+  }, [pluginRuntime])
 
   const toggleToolPanel = useCallback((panel: ToolPanel) => {
     setActiveToolPanel((current) => current === panel ? null : panel)
@@ -124,11 +162,15 @@ export default function App() {
   const [composerSeed, setComposerSeed] = useState(EMPTY_SEED)
 
   const refreshSCONodes = useCallback(async () => {
+    if (!scanEnabled) {
+      setScoNodes([])
+      return
+    }
     try {
       const { items: data } = await listSCONodes()
       setScoNodes(data)
     } catch { /* non-critical */ }
-  }, [])
+  }, [scanEnabled])
 
   const refreshIOA = useCallback(async () => {
     try {
@@ -140,15 +182,19 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (!scanEnabled) {
+      setScoNodes([])
+      return
+    }
     void refreshSCONodes()
     const unsubscribe = subscribeCSTXChanges(() => { void refreshSCONodes() })
     return unsubscribe
-  }, [refreshSCONodes])
+  }, [refreshSCONodes, scanEnabled])
   // Refresh mentionables when scans finish (timeline changes often signal new results)
   useEffect(() => {
-    void syncCSTXArtifacts().catch(() => {})
+    if (scanEnabled) void syncCSTXArtifacts().catch(() => {})
     void refreshIOA()
-  }, [chat.timeline.length, refreshIOA])
+  }, [chat.timeline.length, refreshIOA, scanEnabled])
 
   const mentionables = useMemo(() => assetMentionables(scoNodes), [scoNodes])
 
@@ -240,7 +286,7 @@ export default function App() {
   return (
     <ThemeProvider initial={getInitialTheme()} storageKey="cyber-theme" className="aspect-theme-root h-full text-foreground font-sans antialiased">
     <TooltipProvider delayDuration={300}>
-      <div className="flex h-[100dvh] flex-col overflow-hidden">
+      <div className="flex h-[100dvh] flex-col overflow-hidden" data-cyber-product={effectiveManifest?.product || 'cyber-harness'} data-cyber-capabilities={effectiveManifest?.capabilities.map(item => item.id).join(',') || 'core'}>
         <header className="relative z-[60] flex min-h-12 shrink-0 items-center justify-between gap-1 border-b border-border/60 bg-background px-2 pt-safe sm:gap-2 sm:px-4">
           <div className="flex min-w-0 items-center gap-1 sm:gap-2">
             {/* Phone-only drawer opener — the collapsed sidebar is hidden below md,
@@ -282,7 +328,7 @@ export default function App() {
               toggleToolPanel('ioa')
             }} />}
             <AgentsButton count={chat.agents.length} open={activeToolPanel === 'agents'} onClick={handleOpenAgentPanel} />
-            <QuickConnect serverURL={serverStatus?.serverUrl} version={serverStatus?.version} />
+            <QuickConnect serverURL={serverStatus?.serverUrl} version={serverStatus?.version} profiles={effectiveManifest?.profiles} />
             {/* Separate workspace nav (observations / IOA / agents / connect) from the
                 account utilities (settings / logout) so the row reads as two groups. */}
             <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-border/70 sm:block" aria-hidden="true" />
@@ -349,6 +395,7 @@ export default function App() {
       <ConfigPanel
         open={activeToolPanel === 'settings'}
         status={serverStatus}
+        capabilities={capabilityIDs}
         initialSection={settingsSection}
         onClose={() => setActiveToolPanel(null)}
         onSaved={() => { refreshStatus(); setHealthNonce((n) => n + 1) }}

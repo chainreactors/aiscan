@@ -376,6 +376,11 @@ func (s *Service) serveApplication(connection *aopconn.Connection, registerNames
 			return fmt.Errorf("register application extension namespace: %w", err)
 		}
 	}
+	for _, capability := range s.capabilities {
+		if err := capability.RegisterNamespaces(mux); err != nil {
+			return fmt.Errorf("register %s capability namespace: %w", capability.ID(), err)
+		}
+	}
 	dispatch := func(_ context.Context, envelope *aop.Envelope, sendEnvelope aop.SendFunc) error {
 		handled, err := mux.Dispatch(envelope, sendEnvelope)
 		if err != nil {

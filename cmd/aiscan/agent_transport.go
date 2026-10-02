@@ -20,7 +20,7 @@ func runAgentTransport(ctx context.Context, newProfile func(profile.Request) (pr
 	}
 	switch selected {
 	case cfg.AgentTransportWeb:
-		return node.RunWebSocket(ctx, newProfile, option, logger)
+		return node.RunWebSocketWithCapabilities(ctx, newProfile, option, logger, "scan")
 	case cfg.AgentTransportStdio:
 		return runStdio(ctx, newProfile, option, logger, input, output)
 	default:
