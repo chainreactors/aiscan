@@ -11,13 +11,16 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/chainreactors/cyber/core/extension"
 	"github.com/chainreactors/cyber/core/telemetry"
 	"github.com/chainreactors/cyber/pkg/cli/configuration"
 	cfg "github.com/chainreactors/cyber/pkg/config"
+	ioaserver "github.com/chainreactors/cyber/pkg/exts/ioa/server"
 	webext "github.com/chainreactors/cyber/pkg/exts/web"
 	webpkg "github.com/chainreactors/cyber/pkg/web"
 	managementapi "github.com/chainreactors/cyber/pkg/web/api"
 	webhost "github.com/chainreactors/cyber/pkg/web/host"
+	ioaservice "github.com/chainreactors/cyber/tools/ioa/server"
 	webstatic "github.com/chainreactors/cyber/web"
 	flags "github.com/jessevdk/go-flags"
 )
@@ -90,8 +93,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	return webhost.Serve(ctx, webhost.Config{
 		Addr: opts.Addr, Static: static, Logger: logger,
 		Management: webext.Config{
-			Product: "cyber-harness", Profiles: []webpkg.Profile{{ID: "cyber-scan", Title: "Cyber Scan"}, {ID: "cyber-audit", Title: "Cyber Audit"}}, Database: opts.DB, AccessKey: key, ConfigStore: store,
+			Product: "cyber-harness", Profiles: []webpkg.Profile{{ID: "cyber-scan", Title: "Cyber Scan"}, {ID: "cyber-audit", Title: "Cyber Audit"}},
+			Manifest: []webpkg.Capability{{ID: "ioa", Title: "IOA", APIRoutes: []string{"/ioa/nodes", "/ioa/spaces", "/ioa/messages"}, UIContribs: []string{"ioa-console", "ioa-mentions"}}},
+			Database: opts.DB, AccessKey: key, ConfigStore: store,
 			ConfigAPI: managementapi.ConfigOptions{Sections: codec.Sections}, RuntimeLLM: store.RuntimeLLM,
 		},
+		Extensions: []extension.Extension{ioaserver.NewBrowser(ioaservice.Config{AccessKey: key})},
 	})
 }
