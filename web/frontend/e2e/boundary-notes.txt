@@ -27,7 +27,7 @@ Failure screenshots and traces, plus the HTML report, are written under
 
 Go boundary tests:
   go test -tags "full sqlite" ./agent/provider ./agent/session ./pkg/config ./pkg/node ./pkg/web/api ./pkg/web/service
-  go test -race -tags "full sqlite" ./agent/provider ./agent/session ./pkg/exts/provider ./pkg/config ./pkg/node ./pkg/web/api ./pkg/web/service ./cmd/aiscan
+  go test -race -tags "full sqlite" ./agent/provider ./agent/session ./exts/provider ./pkg/config ./pkg/node ./pkg/web/api ./pkg/web/service ./cmd/aiscan
 The race run requires CGO and a C compiler (on Windows, set CC to gcc).
 
 These tests prepare local fixtures only; they do not publish RC7.

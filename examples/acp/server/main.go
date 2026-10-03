@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	webext "github.com/chainreactors/cyber/pkg/exts/web"
+	webext "github.com/chainreactors/cyber/exts/web"
 
 	"github.com/chainreactors/cyber/core/extension"
 	"github.com/chainreactors/cyber/core/telemetry"

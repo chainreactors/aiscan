@@ -4,8 +4,8 @@ package main
 
 import (
 	"github.com/chainreactors/cyber/core/types"
+	scannerext "github.com/chainreactors/cyber/exts/scanner"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	scannerext "github.com/chainreactors/cyber/pkg/exts/scanner"
 	"os"
 	"path/filepath"
 	"strings"

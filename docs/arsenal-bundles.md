@@ -80,7 +80,7 @@ Makefile 会自动为生成器使用宿主平台、为资源使用编译目标�
 - `tools/arsenal/arsenal.yaml`：工具定义、默认版本、平台文件名和使用提示。
 - 发行入口的 `bundle.yaml`：公共选择、平台增量和可选版本覆盖。
 - `tools/arsenal.NewManager`：统一加载完整目录、发行定义和用户配置，打开同一份安装状态。
-- `pkg/exts/arsenal`：在扩展加载时调用 `Manager.Prepare(ctx)`，注册现有 `arsenal` 命令。
+- `exts/arsenal`：在扩展加载时调用 `Manager.Prepare(ctx)`，注册现有 `arsenal` 命令。
 - audit 的 toolchain：检查当前平台要求的版本和 CLI 能力，预检与会话复用同一个 Manager。
 
 CRTM 的 `Source.Resolve` 统一远程下载与内嵌来源，`Artifact` 表达单个可执行文件。安装器负责校验、暂存、原子替换、安装记录和文件锁。调用方不遍历来源、不猜测 bundle 在来源列表中的位置，也不重复维护安装状态。

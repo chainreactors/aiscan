@@ -15,10 +15,10 @@ import (
 	"github.com/chainreactors/cyber/core/extension"
 	"github.com/chainreactors/cyber/core/telemetry"
 	types "github.com/chainreactors/cyber/core/types"
+	ioaclient "github.com/chainreactors/cyber/exts/ioa/client"
+	ioaserver "github.com/chainreactors/cyber/exts/ioa/server"
+	webext "github.com/chainreactors/cyber/exts/web"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	ioaclient "github.com/chainreactors/cyber/pkg/exts/ioa/client"
-	ioaserver "github.com/chainreactors/cyber/pkg/exts/ioa/server"
-	webext "github.com/chainreactors/cyber/pkg/exts/web"
 	node "github.com/chainreactors/cyber/pkg/node"
 	profile "github.com/chainreactors/cyber/pkg/profile"
 

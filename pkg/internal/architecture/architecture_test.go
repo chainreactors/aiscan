@@ -1,0 +1,342 @@
+// Package architecture enforces repository dependency and installation boundaries.
+package architecture
+
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"reflect"
+	"strconv"
+	"strings"
+	"testing"
+)
+
+const module = "github.com/chainreactors/cyber/"
+
+func root(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("repository root not found")
+		}
+		dir = parent
+	}
+}
+
+func TestRuntimeDependencies(t *testing.T) {
+	repository := root(t)
+	// Parse every file, including inactive platform and edition variants.
+	err := filepath.WalkDir(repository, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relative, _ := filepath.Rel(repository, path)
+		relative = filepath.ToSlash(relative)
+		if entry.IsDir() {
+			if relative != "." && (strings.HasPrefix(entry.Name(), ".") || relative == "web" || relative == "aop") {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		// The agent runtime is distribution-neutral: no product identity
+		// literals or virtual namespaces may appear in it.
+		if strings.HasPrefix(relative, "agent/") && !strings.HasSuffix(path, "_test.go") {
+			content, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			for _, forbidden := range []string{`"cyber"`, "cyber://"} {
+				if strings.Contains(string(content), forbidden) {
+					t.Errorf("%s embeds distribution identity %s in the neutral runtime", relative, forbidden)
+				}
+			}
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			return err
+		}
+		runtime := strings.HasPrefix(relative, "agent/") && !strings.HasSuffix(path, "_test.go")
+		for _, spec := range file.Imports {
+			imported, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				return err
+			}
+			if imported == module+"pkg/app" || imported == module+"exts/app" {
+				t.Errorf("%s imports removed App package", relative)
+			}
+			if !strings.HasSuffix(path, "_test.go") {
+				if strings.HasPrefix(relative, "pkg/config/") || strings.HasPrefix(relative, "pkg/cli/configuration/") {
+					for _, forbidden := range []string{"exts/", "cmd/", "tools/"} {
+						if strings.HasPrefix(imported, module+forbidden) {
+							t.Errorf("%s imports product implementation %s instead of configuration declarations", relative, imported)
+						}
+					}
+				}
+				directory := filepath.ToSlash(filepath.Dir(relative))
+				if (directory == "agent" || directory == "agent/session") && strings.HasPrefix(imported, module+"agent/subagent") {
+					t.Errorf("%s depends on optional subagent capability", relative)
+				}
+				if strings.HasPrefix(relative, "tools/scan/") && (strings.HasPrefix(imported, module+"agent/subagent") || imported == module+"agent/session") {
+					t.Errorf("%s bypasses the injected scanner Worker", relative)
+				}
+			}
+			if !runtime {
+				continue
+			}
+			for _, forbidden := range []string{"pkg/", "exts/", "tools/", "cmd/", "internal/", "core/extension"} {
+				if strings.HasPrefix(imported, module+forbidden) {
+					t.Errorf("%s imports %s", relative, imported)
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "list", "-deps", "./agent/...")
+	cmd.Dir = repository
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("dependency graph: %v\n%s", err, out)
+	}
+	for _, dependency := range strings.Fields(string(out)) {
+		for _, layer := range []string{"pkg/", "exts/", "tools/", "cmd/", "internal/"} {
+			if strings.HasPrefix(dependency, module+layer) {
+				t.Errorf("Agent transitively depends on %s", dependency)
+			}
+		}
+	}
+}
+
+// Each rule identifies the sole production owner. These are source boundaries,
+// not a runtime plugin catalog or a second installation mechanism.
+type installationRule struct {
+	owner   string
+	symbols []string
+}
+
+var installationRules = map[string][]installationRule{
+	"agent/subagent":             {{"exts/subagent", []string{"NewRegistry"}}},
+	"agent/subagent/sessionexec": {{"exts/subagent", []string{"New"}}},
+	"agent/session":              {{"exts/session", []string{"NewResource", "Resource"}}},
+	"agent/provider":             {{"exts/provider", []string{"Initialize"}}},
+	"agent/prompt":               {{"exts/prompt", []string{"NewRegistry"}}},
+	"agent/skills":               {{"exts/skills", []string{"NewStore", "LoadFrom"}}},
+	"tools/ioa":                  {{"exts/ioa/client/extension.go", []string{"New", "Resource"}}},
+	"tools/ioa/server":           {{"exts/ioa/server/extension.go", []string{"New", "Resource"}}},
+	"tools/terminal": {
+		{"exts/terminal", []string{"NewBashTool"}},
+		{"exts/tmux", []string{"NewTmuxCommand"}},
+	},
+	"tools/files":       {{"exts/files", []string{"New", "Resource"}}},
+	"tools/proxy":       {{"exts/proxy", []string{"New*", "Resource", "TrafficNamespace"}}},
+	"tools/arsenal":     {{"exts/arsenal", []string{"New*"}}},
+	"tools/playwright":  {{"exts/browser", []string{"New"}}},
+	"tools/record":      {{"exts/record", []string{"New"}}},
+	"tools/loop":        {{"exts/native", []string{"NewCommand"}}},
+	"tools/okf":         {{"exts/okf", []string{"NewCommand"}}},
+	"tools/curl":        {{"exts/scanner", []string{"New*"}}},
+	"tools/gogo":        {{"exts/scanner", []string{"New*"}}},
+	"tools/neutron":     {{"exts/scanner", []string{"New*"}}},
+	"tools/proton":      {{"exts/proton", []string{"New*"}}},
+	"tools/spray":       {{"exts/scanner", []string{"New*"}}},
+	"tools/zombie":      {{"exts/scanner", []string{"New*"}}},
+	"tools/katana":      {{"exts/scanner", []string{"New*"}}},
+	"tools/passive":     {{"exts/scanner", []string{"New*"}}},
+	"tools/scan":        {{"exts/scanner", []string{"New"}}},
+	"tools/scan/engine": {{"exts/scanner", []string{"InitWithOptions", "NewUncoverEngine"}}},
+	"tools/search": {
+		{"exts/scanner", []string{"NewCyberhubSearch"}},
+		{"exts/search", []string{"NewTavilySearch", "NewWebSearchTool", "NewFetchCommand"}},
+	},
+	"pkg/web/service": {{"exts/web", []string{"NewService", "NewSQLiteStore", "NewAgentPool", "ScanSchema"}}},
+	"pkg/web":         {{"exts/web", []string{"ManagementRoutes", "AOPRoute", "SessionRoute", "ScanRoute", "ConfigRoute", "AgentRoute", "SystemRoute", "ArtifactRoute"}}},
+}
+
+func installationOwner(imported, symbol string) string {
+	for _, rule := range installationRules[strings.TrimPrefix(imported, module)] {
+		for _, pattern := range rule.symbols {
+			if symbol == pattern || strings.HasSuffix(pattern, "*") && strings.HasPrefix(symbol, strings.TrimSuffix(pattern, "*")) {
+				return rule.owner
+			}
+		}
+	}
+	return ""
+}
+func permittedInstallation(relative, imported, owner string) bool {
+	directory := filepath.ToSlash(filepath.Dir(relative))
+	// Unit tests for the implementation may construct their subject directly.
+	implementation := strings.TrimPrefix(imported, module)
+	if strings.HasSuffix(relative, "_test.go") {
+		return directory == implementation || implementation == "pkg/web" && directory == "pkg/web/service"
+	}
+	return relative == owner || directory == owner
+}
+func installationViolations(relative string, file *ast.File) []string {
+	var violations []string
+	imports := map[string]string{}
+	for _, spec := range file.Imports {
+		imported, _ := strconv.Unquote(spec.Path.Value)
+		name := filepath.Base(imported)
+		if spec.Name != nil {
+			name = spec.Name.Name
+		}
+		if name == "." && installationRules[strings.TrimPrefix(imported, module)] != nil {
+			violations = append(violations, "dot import of owned installation API")
+		}
+		imports[name] = imported
+	}
+	ast.Inspect(file, func(node ast.Node) bool {
+		var constructed ast.Expr
+		if literal, ok := node.(*ast.CompositeLit); ok {
+			constructed = literal.Type
+		}
+		if call, ok := node.(*ast.CallExpr); ok {
+			if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "new" && len(call.Args) == 1 {
+				constructed = call.Args[0]
+			}
+		}
+		if typ, ok := constructed.(*ast.SelectorExpr); ok && typ.Sel.Name == "Resource" {
+			if qualifier, ok := typ.X.(*ast.Ident); ok {
+				imported := imports[qualifier.Name]
+				owner := installationOwner(imported, "Resource")
+				if owner != "" && !permittedInstallation(relative, imported, owner) {
+					violations = append(violations, "resource construction belongs to "+owner)
+				}
+			}
+		}
+		selector, ok := node.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		if selector.Sel.Name == "NamespaceBindings" && relative != "exts/session/protocol_extension.go" && !strings.HasPrefix(relative, "agent/session/") {
+			violations = append(violations, "Session protocols must be contributed by session.NewProtocol")
+		}
+		ident, ok := selector.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		imported := imports[ident.Name]
+		if selector.Sel.Name == "Resource" {
+			return true
+		} // Type inspection and borrowing do not install a resource.
+		owner := installationOwner(imported, selector.Sel.Name)
+		if owner != "" && !permittedInstallation(relative, imported, owner) {
+			violations = append(violations, ident.Name+"."+selector.Sel.Name+" belongs to "+owner)
+		}
+		return true
+	})
+	return violations
+}
+
+// The core Option holds host-neutral configuration only. Scanner-domain
+// sections are extension declarations owned by exts/scanner and reach the
+// runtime through Option.Extensions.
+func TestCoreOptionHasNoScannerSections(t *testing.T) {
+	repository := root(t)
+	file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(repository, "pkg", "config", "options.go"), nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forbidden := map[string]bool{"cyberhub": true, "recon": true, "scan": true, "search": true}
+	ast.Inspect(file, func(node ast.Node) bool {
+		field, ok := node.(*ast.Field)
+		if !ok || field.Tag == nil {
+			return true
+		}
+		raw, err := strconv.Unquote(field.Tag.Value)
+		if err != nil {
+			return true
+		}
+		key := strings.Split(reflect.StructTag(raw).Get("config"), ",")[0]
+		if forbidden[key] {
+			t.Errorf("pkg/config Option carries scanner configuration key %q; register a config.Section instead", key)
+		}
+		return true
+	})
+}
+
+func TestExtensionsAreTheInstallationEntryPoints(t *testing.T) {
+	repository := root(t)
+	for _, tree := range []string{"cmd", "pkg", "exts", "examples"} {
+		err := filepath.WalkDir(filepath.Join(repository, tree), func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				if strings.HasPrefix(entry.Name(), ".") {
+					return fs.SkipDir
+				}
+				return nil
+			}
+			if !strings.HasSuffix(path, ".go") {
+				return nil
+			}
+			relative, _ := filepath.Rel(repository, path)
+			relative = filepath.ToSlash(relative)
+			file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+			if err != nil {
+				return err
+			}
+			for _, violation := range installationViolations(relative, file) {
+				t.Errorf("%s: %s", relative, violation)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+func TestInstallationBoundaryRules(t *testing.T) {
+	for _, test := range []struct {
+		name, path, source string
+		reject             bool
+	}{
+		{"direct", "cmd/example/main.go", `package main; import ioa "github.com/chainreactors/cyber/tools/ioa"; var x = ioa.New`, true},
+		{"alias", "examples/main.go", `package main; import original "github.com/chainreactors/cyber/tools/ioa"; var construct = original.New`, true},
+		{"anonymous extension", "cmd/example/main.go", `package main; import ioa "github.com/chainreactors/cyber/tools/ioa"; var load = func() { _ = ioa.New(ioa.Config{}, nil) }`, true},
+		{"another extension", "exts/search/extra.go", `package search; import ioa "github.com/chainreactors/cyber/tools/ioa"; var x = ioa.New`, true},
+		{"declaration bypass", "exts/ioa/client/declare.go", `package client; import ioa "github.com/chainreactors/cyber/tools/ioa"; var x = ioa.New`, true},
+		{"resource literal", "cmd/example/main.go", `package main; import ioa "github.com/chainreactors/cyber/tools/ioa"; var x = ioa.Resource{}`, true},
+		{"protocol alias", "cmd/example/main.go", `package main; func install(runtime R) { bindings := runtime.NamespaceBindings; _ = bindings }`, true},
+		{"owner", "exts/ioa/client/extension.go", `package client; import ioa "github.com/chainreactors/cyber/tools/ioa"; var x = ioa.New`, false},
+		{"config", "cmd/example/main.go", `package main; import ioa "github.com/chainreactors/cyber/tools/ioa"; var config ioa.Config`, false},
+		{"business", "cmd/example/main.go", `package main; import ioa "github.com/chainreactors/cyber/tools/ioa"; func query(s *ioa.Service) { _ = s.ListSpaces }`, false},
+		{"custom extension", "examples/main.go", `package main; import ext "github.com/chainreactors/cyber/core/extension"; var x = ext.Func{}`, false},
+		{"unit test", "pkg/web/service/example_test.go", `package service_test; import svc "github.com/chainreactors/cyber/pkg/web/service"; var x = svc.NewService`, false},
+		{"integration test", "exts/web/example_test.go", `package web_test; import svc "github.com/chainreactors/cyber/pkg/web/service"; var x = svc.NewService`, true},
+		{"host manager construction", "cmd/aiscan/extensions.go", `package main; import arsenal "github.com/chainreactors/cyber/tools/arsenal"; var x = arsenal.NewManager`, true},
+		{"host store construction", "cmd/example/main.go", `package main; import svc "github.com/chainreactors/cyber/pkg/web/service"; var x = svc.NewSQLiteStore`, true},
+		{"host schema installation", "cmd/example/main.go", `package main; import svc "github.com/chainreactors/cyber/pkg/web/service"; var x = svc.ScanSchema`, true},
+		{"cross extension browser construction", "exts/jev/browser_integration_test.go", `package jev; import browser "github.com/chainreactors/cyber/tools/playwright"; var x = browser.New`, true},
+		{"cross extension shell construction", "exts/jev/integration_test.go", `package jev; import shell "github.com/chainreactors/cyber/tools/terminal"; var x = shell.NewBashTool`, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			file, err := parser.ParseFile(token.NewFileSet(), test.path, test.source, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			violations := installationViolations(test.path, file)
+			if (len(violations) > 0) != test.reject {
+				t.Fatalf("violations=%v, reject=%v", violations, test.reject)
+			}
+		})
+	}
+}

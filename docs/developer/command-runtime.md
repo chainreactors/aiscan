@@ -31,9 +31,8 @@ from the token on each request; an expired token fails closed. `mitm` and
 `proxy` both invoke the same `RunCommand` function. A wrapped detached `tmux`
 session takes ownership of its route lease until the session ends.
 
-`third_party/proc` is based on `github.com/chainreactors/utils/proc`
-`v0.0.0-20260917082019-d9b6bc48f7e2` and adds logical session status.
-`third_party/mitmproxy` is based on `github.com/chainreactors/utils/mitmproxy`
-`v0.0.0-20260909040842-68732c4ef873` and exposes the request's proxy-auth
-identity to its dial callback. The root and audit modules use these local
-copies until matching upstream module versions are available.
+The root and audit modules depend on `github.com/chainreactors/utils/proc`
+for logical session status and complete output-file mirrors.
+`github.com/chainreactors/utils/mitmproxy` exposes each request's proxy-auth
+identity to its dial callback and reports forwarding completion to capture
+observers. These runtime capabilities belong to the shared libraries.

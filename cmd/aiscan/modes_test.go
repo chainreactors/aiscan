@@ -10,7 +10,7 @@ import (
 	"github.com/chainreactors/cyber/core/eventbus"
 	"github.com/chainreactors/cyber/core/events"
 	procbus "github.com/chainreactors/cyber/core/proc"
-	"github.com/chainreactors/cyber/internal/testutil/apptest"
+	"github.com/chainreactors/cyber/pkg/testutil/apptest"
 
 	"github.com/chainreactors/cyber/agent/provider"
 	agentsession "github.com/chainreactors/cyber/agent/session"

@@ -2,9 +2,9 @@ package main
 
 import (
 	types "github.com/chainreactors/cyber/core/types"
+	scannerext "github.com/chainreactors/cyber/exts/scanner"
+	searchext "github.com/chainreactors/cyber/exts/search"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	scannerext "github.com/chainreactors/cyber/pkg/exts/scanner"
-	searchext "github.com/chainreactors/cyber/pkg/exts/search"
 )
 
 // DistributeFromOption projects shared harness configuration for transport and UI.

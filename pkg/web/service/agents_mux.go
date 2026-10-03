@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	operationpb "github.com/chainreactors/cyber/aop/operation"
-	"github.com/chainreactors/cyber/pkg/exts/guardrail"
+	"github.com/chainreactors/cyber/exts/guardrail"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"log/slog"
 

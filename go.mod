@@ -1,9 +1,5 @@
 module github.com/chainreactors/cyber
 
-replace github.com/chainreactors/utils/proc => ./third_party/proc
-
-replace github.com/chainreactors/utils/mitmproxy => ./third_party/mitmproxy
-
 go 1.26
 
 tool (
@@ -13,7 +9,6 @@ tool (
 
 require (
 	connectrpc.com/connect v1.20.0
-	github.com/Microsoft/go-winio v0.6.2
 	github.com/alecthomas/chroma/v2 v2.14.0
 	github.com/carapace-sh/carapace v1.11.6
 	github.com/chainreactors/crtm v0.0.3-0.20260924103954-9432523918ae
@@ -34,9 +29,9 @@ require (
 	github.com/chainreactors/tui/console v0.0.0-20260712082522-2ba36ad7841f
 	github.com/chainreactors/tui/readline v0.0.0-20260723062039-ed89e758c21b
 	github.com/chainreactors/utils v0.0.0-20260711153742-f3d210a5fa9d
-	github.com/chainreactors/utils/mitmproxy v0.0.0-20260909040842-68732c4ef873
+	github.com/chainreactors/utils/mitmproxy v0.0.0-20261002195803-fc9e07c4b4fd
 	github.com/chainreactors/utils/parsers v0.0.3
-	github.com/chainreactors/utils/proc v0.0.0-20260917082019-d9b6bc48f7e2
+	github.com/chainreactors/utils/proc v0.0.0-20261002195803-fc9e07c4b4fd
 	github.com/chainreactors/zombie v1.3.1-0.20260809133033-0d0df6fa50f5
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/glamour v0.8.0
@@ -197,7 +192,7 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.13 // indirect
 	github.com/go-redis/redis v6.15.9+incompatible // indirect
 	github.com/go-sql-driver/mysql v1.10.0 // indirect
-	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
+	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/gofrs/uuid/v5 v5.3.2 // indirect

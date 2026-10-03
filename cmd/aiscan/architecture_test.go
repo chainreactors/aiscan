@@ -55,8 +55,8 @@ func TestReusableLayersDoNotDependOnDistributionFeatures(t *testing.T) {
 		t.Fatal(err)
 	}
 	forbidden := []string{
-		"/cmd/aiscan", "/pkg/exts/scanner", "/pkg/exts/search", "/pkg/exts/proxy",
-		"/pkg/exts/ioa", "/pkg/exts/browser", "/pkg/exts/record", "/pkg/exts/web",
+		"/cmd/aiscan", "/exts/scanner", "/exts/search", "/exts/proxy",
+		"/exts/ioa", "/exts/browser", "/exts/record", "/exts/web",
 		"/pkg/web", "/pkg/node",
 	}
 	for _, dependency := range strings.Fields(string(output)) {

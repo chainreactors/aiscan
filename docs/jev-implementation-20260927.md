@@ -68,7 +68,7 @@ flowchart TD
 - `agent/provider/jev` 只实现原生协议、重试、用量；不认识 Claim/Reflex。429/529、响应头前 EOF 与响应体截断共用最多三次尝试、250/500 ms 退避及原总超时预算；重试只重新请求判别，失败尝试的缺失用量仍记为未知，不重放工具。
 - JEV 标准 HTTP transport 为 provider 自己的副本，限定 HTTP/1.1，并同步 TLS ALPN、保留连接复用及原代理/TLS 设置，避免实测 HTTP/2 推理请求长时间无响应。不会修改全局 transport、其他模型请求或进程 GODEBUG；宿主注入的自定义 RoundTripper 继续保留。
 - Agent 的 `BeforeModel` 返回追加的原生观察消息；`AfterModel` 在接受完整模型输出后、执行其工具调用前触发一次。二者都在请求重试之外，提供历史副本；最终回答也进入 AfterModel。
-- `pkg/exts/jev` 独占声明、编译、持久化、候选判别及执行循环。AfterModel 只提交快照，网络工作在单个有界后台队列进行。旁路调用直接使用现有 Provider，不运行 Agent，所以不递归触发 hooks。
+- `exts/jev` 独占声明、编译、持久化、候选判别及执行循环。AfterModel 只提交快照，网络工作在单个有界后台队列进行。旁路调用直接使用现有 Provider，不运行 Agent，所以不递归触发 hooks。
 - 未匹配 Reflex 的新用户约束边界提交一次后台 Claim/Reflex 判别，使首次浏览器请求能产生能力选择 Claim；已匹配场景的入口不重复判别。普通 LLM 不等待声明或编译。Reflex 发布后只能在后续安全边界接管；每次 LLM 输出仍进入 AfterModel 判别。
 - LLM 一次输出中的文本和多个 toolcall 分别作为判别问题，合并成一次 JEV 请求。无需将 LLM 参数与历史候选精确匹配。
 - 任务完成时，新声明及匹配到的未编译声明进入归并和可编译性判断；同任务已声明但最后一次判别未匹配的材料仍可参与。匹配已有 Claim 不重新生成或消费该 Claim。修复仅针对实际交接快照中存在的场景，匹配其支持 Claim 也可触发核对；同任务刚发布的场景不被误算作先前接管失败。当前交互、工具定义及普通命令文档支持任意已注册原生工具和多工具组合。是否编译由 JEV 决定，没有强制通过、计数门槛或无限重试。
@@ -166,10 +166,10 @@ JEV 配置只包含连接及自动接管字段；风险策略由独立 Guardrail
 额外报告 80% 目标：分别按全部 LLM input+output（包含后台 Claim/Compile）和 LLM+JEV 全供应商 token，统计减少至少 80% 且耗时下降的正确配对任务数；output 和 reasoning 子项独立列出。同步报告参考费用，不能把模型调用减少或 LLM token 节省等同于全链路节省。
 
 ```powershell
-go test ./agent ./agent/provider ./agent/provider/jev ./core/tool ./pkg/exts/jev ./pkg/exts/guardrail ./tools/curl ./tools/toolargs ./pkg/harness -count=1
-go test -tags full ./tools/playwright ./pkg/exts/browser ./pkg/exts/jev -count=1
+go test ./agent ./agent/provider ./agent/provider/jev ./core/tool ./exts/jev ./exts/guardrail ./tools/curl ./tools/toolargs ./pkg/harness -count=1
+go test -tags full ./tools/playwright ./exts/browser ./exts/jev -count=1
 go test -tags 'full sqlite' ./cmd/aiscan -count=1
-go test -race ./agent/provider/jev ./pkg/exts/jev ./core/tool -count=1
+go test -race ./agent/provider/jev ./exts/jev ./core/tool -count=1
 ```
 
 本修订实测结果见[自动接管验收](jev-autonomous-takeover-20261001.md)，首次失败快照见[复审记录](jev-review-validation-20261001.md)，以前版本见[历史验证记录](jev-validation-20260928.md)。历史 seeded/学习版本与工具 Observe 基线的数据不能视为本修订的验收。[JEV 主导执行设计](jev-controller-design-20260928.md) 保留控制权及交接的历史设计；当前契约以本文件为准。

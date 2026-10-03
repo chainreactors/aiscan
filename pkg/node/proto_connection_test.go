@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/chainreactors/cyber/agent"
-	loopext "github.com/chainreactors/cyber/pkg/exts/agent"
-	promptext "github.com/chainreactors/cyber/pkg/exts/prompt"
+	loopext "github.com/chainreactors/cyber/exts/agent"
+	promptext "github.com/chainreactors/cyber/exts/prompt"
 
 	agentsession "github.com/chainreactors/cyber/agent/session"
 	aop "github.com/chainreactors/cyber/aop"
@@ -33,12 +33,12 @@ import (
 	"github.com/chainreactors/cyber/core/telemetry"
 	coretool "github.com/chainreactors/cyber/core/tool"
 	types "github.com/chainreactors/cyber/core/types"
-	"github.com/chainreactors/cyber/internal/testutil/apptest"
-	"github.com/chainreactors/cyber/internal/testutil/hosttest"
 	"github.com/chainreactors/cyber/pkg/aopws"
+	"github.com/chainreactors/cyber/pkg/testutil/apptest"
+	"github.com/chainreactors/cyber/pkg/testutil/hosttest"
 
-	proxyext "github.com/chainreactors/cyber/pkg/exts/proxy"
-	sessionext "github.com/chainreactors/cyber/pkg/exts/session"
+	proxyext "github.com/chainreactors/cyber/exts/proxy"
+	sessionext "github.com/chainreactors/cyber/exts/session"
 	toolnode "github.com/chainreactors/cyber/pkg/node/tool"
 	"github.com/gorilla/websocket"
 	protobuf "google.golang.org/protobuf/proto"

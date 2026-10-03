@@ -20,8 +20,8 @@ IOA 是可插拔的 Agent 协作扩展。产品默认安装客户端扩展：未
 
 | 扩展 | 所有权 | 对外能力 |
 | --- | --- | --- |
-| `pkg/exts/ioa/client` | 本地或外部客户端、收信、Session 路由、同步 handoff、命令 | `Service()` / Reader 与状态 |
-| `pkg/exts/ioa/server` | 独立服务的 Store、Service、认证、HTTP/SSE | `Server()` |
+| `exts/ioa/client` | 本地或外部客户端、收信、Session 路由、同步 handoff、命令 | `Service()` / Reader 与状态 |
+| `exts/ioa/server` | 独立服务的 Store、Service、认证、HTTP/SSE | `Server()` |
 
 ## 客户端装配
 
@@ -143,8 +143,8 @@ Web 的 IOA Server 保持宿主寿命，应用配置重载只替换应用 Profil
 根目录 `go.work` 联调 workspace 随之移除，构建不再依赖相邻仓库的本地路径。
 
 ```text
-go test ./pkg/config ./pkg/cli ./agent/skills ./pkg/exts/... ./tools/ioa/... ./pkg/profile ./pkg/node ./pkg/console ./cmd/aiscan ./pkg/web/service
-go test -race ./core/extension ./core/events ./core/eventbus ./pkg/exts/... ./tools/ioa/... ./pkg/profile ./pkg/node ./pkg/console ./agent/skills
+go test ./pkg/config ./pkg/cli ./agent/skills ./exts/... ./tools/ioa/... ./pkg/profile ./pkg/node ./pkg/console ./cmd/aiscan ./pkg/web/service
+go test -race ./core/extension ./core/events ./core/eventbus ./exts/... ./tools/ioa/... ./pkg/profile ./pkg/node ./pkg/console ./agent/skills
 go test -tags full ./cmd/aiscan ./pkg/web/service
 go test github.com/chainreactors/ioa/server
 ```

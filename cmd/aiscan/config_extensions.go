@@ -5,10 +5,10 @@ import (
 	"net/url"
 
 	types "github.com/chainreactors/cyber/core/types"
+	ioaclient "github.com/chainreactors/cyber/exts/ioa/client"
+	ioaserver "github.com/chainreactors/cyber/exts/ioa/server"
+	"github.com/chainreactors/cyber/exts/jev"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	ioaclient "github.com/chainreactors/cyber/pkg/exts/ioa/client"
-	ioaserver "github.com/chainreactors/cyber/pkg/exts/ioa/server"
-	"github.com/chainreactors/cyber/pkg/exts/jev"
 	managementapi "github.com/chainreactors/cyber/pkg/web/api"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/structpb"

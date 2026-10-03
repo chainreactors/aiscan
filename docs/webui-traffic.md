@@ -16,4 +16,4 @@ WebUI 顶栏的可观测入口统一展示当前会话的工具、流量、文�
 
 流量保留原生 header 列表及 body bytes，显示时保留重复 header、解码 UTF-8，二进制正文展示有限长度的十六进制预览，大文本预览限制为 128 KiB。捕获错误和已收到的响应可同时显示。
 
-验证：`go test ./pkg/exts/observe ./tools/proxy ./cmd/aiscan` 包含真实 HTTP 经代理捕获、工具/文件/命令/进程事件及调用关联校验；viewer 和 traffic 单元测试覆盖去重、关联顺序、会话隔离、历史替换和正文转换。`npm run test:e2e:record` 包含 WebUI 的二进制 WebSocket 更新、刷新恢复、会话切换、分类/搜索、时间线卡片、CSTX 解析和窄屏展示，以及 record 和通用组件回归。
+验证：`go test ./exts/observe ./tools/proxy ./cmd/aiscan` 包含真实 HTTP 经代理捕获、工具/文件/命令/进程事件及调用关联校验；viewer 和 traffic 单元测试覆盖去重、关联顺序、会话隔离、历史替换和正文转换。`npm run test:e2e:record` 包含 WebUI 的二进制 WebSocket 更新、刷新恢复、会话切换、分类/搜索、时间线卡片、CSTX 解析和窄屏展示，以及 record 和通用组件回归。

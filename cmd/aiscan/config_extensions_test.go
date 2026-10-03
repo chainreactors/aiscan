@@ -2,9 +2,9 @@ package main
 
 import (
 	"github.com/chainreactors/cyber/core/types"
+	ioaclient "github.com/chainreactors/cyber/exts/ioa/client"
+	scannerext "github.com/chainreactors/cyber/exts/scanner"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	ioaclient "github.com/chainreactors/cyber/pkg/exts/ioa/client"
-	scannerext "github.com/chainreactors/cyber/pkg/exts/scanner"
 	managementapi "github.com/chainreactors/cyber/pkg/web/api"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"

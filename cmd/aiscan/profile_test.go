@@ -15,8 +15,8 @@ import (
 	ptypb "github.com/chainreactors/cyber/aop/pty"
 	"github.com/chainreactors/cyber/core/extension"
 	"github.com/chainreactors/cyber/core/telemetry"
+	loopext "github.com/chainreactors/cyber/exts/agent"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	loopext "github.com/chainreactors/cyber/pkg/exts/agent"
 	profilepkg "github.com/chainreactors/cyber/pkg/profile"
 	protobuf "google.golang.org/protobuf/proto"
 )

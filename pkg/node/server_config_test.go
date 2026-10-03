@@ -15,11 +15,11 @@ import (
 	aop "github.com/chainreactors/cyber/aop"
 	"github.com/chainreactors/cyber/core/telemetry"
 	types "github.com/chainreactors/cyber/core/types"
-	"github.com/chainreactors/cyber/internal/testutil/hosttest"
+	webext "github.com/chainreactors/cyber/exts/web"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	webext "github.com/chainreactors/cyber/pkg/exts/web"
 	"github.com/chainreactors/cyber/pkg/harness"
 	"github.com/chainreactors/cyber/pkg/profile"
+	"github.com/chainreactors/cyber/pkg/testutil/hosttest"
 	webservice "github.com/chainreactors/cyber/pkg/web/service"
 )
 

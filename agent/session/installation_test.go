@@ -6,7 +6,7 @@ import (
 
 	"github.com/chainreactors/cyber/agent"
 	"github.com/chainreactors/cyber/core/extension"
-	"github.com/chainreactors/cyber/internal/testutil/apptest"
+	"github.com/chainreactors/cyber/pkg/testutil/apptest"
 )
 
 // newUnitResource supplies explicit dependencies for package-internal resource tests.

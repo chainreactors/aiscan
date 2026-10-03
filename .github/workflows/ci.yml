@@ -78,7 +78,7 @@ jobs:
           fi
 
       - name: Check repository architecture and dependencies
-        run: go test -count=1 ./internal/architecture ./core/resource ./core/extension ./core/registry ./pkg/exts ./cmd/agent
+        run: go test -count=1 ./pkg/internal/architecture ./core/resource ./core/extension ./core/registry ./exts ./cmd/agent
 
       - name: Build the minimal agent
         run: |
@@ -112,7 +112,7 @@ jobs:
           CGO_ENABLED=0 go build -tags "$WEB_TAGS" -o /dev/null ./cmd/cyber-web
           # The standalone IOA server is a Hub messaging capability. Its
           # agent client and product execution capabilities remain on nodes.
-          if CGO_ENABLED=0 go list -deps -tags "$WEB_TAGS" ./cmd/cyber-web | grep -Eq '^github\.com/chainreactors/cyber/((pkg/exts|tools)/(scanner|search|proxy|browser|record|scan|audit)(/|$)|pkg/exts/ioa/client(/|$)|tools/ioa$)'; then
+          if CGO_ENABLED=0 go list -deps -tags "$WEB_TAGS" ./cmd/cyber-web | grep -Eq '^github\.com/chainreactors/cyber/((exts|tools)/(scanner|search|proxy|browser|record|scan|audit)(/|$)|exts/ioa/client(/|$)|tools/ioa$)'; then
             echo "::error::cyber-web reaches a product execution capability"
             exit 1
           fi
@@ -127,11 +127,11 @@ jobs:
             exit 1
           fi
           libcstx_imports="$(git grep -l 'github.com/chainreactors/libcstx/go' -- '*.go' || true)"
-          if printf '%s\n' "$libcstx_imports" | grep -v '^pkg/exts/cstx/' | grep -q .; then
-            echo "::error::libcstx may only be imported by pkg/exts/cstx"
+          if printf '%s\n' "$libcstx_imports" | grep -v '^exts/cstx/' | grep -q .; then
+            echo "::error::libcstx may only be imported by exts/cstx"
             exit 1
           fi
-          if git grep -n -E 'go-astiav|#cgo[[:space:]]+pkg-config' -- pkg/exts/record tools/record; then
+          if git grep -n -E 'go-astiav|#cgo[[:space:]]+pkg-config' -- exts/record tools/record; then
             echo "::error::record must link only through its Extension-owned FFI"
             exit 1
           fi
@@ -146,7 +146,7 @@ jobs:
 
       - name: Compile public scanner regressions
         run: |
-          go test -run '^$' -tags "$FULL_CAPS_TAGS integration" ./pkg/exts/scanner
+          go test -run '^$' -tags "$FULL_CAPS_TAGS integration" ./exts/scanner
 
       - name: Check whitespace and submodule pins
         run: |
@@ -318,7 +318,7 @@ jobs:
         run: |
           go test -tags "$FULL_CAPS_TAGS" -count=1 -timeout 5m -v \
             -run 'Test(ScannerFunctionalRegression|FullScannerFunctionalRegression)$' \
-            ./pkg/exts/scanner
+            ./exts/scanner
 
       - name: Run remaining full-tag unit variants
         run: |
@@ -436,7 +436,7 @@ jobs:
         run: |
           # Untracked output is drift too: a new proto yields a new binding file,
           # which `git diff` never reports.
-          test -z "$(git status --porcelain -- pkg/rpc core/types pkg/exts/guardrail/guardrail.pb.go web/frontend/src/gen)"
+          test -z "$(git status --porcelain -- pkg/rpc core/types exts/guardrail/guardrail.pb.go web/frontend/src/gen)"
           # The AOP bindings are generated into the cyber-ui submodule, where the
           # superproject tracks only the gitlink, so a regeneration inside it is
           # invisible from here and the check has to run in the submodule.

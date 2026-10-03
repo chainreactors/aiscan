@@ -277,7 +277,7 @@ func TestAuditDependencyBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	forbidden := []string{"/pkg/exts/scanner", "/tools/scan", "/tools/resources", "/pkg/exts/web", "/pkg/exts/ioa", "/pkg/exts/browser", "/pkg/exts/search"}
+	forbidden := []string{"/exts/scanner", "/tools/scan", "/tools/resources", "/exts/web", "/exts/ioa", "/exts/browser", "/exts/search"}
 	for _, dependency := range strings.Fields(string(output)) {
 		for _, path := range forbidden {
 			if strings.HasPrefix(dependency, "github.com/chainreactors/cyber"+path) {

@@ -72,9 +72,9 @@ when a set here drifts from the file. It is a data file, not a shell script —
 the values hold spaces, so sourcing it would truncate every one of them.
 
 - **CSTX** normalization runs in the browser through `@cyber/cstx` and its
-  version-matched WASM ABI. `pkg/exts/cstx` remains available as an uncomposed
+  version-matched WASM ABI. `exts/cstx` remains available as an uncomposed
   native extension, but no aiscan edition imports or starts it.
-- **`record`** composes `pkg/exts/record`. That Extension owns its native
+- **`record`** composes `exts/record`. That Extension owns its native
   runtime and contributes the record Tool through the typed resource scope.
 - **RE2** uses the dependency's pure-Go backend. The same standard or full
   source tree builds and works with `CGO_ENABLED=0` or `CGO_ENABLED=1`; enabling
@@ -139,7 +139,7 @@ record-enabled binaries.
 Native smoke tests are opt-in because they require an interactive desktop/X11 session:
 
 ```bash
-go test -tags "record record_integration" ./pkg/exts/record
+go test -tags "record record_integration" ./exts/record
 ```
 
 ## WebUI results

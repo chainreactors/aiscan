@@ -22,10 +22,10 @@ import (
 	aop "github.com/chainreactors/cyber/aop"
 	"github.com/chainreactors/cyber/core/extension"
 	types "github.com/chainreactors/cyber/core/types"
-	"github.com/chainreactors/cyber/internal/testutil/apptest"
 	consoleapi "github.com/chainreactors/cyber/pkg/console/api"
 	profile "github.com/chainreactors/cyber/pkg/profile"
 	rpc "github.com/chainreactors/cyber/pkg/rpc"
+	"github.com/chainreactors/cyber/pkg/testutil/apptest"
 	scanpb "github.com/chainreactors/cyber/pkg/web/scan"
 )
 

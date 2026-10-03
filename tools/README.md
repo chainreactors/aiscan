@@ -11,7 +11,7 @@ Tool Registry 和 Command Registry 分别定义 `tool.Tool` 与 `tool.Command` t
 失败返回 Go error，并遵守 context 取消。构造函数显式接收 scanner、proxy、IOA 或工作
 目录等依赖。不得增加全局 Registry、工厂清单、依赖容器、兼容包装或平行传输模型。
 
-`tools/*` 保存原始领域实现与 Tool/Command 声明，`pkg/exts/*` 适配 Profile 生命周期和
+`tools/*` 保存原始领域实现与 Tool/Command 声明，`exts/*` 适配 Profile 生命周期和
 Registry 贡献，`pkg/profile` 提供 `Profile` 与 `Request` 宿主契约。
 具体 Profile 图由 `cmd/aiscan` 和 `cmd/agent` 声明；aiscan 的运行模式也由 `cmd/aiscan` 管理。
 

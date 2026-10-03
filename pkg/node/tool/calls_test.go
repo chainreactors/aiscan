@@ -11,8 +11,8 @@ import (
 	toolpb "github.com/chainreactors/cyber/aop/tool"
 	coreevents "github.com/chainreactors/cyber/core/events"
 	coretool "github.com/chainreactors/cyber/core/tool"
-	"github.com/chainreactors/cyber/internal/testutil/hosttest"
 	toolnode "github.com/chainreactors/cyber/pkg/node/tool"
+	"github.com/chainreactors/cyber/pkg/testutil/hosttest"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )

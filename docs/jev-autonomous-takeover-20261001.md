@@ -98,12 +98,12 @@
 通用原生工具集成测试没有 CommandRegistry，工具名、ID、版本及 job 在运行时变化，覆盖 catalog/activate/receipt 组合、轮询及复用；其固定模型响应只验证机制。纯观察检查覆盖无 I/O、时间中断、候选预算、读取器序列化、显式 read、效果后实际检查、部分场景交接、场景撤下和实际补充后的修复。
 
 ```powershell
-go test ./agent ./agent/provider ./agent/provider/jev ./core/tool ./pkg/exts/jev ./pkg/exts/guardrail ./tools/curl ./tools/toolargs ./pkg/harness -count=1
-go test -tags full,sqlite ./pkg/exts/browser ./pkg/exts/jev ./cmd/aiscan -count=1
-go test -race ./agent/provider/jev ./pkg/exts/jev ./core/tool -count=1
+go test ./agent ./agent/provider ./agent/provider/jev ./core/tool ./exts/jev ./exts/guardrail ./tools/curl ./tools/toolargs ./pkg/harness -count=1
+go test -tags full,sqlite ./exts/browser ./exts/jev ./cmd/aiscan -count=1
+go test -race ./agent/provider/jev ./exts/jev ./core/tool -count=1
 # 真实验收需要进程环境中的两组凭据及 CYBER_BASE_URL/CYBER_MODEL。
 $env:JEV_BROWSER_LIVE='1'
 $env:JEV_DECLARATION_EFFORT='low'
 $env:JEV_BROWSER_REPORT='<新的报告路径>'
-go test -tags full,sqlite ./pkg/exts/jev -run '^TestBrowserAutomaticTakeoverAfterBoundedDiscovery$' -count=1 -timeout=20m -v
+go test -tags full,sqlite ./exts/jev -run '^TestBrowserAutomaticTakeoverAfterBoundedDiscovery$' -count=1 -timeout=20m -v
 ```

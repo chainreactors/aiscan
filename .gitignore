@@ -4,8 +4,6 @@
 *.dll
 *.so
 *.dylib
-!third_party/proc/winpty_bin/winpty-agent.exe
-!third_party/proc/winpty_bin/winpty.dll
 
 # Test binary, built with `go test -c`
 *.test
@@ -77,7 +75,7 @@ aiscan.yaml
 
 # Live acceptance and local browser test output
 /.runlogs/
-/pkg/exts/jev/.runlogs/
+/exts/jev/.runlogs/
 /test-results/
 /sweep-*.yaml
 /web/frontend/sweep-root.yaml

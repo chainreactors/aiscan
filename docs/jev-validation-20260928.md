@@ -59,7 +59,7 @@
 
 ### 修复后的回归结果
 
-`go test -tags full ./pkg/exts/jev ./tools/curl ./core/tool -count=1`、Agent BeforeModel/AfterModel 定向回归，以及 JEV 扩展、core/tool、agent/provider/jev 的 race 测试均通过；本轮改动范围内的 `git diff --check` 通过。新增用例覆盖编译再次评估、失败后的可重试状态、持久化恢复和未接管时提示不变。普通测试通过不覆盖概率判别的全部行为，不改变上述真实 HTTP A/B 和浏览器测试的失败状态。
+`go test -tags full ./exts/jev ./tools/curl ./core/tool -count=1`、Agent BeforeModel/AfterModel 定向回归，以及 JEV 扩展、core/tool、agent/provider/jev 的 race 测试均通过；本轮改动范围内的 `git diff --check` 通过。新增用例覆盖编译再次评估、失败后的可重试状态、持久化恢复和未接管时提示不变。普通测试通过不覆盖概率判别的全部行为，不改变上述真实 HTTP A/B 和浏览器测试的失败状态。
 
 ## 修复前：非浏览器依赖闭环 20 对，自动编译未通过
 
@@ -99,12 +99,12 @@ off 第 19 个任务完成了全部正确访问并给出正确阴性结论，但
 已有 `CYBER_API_KEY`、`CYBER_MODEL`、`CYBER_BASE_URL`、`TYPESAFE_API_KEY` 和参考 `JEV_BENCH_PRICES` 配置时，设置 `JEV_BENCH_LIVE=1`、`JEV_BENCH_PAIRS=20` 及独立的 `JEV_BENCH_REPORT`，运行：
 
 ```text
-go test -tags full ./pkg/exts/jev -run '^TestLiveAutomaticReflexAB/aiscan-http-loop$' -count=1 -v -timeout 25m
+go test -tags full ./exts/jev -run '^TestLiveAutomaticReflexAB/aiscan-http-loop$' -count=1 -v -timeout 25m
 ```
 
-夹具正反例测试通过；运行后 `go test -tags full ./pkg/exts/jev ./tools/curl ./core/tool -count=1`、Agent 的 BeforeModel/AfterModel 定向回归及范围内 `git diff --check` 均通过。普通回归通过不覆盖真实模型语义判别，真实 A/B 失败状态仍保留。
+夹具正反例测试通过；运行后 `go test -tags full ./exts/jev ./tools/curl ./core/tool -count=1`、Agent 的 BeforeModel/AfterModel 定向回归及范围内 `git diff --check` 均通过。普通回归通过不覆盖真实模型语义判别，真实 A/B 失败状态仍保留。
 
-证据：[42 条原始记录](../.runlogs/jev-nonbrowser-loop-20260929.json)、[完整汇总及后台归因](../.runlogs/jev-nonbrowser-loop-20260929-summary.json)、[运行日志](../.runlogs/jev-nonbrowser-loop-20260929.log)、[172 个源文件哈希](../.runlogs/jev-nonbrowser-loop-source-20260929.json)、[完整性校验及报告错误](../.runlogs/jev-nonbrowser-loop-verified-20260929.json)。测试实现：[HTTP 依赖闭环夹具](../pkg/exts/jev/benchmark_http_loop_test.go)。
+证据：[42 条原始记录](../.runlogs/jev-nonbrowser-loop-20260929.json)、[完整汇总及后台归因](../.runlogs/jev-nonbrowser-loop-20260929-summary.json)、[运行日志](../.runlogs/jev-nonbrowser-loop-20260929.log)、[172 个源文件哈希](../.runlogs/jev-nonbrowser-loop-source-20260929.json)、[完整性校验及报告错误](../.runlogs/jev-nonbrowser-loop-verified-20260929.json)。测试实现：[HTTP 依赖闭环夹具](../exts/jev/benchmark_http_loop_test.go)。
 
 ## 泛化浏览器完整对照：五类任务，20 对
 
@@ -173,7 +173,7 @@ go test -tags full ./pkg/exts/jev -run '^TestLiveAutomaticReflexAB/aiscan-http-l
 
 5/5 正确，错误动作 0，主历史前缀改写 0，后 4 个任务均复用同一 Reflex，只调用主 LLM 生成最终报告。首次任务包含后台声明/编译共 58.146 s，完整测试 80.61 s、28 次 JEV 请求。首次成本保留，不能只报后续时间。
 
-通过 `go test -tags full ./pkg/exts/jev ./tools/playwright -count=1`，以及同一跨页面测试的真实供应商模式。证据：[原始记录及自动生成的库](../.runlogs/jev-generic-browser-20260929.json)、[真实运行日志](../.runlogs/jev-generic-browser-20260929.log)。
+通过 `go test -tags full ./exts/jev ./tools/playwright -count=1`，以及同一跨页面测试的真实供应商模式。证据：[原始记录及自动生成的库](../.runlogs/jev-generic-browser-20260929.json)、[真实运行日志](../.runlogs/jev-generic-browser-20260929.log)。
 
 该回归验证未见页面上的动态选择、策略复用和自动编译，不是新的 off/auto 性能对照，也不是完整浏览器覆盖证明。iframe、Shadow DOM、画布、任意编辑器等仍需按原生能力覆盖验证；ab5 的全链路费用和 reasoning 未通过项仍然有效。
 
@@ -232,7 +232,7 @@ go test -tags full ./pkg/exts/jev -run '^TestLiveAutomaticReflexAB/aiscan-http-l
 
 控制器已实现连续执行、独立的参数缺口判别、明确 report/defer 交接、无效果 stale 恢复、紧凑私有上下文及原生 HTTP 批量候选。核心类型和工具边界不变，详见 [当前架构](jev-controller-design-20260928.md)。
 
-2026-09-28 本轮通过 `go test -tags full ./tools/playwright ./pkg/exts/browser ./pkg/exts/jev -count=1` 和 `go test -race ./pkg/exts/jev ./core/tool ./agent/provider/jev -count=1`。定向真实 JEV 测试发现：参数判断看不到明确绑定时，缺参数与可填写场景会同时误判；完整候选移入共享 state 后，缺绑定、控件改名、已有绑定及已填写四个用例均通过。该诊断使用人工定义的通用场景，只证明判断边界，不替代自动 Claim/Compile 或性能测试。首次失败 [日志](../.runlogs/jev-generation-boundary-20260928.log) 和修正后 [日志](../.runlogs/jev-generation-boundary2-20260928.log) 都保留。
+2026-09-28 本轮通过 `go test -tags full ./tools/playwright ./exts/browser ./exts/jev -count=1` 和 `go test -race ./exts/jev ./core/tool ./agent/provider/jev -count=1`。定向真实 JEV 测试发现：参数判断看不到明确绑定时，缺参数与可填写场景会同时误判；完整候选移入共享 state 后，缺绑定、控件改名、已有绑定及已填写四个用例均通过。该诊断使用人工定义的通用场景，只证明判断边界，不替代自动 Claim/Compile 或性能测试。首次失败 [日志](../.runlogs/jev-generation-boundary-20260928.log) 和修正后 [日志](../.runlogs/jev-generation-boundary2-20260928.log) 都保留。
 
 第二轮 [ab2](../.runlogs/jev-controller-ab2-20260928.json) 在完成 8 条记录后中止：JEV 推理请求发生连续超时，审计记录 40 次请求错误，数据存在缺失用量和未结算的在途任务，不能用于性能验收。未删除这些失败，也不将其计为免费；[中止说明](../.runlogs/jev-controller-ab2-interruption-20260928.json) 和 [源文件哈希](../.runlogs/jev-controller-ab2-source-20260928.json) 均保留。
 
@@ -309,7 +309,7 @@ HTTP 从 auto 的重复 GET 112 次（Observe 基线）降到 0，每任务一�
 
 本轮新增并通过的回归覆盖：无 Observe 的普通工具与宿主、已有 Reflex 接收页面动作而不再声明、观察源失败整轮回退、DOM 替换/重观察/消费/关闭并重建会话后的旧调用拒绝、普通调用仍可执行、表单原始事实与未知填写值、即时状态变化、fill/select/scroll/显式 wait。真实 Chromium 的三页自动声明/编译/复用机制测试通过（模型替身，仅证明机制）。完整 `full` Playwright/browser/JEV 测试、`full sqlite` aiscan 测试及相关 race 测试通过。
 
-全仓库 `go test ./...` 未全绿：`cmd/harness` 请求数量为 11 而断言要求 10；`internal/architecture` 安装入口检查报告既有构造调用（包括 JEV 测试夹具）；`tools/katana` 的 leakless.exe 被 Windows 安全软件拦截。未为通过测试而放宽断言或关闭安全软件。本次相关路径的 `git diff --check` 通过。
+全仓库 `go test ./...` 未全绿：`cmd/harness` 请求数量为 11 而断言要求 10；`pkg/internal/architecture` 安装入口检查报告既有构造调用（包括 JEV 测试夹具）；`tools/katana` 的 leakless.exe 被 Windows 安全软件拦截。未为通过测试而放宽断言或关闭安全软件。本次相关路径的 `git diff --check` 通过。
 
 真实 A/B 已完成：两种模式各一次发现任务，以及浏览器、HTTP 场景各 20 对复用任务，共 **84 条记录**，本轮没有续跑或丢弃样本。两组所有任务均正确，两个场景的 `accepted` 都为 **false**；功能通过不等于性能达标。
 
@@ -483,7 +483,7 @@ auto 复用阶段实际执行浏览器 / HTTP Reflex 动作 **124 / 80 次**。�
 # 空库普通请求 → 自动 Claim/Compile → 后续页面接管
 $env:JEV_BROWSER_LIVE = '1'
 $env:JEV_BROWSER_REPORT = 'D:\path\to\browser-report.json'
-go test -tags full ./pkg/exts/jev -run '^TestBrowserReflexRoutesAndOperatesUnseenPages$' -count=1 -v -timeout 10m
+go test -tags full ./exts/jev -run '^TestBrowserReflexRoutesAndOperatesUnseenPages$' -count=1 -v -timeout 10m
 
 # aiscan 默认流式 profile
 $env:JEV_PROFILE_LIVE = '1'
@@ -495,7 +495,7 @@ go test -tags 'full sqlite' ./cmd/aiscan -run '^TestLiveJEVProfileHTTP$' -count=
 # JEV_BENCH_PRICE_SOURCE 注明价格来源；代理实际账单须另外核对。
 $env:JEV_BENCH_LIVE = '1'
 $env:JEV_BENCH_REPORT = 'D:\path\to\ab-report.json'
-go test -tags full ./pkg/exts/jev -run '^TestLiveAutomaticReflexAB$' -count=1 -v -timeout 120m
+go test -tags full ./exts/jev -run '^TestLiveAutomaticReflexAB$' -count=1 -v -timeout 120m
 ```
 
 `JEV_BENCH_PAIRS` 可缩小冒烟规模，但少于 20 对不能建立性能验收。当前没有 learn 模式、训练预算或强制激活命令。
@@ -594,7 +594,7 @@ HTTP 诊断在第 8 个普通任务后自动触发了上下文规则编译。两
 1. **环境标识混入动态时间。** `jev.environment` 对完整 `cfg.SystemPrompt` 做哈希；实际 Session 每次运行调用 `resolveSystemPrompt`，默认环境段包含精确到秒的 `Current Time`。仅将时间推进一秒、保持模型/工具/策略不变，环境标识就改变。训练按 `Source/Environment` 分组、接管要求 Environment 完全一致，因此实际 harness 中跨运行的训练积累和规则复用会被切断。固定 system prompt 的 A/B/C 测试没有覆盖此条件；单任务 profile 冒烟也无法验证跨任务复用。
 2. **学习单元与真实工具调用不一致。** `collect` 仅接受一条 ToolCall 且完整 canonical 参数等于某个候选；重放验证使用同样条件。离线复现：`curl -i URL` 留下 1 个正样本；同一成功请求增加 `-s` 后留下 0 个；同一轮返回两条各自精确匹配的成功调用，也留下 0 个。实际学习记录中的零正样本与此一致。
 
-离线探针位于 `.runlogs/jev-reflex-diagnosis_test.go`，通过 Go overlay 加入测试，不修改生产代码。运行 `go test -overlay .runlogs/jev-reflex-diagnosis-overlay.json ./pkg/exts/jev -run '^TestDiagnoseReflexEnvironmentAndSamples$' -count=1 -v` 可复现当前行为。这里的 PASS 表示重现诊断，不表示缺陷已修复。
+离线探针位于 `.runlogs/jev-reflex-diagnosis_test.go`，通过 Go overlay 加入测试，不修改生产代码。运行 `go test -overlay .runlogs/jev-reflex-diagnosis-overlay.json ./exts/jev -run '^TestDiagnoseReflexEnvironmentAndSamples$' -count=1 -v` 可复现当前行为。这里的 PASS 表示重现诊断，不表示缺陷已修复。
 
 另外，当前 `context` 采样把无工具调用的普通最终回答整个作为 Label。工具正样本被丢弃后，实际触发的是最终报告的上下文编译；编译器却要求有限判断，不能生成报告。这解释了当前学习目标的错位。两次 reasoning 预算耗尽是观测到的失败表现，不能仅靠增大预算证明这个目标有效。
 
@@ -610,7 +610,7 @@ HTTP 诊断在第 8 个普通任务后自动触发了上下文规则编译。两
 # 真实模型 + 预装通用浏览器规则，仅验证执行链路
 $env:JEV_BROWSER_LIVE = '1'
 $env:JEV_BROWSER_REPORT = 'D:\path\to\browser-report.json'
-go test -tags full ./pkg/exts/jev -run '^TestBrowserReflexRoutesAndOperatesUnseenPages$' -count=1 -v -timeout 10m
+go test -tags full ./exts/jev -run '^TestBrowserReflexRoutesAndOperatesUnseenPages$' -count=1 -v -timeout 10m
 
 # 实际 aiscan profile，流式会话、空库 auto
 $env:JEV_PROFILE_LIVE = '1'
@@ -620,7 +620,7 @@ go test -tags 'full sqlite' ./cmd/aiscan -run '^TestLiveJEVProfileHTTP$' -count=
 # 完整自动学习验收；JEV_BENCH_PRICES 要包含两种模型的 input/output/cache_read 价格
 $env:JEV_BENCH_LIVE = '1'
 $env:JEV_BENCH_REPORT = 'D:\path\to\abc-report.json'
-go test -tags full ./pkg/exts/jev -run '^TestLiveAutomaticReflexABC$' -count=1 -v -timeout 120m
+go test -tags full ./exts/jev -run '^TestLiveAutomaticReflexABC$' -count=1 -v -timeout 120m
 ```
 
 默认训练预算为每组 40 个任务；本轮诊断使用 `JEV_BENCH_TRAINING=12`。测试不会在没有激活规则时继续跑留出任务并伪报节省比例。

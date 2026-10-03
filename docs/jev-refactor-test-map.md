@@ -1,7 +1,7 @@
 # JEV Simplification And Test Mapping
 
 This refactor reduces duplicate state and shared execution paths in
-`pkg/exts/jev`. Public APIs, configuration, prompts, judgment categories, request
+`exts/jev`. Public APIs, configuration, prompts, judgment categories, request
 budgets, native execution boundaries and library version 3 remain compatible.
 Context-budget changes and browser prerequisite judgment changes are outside
 this refactor.
@@ -71,9 +71,9 @@ repair admission, empty-library discovery and browser workflows.
 The following local regressions passed on Windows with Go 1.26.1:
 
 ```powershell
-go test ./agent/... ./core/tool/... ./pkg/exts/native ./pkg/exts/terminal ./pkg/exts/jev ./pkg/exts/guardrail -skip Live -count=1 -timeout=5m
-go test -race ./pkg/exts/jev ./agent/provider/jev ./core/tool/... -skip Live -count=1 -timeout=5m
-go test -tags full,sqlite ./pkg/exts/jev -skip Live -count=1 -timeout=5m
+go test ./agent/... ./core/tool/... ./exts/native ./exts/terminal ./exts/jev ./exts/guardrail -skip Live -count=1 -timeout=5m
+go test -race ./exts/jev ./agent/provider/jev ./core/tool/... -skip Live -count=1 -timeout=5m
+go test -tags full,sqlite ./exts/jev -skip Live -count=1 -timeout=5m
 ```
 
 All JEV paid Live switches were unset for the full/sqlite run. The three main

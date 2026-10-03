@@ -15,8 +15,8 @@ import (
 	crtm "github.com/chainreactors/crtm/pkg"
 	"github.com/chainreactors/cyber/core/extension"
 	coretool "github.com/chainreactors/cyber/core/tool"
-	"github.com/chainreactors/cyber/internal/testutil/hosttest"
-	arsenalext "github.com/chainreactors/cyber/pkg/exts/arsenal"
+	arsenalext "github.com/chainreactors/cyber/exts/arsenal"
+	"github.com/chainreactors/cyber/pkg/testutil/hosttest"
 )
 
 type offlineTransport struct{}

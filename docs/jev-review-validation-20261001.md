@@ -71,9 +71,9 @@ auto 全部 LLM token 为 38,382，JEV token 为 107,384，JEV 请求 38 次；o
 已执行并通过：
 
 ```powershell
-go test -buildvcs=false ./agent/... ./core/... ./pkg/exts/jev ./pkg/exts/guardrail ./pkg/exts ./pkg/harness ./tools/curl ./tools/toolargs -count=1 -timeout=6m
-go test -buildvcs=false -tags 'full sqlite' ./tools/playwright ./pkg/exts/browser ./pkg/exts/jev ./cmd/aiscan -count=1 -timeout=6m
-go test -buildvcs=false -race ./agent/provider/jev ./pkg/exts/jev ./core/tool -count=1 -timeout=6m
+go test -buildvcs=false ./agent/... ./core/... ./exts/jev ./exts/guardrail ./exts ./pkg/harness ./tools/curl ./tools/toolargs -count=1 -timeout=6m
+go test -buildvcs=false -tags 'full sqlite' ./tools/playwright ./exts/browser ./exts/jev ./cmd/aiscan -count=1 -timeout=6m
+go test -buildvcs=false -race ./agent/provider/jev ./exts/jev ./core/tool -count=1 -timeout=6m
 ```
 
 完整自动接管仍有以下阻碍：

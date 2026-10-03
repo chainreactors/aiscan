@@ -12,8 +12,8 @@ import (
 	"github.com/chainreactors/cyber/core/hooks"
 	"github.com/chainreactors/cyber/core/operation"
 	"github.com/chainreactors/cyber/core/telemetry"
-	ioaext "github.com/chainreactors/cyber/pkg/exts/ioa/client"
-	promptext "github.com/chainreactors/cyber/pkg/exts/prompt"
+	ioaext "github.com/chainreactors/cyber/exts/ioa/client"
+	promptext "github.com/chainreactors/cyber/exts/prompt"
 	ioatools "github.com/chainreactors/cyber/tools/ioa"
 	"github.com/chainreactors/ioa/protocols"
 )

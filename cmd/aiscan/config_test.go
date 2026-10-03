@@ -5,9 +5,9 @@ import (
 
 	"github.com/chainreactors/cyber/agent/provider"
 	"github.com/chainreactors/cyber/core/telemetry"
+	scannerext "github.com/chainreactors/cyber/exts/scanner"
+	searchext "github.com/chainreactors/cyber/exts/search"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	scannerext "github.com/chainreactors/cyber/pkg/exts/scanner"
-	searchext "github.com/chainreactors/cyber/pkg/exts/search"
 	profilepkg "github.com/chainreactors/cyber/pkg/profile"
 )
 

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/cyber/core/extension"
-	ioaserver "github.com/chainreactors/cyber/pkg/exts/ioa/server"
+	ioaserver "github.com/chainreactors/cyber/exts/ioa/server"
 	ioaservice "github.com/chainreactors/cyber/tools/ioa/server"
 	ioaclient "github.com/chainreactors/ioa/client"
 )

@@ -25,7 +25,7 @@ makes build membership depend on import side effects.
 
 1. Keep three dependency layers:
    - `core` and `agent` contain reusable mechanisms and the agent runtime.
-   - `pkg/base`, `pkg/exts`, and `tools` contain reusable capability packs.
+   - `pkg/base`, `exts`, and `tools` contain reusable capability packs.
    - `pkg/aiscan` contains the reference distribution; `cmd/aiscan` is its CLI host.
 2. Keep `pkg/base.New` plus `extension.New` as the generic composition entry.
    Publish `pkg/aiscan.New` for embedders that want the reference distribution.

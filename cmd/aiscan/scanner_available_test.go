@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	scannerext "github.com/chainreactors/cyber/pkg/exts/scanner"
+	scannerext "github.com/chainreactors/cyber/exts/scanner"
 )
 
 func scannerNames() []string {

@@ -10,10 +10,10 @@ import (
 	"github.com/chainreactors/cyber/agent/skills"
 	"github.com/chainreactors/cyber/core/extension"
 	"github.com/chainreactors/cyber/core/telemetry"
-	"github.com/chainreactors/cyber/internal/testutil/apptest"
-	"github.com/chainreactors/cyber/internal/testutil/hosttest"
+	promptext "github.com/chainreactors/cyber/exts/prompt"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	promptext "github.com/chainreactors/cyber/pkg/exts/prompt"
+	"github.com/chainreactors/cyber/pkg/testutil/apptest"
+	"github.com/chainreactors/cyber/pkg/testutil/hosttest"
 )
 
 func defaultPromptResolver(t *testing.T) agentprompt.Resolver {

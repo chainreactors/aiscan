@@ -169,8 +169,8 @@ fetch_sdk() {
   [[ -d "${stage}/lib" ]] || { echo "native SDK archive is missing lib/" >&2; exit 1; }
   [[ -f "${stage}/lib/librecord.a" ]] || { echo "record SDK archive is missing librecord.a" >&2; exit 1; }
   [[ -f "${stage}/include/record_ffi.h" ]] || { echo "record SDK archive is missing record_ffi.h" >&2; exit 1; }
-  cmp -s "${stage}/include/record_ffi.h" "${ROOT}/pkg/exts/record/record_ffi.h" || {
-    echo "record SDK ABI header does not match pkg/exts/record/record_ffi.h" >&2
+  cmp -s "${stage}/include/record_ffi.h" "${ROOT}/exts/record/record_ffi.h" || {
+    echo "record SDK ABI header does not match exts/record/record_ffi.h" >&2
     exit 1
   }
 

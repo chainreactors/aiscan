@@ -155,7 +155,7 @@ harness-llm-subagent:
 	$(GO) test -tags live_llm -run '^TestLiveLLMParentDelegatesIOASiblings$$' -count=1 -v -timeout 5m ./cmd/harness/...
 
 check-architecture:
-	$(GO) test -count=1 ./core/extension ./core/registry ./pkg/exts
+	$(GO) test -count=1 ./core/extension ./core/registry ./exts
 
 prepare:
 	mkdir -p "$(BIN_DIR)"

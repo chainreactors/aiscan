@@ -5,8 +5,8 @@ package main
 import (
 	"context"
 	types "github.com/chainreactors/cyber/core/types"
+	ioaclient "github.com/chainreactors/cyber/exts/ioa/client"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	ioaclient "github.com/chainreactors/cyber/pkg/exts/ioa/client"
 	"os"
 	"path/filepath"
 	"runtime"

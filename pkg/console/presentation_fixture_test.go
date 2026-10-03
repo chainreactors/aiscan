@@ -4,9 +4,9 @@ import (
 	"context"
 	agentsession "github.com/chainreactors/cyber/agent/session"
 	"github.com/chainreactors/cyber/core/extension"
+	sessionext "github.com/chainreactors/cyber/exts/session"
+	tuiext "github.com/chainreactors/cyber/exts/tui"
 	"github.com/chainreactors/cyber/pkg/console/api"
-	sessionext "github.com/chainreactors/cyber/pkg/exts/session"
-	tuiext "github.com/chainreactors/cyber/pkg/exts/tui"
 	"testing"
 )
 

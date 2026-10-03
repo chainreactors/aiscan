@@ -21,7 +21,7 @@ import (
 	coreevents "github.com/chainreactors/cyber/core/events"
 	"github.com/chainreactors/cyber/core/telemetry"
 	coretool "github.com/chainreactors/cyber/core/tool"
-	"github.com/chainreactors/cyber/internal/testutil/hosttest"
+	"github.com/chainreactors/cyber/pkg/testutil/hosttest"
 
 	terminaltool "github.com/chainreactors/cyber/tools/terminal"
 )

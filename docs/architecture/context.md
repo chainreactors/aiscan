@@ -30,7 +30,7 @@ Skill 提供描述、位置和正文。框架本身不内嵌任何知识；内�
 
 OKF（Open Knowledge Format）用于把知识组织为渐进阅读的 Markdown bundle：索引、概念文件、历史记录，以及来源/验证等元数据。它与 Skill 可配合使用：Skill 告诉模型何时使用知识，OKF 组织具体知识和引用。
 
-`pkg/exts/okf` 同时贡献 Markdown 产出策略、`okf` 校验命令和虚拟参考文档。参考发行版安装它，最小 `cmd/agent` 不自动安装。`okf validate <path>` 检查格式，`okf test <path>` 做更严格的生产检查；它们不会执行文档里的 executor/attester。具体契约见 [OKF 内置说明](../../pkg/exts/okf/assets/okf.md)。
+`exts/okf` 同时贡献 Markdown 产出策略、`okf` 校验命令和虚拟参考文档。参考发行版安装它，最小 `cmd/agent` 不自动安装。`okf validate <path>` 检查格式，`okf test <path>` 做更严格的生产检查；它们不会执行文档里的 executor/attester。具体契约见 [OKF 内置说明](../../exts/okf/assets/okf.md)。
 
 ## 上下文压缩
 
@@ -56,4 +56,4 @@ OKF（Open Knowledge Format）用于把知识组织为渐进阅读的 Markdown b
 
 标准循环对可重试网络/服务错误退避重试，支持带抖动的指数退避和有效的 `Retry-After` 秒数。鉴权/参数等不可重试错误直接返回；上下文溢出走压缩恢复路径。重试复用逻辑消息 ID，消费端应按 ID 合并流式片段和最终消息。
 
-实现：[Prompt](../../agent/prompt/prompt.go)、[贡献扩展](../../pkg/exts/prompt/extension.go)、[Skill Store](../../agent/skills/embed.go)、[压缩](../../agent/compact.go)、[重试](../../agent/retry.go)。验证入口：[Prompt 测试](../../agent/prompt/prompt_test.go)、[压缩测试](../../agent/compact_test.go)、[重试测试](../../agent/retry_test.go)。
+实现：[Prompt](../../agent/prompt/prompt.go)、[贡献扩展](../../exts/prompt/extension.go)、[Skill Store](../../agent/skills/embed.go)、[压缩](../../agent/compact.go)、[重试](../../agent/retry.go)。验证入口：[Prompt 测试](../../agent/prompt/prompt_test.go)、[压缩测试](../../agent/compact_test.go)、[重试测试](../../agent/retry_test.go)。

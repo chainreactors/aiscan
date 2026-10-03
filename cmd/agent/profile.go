@@ -9,13 +9,13 @@ import (
 	agentsession "github.com/chainreactors/cyber/agent/session"
 	"github.com/chainreactors/cyber/core/extension"
 	"github.com/chainreactors/cyber/core/telemetry"
+	loopext "github.com/chainreactors/cyber/exts/agent"
+	sessionext "github.com/chainreactors/cyber/exts/session"
+	subagentext "github.com/chainreactors/cyber/exts/subagent"
+	terminalext "github.com/chainreactors/cyber/exts/terminal"
+	tuiext "github.com/chainreactors/cyber/exts/tui"
 	cfg "github.com/chainreactors/cyber/pkg/config"
 	consoleapi "github.com/chainreactors/cyber/pkg/console/api"
-	loopext "github.com/chainreactors/cyber/pkg/exts/agent"
-	sessionext "github.com/chainreactors/cyber/pkg/exts/session"
-	subagentext "github.com/chainreactors/cyber/pkg/exts/subagent"
-	terminalext "github.com/chainreactors/cyber/pkg/exts/terminal"
-	tuiext "github.com/chainreactors/cyber/pkg/exts/tui"
 	harness "github.com/chainreactors/cyber/pkg/harness"
 )
 

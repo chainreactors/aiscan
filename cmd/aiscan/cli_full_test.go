@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
+	scannerext "github.com/chainreactors/cyber/exts/scanner"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	scannerext "github.com/chainreactors/cyber/pkg/exts/scanner"
 )
 
 func TestParseCLIReconCommandsAndFlags(t *testing.T) {

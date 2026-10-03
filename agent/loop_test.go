@@ -20,7 +20,7 @@ import (
 	coretool "github.com/chainreactors/cyber/core/tool"
 	toolhooks "github.com/chainreactors/cyber/core/tool/hooks"
 	"github.com/chainreactors/cyber/core/truncate"
-	"github.com/chainreactors/cyber/internal/testutil/hosttest"
+	"github.com/chainreactors/cyber/pkg/testutil/hosttest"
 	terminaltool "github.com/chainreactors/cyber/tools/terminal"
 	"github.com/chainreactors/utils/proc"
 	"google.golang.org/protobuf/encoding/protojson"

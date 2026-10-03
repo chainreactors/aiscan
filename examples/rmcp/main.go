@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/chainreactors/cyber/core/egress"
-	terminalext "github.com/chainreactors/cyber/pkg/exts/terminal"
+	terminalext "github.com/chainreactors/cyber/exts/terminal"
 
 	"github.com/chainreactors/cyber/core/extension"
 	"github.com/chainreactors/cyber/core/telemetry"

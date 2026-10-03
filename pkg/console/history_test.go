@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/chainreactors/cyber/internal/testutil/apptest"
-	"github.com/chainreactors/cyber/internal/testutil/hosttest"
-	loopext "github.com/chainreactors/cyber/pkg/exts/agent"
-	promptext "github.com/chainreactors/cyber/pkg/exts/prompt"
+	loopext "github.com/chainreactors/cyber/exts/agent"
+	promptext "github.com/chainreactors/cyber/exts/prompt"
+	"github.com/chainreactors/cyber/pkg/testutil/apptest"
+	"github.com/chainreactors/cyber/pkg/testutil/hosttest"
 
 	"github.com/chainreactors/cyber/agent"
 	"github.com/chainreactors/cyber/agent/provider"
@@ -18,8 +18,8 @@ import (
 	coreevents "github.com/chainreactors/cyber/core/events"
 	"github.com/chainreactors/cyber/core/telemetry"
 	"github.com/chainreactors/cyber/core/types"
-	sessionext "github.com/chainreactors/cyber/pkg/exts/session"
-	telemetryext "github.com/chainreactors/cyber/pkg/exts/telemetry"
+	sessionext "github.com/chainreactors/cyber/exts/session"
+	telemetryext "github.com/chainreactors/cyber/exts/telemetry"
 )
 
 func TestListSavedSessionsOnlyReadsJSONL(t *testing.T) {

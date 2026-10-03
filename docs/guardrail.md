@@ -9,8 +9,8 @@ owns the HTTP protocol, retries, request timeout and usage accounting. `score`
 returns a weighted level index; `noul` returns a probability. Their interpretation
 belongs to consumers. See the [native API](https://docs.typesafe.ai/api).
 
-`pkg/exts/jev` defines Claim/Compile/Reflex and its execution loop over `choice`.
-`pkg/exts/guardrail` is an independent consumer: it calls native `choice` directly,
+`exts/jev` defines Claim/Compile/Reflex and its execution loop over `choice`.
+`exts/guardrail` is an independent consumer: it calls native `choice` directly,
 without compiling or invoking a Reflex. Its `record/review/block` options, risk
 presets and fallback semantics are extension policy, never provider abstractions.
 
@@ -19,7 +19,7 @@ enter `core/tool/hooks.Execute`. Guardrail installs one `tool.before` handler.
 The core owns hook dispatch, admission and cancellation; the extension owns its
 policy, consequence assessment, pending reviews and CLI/AOP adapters.
 
-    Executor → tool.before → pkg/exts/guardrail.Runtime.Admit
+    Executor → tool.before → exts/guardrail.Runtime.Admit
         → JEV choice: risk screen
         → record: continue
         → review/block:
@@ -239,7 +239,7 @@ descendants, CLI/AOP resolution without Session queueing, Web node routing,
 JSONL payload serialization, JEV mock HTTP/retries/fallbacks/redaction, Secret
 configuration roundtrip and default extension composition. Normal tests use
 dummy credentials and mock HTTP. Explicitly set CYBER_JEV_LIVE_TEST=1 and
-TYPESAFE_API_KEY, then run go test ./pkg/exts/guardrail -run TestLiveJEV -v -count=1
+TYPESAFE_API_KEY, then run go test ./exts/guardrail -run TestLiveJEV -v -count=1
 to validate record/review/block against the real provider. The live test sends
 synthetic descriptions; no production target or destructive command executes.
 

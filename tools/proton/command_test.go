@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	coretool "github.com/chainreactors/cyber/core/tool"
-	"github.com/chainreactors/cyber/internal/testutil/hosttest"
+	"github.com/chainreactors/cyber/pkg/testutil/hosttest"
 	protoncmd "github.com/chainreactors/cyber/tools/proton"
 	"github.com/chainreactors/cyber/tools/proton/resources"
 	terminaltool "github.com/chainreactors/cyber/tools/terminal"

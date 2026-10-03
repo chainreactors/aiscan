@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	loopext "github.com/chainreactors/cyber/pkg/exts/agent"
+	loopext "github.com/chainreactors/cyber/exts/agent"
 
 	"github.com/chainreactors/cyber/agent"
 	agentsession "github.com/chainreactors/cyber/agent/session"
@@ -16,12 +16,12 @@ import (
 	"github.com/chainreactors/cyber/core/namespaces"
 	procbus "github.com/chainreactors/cyber/core/proc"
 	"github.com/chainreactors/cyber/core/telemetry"
-	"github.com/chainreactors/cyber/internal/testutil/apptest"
-	"github.com/chainreactors/cyber/internal/testutil/hosttest"
+	promptext "github.com/chainreactors/cyber/exts/prompt"
+	ptyext "github.com/chainreactors/cyber/exts/pty"
+	sessionext "github.com/chainreactors/cyber/exts/session"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	promptext "github.com/chainreactors/cyber/pkg/exts/prompt"
-	ptyext "github.com/chainreactors/cyber/pkg/exts/pty"
-	sessionext "github.com/chainreactors/cyber/pkg/exts/session"
+	"github.com/chainreactors/cyber/pkg/testutil/apptest"
+	"github.com/chainreactors/cyber/pkg/testutil/hosttest"
 	terminaltool "github.com/chainreactors/cyber/tools/terminal"
 	"github.com/chainreactors/utils/proc"
 )

@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/chainreactors/cyber/core/telemetry"
+	scannerext "github.com/chainreactors/cyber/exts/scanner"
 	hostcli "github.com/chainreactors/cyber/pkg/cli"
 	"github.com/chainreactors/cyber/pkg/cli/configuration"
 	taskcli "github.com/chainreactors/cyber/pkg/cli/task"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	scannerext "github.com/chainreactors/cyber/pkg/exts/scanner"
 	"github.com/chainreactors/cyber/pkg/output"
 
 	goflags "github.com/jessevdk/go-flags"

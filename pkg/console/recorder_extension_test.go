@@ -4,7 +4,7 @@ import (
 	"context"
 	coreevents "github.com/chainreactors/cyber/core/events"
 	"github.com/chainreactors/cyber/core/extension"
-	telemetry "github.com/chainreactors/cyber/pkg/exts/telemetry"
+	telemetry "github.com/chainreactors/cyber/exts/telemetry"
 	"testing"
 )
 

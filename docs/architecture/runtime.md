@@ -26,7 +26,7 @@ subagent 是可选扩展，不属于 Agent 配置或 Session 内建工具。`sub
 具名定义可以在运行时增加与撤销。租约覆盖准备、执行和收尾，撤销取消关联任务并等待排空，
 之后才允许同名注册。Session 仅提供通用附属会话、单任务模式与关闭完成回调；
 subagent 在最终记录之后发送完成通知、释放父 inbox producer。完整职责与调用约定见
-[Subagent 扩展](../../pkg/exts/subagent/README.md)。
+[Subagent 扩展](../../exts/subagent/README.md)。
 
 ## 标准循环
 

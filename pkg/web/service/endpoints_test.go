@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/chainreactors/cyber/core/resource"
+	scannerext "github.com/chainreactors/cyber/exts/scanner"
 	hostcli "github.com/chainreactors/cyber/pkg/cli"
 	configpkg "github.com/chainreactors/cyber/pkg/config"
-	scannerext "github.com/chainreactors/cyber/pkg/exts/scanner"
 	managementapi "github.com/chainreactors/cyber/pkg/web/api"
 	flags "github.com/jessevdk/go-flags"
 

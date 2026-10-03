@@ -11,8 +11,8 @@ import (
 	operationpb "github.com/chainreactors/cyber/aop/operation"
 	"github.com/chainreactors/cyber/core/operation"
 	"github.com/chainreactors/cyber/core/telemetry"
+	observeext "github.com/chainreactors/cyber/exts/observe"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	observeext "github.com/chainreactors/cyber/pkg/exts/observe"
 )
 
 // Every capability a profile publishes is resolved by type at load, not by the

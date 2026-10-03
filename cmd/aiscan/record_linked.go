@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/chainreactors/cyber/core/extension"
-	"github.com/chainreactors/cyber/pkg/exts/record"
+	"github.com/chainreactors/cyber/exts/record"
 )
 
 func recordExtension(config appConfig, workDir string) (extension.Extension, error) {

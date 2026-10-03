@@ -11,7 +11,7 @@ import (
 	toolpb "github.com/chainreactors/cyber/aop/tool"
 	coreevents "github.com/chainreactors/cyber/core/events"
 	types "github.com/chainreactors/cyber/core/types"
-	telemetry "github.com/chainreactors/cyber/pkg/exts/telemetry"
+	telemetry "github.com/chainreactors/cyber/exts/telemetry"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/timestamppb"

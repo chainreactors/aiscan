@@ -1,9 +1,5 @@
 module github.com/chainreactors/cyber/audit
 
-replace github.com/chainreactors/utils/proc => ../third_party/proc
-
-replace github.com/chainreactors/utils/mitmproxy => ../third_party/mitmproxy
-
 go 1.26
 
 require (
@@ -41,7 +37,7 @@ require (
 	github.com/chainreactors/tui/readline v0.0.0-20260723062039-ed89e758c21b // indirect
 	github.com/chainreactors/utils v0.0.0-20260711153742-f3d210a5fa9d // indirect
 	github.com/chainreactors/utils/parsers v0.0.3 // indirect
-	github.com/chainreactors/utils/proc v0.0.0-20260917082019-d9b6bc48f7e2 // indirect
+	github.com/chainreactors/utils/proc v0.0.0-20261002195803-fc9e07c4b4fd // indirect
 	github.com/charlievieth/fastwalk v1.0.14 // indirect
 	github.com/charmbracelet/bubbles v1.0.0 // indirect
 	github.com/charmbracelet/bubbletea v1.3.10 // indirect

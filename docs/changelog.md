@@ -12,7 +12,7 @@
 - 合并 `pkg/base` 到 `pkg/harness`，以 `BaseConfig` 和 `BaseExtensions` 提供默认能力。
 - 将 `pkg/commands` 与 `pkg/toolset` 归入 `core/tool`，保留独立的命令和工具注册表；进程会话桥接从 `agent/proc` 移至 `core/proc`。
 - 应用配置与输出分别从 `core/config`、`core/output` 移至 `pkg/config`、`pkg/output`；发布版本注入路径同步更新。
-- aiscan 运行模式从 `pkg/runner` 收回 `cmd/aiscan`；测试辅助归入 `internal/testutil`，保留 host/app 两层。
+- aiscan 运行模式从 `pkg/runner` 收回 `cmd/aiscan`；测试辅助归入 `pkg/internal/testutil`，保留 host/app 两层。
 - IOA client/server 的 CLI、IOA client 和 Session 的 Console 适配并入所属扩展包，保留独立安装入口。
 
 - 将参考发行版组装从 `pkg/aiscan` 内联至 `cmd/aiscan`，移除公开的 `pkg/aiscan.New` 入口。嵌入方可使用 `pkg/harness` 构造通用宿主，或显式组合扩展；它们不自动提供完整 aiscan 发行版。CLI、配置字段和协议保持不变。

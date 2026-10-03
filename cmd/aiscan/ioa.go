@@ -11,9 +11,9 @@ import (
 
 	"github.com/chainreactors/cyber/core/extension"
 	"github.com/chainreactors/cyber/core/telemetry"
+	ioaclient "github.com/chainreactors/cyber/exts/ioa/client"
+	ioaserver "github.com/chainreactors/cyber/exts/ioa/server"
 	hostcli "github.com/chainreactors/cyber/pkg/cli"
-	ioaclient "github.com/chainreactors/cyber/pkg/exts/ioa/client"
-	ioaserver "github.com/chainreactors/cyber/pkg/exts/ioa/server"
 	ioatools "github.com/chainreactors/cyber/tools/ioa"
 	service "github.com/chainreactors/cyber/tools/ioa/server"
 )

@@ -75,7 +75,6 @@ linters:
       - vendor
       - tools/templates
       - ^dist/
-      - third_party$
       - builtin$
       - ^examples/
 issues:
@@ -86,6 +85,5 @@ formatters:
     generated: lax
     paths:
       - ^dist/
-      - third_party$
       - builtin$
       - ^examples/

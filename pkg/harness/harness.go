@@ -20,10 +20,10 @@ import (
 	"github.com/chainreactors/cyber/core/extension"
 	"github.com/chainreactors/cyber/core/proc"
 	coretool "github.com/chainreactors/cyber/core/tool"
-	loopext "github.com/chainreactors/cyber/pkg/exts/agent"
-	"github.com/chainreactors/cyber/pkg/exts/guardrail"
-	sessionext "github.com/chainreactors/cyber/pkg/exts/session"
-	subagentext "github.com/chainreactors/cyber/pkg/exts/subagent"
+	loopext "github.com/chainreactors/cyber/exts/agent"
+	"github.com/chainreactors/cyber/exts/guardrail"
+	sessionext "github.com/chainreactors/cyber/exts/session"
+	subagentext "github.com/chainreactors/cyber/exts/subagent"
 	terminaltool "github.com/chainreactors/cyber/tools/terminal"
 )
 

@@ -18,7 +18,7 @@ flowchart TD
     Events --> Presentation[展示 / 记录 / 传输]
 ```
 
-`agent/` 提供模型循环和会话机制，`core/` 提供资源、hooks、操作关联和事件等基础设施。业务实现多位于 `tools/`，对应扩展在 `pkg/exts/` 中将实现接入资源与生命周期。
+`agent/` 提供模型循环和会话机制，`core/` 提供资源、hooks、操作关联和事件等基础设施。业务实现多位于 `tools/`，对应扩展在 `exts/` 中将实现接入资源与生命周期。
 
 `pkg/harness.BaseExtensions` 返回有序的默认扩展，`harness.New` 在此之上提供工具宿主和会话 Agent 的通用组合；`cmd/aiscan` 负责解析配置、加入扫描器和代理等产品能力，并选择运行入口。最小 `cmd/agent` 使用同一基础组合，但不安装安全扫描、IOA 和 Web。应用功能由明确的组合决定。
 
@@ -70,11 +70,11 @@ Go 宿主直接持有组合和 Session Runtime。跨进程宿主通过 AOP 发�
 
 IOA client/server 的 CLI 声明与 Session、IOA client 的 Console 贡献和各自扩展放在同一包，以文件划分职责。`NewConsole` 仍是独立安装入口，合包不改变可选性或加载顺序。IOA client 和 server 保持独立，避免客户端引入服务端依赖。
 
-宿主契约 `pkg/profile`、启动声明 `pkg/cli` 和展示契约 `pkg/console/api` 保持独立。Profile 通过 Providers、Events、Progress、Processes 借出明确的能力，只有 Active 时可访问；不提供 App 聚合容器或通用资源查找。测试辅助位于 `internal/testutil/hosttest` 与 `internal/testutil/apptest`，后者使用真实功能 Extension。
+宿主契约 `pkg/profile`、启动声明 `pkg/cli` 和展示契约 `pkg/console/api` 保持独立。Profile 通过 Providers、Events、Progress、Processes 借出明确的能力，只有 Active 时可访问；不提供 App 聚合容器或通用资源查找。测试辅助实现在 `pkg/internal/testutil`，仓库各层测试通过 `pkg/testutil/hosttest` 与 `pkg/testutil/apptest` 访问，后者使用真实功能 Extension。
 
 ## 唯一安装入口
 
-产品、宿主、示例和集成测试通过 `pkg/exts` 安装功能。`harness.New` 只组合现有 Extension，
+产品、宿主、示例和集成测试通过 `exts` 安装功能。`harness.New` 只组合现有 Extension，
 不重复初始化工具、Provider 或 Session。底层构造与资源方法服务于对应 Extension 和包内单元测试。
 `Declare` 声明配置，`NewConsole` 贡献展示；它们借用同一个已安装实例，不再创建业务资源。
 
@@ -88,7 +88,7 @@ Manager；Session Extension 拥有 Session Resource。事件流、Progress、Log
 各创建一份并共享。消费者排空之后才关闭依赖，Session 不关闭借用对象。Web 的能力借用始终位于
 Profile 租约内，退休实例在最后一个使用者释放后关闭。
 
-依赖及安装边界由 `go test ./internal/architecture` 检查，包括平台与构建标签下的源码。
+依赖及安装边界由 `go test ./pkg/internal/architecture` 检查，包括平台与构建标签下的源码。
 
 
 IOA client 的 `New` 唯一拥有连接，`NewCollaboration` 借用同一 Service 安装 Agent hooks、Skills 与消息订阅，

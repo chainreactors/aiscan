@@ -3,7 +3,7 @@ package cyber.guardrail;
 import "aop/content.proto";
 import "aop/operation/protocol.proto";
 import "google/protobuf/timestamp.proto";
-option go_package = "github.com/chainreactors/cyber/pkg/exts/guardrail;guardrail";
+option go_package = "github.com/chainreactors/cyber/exts/guardrail;guardrail";
 
 enum Action {
   ACTION_UNSPECIFIED = 0;

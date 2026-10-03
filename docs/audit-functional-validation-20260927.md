@@ -44,7 +44,7 @@
 
 - audit 模块完整 `go test ./...` 与 `go vet ./...`。
 - `pkg/console`、`pkg/config`、`cmd/agent`、`cmd/aiscan`、`cmd/harness` 完整包测试。
-- `agent/session`、`core/eventbus`、`core/events`、`pkg/exts/telemetry`、`pkg/harness` 完整包测试。
+- `agent/session`、`core/eventbus`、`core/events`、`exts/telemetry`、`pkg/harness` 完整包测试。
 - `tools/files` 与 `tools/okf` 完整包测试和 vet。glob 回归构造了 20,001 个无关文件，修复前的五种小范围查询均失败，修复后均通过；直接查询超限目录仍返回额度错误。
 - Windows 外部 junction 证据拒绝测试。内部相对 symlink 的断言受本机创建符号链接权限限制，未在此平台执行。
 - 最终内嵌工具 exe 的 `TestSingleFileRelease`：只复制单个可执行文件，空 PATH/工具目录、外网代理阻断，验证安装、幂等、删除恢复、工具执行及报告完成，外部请求为 0。

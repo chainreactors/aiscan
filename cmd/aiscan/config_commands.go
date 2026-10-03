@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
+	ioaclient "github.com/chainreactors/cyber/exts/ioa/client"
+	scannerext "github.com/chainreactors/cyber/exts/scanner"
+	searchext "github.com/chainreactors/cyber/exts/search"
 	"github.com/chainreactors/cyber/pkg/cli/configuration"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	ioaclient "github.com/chainreactors/cyber/pkg/exts/ioa/client"
-	scannerext "github.com/chainreactors/cyber/pkg/exts/scanner"
-	searchext "github.com/chainreactors/cyber/pkg/exts/search"
 )
 
 // Product connections are contributed here; the shared commands do not import

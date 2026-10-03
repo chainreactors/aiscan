@@ -82,4 +82,4 @@ Session 就是用户持续处理的一项任务，沿用既有消息、执行与
 
 Web 数据库在启动时自动迁移已支持的旧结构：`chat_aop_events.event_json` 转为 protobuf 二进制，`scans.scan_json` 转为关系字段，并从会话 JSON 中移除旧 `scan_ids` / `scanIds` 副本；会话关联统一读取 `session_scans`。迁移保留事件 ID、cursor、扫描记录与会话关联。已迁移的数据库再次启动时不会重复转换；所有迁移在同一事务内完成，转换失败会回滚并停止启动。其他不受支持的旧结构仍会报错，程序不会自动删除已有数据库。浏览器 IndexedDB 是派生缓存，版本升级时会重新消费服务端归档。
 
-实现：[事件流](../../core/events)、[telemetry 扩展](../../pkg/exts/telemetry/extension.go)、[会话 JSONL](../../agent/session/session_jsonl.go)、[Web 存储](../../pkg/web/service/store_sqlite.go)、[浏览器 CSTX](../../web/frontend/src/lib/cstx-runtime.ts)。验证入口：[历史记录测试](../../agent/session/session_jsonl_test.go)、[artifact API 测试](../../pkg/web/api/artifact_test.go)。
+实现：[事件流](../../core/events)、[telemetry 扩展](../../exts/telemetry/extension.go)、[会话 JSONL](../../agent/session/session_jsonl.go)、[Web 存储](../../pkg/web/service/store_sqlite.go)、[浏览器 CSTX](../../web/frontend/src/lib/cstx-runtime.ts)。验证入口：[历史记录测试](../../agent/session/session_jsonl_test.go)、[artifact API 测试](../../pkg/web/api/artifact_test.go)。

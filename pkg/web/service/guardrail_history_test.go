@@ -19,7 +19,7 @@ import (
 	"github.com/chainreactors/cyber/core/hooks"
 	"github.com/chainreactors/cyber/core/operation"
 	toolhooks "github.com/chainreactors/cyber/core/tool/hooks"
-	"github.com/chainreactors/cyber/pkg/exts/guardrail"
+	"github.com/chainreactors/cyber/exts/guardrail"
 	"google.golang.org/protobuf/proto"
 )
 

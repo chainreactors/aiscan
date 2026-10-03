@@ -39,7 +39,7 @@ flowchart TD
 ```
 
 - `agent/provider/jev` 保持纯协议客户端。
-- `pkg/exts/jev` 拥有 Reflex 选择、连续执行、恢复判断及交接语义。
+- `exts/jev` 拥有 Reflex 选择、连续执行、恢复判断及交接语义。
 - Agent 仍只提供通用 BeforeModel/AfterModel、历史追加和原工具执行流程，不认识 JEV，也不增加必需的加速内核。
 - 工具返回事实和有限候选，不判断是否调用 LLM，不引用 JEV。Playwright 页面、URL、selector 和动作顺序仍完全动态。
 - 历史设计采用 `Claim{When, Question, Options}`、`Reflex{When, Decide, Sources}`。2026-10-01 起改为运行时 `Observe` 表达式，移除工具观察适配；当前契约见 [实现说明](jev-implementation-20260927.md)。本文及原有实测保留作为此前工具 Observe 版本的设计记录。
@@ -102,10 +102,10 @@ JEV 私有输入使用有界文本投影：去除 protobuf 包装、base64 参�
 
 | 位置 | 修改职责 |
 | --- | --- |
-| `pkg/exts/jev/execute.go` | 控制选项、持续观察、重复动作反馈、可确认的 stale 恢复、一次性交接 |
-| `pkg/exts/jev/extension.go`、`store.go` | 明确交接目的及工具证据语义，保留 append-only 回执 |
-| `pkg/exts/jev/declare.go` | 编译完整的进入、继续、恢复、交接策略；已有场景继续匹配，不生成页面级 Claim |
-| `pkg/exts/jev/*_test.go` | 核对模型调用数、真实工具次数、错误恢复、报告证据和完整用量 |
+| `exts/jev/execute.go` | 控制选项、持续观察、重复动作反馈、可确认的 stale 恢复、一次性交接 |
+| `exts/jev/extension.go`、`store.go` | 明确交接目的及工具证据语义，保留 append-only 回执 |
+| `exts/jev/declare.go` | 编译完整的进入、继续、恢复、交接策略；已有场景继续匹配，不生成页面级 Claim |
+| `exts/jev/*_test.go` | 核对模型调用数、真实工具次数、错误恢复、报告证据和完整用量 |
 
 关键回归：
 

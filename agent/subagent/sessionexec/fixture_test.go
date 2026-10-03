@@ -14,11 +14,11 @@ import (
 	"github.com/chainreactors/cyber/core/extension"
 	"github.com/chainreactors/cyber/core/hooks"
 	coretool "github.com/chainreactors/cyber/core/tool"
-	"github.com/chainreactors/cyber/internal/testutil/apptest"
-	"github.com/chainreactors/cyber/internal/testutil/hosttest"
-	loopext "github.com/chainreactors/cyber/pkg/exts/agent"
-	promptext "github.com/chainreactors/cyber/pkg/exts/prompt"
-	sessionext "github.com/chainreactors/cyber/pkg/exts/session"
+	loopext "github.com/chainreactors/cyber/exts/agent"
+	promptext "github.com/chainreactors/cyber/exts/prompt"
+	sessionext "github.com/chainreactors/cyber/exts/session"
+	"github.com/chainreactors/cyber/pkg/testutil/apptest"
+	"github.com/chainreactors/cyber/pkg/testutil/hosttest"
 )
 
 type testTool struct {

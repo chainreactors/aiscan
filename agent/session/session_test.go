@@ -21,9 +21,9 @@ import (
 	"github.com/chainreactors/cyber/core/telemetry"
 	coretool "github.com/chainreactors/cyber/core/tool"
 	types "github.com/chainreactors/cyber/core/types"
-	"github.com/chainreactors/cyber/internal/testutil/apptest"
-	"github.com/chainreactors/cyber/internal/testutil/hosttest"
-	terminaltools "github.com/chainreactors/cyber/pkg/exts/terminal"
+	terminaltools "github.com/chainreactors/cyber/exts/terminal"
+	"github.com/chainreactors/cyber/pkg/testutil/apptest"
+	"github.com/chainreactors/cyber/pkg/testutil/hosttest"
 
 	looptool "github.com/chainreactors/cyber/tools/loop"
 	terminaltool "github.com/chainreactors/cyber/tools/terminal"

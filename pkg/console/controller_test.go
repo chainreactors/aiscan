@@ -14,8 +14,8 @@ import (
 	"github.com/chainreactors/cyber/agent/provider"
 	agentsession "github.com/chainreactors/cyber/agent/session"
 	aop "github.com/chainreactors/cyber/aop"
-	"github.com/chainreactors/cyber/internal/testutil/apptest"
 	cfg "github.com/chainreactors/cyber/pkg/config"
+	"github.com/chainreactors/cyber/pkg/testutil/apptest"
 	rlterm "github.com/chainreactors/tui/readline/terminal"
 )
 

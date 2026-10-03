@@ -13,10 +13,10 @@ import (
 
 	"github.com/chainreactors/cyber/core/extension"
 	"github.com/chainreactors/cyber/core/telemetry"
+	ioaserver "github.com/chainreactors/cyber/exts/ioa/server"
+	webext "github.com/chainreactors/cyber/exts/web"
 	"github.com/chainreactors/cyber/pkg/cli/configuration"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	ioaserver "github.com/chainreactors/cyber/pkg/exts/ioa/server"
-	webext "github.com/chainreactors/cyber/pkg/exts/web"
 	webpkg "github.com/chainreactors/cyber/pkg/web"
 	managementapi "github.com/chainreactors/cyber/pkg/web/api"
 	webhost "github.com/chainreactors/cyber/pkg/web/host"

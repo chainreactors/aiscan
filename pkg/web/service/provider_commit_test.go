@@ -11,7 +11,7 @@ import (
 	"github.com/chainreactors/cyber/agent/provider"
 	"github.com/chainreactors/cyber/core/extension"
 	"github.com/chainreactors/cyber/core/telemetry"
-	providerext "github.com/chainreactors/cyber/pkg/exts/provider"
+	providerext "github.com/chainreactors/cyber/exts/provider"
 	profile "github.com/chainreactors/cyber/pkg/profile"
 )
 

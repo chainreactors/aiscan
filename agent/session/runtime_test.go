@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/chainreactors/cyber/core/extension"
-	"github.com/chainreactors/cyber/internal/testutil/apptest"
-	"github.com/chainreactors/cyber/internal/testutil/hosttest"
-	loopext "github.com/chainreactors/cyber/pkg/exts/agent"
+	loopext "github.com/chainreactors/cyber/exts/agent"
+	"github.com/chainreactors/cyber/pkg/testutil/apptest"
+	"github.com/chainreactors/cyber/pkg/testutil/hosttest"
 	terminaltool "github.com/chainreactors/cyber/tools/terminal"
 
 	"github.com/chainreactors/cyber/agent"
@@ -25,8 +25,8 @@ import (
 	coreoutput "github.com/chainreactors/cyber/core/events/jsonl"
 	"github.com/chainreactors/cyber/core/telemetry"
 	types "github.com/chainreactors/cyber/core/types"
+	telemetryext "github.com/chainreactors/cyber/exts/telemetry"
 	cfg "github.com/chainreactors/cyber/pkg/config"
-	telemetryext "github.com/chainreactors/cyber/pkg/exts/telemetry"
 	"github.com/chainreactors/utils/proc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

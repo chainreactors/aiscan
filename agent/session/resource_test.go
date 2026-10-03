@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/chainreactors/cyber/agent"
-	"github.com/chainreactors/cyber/internal/testutil/apptest"
+	"github.com/chainreactors/cyber/pkg/testutil/apptest"
 )
 
 func TestResourceRequiresExplicitCapabilities(t *testing.T) {
