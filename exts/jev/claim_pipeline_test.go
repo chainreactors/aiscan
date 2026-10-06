@@ -213,7 +213,7 @@ func pipelineArtifact(target string) string {
 }
 
 func pipelineTask(target string) string {
-	return "Read the current native receipt for the literal target below using claimlab inspect. Report only the exact receipt from its actual result.\nTarget: " + jsonText(target)
+	return "Read the current native receipt for the target below using claimlab inspect. The target is encoded as a JSON string: decode it exactly once, preserving its literal quotes and backslashes. Report only the exact receipt from its actual result.\nTarget: " + jsonText(target)
 }
 
 func pipelineTarget(req *provider.ChatCompletionRequest) (string, error) {

@@ -26,7 +26,7 @@ type liveNativeInstallation struct {
 	client *jevapi.Client
 }
 
-func installLiveNative(t *testing.T, providerConfig *provider.ProviderConfig, config Config, key, system string, maxTurns int, closeTimeout time.Duration, nativeTools []coretool.Tool) liveNativeInstallation {
+func installLiveNative(t *testing.T, providerConfig *provider.ProviderConfig, config Config, key, system string, maxTurns int, closeTimeout time.Duration, nativeTools []coretool.Tool, contracts ...coretool.NativeContract) liveNativeInstallation {
 	t.Helper()
 	if err := os.MkdirAll(config.Directory, 0700); err != nil {
 		t.Fatal(err)
@@ -41,7 +41,22 @@ func installLiveNative(t *testing.T, providerConfig *provider.ProviderConfig, co
 	t.Cleanup(client.Close)
 	e := New(config)
 	set, err := extension.New(extension.Provided[*corehooks.Registry](registry), tools,
-		extension.Func{LoadFunc: func(scope *extension.Scope) error { return extension.Add[coretool.Tool](scope, nativeTools...) }},
+		extension.Func{LoadFunc: func(scope *extension.Scope) error {
+			native := coretool.NewNativeContractRegistry()
+			if err := extension.Provide(scope, native); err != nil {
+				return err
+			}
+			if err := extension.Define[coretool.NativeContract](scope, native); err != nil {
+				return err
+			}
+			if err := extension.Add[coretool.Tool](scope, nativeTools...); err != nil {
+				return err
+			}
+			if len(contracts) > 0 {
+				return extension.Add(scope, contracts...)
+			}
+			return nil
+		}},
 		extension.Provided[*jevapi.Client](client), e)
 	if err != nil {
 		t.Fatal(err)

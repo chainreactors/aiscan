@@ -17,7 +17,8 @@ func TestProviderAccountingSeparatesMainClaimAndReflex(t *testing.T) {
 	for _, request := range []*provider.ChatCompletionRequest{
 		{SessionID: "main", Messages: []*aop.Message{provider.TextMessage("system", "ordinary")}},
 		{Messages: []*aop.Message{provider.TextMessage("system", claimPrompt)}},
-		{Messages: []*aop.Message{provider.TextMessage("system", compilePrompt)}},
+		{SessionID: "compiler", Purpose: "compilation", Messages: []*aop.Message{provider.TextMessage("system", compilePrompt+"\n\n"+compilerSkill)}},
+		{Purpose: "parameters", Messages: []*aop.Message{provider.TextMessage("system", "extract current values")}},
 	} {
 		if _, err := p.ChatCompletion(t.Context(), request); err != nil {
 			t.Fatal(err)
@@ -25,11 +26,15 @@ func TestProviderAccountingSeparatesMainClaimAndReflex(t *testing.T) {
 	}
 	snapshot := p.snapshot()
 	for _, kind := range []string{"foreground", "claim", "reflex"} {
-		if got := snapshot.byKind[kind]; got.InputTokens != 1000 || got.OutputTokens != 100 || got.Detail["requests"] != 1 {
+		requests := uint64(1)
+		if kind == "foreground" {
+			requests = 2 // Ordinary inference and current argument extraction.
+		}
+		if got := snapshot.byKind[kind]; got.InputTokens != 1000*requests || got.OutputTokens != 100*requests || got.Detail["requests"] != requests {
 			t.Fatalf("%s=%v", kind, got)
 		}
 	}
-	if snapshot.usage.TotalTokens != 3300 || snapshot.foreground != 1 {
+	if snapshot.usage.TotalTokens != 4400 || snapshot.foreground != 2 {
 		t.Fatal("combined usage does not reconcile with separate categories")
 	}
 }

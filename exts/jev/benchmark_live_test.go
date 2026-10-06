@@ -380,7 +380,9 @@ func (p *benchmarkProvider) ChatCompletion(ctx context.Context, req *provider.Ch
 	}
 	p.usage.Detail["requests"]++
 	kind := "foreground"
-	if req.SessionID == "" {
+	if req.Purpose == "compilation" {
+		kind = "reflex"
+	} else if req.SessionID == "" && req.Purpose != "parameters" {
 		kind = "claim"
 		if len(req.Messages) > 0 && provider.MessageText(req.Messages[0]) == compilePrompt {
 			kind = "reflex"
@@ -394,7 +396,7 @@ func (p *benchmarkProvider) ChatCompletion(ctx context.Context, req *provider.Ch
 	}
 	kindUsage := p.byKind[kind]
 	kindUsage.Detail["requests"]++
-	if req.SessionID != "" {
+	if kind == "foreground" {
 		p.foreground++
 	}
 	if resp == nil || resp.Usage == nil {
