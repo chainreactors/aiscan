@@ -33,7 +33,7 @@ cyber-harness 将模型、工具和运行环境组合为可以持续执行任务
 | --- | --- |
 | Extension、资源贡献与借用、回滚和关闭 | [扩展装配](architecture.md#扩展装配与生命周期) |
 | Agent 循环、Session、Inbox、子任务与取消 | [运行时](architecture.md#agent-运行时) |
-| JEV 学习、编译、验证、复用与交接 | [JEV 与 Reflex](architecture.md#jev-与-reflex) |
+| JEV 学习、编译、验证、复用与交接 | [JEV 与 Reflex](jev.md) |
 | Tool、Command、进程、出口与工具准入 | [执行环境](architecture.md#执行环境) |
 | Provider、Prompt、Skills、压缩与预算 | [上下文与知识](architecture.md#上下文与知识) |
 | AOP 事件、记录、Artifact 与资产投影 | [事件与数据](architecture.md#事件与数据) |

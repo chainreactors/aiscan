@@ -1,0 +1,28 @@
+syntax = "proto3";
+package decision;
+option go_package = "github.com/chainreactors/cyber/core/decision;decision";
+
+enum ClaimType {
+  unspecified = 0;
+  choice = 1;
+  score = 2;
+  noul = 3;
+}
+
+// One semantic judgment. Context contains facts, constraints and option meanings.
+message Claim {
+  ClaimType type = 1;
+  string context = 2;
+  repeated string options = 3;
+}
+
+// Evaluation metadata; exactly one value matches the Claim's type.
+message Evaluation {
+  oneof value {
+    string choice = 1;
+    double score = 2;
+    double noul = 3;
+  }
+  map<string, double> probabilities = 4;
+  double confidence = 5;
+}

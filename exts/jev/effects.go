@@ -228,13 +228,13 @@ func literalCommand(text string) []string {
 	if !safe {
 		return nil
 	}
-	argv := []string{}
-	for _, word := range call.Args {
-		v, err := expand.Literal(&expand.Config{}, word)
-		if err != nil {
-			return nil
-		}
-		argv = append(argv, v)
+	// Match the native Bash interpreter's argument decoding. Literal keeps
+	// escape bytes in concatenated quoted words, so e.g. 'owner'\''s' would
+	// replay with a different target. Unsafe expansions were rejected above;
+	// Fields only removes transport quoting from these literal arguments.
+	argv, err := expand.Fields(&expand.Config{}, call.Args...)
+	if err != nil {
+		return nil
 	}
 	return argv
 }

@@ -178,7 +178,7 @@ func (c *compilerAgent) ExecuteTool(ctx context.Context, name, arguments string)
 		if ctx.Err() != nil {
 			c.fatal = ctx.Err()
 		}
-		if diagnostic.Code == "native_contract_unavailable" && len(c.extension.contracts.Catalog()) == 0 {
+		if diagnostic.Code == "native_contract_unavailable" && r != nil && !c.extension.contractsAvailable(*r) {
 			diagnostic.Status = "waiting"
 		}
 		if c.fatal != nil {
@@ -264,7 +264,7 @@ func (e *Extension) fillScope(r *Reflex, p *compilation) {
 	var descriptions []string
 	for _, id := range p.ids {
 		if c, ok := p.claims[id]; ok {
-			descriptions = append(descriptions, c.description())
+			descriptions = append(descriptions, c.Description())
 		}
 	}
 	r.When = "The current user requests a capability described by these related natural-language Claims: " + jsonText(descriptions)

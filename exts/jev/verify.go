@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 
 	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
+	"github.com/chainreactors/cyber/core/decision"
 )
 
 type replayResult struct {
@@ -114,76 +114,48 @@ func probeReflexArguments(ctx context.Context, reflex *Reflex, input, args map[s
 			}
 			prefix[node] = chosen
 		}
-		judge := func(request jevapi.Request) (*jevapi.Response, error) {
+		judge := func(claim Claim) (*jevapi.Evaluation, error) {
 			calls++
 			if calls > maxDecisions {
 				return nil, fmt.Errorf("nonterminating decision loop")
 			}
-			states = append(states, map[string]any{"state": request.State, "questions": request.Questions})
-			response := &jevapi.Response{Answers: map[string]jevapi.Answer{}}
-			ids := make([]string, 0, len(request.Questions))
-			for id := range request.Questions {
-				ids = append(ids, id)
-			}
-			sort.Strings(ids)
-			for _, id := range ids {
-				q := request.Questions[id]
-				node := fmt.Sprintf("%d/%s", calls, id)
-				switch q.Type {
-				case "choice":
-					data, _ := json.Marshal(q.Criteria)
-					var options map[string]any
-					_ = json.Unmarshal(data, &options)
-					keys := make([]string, 0, len(options))
-					for option := range options {
-						keys = append(keys, option)
-					}
-					sort.Strings(keys)
-					chosen := schedule[node]
-					if chosen == "" {
-						for _, option := range keys {
-							if option != Defer {
-								chosen = option
-								break
-							}
+			states = append(states, claim)
+			node := fmt.Sprint(calls)
+			chosen := schedule[node]
+			switch claim.Type {
+			case jevapi.ClaimChoice:
+				if chosen == "" {
+					for _, option := range claim.Options {
+						if option != Defer {
+							chosen = option
+							break
 						}
 					}
-					alternatives(node, chosen, keys)
-					response.Answers[id] = jevapi.Answer{Type: "choice", Choice: chosen}
-				case "score":
-					var levels []any
-					data, _ := json.Marshal(q.Criteria)
-					_ = json.Unmarshal(data, &levels)
-					chosen := schedule[node]
-					if chosen == "" {
-						chosen = "middle"
-					}
-					alternatives(node, chosen, []string{"low", "middle", "high"})
-					value := float64(len(levels)-1) / 2
-					if chosen == "low" {
-						value = 0
-					}
-					if chosen == "high" {
-						value = float64(len(levels) - 1)
-					}
-					response.Answers[id] = jevapi.Answer{Type: "score", Score: &value}
-				case "noul":
-					chosen := schedule[node]
-					if chosen == "" {
-						chosen = "middle"
-					}
-					alternatives(node, chosen, []string{"low", "middle", "high"})
-					value := 0.5
-					if chosen == "low" {
-						value = 0
-					}
-					if chosen == "high" {
-						value = 1
-					}
-					response.Answers[id] = jevapi.Answer{Type: "noul", Noul: &value}
 				}
+				alternatives(node, chosen, claim.Options)
+				return &jevapi.Evaluation{Value: &decision.Evaluation_Choice{Choice: chosen}}, nil
+			case jevapi.ClaimScore, jevapi.ClaimNoul:
+				if chosen == "" {
+					chosen = "middle"
+				}
+				alternatives(node, chosen, []string{"low", "middle", "high"})
+				upper := 1.0
+				if claim.Type == jevapi.ClaimScore {
+					upper = float64(len(claim.Options) - 1)
+				}
+				value := upper / 2
+				if chosen == "low" {
+					value = 0
+				}
+				if chosen == "high" {
+					value = upper
+				}
+				if claim.Type == jevapi.ClaimScore {
+					return &jevapi.Evaluation{Value: &decision.Evaluation_Score{Score: value}}, nil
+				}
+				return &jevapi.Evaluation{Value: &decision.Evaluation_Noul{Noul: value}}, nil
 			}
-			return response, nil
+			return nil, fmt.Errorf("unsupported Claim type")
 		}
 		execute := func(candidate binding) (map[string]any, error) {
 			dispatched++
@@ -238,9 +210,13 @@ func probeReflexArguments(ctx context.Context, reflex *Reflex, input, args map[s
 		states = append(states, map[string]any{"replayed": cursor, "stopped": errors.Is(interruptedCause(err), errProbeStop), "complete": err == nil && cursor == len(results) && output != nil && output[report] != nil && output["parameters"] == nil, "gap": gap, "diagnostic": diagnostic})
 		if output != nil {
 			if output[report] != nil {
-				if _, err := resolveReport(output[report], evidence); err != nil {
+				grounded, err := resolveReport(output[report], evidence)
+				if err != nil {
 					return nil, nil, fmt.Errorf("report provenance: %w", err)
 				}
+				// Semantic review receives the same actual value as runtime
+				// composition, rather than an unresolved evidence pointer.
+				output[report] = grounded
 			}
 			if output["parameters"] != nil && !allowMissing {
 				return nil, nil, fmt.Errorf("compiler requires current example arguments to probe the generated parameterized function")

@@ -12,7 +12,7 @@ export function JEVDefinition({ value, compact = false }: { value: ClaimDefiniti
   return <div className="min-w-0 space-y-3" data-testid={reflex ? 'jev-reflex-definition' : 'jev-claim-definition'}>
     <div className="flex items-center gap-2 text-xs"><span className="rounded border border-emerald-500/30 px-1.5 py-0.5 text-emerald-600 dark:text-emerald-400">{reflex ? 'Reflex' : 'Claim'}{!value.id && ` · ${t('draft')}`}</span>
       {value.id && <code className="min-w-0 truncate text-[10px] text-muted-foreground" title={value.id}>{value.id}</code>}</div>
-    <p className={`${compact ? 'text-[11px]' : 'text-xs'} whitespace-pre-wrap break-words text-muted-foreground`}>{'text' in value && value.text ? value.text : value.when}</p>
+    <p className={`${compact ? 'text-[11px]' : 'text-xs'} whitespace-pre-wrap break-words text-muted-foreground`}>{'context' in value ? value.context : value.when}</p>
     {reflex ? <>
       {!!reflex.apiVersion && <p className="text-xs text-muted-foreground">{t(reflex.qualificationJson && reflex.qualificationJson !== 'null' ? 'qualified' : 'candidate')} · API {reflex.apiVersion}</p>}
       {reflex.blocker && <p role="status" className="whitespace-pre-wrap break-words text-xs text-amber-600" data-testid="jev-candidate-blocker">{t('candidateBlocker')}: {reflex.blocker}</p>}
@@ -31,9 +31,8 @@ export function JEVDefinition({ value, compact = false }: { value: ClaimDefiniti
         <CodeBlock code={reflex.observe} language="javascript" maxHeight={300} />
         {Object.entries(reflex.readers).map(([id, source]) => <div key={id}><p className="mt-2 text-[11px] text-muted-foreground">{id}</p><CodeBlock code={source} language="javascript" maxHeight={300} /></div>)}
       </details>
-    </> : 'question' in value && <>
-      {!!value.question && <p className="whitespace-pre-wrap break-words text-xs font-medium">{value.question}</p>}
-      {!!Object.keys(value.options).length && <ChoiceBranches definition question={{ $typeName: 'cyber.jev.Question', type: 'choice', instructionsJson: value.question, criteriaJson: JSON.stringify(value.options) }} />}
+    </> : 'context' in value && <>
+      {!!value.options.length && <ChoiceBranches definition question={{ $typeName: 'decision.Claim', type: value.type, context: value.context, options: value.options }} />}
       <p className="text-[10px] text-muted-foreground">{t('compilationEvidence')}</p>
     </>}
   </div>

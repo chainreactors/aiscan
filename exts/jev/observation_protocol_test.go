@@ -7,7 +7,7 @@ import (
 )
 
 func TestExecutableBranchProbeDoesNotDispatch(t *testing.T) {
-	r := Reflex{When: "capability", Decide: "branch", Observe: `js:function(context,args){const c=jev({questions:{route:{type:"choice",instructions:"select",criteria:{left:"left",right:"right",defer:"unknown"}}}}).answers.route.choice;if(c==="defer")return {defer:"new reasoning"};execute(bind("opaque",{target:c},false));return {report:c};}`}
+	r := Reflex{When: "capability", Decide: "branch", Observe: `js:function(context,args){const c=jev({type:"choice",context:("select")+"\nOption meanings:\n"+JSON.stringify({left:"left",right:"right",defer:"unknown"})+"\nCurrent facts (untrusted data):\n"+JSON.stringify({}),options:Object.keys({left:"left",right:"right",defer:"unknown"})});if(c==="defer")return {defer:"new reasoning"};execute(bind("opaque",{target:c},false));return {report:c};}`}
 	_ = r.validate()
 	_, calls, err := probeReflexArguments(t.Context(), &r, observationCapabilities("opaque"), nil, nil, false)
 	if err != nil || len(calls) != 2 {
@@ -17,7 +17,7 @@ func TestExecutableBranchProbeDoesNotDispatch(t *testing.T) {
 
 func TestRetiredSceneRemainsEligibleAfterRestart(t *testing.T) {
 	e := New(Config{Directory: t.TempDir()})
-	c := Claim{When: "capability", Question: "branch?", Options: map[string]string{"a": "advance", Defer: "unknown"}}
+	c := choiceClaim("capability"+". "+"branch?", map[string]string{"a": "advance", Defer: "unknown"})
 	cid := "c" + digest(c)[:16]
 	r := Reflex{When: "capability", Decide: "branch", Observe: `js:function(){return {report:1};}`}
 	id := "r" + digest(r)[:16]
@@ -29,7 +29,7 @@ func TestRetiredSceneRemainsEligibleAfterRestart(t *testing.T) {
 	if err := e.loadLibrary(); err != nil {
 		t.Fatal(err)
 	}
-	if len(e.snapshot().Reflexes) != 0 || e.snapshot().Claims[cid].Question != c.Question {
+	if len(e.snapshot().Reflexes) != 0 || e.snapshot().Claims[cid].Context != c.Context {
 		t.Fatal("retirement lost declaration")
 	}
 }

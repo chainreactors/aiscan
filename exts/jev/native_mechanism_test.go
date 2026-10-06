@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chainreactors/cyber/internal/jevwire"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -41,7 +42,7 @@ func TestReflexV2ReplayLiteralShellEncoding(t *testing.T) {
 
 func TestReflexV2FrozenReusesWithoutLearning(t *testing.T) {
 	effects := 0
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer { return runtimeAnswers(req, "run") })
+	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer { return runtimeAnswers(req, "run") })
 	e, cfg, _ := testInstallation(t, Config{Mode: "auto", Learning: "frozen"}, client, coretool.Command{Name: "lab", Run: func(_ context.Context, ex *coretool.Execution) (any, error) {
 		if ex.Args[0] == "add" {
 			effects++
@@ -102,7 +103,7 @@ func TestReflexV2CompilerRetainsCoverageCandidateOnFailure(t *testing.T) {
 		}
 		return reply(&aop.Message{Role: "assistant", Content: []*aop.Content{{Value: &aop.Content_ToolCall{ToolCall: &aop.ToolCall{Id: "draft", Name: "validate_reflex", Arguments: &aop.EncodedValue{Data: []byte(jsonText(map[string]any{"artifact": json.RawMessage(artifact)})), MediaType: aop.JSONMediaType}}}}}}), nil
 	})}
-	claim := Claim{Text: "Add entries for current actor."}
+	claim := Claim{Type: jevapi.ClaimNoul, Context: "Add entries for current actor."}
 	id := "c" + digest(claim)[:16]
 	e.library.Claims[id] = claimRecord{Claim: claim}
 	plan := &compilation{job: declaration{cfg: cfg}, claims: map[string]Claim{id: claim}, ids: []string{id}, capabilities: observationCapabilities("bash"), state: json.RawMessage(`{"messages":[{"role":"user","text":"Add entries for current actor"}]}`), input: map[string]any{}}
@@ -183,7 +184,7 @@ func TestReflexV2RuntimeSemanticJudgmentsDefer(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			e := testLaboratory(t)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_ = json.NewEncoder(w).Encode(jevapi.Response{Answers: map[string]jevapi.Answer{kind: {Type: "choice", Choice: Defer}}})
+				_ = json.NewEncoder(w).Encode(jevwire.Response{Answers: map[string]jevwire.Answer{kind: {Type: "choice", Choice: Defer}}})
 			}))
 			defer server.Close()
 			e.client = jevapi.New("test-only", "test", time.Second)

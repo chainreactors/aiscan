@@ -8,6 +8,7 @@ import (
 	"github.com/chainreactors/cyber/aop"
 	"github.com/chainreactors/cyber/core/events"
 	"github.com/chainreactors/cyber/core/extension"
+	"github.com/chainreactors/cyber/internal/jevwire"
 
 	"github.com/chainreactors/cyber/core/hooks"
 	toolhooks "github.com/chainreactors/cyber/core/tool/hooks"
@@ -38,18 +39,18 @@ func TestConfiguredKeyAlwaysInstallsTwoStageChecks(t *testing.T) {
 		t.Run(consequence, func(t *testing.T) {
 			var requests, executions atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var body jevapi.Request
+				var body jevwire.Request
 				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 					t.Error(err)
 				}
 				q := body.Questions["action"]
 				choice := "review"
 				if requests.Add(1) == 1 {
-					if !strings.Contains(q.Instructions.(string), "Stage 1:") || q.Criteria.(map[string]any)["review"] != "operator screening marker" {
+					if !strings.Contains(q.Instructions, "Stage 1:") || !strings.Contains(q.Instructions, "operator screening marker") {
 						t.Error("missing screening policy")
 					}
 				} else {
-					if !strings.Contains(q.Instructions.(string), "Stage 2:") || q.Criteria.(map[string]any)["review"] == "operator screening marker" {
+					if !strings.Contains(q.Instructions, "Stage 2:") || strings.Contains(q.Instructions, "operator screening marker") {
 						t.Error("screening criteria reused as consequence verdict")
 					}
 					if consequence == "failure" {
@@ -104,13 +105,15 @@ func TestChoiceWireAndPerInvocationJudgment(t *testing.T) {
 			t.Error("bad authentication")
 		}
 		var body struct {
-			jevapi.Request
+			jevwire.Request
 			Model string `json:"model"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
 		}
-		if body.Model != jevapi.DefaultModel || body.Questions["action"].Type != "choice" || len(body.Questions["action"].Criteria.(map[string]any)) != 3 {
+		var options map[string]string
+		_ = json.Unmarshal(body.Questions["action"].Criteria, &options)
+		if body.Model != jevapi.DefaultModel || body.Questions["action"].Type != "choice" || len(options) != 3 {
 			t.Errorf("bad judgment request: %+v", body.Questions)
 		}
 		state := string(body.State)

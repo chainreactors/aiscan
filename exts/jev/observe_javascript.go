@@ -41,7 +41,7 @@ function command(name, argv) { return {name:name, argv:argv}; }
 // runReflexJS executes one ordinary function. Only the native JEV and Executor
 // bridges can perform external work; every bridge receives and returns JSON.
 func runReflexJS(ctx context.Context, reflex *Reflex, input, arguments map[string]any,
-	judge func(jevapi.Request) (*jevapi.Response, error), execute func(binding) (map[string]any, error)) (map[string]any, error) {
+	judge func(Claim) (*jevapi.Evaluation, error), execute func(binding) (map[string]any, error)) (map[string]any, error) {
 	if reflex == nil || reflex.program == nil {
 		return nil, fmt.Errorf("Reflex program has not been validated")
 	}
@@ -102,43 +102,42 @@ Math.random=function(){throw new Error("randomness unavailable")};globalThis.Dat
 		return nil, err
 	}
 	_ = runtime.Set("jev", func(call goja.FunctionCall) goja.Value {
-		var request jevapi.Request
-		if err := decode(call.Argument(0), &request); err != nil {
-			fail(fmt.Errorf("JEV request: %w", err))
+		var claim Claim
+		if err := decode(call.Argument(0), &claim); err != nil {
+			fail(fmt.Errorf("JEV Claim: %w", err))
 		}
-		if err := validateQuestions(request.Questions); err != nil {
+		if err := claim.Validate(); err != nil {
 			fail(err)
-		}
-		if len(request.State) == 0 {
-			request.State = json.RawMessage(`{}`)
-		}
-		if len(request.State) > 32<<10 || !json.Valid(request.State) {
-			fail(fmt.Errorf("invalid JEV state"))
 		}
 		if err := ctx.Err(); err != nil {
 			fail(err)
 		}
-		response, err := judge(request)
+		evaluation, err := judge(claim)
 		if err != nil {
 			fail(err)
 		}
-		if response == nil {
-			fail(handoffError{"missing JEV response"})
-		}
-		for id, q := range request.Questions {
-			switch q.Type {
-			case "choice":
-				_, err = response.Choice(id, q)
-			case "score":
-				_, err = response.Score(id, q)
-			case "noul":
-				_, err = response.Noul(id)
-			}
+		switch claim.Type {
+		case jevapi.ClaimChoice:
+			value, err := claim.Choice(evaluation)
 			if err != nil {
-				fail(handoffError{"invalid JEV response: " + err.Error()})
+				fail(handoffError{err.Error()})
 			}
+			return runtime.ToValue(value)
+		case jevapi.ClaimScore:
+			value, err := claim.Score(evaluation)
+			if err != nil {
+				fail(handoffError{err.Error()})
+			}
+			return runtime.ToValue(value)
+		case jevapi.ClaimNoul:
+			value, err := claim.Noul(evaluation)
+			if err != nil {
+				fail(handoffError{err.Error()})
+			}
+			return runtime.ToValue(value)
 		}
-		return export(response)
+		fail(fmt.Errorf("unsupported Claim type"))
+		return goja.Undefined()
 	})
 	_ = runtime.Set("execute", func(call goja.FunctionCall) goja.Value {
 		var candidate binding
@@ -251,34 +250,6 @@ func checkRuntimeNumbers(value any) error {
 		return nil
 	}
 	return check(plain)
-}
-
-func validateQuestions(questions map[string]jevapi.Question) error {
-	if len(questions) == 0 || len(questions) > 40 {
-		return fmt.Errorf("invalid JEV questions")
-	}
-	for id, q := range questions {
-		if strings.TrimSpace(id) == "" || q.Instructions == nil {
-			return fmt.Errorf("invalid JEV question")
-		}
-		encoded, _ := json.Marshal(q.Criteria)
-		switch q.Type {
-		case "choice":
-			var options map[string]any
-			if json.Unmarshal(encoded, &options) != nil || len(options) < 2 || len(options) > maxCandidates || options[Defer] == nil {
-				return fmt.Errorf("choice requires finite options and defer")
-			}
-		case "score":
-			var levels []any
-			if json.Unmarshal(encoded, &levels) != nil || len(levels) < 2 || len(levels) > 10 {
-				return fmt.Errorf("invalid score levels")
-			}
-		case "noul":
-		default:
-			return fmt.Errorf("unsupported JEV question type %q", q.Type)
-		}
-	}
-	return nil
 }
 
 // Parsing never evaluates the reader or its native globals.

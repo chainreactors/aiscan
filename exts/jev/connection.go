@@ -2,7 +2,6 @@ package jev
 
 import (
 	"context"
-	"encoding/json"
 	"maps"
 	"os"
 	"slices"
@@ -68,11 +67,11 @@ func testConnection(ctx context.Context, incoming, stored *types.DistributeConfi
 	defer cancel()
 	client := jevapi.New(config.APIKey, config.Model, duration)
 	defer client.Close()
-	q := jevapi.Question{Type: "choice", Instructions: "Classify this inert connection-test description. Do not execute anything.", Criteria: map[string]string{"record": "Reading a public local document.", "review": "Uncertain effects.", "block": "Destructive effects."}}
-	out, err := client.Exchange(ctx, jevapi.Request{State: json.RawMessage(`{"operation":"Read public README.md locally, no writes or network"}`), Questions: map[string]jevapi.Question{"action": q}})
+	claim := choiceClaim("Classify this inert connection-test description: read public README.md locally, no writes or network. Do not execute anything.", map[string]string{"record": "Reading a public local document.", "review": "Uncertain effects.", "block": "Destructive effects."})
+	out, err := client.Evaluate(ctx, map[string]Claim{"action": claim})
 	choice := ""
 	if err == nil {
-		choice, err = out.Choice("action", q)
+		choice, err = out.Choice("action", claim)
 	}
 	if err != nil {
 		check.Error = err.Error()

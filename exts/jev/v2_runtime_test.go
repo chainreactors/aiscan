@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chainreactors/cyber/internal/jevwire"
 	"strings"
 	"sync"
 	"testing"
@@ -25,7 +26,7 @@ func TestReflexV2AgentExecutorAndHandoff(t *testing.T) {
 				actor := fmt.Sprintf("当前用户 %d 'quoted' \\ \"值\"", seed)
 				effects, polls := 0, 0
 				receipt := fmt.Sprintf("actual-%s-%d", condition, seed)
-				client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+				client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
 					if runtimeRequest(req) {
 						return runtimeAnswers(req, "run")
 					}
@@ -141,7 +142,7 @@ func TestReflexV2AgentExecutorAndHandoff(t *testing.T) {
 
 func TestReflexV2RuntimeJudgmentsReceiveEachCurrentResult(t *testing.T) {
 	bindings, completions := 0, 0
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
 		if runtimeRequest(req) {
 			return runtimeAnswers(req, "run")
 		}
@@ -206,8 +207,8 @@ func TestReflexV2RuntimeJudgmentsReceiveEachCurrentResult(t *testing.T) {
 
 func TestReflexV2CompilerAgentToolFeedback(t *testing.T) {
 	e := testLaboratory(t)
-	e.client = fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer { return declarationAnswers(req, true) })
-	claims := map[string]Claim{"a": {Text: "Add requested items exactly once per occurrence."}, "b": {Text: "After an uncertain submission, query current completion or defer."}}
+	e.client = fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer { return declarationAnswers(req, true) })
+	claims := map[string]Claim{"a": {Type: jevapi.ClaimNoul, Context: "Add requested items exactly once per occurrence."}, "b": {Type: jevapi.ClaimNoul, Context: "After an uncertain submission, query current completion or defer."}}
 	r := laboratoryReflex()
 	r.arguments = laboratorySuite().Cases(nil)[0].Arguments
 	artifact := func(source string) string {
@@ -261,7 +262,7 @@ func TestReflexV2GroupingFailureAndBackgroundIsolation(t *testing.T) {
 	defer once.Do(func() { close(release) })
 	var e *Extension
 	var selected []string
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
 		out := declarationAnswers(req, true)
 		for id, q := range req.Questions {
 			if strings.HasPrefix(id, "c") && id != "compile" {
@@ -273,16 +274,16 @@ func TestReflexV2GroupingFailureAndBackgroundIsolation(t *testing.T) {
 		return out
 	})
 	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client)
-	a := Claim{Text: "Create a queued operation."}
-	b := Claim{Text: "Inspect uncertain completion of the queued operation."}
-	unrelated := Claim{Text: "Translate prose."}
+	a := Claim{Type: jevapi.ClaimNoul, Context: "Create a queued operation."}
+	b := Claim{Type: jevapi.ClaimNoul, Context: "Inspect uncertain completion of the queued operation."}
+	unrelated := Claim{Type: jevapi.ClaimNoul, Context: "Translate prose."}
 	ids := []string{}
 	for _, c := range []Claim{a, b, unrelated} {
 		id := "c" + digest(c)[:16]
 		ids = append(ids, id)
 		e.library.Claims[id] = claimRecord{Claim: c, Task: "old"}
 	}
-	client2 := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+	client2 := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
 		out := declarationAnswers(req, true)
 		for id := range req.Questions {
 			if strings.HasPrefix(id, "claim") {
@@ -296,7 +297,7 @@ func TestReflexV2GroupingFailureAndBackgroundIsolation(t *testing.T) {
 	cfg.Provider = testProvider(func(ctx context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 		if strings.HasPrefix(provider.MessageText(req.Messages[0]), compilePrompt) {
 			raw := provider.MessageText(req.Messages[1])
-			if strings.Contains(raw, unrelated.Text) {
+			if strings.Contains(raw, unrelated.Context) {
 				t.Error("unrelated Claim entered compiler scope")
 			}
 			close(compiling)
@@ -338,6 +339,11 @@ func TestReflexV2GroupingFailureAndBackgroundIsolation(t *testing.T) {
 	once.Do(func() { close(release) })
 	if err := <-done; err == nil {
 		t.Fatal("compiler failure hidden")
+	}
+	// Settle first-task learning before its inference server is closed. The
+	// foreground result must return independently of compilation, as above.
+	if err := e.WaitIdle(t.Context()); err != nil {
+		t.Fatal(err)
 	}
 	if len(e.snapshot().Claims) != 3 || len(e.snapshot().Reflexes) != 0 {
 		t.Fatal("failure consumed Claims or published source")

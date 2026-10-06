@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/chainreactors/cyber/internal/jevwire"
 	"strings"
 	"testing"
 
 	"github.com/chainreactors/cyber/agent/provider"
-	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 	"github.com/chainreactors/cyber/aop"
 	coretool "github.com/chainreactors/cyber/core/tool"
 )
@@ -73,7 +73,7 @@ func TestCompilationKeepsHandoffBoundaryWithoutDuplicatingConstraints(t *testing
 		t.Fatalf("handoff projection lost evidence: %s, %v", projected, err)
 	}
 	requests := 0
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
 		requests++
 		if len(req.State) > 64<<10 || strings.Count(string(req.State), constraint) != 1 || !strings.Contains(string(req.State), "entry missing") {
 			t.Error("compilation request duplicated or lost task evidence")
@@ -82,9 +82,9 @@ func TestCompilationKeepsHandoffBoundaryWithoutDuplicatingConstraints(t *testing
 	})
 	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client,
 		coretool.Command{Name: "catalog", Usage: "catalog [arguments]\n" + strings.Repeat("native documentation ", 1400), Run: func(context.Context, *coretool.Execution) (any, error) { return nil, nil }})
-	c := Claim{When: "Native scene", Question: "Can it progress?", Options: map[string]string{Defer: "Missing facts", "inspect": "Read state"}}
+	c := choiceClaim("Native scene"+". "+"Can it progress?", map[string]string{Defer: "Missing facts", "inspect": "Read state"})
 	e.library.Claims["c"] = claimRecord{Claim: c}
-	e.library.Reflexes["r"] = reflexRecord{Reflex: Reflex{When: c.When, Decide: "Use current native bindings", Observe: normalizeFixture(`js:({state:{},candidates:{}})`)}, Claims: []string{"c"}}
+	e.library.Reflexes["r"] = reflexRecord{Reflex: Reflex{When: c.Context, Decide: "Use current native bindings", Observe: normalizeFixture(`js:({state:{},candidates:{}})`)}, Claims: []string{"c"}}
 	catalog, err := e.capabilities(cfg, state)
 	if err != nil {
 		t.Fatal(err)
@@ -107,7 +107,7 @@ func TestLargeCapabilityCatalogPreservesObservedNativeDocumentation(t *testing.T
 	for i := range commands {
 		commands[i].Run = func(context.Context, *coretool.Execution) (any, error) { return nil, nil }
 	}
-	client := fakeJEV(t, func(jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(jevwire.Request) map[string]jevwire.Answer {
 		t.Error("catalog inspection dispatched a judgment")
 		return nil
 	})

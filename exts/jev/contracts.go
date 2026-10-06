@@ -4,6 +4,16 @@ import (
 	"encoding/json"
 )
 
+func (e *Extension) contractsAvailable(r Reflex) bool {
+	contracts := e.contracts.Snapshot()
+	for _, step := range r.Steps {
+		if _, ok := contracts[step.Contract]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // Contracts describe executable dependencies, never task parameters or progress.
 func nativeContracts(capabilities map[string]any) map[string]string {
 	contracts := map[string]string{"helpers": digest([]string{observeHelpersJS})}

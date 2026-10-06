@@ -1,7 +1,8 @@
+import { ClaimSchema, ClaimType } from '../../gen/decision/claim_pb'
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDownLeft, Bot, Check, CircuitBoard, GitBranch, Layers, Loader2, Pause, Play, RotateCcw, Terminal, XCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { decisionOptions, decisionQuestions, decisionText } from '../../lib/jev-decisions'
+import { decisionOptions, decisionQuestions, decisionText , evaluationChoice, evaluationNumber, evaluationType } from '../../lib/jev-decisions'
 import { workflowNodeSummary, type WorkflowNode } from '../../lib/workflow-view'
 import { controlFeedback, type ControlFrame, type ControlStage } from '../../lib/jev-control-flow'
 import './JEVControlFlow.css'
@@ -23,7 +24,7 @@ export function JEVControlFlow({ nodes, current, frame, previous, moving, replay
   const decision = current?.kind === 'decision' ? current : latest(node => node.kind === 'decision' && !!node.background === (stage === 'background'))
   const request = decision?.record?.value.payload
   const result = decision?.related?.find(record => record.value.payload.case === 'decisionResult')?.value.payload
-  const questions = request?.case === 'decisionRequest' ? decisionQuestions(request.value.questions) : []
+  const questions = request?.case === 'decisionRequest' ? decisionQuestions(request.value.claims) : []
   const answers = result?.case === 'decisionResult' ? result.value : request?.case === 'decisionResult' ? request.value : undefined
   const background = latest(node => !!node.background)
   const toolNodes = foreground.filter(node => node.kind === 'tool' || node.kind === 'agent')
@@ -116,13 +117,13 @@ export function JEVControlFlow({ nodes, current, frame, previous, moving, replay
         <button type="button" className="control-judgment-heading" disabled={!decision} onClick={() => decision && onSelect(decision.id)}><CircuitBoard /><strong>JEV</strong><span>{t('control.forkLayer')}</span><b>{nodes.filter(node => node.kind === 'decision').length}<small>{t('judgments')}</small></b></button>
         <div className="control-forks" data-testid="control-forks">
           {questions.slice(0, 4).map(([questionId, question]) => {
-            const answer = answers?.answers[questionId], options = decisionOptions(question, answer), chosen = options.find(option => option.selected), top = options[0]
-            const probability = chosen?.probability ?? (question.type === 'noul' ? answer?.noul : undefined)
-            return <div className="control-fork" key={questionId} data-control-question={questionId} data-choice={answer?.choice || undefined}>
-              <span title={decisionText(question.instructionsJson)}>{t(`questionTitles.${questionId}`, { defaultValue: decisionText(question.instructionsJson) || questionId })}</span>
+            const answer = answers?.evaluations[questionId], options = decisionOptions(question, answer), chosen = options.find(option => option.selected), top = options[0]
+            const probability = chosen?.probability ?? (question.type === ClaimType.noul ? evaluationNumber(answer) : undefined)
+            return <div className="control-fork" key={questionId} data-control-question={questionId} data-choice={evaluationChoice(answer) || undefined}>
+              <span title={question.context}>{t(`questionTitles.${questionId}`, { defaultValue: question.context || questionId })}</span>
               <div className="control-distribution" aria-hidden="true">{options.map(option => <i key={option.id} data-chosen={option.selected} style={{ width: `${(option.probability ?? 0) * 100}%` }} />)}{!options.some(option => option.probability !== undefined) && <i className="is-unknown" />}</div>
-              <b>{probability !== undefined ? `${(probability * 100).toFixed(1)}%` : question.type === 'score' && answer?.score !== undefined ? answer.score.toFixed(2) : '—'}</b>
-              <span className="control-choice" title={chosen?.description}>{answer?.choice || (answer ? question.type : t('control.waiting'))}</span>
+              <b>{probability !== undefined ? `${(probability * 100).toFixed(1)}%` : question.type === ClaimType.score && evaluationNumber(answer) !== undefined ? evaluationNumber(answer)?.toFixed(2) : '—'}</b>
+              <span className="control-choice" title={chosen?.description}>{evaluationChoice(answer) || (answer ? ClaimType[question.type] : t('control.waiting'))}</span>
               {chosen && top && !top.selected && <span className="sr-only">{t('selected')}: {chosen.id}</span>}
             </div>
           })}

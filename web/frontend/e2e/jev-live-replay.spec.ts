@@ -48,10 +48,10 @@ test('retained real events render their exact selections, publications and chron
     const request = projection.records.find(candidate => candidate.value.payload.case === 'decisionRequest' && candidate.value.payload.value.requestId === result.requestId)
     if (request) await page.locator(`[data-record-id="${request.event.id}"]`).click()
     const batch = page.locator(`[data-request-id="${result.requestId}"]`)
-    for (const [id, answer] of Object.entries(result.answers)) {
-      if (!answer.choice) continue
-      await expect(batch.locator(`[data-question-id="${id}"] [data-option-id="${answer.choice}"]`)).toHaveAttribute('data-selected', 'true')
-      await expect(batch.locator(`[data-question-id="${id}"] [data-option-id="${answer.choice}"]`)).toBeVisible()
+    for (const [id, answer] of Object.entries(result.evaluations)) {
+      if (answer.value.case !== 'choice') continue
+      await expect(batch.locator(`[data-question-id="${id}"] [data-option-id="${answer.value.value}"]`)).toHaveAttribute('data-selected', 'true')
+      await expect(batch.locator(`[data-question-id="${id}"] [data-option-id="${answer.value.value}"]`)).toBeVisible()
     }
   }
   const publications = projection.records.filter(record => record.value.payload.case === 'libraryChange' && record.value.payload.value.state === 'claim_published').length

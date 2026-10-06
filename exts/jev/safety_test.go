@@ -3,12 +3,12 @@ package jev
 import (
 	"context"
 	"fmt"
+	"github.com/chainreactors/cyber/internal/jevwire"
 	"testing"
 
 	"github.com/chainreactors/cyber/agent"
 	"github.com/chainreactors/cyber/agent/hooks"
 	"github.com/chainreactors/cyber/agent/provider"
-	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 	aop "github.com/chainreactors/cyber/aop"
 	coretool "github.com/chainreactors/cyber/core/tool"
 )
@@ -16,7 +16,7 @@ import (
 func TestContextRewriterLeavesDecisionWithModel(t *testing.T) {
 	for _, useHook := range []bool{false, true} {
 		t.Run(fmt.Sprint(useHook), func(t *testing.T) {
-			client := fakeJEV(t, func(jevapi.Request) map[string]jevapi.Answer {
+			client := fakeJEV(t, func(jevwire.Request) map[string]jevwire.Answer {
 				t.Error("controller must not act on a different request projection")
 				return nil
 			})
@@ -72,7 +72,7 @@ func TestMediaConstraintsCannotSilentlyBecomeTextOnly(t *testing.T) {
 }
 
 func TestObservationFailureDoesNotHideCompetingCapability(t *testing.T) {
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
 		if runtimeRequest(req) && req.Questions["entry"].Type == "" {
 			t.Error("unselected broken program reached runtime decision")
 		}

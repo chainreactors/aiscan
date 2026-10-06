@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chainreactors/cyber/internal/jevwire"
 	"strings"
 	"testing"
 	"time"
@@ -15,10 +16,10 @@ import (
 	coretool "github.com/chainreactors/cyber/core/tool"
 )
 
-func compilerReadPlan(t *testing.T, review func(jevapi.Request) map[string]jevapi.Answer) (*Extension, *compilation, string) {
+func compilerReadPlan(t *testing.T, review func(jevwire.Request) map[string]jevwire.Answer) (*Extension, *compilation, string) {
 	t.Helper()
 	if review == nil {
-		review = func(req jevapi.Request) map[string]jevapi.Answer { return declarationAnswers(req, true) }
+		review = func(req jevwire.Request) map[string]jevwire.Answer { return declarationAnswers(req, true) }
 	}
 	executions := 0
 	client := fakeJEV(t, review)
@@ -49,7 +50,7 @@ func compilerReadPlan(t *testing.T, review func(jevapi.Request) map[string]jevap
 	if err != nil {
 		t.Fatal(err)
 	}
-	claim := Claim{Text: "Read the current receipt using the requested actor."}
+	claim := Claim{Type: jevapi.ClaimNoul, Context: "Read the current receipt using the requested actor."}
 	id := "c" + digest(claim)[:16]
 	e.library.Claims[id] = claimRecord{Claim: claim}
 	return e, &compilation{job: declaration{cfg: cfg}, claims: map[string]Claim{id: claim}, ids: []string{id}, capabilities: caps, state: state, input: map[string]any{"input": input}}, actor
@@ -112,7 +113,7 @@ func TestReflexV2CompilerRepairsPastOldLimits(t *testing.T) {
 
 func TestReflexV2CompilerSemanticRejectionReturnsToAgent(t *testing.T) {
 	reviews := 0
-	e, plan, actor := compilerReadPlan(t, func(req jevapi.Request) map[string]jevapi.Answer {
+	e, plan, actor := compilerReadPlan(t, func(req jevwire.Request) map[string]jevwire.Answer {
 		out := declarationAnswers(req, true)
 		if _, ok := req.Questions["coverage_freshness"]; ok {
 			reviews++
@@ -257,7 +258,7 @@ func TestReflexV2CompilerFormatFailuresAreRepairable(t *testing.T) {
 func TestReflexV2CompilerMissingEvidenceWaitsWithoutPublishing(t *testing.T) {
 	for _, stage := range []string{"mechanism", "semantic"} {
 		t.Run(stage, func(t *testing.T) {
-			e, plan, actor := compilerReadPlan(t, func(req jevapi.Request) map[string]jevapi.Answer {
+			e, plan, actor := compilerReadPlan(t, func(req jevwire.Request) map[string]jevwire.Answer {
 				out := declarationAnswers(req, true)
 				out["compile"], out["defect"] = answer(Defer), answer(Defer)
 				return out

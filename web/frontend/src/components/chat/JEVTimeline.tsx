@@ -1,3 +1,4 @@
+import { ClaimSchema, ClaimType } from '../../gen/decision/claim_pb'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, CircuitBoard, Loader2, Repeat2, ArrowRight, Layers, Bot, Wrench, Eye, Check, XCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -5,8 +6,8 @@ import { create } from '@bufbuild/protobuf'
 import { registerTimelineRenderer, ToolResultDisplay } from '@/viewer'
 import { CodeBlock } from '@/markdown'
 import type { ExtensionTimelineItem } from '@/viewer'
-import { DecisionRequestSchema, QuestionSchema } from '../../gen/types/jev_pb'
-import { claimDefinitions, decisionOptions, parseJEVJSON } from '../../lib/jev-decisions'
+import { DecisionRequestSchema } from '../../gen/types/jev_pb'
+import { claimDefinitions, decisionOptions, parseJEVJSON , evaluationChoice, evaluationNumber, evaluationType } from '../../lib/jev-decisions'
 import { useToolPresentation } from './ToolCallResult'
 import { useObservationLabels } from '../../lib/observation-labels'
 import type { JEVSegment, JEVCompilation, JEVRecord, JEVCheck } from '../../lib/jev-view'
@@ -91,7 +92,7 @@ export function JEVWorkflowDetail({ node, nodes }: { node: WorkflowNode; nodes: 
       return <DecisionBatch request={payload.value} result={result?.case === 'decisionResult' ? result.value : undefined} />
     }
     case 'decisionResult': return <DecisionBatch request={create(DecisionRequestSchema, { requestId: payload.value.requestId, purpose: payload.value.purpose,
-      questions: Object.fromEntries(Object.entries(payload.value.answers).map(([id, answer]) => [id, create(QuestionSchema, { type: answer.type, criteriaJson: '{}' })])) })} result={payload.value} />
+      claims: Object.fromEntries(Object.entries(payload.value.evaluations).map(([id, answer]) => [id, create(ClaimSchema, { type: evaluationType(answer) })])) })} result={payload.value} />
     case 'dispatch': case 'result': {
       const resultRecord = records.find(record => record.value.payload.case === 'result')?.value.payload
       const result = resultRecord?.case === 'result' ? resultRecord.value.result : node.step?.result
@@ -113,15 +114,13 @@ export function JEVWorkflowDetail({ node, nodes }: { node: WorkflowNode; nodes: 
       const last = records[records.length - 1]?.value.payload
       const generation = last?.case === 'generation' ? last.value : payload.value
       const output = parseJEVJSON(generation.output)
-      const optionsKey = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value)
-        ? JSON.stringify(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : undefined
       const drafts = generation.kind === 'claim_llm' ? claimDefinitions(output)
         : generation.kind === 'reflex_llm' && generation.output ? [output && typeof output === 'object' && 'observe' in output ? output : { observe: generation.output }] : []
       const targets = drafts.map(draft => nodes.find(other => {
         const change = other.record?.value.payload
         if (other.sessionId !== node.sessionId || other.turnId !== node.turnId || other.timestamp < node.timestamp || change?.case !== 'libraryChange') return false
-        return 'text' in draft ? change.value.state === 'claim_published' && !!change.value.claim
-          && (draft.text ? draft.text === change.value.claim.text : draft.when === change.value.claim.when && draft.question === change.value.claim.question && optionsKey(draft.options) === optionsKey(change.value.claim.options))
+        return 'context' in draft ? change.value.state === 'claim_published' && !!change.value.claim
+          && draft.type === change.value.claim.type && draft.context === change.value.claim.context && JSON.stringify(draft.options) === JSON.stringify(change.value.claim.options)
           : ['reflex_published', 'reflex_candidate'].includes(change.value.state) && change.value.reflex?.observe === draft.observe
       }))
       const published = generation.state === 'finished' && !generation.error && drafts.length > 0 && targets.every(Boolean)
@@ -215,9 +214,9 @@ function RecordedFlow({ records, segment, context }: { records: JEVRecord[]; seg
         <button id={`jev-node-${record.event.id}`} type="button" aria-pressed={record.event.id === current?.event.id} onClick={() => select(record.event.id)}
           className="jev-history-node" data-record-id={record.event.id}>
           <span className="jev-history-number">{index + 1}</span><span>{label(record)}</span>
-          {record.value.payload.case === 'decisionRequest' && <span className="jev-history-result">{Object.entries(answers.get(record.value.payload.value.requestId)?.answers || {}).map(([id, answer]) => answer.choice
-            ? t(`optionTitles.${answer.choice}`, { defaultValue: /^c[0-9a-f]+$/.test(answer.choice) ? t('knownScene') : decisionOptions(record.value.payload.case === 'decisionRequest' ? record.value.payload.value.questions[id] : create(QuestionSchema), answer).find(option => option.selected)?.description || answer.choice })
-            : answer.score ?? answer.noul ?? '').join(' · ') || t('awaitingAnswer')}</span>}
+          {record.value.payload.case === 'decisionRequest' && <span className="jev-history-result">{Object.entries(answers.get(record.value.payload.value.requestId)?.evaluations || {}).map(([id, answer]) => evaluationChoice(answer)
+            ? t(`optionTitles.${evaluationChoice(answer)}`, { defaultValue: /^c[0-9a-f]+$/.test(evaluationChoice(answer) || '') ? t('knownScene') : decisionOptions(record.value.payload.case === 'decisionRequest' ? record.value.payload.value.claims[id] : create(ClaimSchema), answer).find(option => option.selected)?.description || evaluationChoice(answer) })
+            : evaluationNumber(answer) ?? '').join(' · ') || t('awaitingAnswer')}</span>}
         </button>
       </div>)}
     </div>
@@ -237,7 +236,7 @@ function RecordedFlow({ records, segment, context }: { records: JEVRecord[]; seg
       case 'decisionResult':
         if (requests.has(payload.value.requestId)) return null
         content = <DecisionBatch bodyOnly request={create(DecisionRequestSchema, { requestId: payload.value.requestId, purpose: payload.value.purpose,
-          questions: Object.fromEntries(Object.entries(payload.value.answers).map(([id, answer]) => [id, create(QuestionSchema, { type: answer.type, criteriaJson: '{}' })])) })} result={payload.value} />
+          claims: Object.fromEntries(Object.entries(payload.value.evaluations).map(([id, answer]) => [id, create(ClaimSchema, { type: evaluationType(answer) })])) })} result={payload.value} />
         break
       case 'observation': {
         content = <FlowSection title={t('inputState')} icon={<Eye className="h-3.5 w-3.5" />}>
@@ -346,13 +345,13 @@ function JEVCheckView({ check }: { check: JEVCheck }) {
   const { t } = useTranslation('jev')
   const count = check.records.filter(record => record.value.payload.case === 'decisionResult').length
   const latest = [...check.records].reverse().find(r => r.value.payload.case === 'decisionResult')?.value.payload
-  const entry = latest?.case === 'decisionResult' ? latest.value.answers.entry : undefined
+  const entry = latest?.case === 'decisionResult' ? latest.value.evaluations.entry : undefined
   const ref = useLiveDisclosure(check.status === 'running')
   return <details ref={ref} className="group min-w-0 border-l-2 border-border pl-3" data-testid="jev-check" id={`jev-${check.id}`}>
     <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 py-2 text-xs text-muted-foreground">
       {check.status === 'running' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CircuitBoard className="h-3.5 w-3.5 text-emerald-500" />}
       <span>{t('check')} {check.iteration ? `· ${check.iteration}` : ''}</span><ArrowRight className="h-3 w-3" /><span>{t(check.status === 'running' ? 'checking' : 'modelContinues')}</span>
-      {entry?.choice && <span className="tabular-nums">· {t('entryChoice')} {t(`optionTitles.${entry.choice}`, { defaultValue: t('knownScene') })}</span>}
+      {evaluationChoice(entry) && <span className="tabular-nums">· {t('entryChoice')} {t(`optionTitles.${evaluationChoice(entry)}`, { defaultValue: t('knownScene') })}</span>}
       {!!count && <span>· {count} {t('judgments')}</span>}
       <ChevronDown className="ml-auto h-3.5 w-3.5 transition-transform group-open:rotate-180" />
     </summary>

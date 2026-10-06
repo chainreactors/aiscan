@@ -10,59 +10,149 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
-	"reflect"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	aop "github.com/chainreactors/cyber/aop"
+	"github.com/chainreactors/cyber/core/decision"
+	"github.com/chainreactors/cyber/internal/jevwire"
 )
 
 const Endpoint = "https://api.typesafe.ai/v1/systemone"
 const DefaultModel = "jev-1.13.0"
 
-// Question is the vendor's native question, not a second application protocol.
-type Question struct {
-	Type         string `json:"type"`
-	Instructions any    `json:"instructions"`
-	// Criteria is an option map for choice, an ordered array for score, or
-	// optional true/false descriptions for noul. Values may be structured JSON.
-	Criteria any `json:"criteria,omitempty"`
-}
-type Request struct {
-	State     json.RawMessage     `json:"state"`
-	Questions map[string]Question `json:"questions"`
-}
-type Answer struct {
-	Type          string             `json:"type"`
-	Choice        string             `json:"choice,omitempty"`
-	Score         *float64           `json:"score,omitempty"`
-	Noul          *float64           `json:"noul,omitempty"`
-	Legend        map[string]string  `json:"legend,omitempty"`
-	Probabilities map[string]float64 `json:"probabilities,omitempty"`
-	Confidence    float64            `json:"confidence,omitempty"`
-}
-type Response struct {
-	Attempts uint64            `json:"-"`
-	Model    string            `json:"model"`
-	Answers  map[string]Answer `json:"answers"`
-	Usage    *struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
-	} `json:"usage"`
+// Evaluations holds typed results and execution metadata for one inference.
+// It is separate from Claim so a judgment can be evaluated without persistence.
+type Evaluations struct {
+	Values map[string]*Evaluation
+	Usage  *aop.TokenUsage
 }
 
-func (r *Response) TokenUsage() *aop.TokenUsage {
-	if r == nil || r.Usage == nil {
+func (e *Evaluations) TokenUsage() *aop.TokenUsage {
+	if e == nil {
 		return nil
 	}
-	missing := uint64(0)
-	if r.Attempts > 1 {
-		missing = r.Attempts - 1
+	return e.Usage
+}
+func (e *Evaluations) Choice(id string, c Claim) (string, error) {
+	if e == nil {
+		return "", errors.New("missing JEV response")
 	}
-	return &aop.TokenUsage{InputTokens: uint64(max(0, r.Usage.InputTokens)), OutputTokens: uint64(max(0, r.Usage.OutputTokens)), TotalTokens: uint64(max(0, r.Usage.InputTokens) + max(0, r.Usage.OutputTokens)), Detail: map[string]uint64{"requests": r.Attempts, "usage_missing": missing}}
+	return c.Choice(e.Values[id])
+}
+func (e *Evaluations) Score(id string, c Claim) (float64, error) {
+	if e == nil {
+		return 0, errors.New("missing JEV response")
+	}
+	return c.Score(e.Values[id])
+}
+func (e *Evaluations) Noul(id string, c Claim) (float64, error) {
+	if e == nil {
+		return 0, errors.New("missing JEV response")
+	}
+	return c.Noul(e.Values[id])
+}
+
+// Evaluate batches independent Claims. The application sees only the closed
+// decision algebra; vendor request envelopes remain at the transport boundary.
+func (c *Client) Evaluate(ctx context.Context, claims map[string]Claim) (*Evaluations, error) {
+	questions := map[string]jevwire.Question{}
+	state := json.RawMessage(`{}`)
+	// Share explicitly marked evidence once at the vendor boundary. Ordinary
+	// context, including trailing JSON, remains intact. Claims and traces still
+	// contain the complete context; this only avoids duplicating the wire state.
+	shared := ""
+	first := true
+	for _, claim := range claims {
+		at := strings.LastIndex(claim.Context, jevwire.EvidenceMarker)
+		if at < 0 || !json.Valid([]byte(claim.Context[at+len(jevwire.EvidenceMarker):])) {
+			shared = ""
+			break
+		}
+		suffix := claim.Context[at:]
+		if first {
+			shared, first = suffix, false
+		} else if shared != suffix {
+			shared = ""
+			break
+		}
+	}
+	if shared != "" {
+		state = json.RawMessage(shared[len(jevwire.EvidenceMarker):])
+	}
+	for id, claim := range claims {
+		if strings.TrimSpace(id) == "" {
+			return nil, errors.New("Claim identifier is required")
+		}
+		if err := claim.Validate(); err != nil {
+			return nil, err
+		}
+		q := jevwire.Question{Type: claim.Type.String(), Instructions: strings.TrimSuffix(claim.Context, shared)}
+		switch claim.Type {
+		case ClaimChoice:
+			options := map[string]string{}
+			for _, option := range claim.Options {
+				options[option] = option
+			}
+			q.Criteria, _ = json.Marshal(options)
+		case ClaimScore:
+			q.Criteria, _ = json.Marshal(claim.Options)
+		}
+		questions[id] = q
+	}
+	response, err := c.exchange(ctx, jevwire.Request{State: state, Questions: questions})
+	out := &Evaluations{Values: map[string]*Evaluation{}, Usage: response.TokenUsage()}
+	if response != nil {
+		for id, answer := range response.Answers {
+			value := &Evaluation{Probabilities: answer.Probabilities, Confidence: answer.Confidence}
+			switch answer.Type {
+			case "choice":
+				value.Value = &decision.Evaluation_Choice{Choice: answer.Choice}
+			case "score":
+				if answer.Score != nil {
+					value.Value = &decision.Evaluation_Score{Score: *answer.Score}
+				}
+			case "noul":
+				if answer.Noul != nil {
+					value.Value = &decision.Evaluation_Noul{Noul: *answer.Noul}
+				}
+			}
+			out.Values[id] = value
+		}
+	}
+	return out, err
+}
+func (c *Client) Choice(ctx context.Context, claim *Claim) (string, error) {
+	if claim == nil || claim.Type != ClaimChoice {
+		return "", errors.New("Claim is not a choice")
+	}
+	out, err := c.Evaluate(ctx, map[string]Claim{"claim": *claim})
+	if err != nil {
+		return "", err
+	}
+	return out.Choice("claim", *claim)
+}
+func (c *Client) Score(ctx context.Context, claim *Claim) (float64, error) {
+	if claim == nil || claim.Type != ClaimScore {
+		return 0, errors.New("Claim is not a score")
+	}
+	out, err := c.Evaluate(ctx, map[string]Claim{"claim": *claim})
+	if err != nil {
+		return 0, err
+	}
+	return out.Score("claim", *claim)
+}
+func (c *Client) Noul(ctx context.Context, claim *Claim) (float64, error) {
+	if claim == nil || claim.Type != ClaimNoul {
+		return 0, errors.New("Claim is not a noul")
+	}
+	out, err := c.Evaluate(ctx, map[string]Claim{"claim": *claim})
+	if err != nil {
+		return 0, err
+	}
+	return out.Noul("claim", *claim)
 }
 
 type Client struct {
@@ -103,6 +193,7 @@ func New(key, model string, timeout time.Duration) *Client {
 	}
 	return &Client{APIKey: key, Model: model, Endpoint: Endpoint, Timeout: timeout, http: &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
+
 func (c *Client) Close() { c.http.CloseIdleConnections() }
 
 // Usage includes all consumers and failed attempts. It is suitable for paired
@@ -112,13 +203,13 @@ func (c *Client) Usage() *aop.TokenUsage {
 	return &aop.TokenUsage{InputTokens: i, OutputTokens: o, TotalTokens: i + o, Detail: map[string]uint64{"requests": c.attempts.Load(), "usage_missing": c.missing.Load()}}
 }
 
-// Exchange preserves batched speculative questions. Callers validate only the
+// exchange preserves batched speculative questions. Callers validate only the
 // selected answer heads; an unused speculative head cannot authorize effects.
-func (c *Client) Exchange(ctx context.Context, input Request) (response *Response, resultErr error) {
+func (c *Client) exchange(ctx context.Context, input jevwire.Request) (response *jevwire.Response, resultErr error) {
 	var attempts uint64
 	defer func() {
 		if response == nil {
-			response = &Response{}
+			response = &jevwire.Response{}
 		}
 		response.Attempts = attempts
 	}()
@@ -127,7 +218,10 @@ func (c *Client) Exchange(ctx context.Context, input Request) (response *Respons
 	if len(input.State) > 64<<10 || !json.Valid(input.State) || len(input.Questions) == 0 || len(input.Questions) > 40 {
 		return nil, errors.New("invalid JEV request limits")
 	}
-	body, err := json.Marshal(map[string]any{"model": c.Model, "state": input.State, "questions": input.Questions})
+	body, err := json.Marshal(struct {
+		Model string `json:"model"`
+		jevwire.Request
+	}{Model: c.Model, Request: input})
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +288,7 @@ func (c *Client) Exchange(ctx context.Context, input Request) (response *Respons
 			c.missing.Add(1)
 			return nil, fmt.Errorf("JEV HTTP status %d", res.StatusCode)
 		}
-		var out Response
+		var out jevwire.Response
 		if json.Unmarshal(raw, &out) != nil {
 			c.missing.Add(1)
 			return nil, errors.New("invalid JEV response")
@@ -212,52 +306,4 @@ func (c *Client) Exchange(ctx context.Context, input Request) (response *Respons
 		return &out, nil
 	}
 	return nil, errors.New("JEV retry limit reached")
-}
-
-func (r *Response) Choice(name string, question Question) (string, error) {
-	if r == nil {
-		return "", errors.New("missing JEV response")
-	}
-	a, ok := r.Answers[name]
-	if question.Type != "choice" || !ok || a.Type != "choice" {
-		return "", errors.New("invalid JEV choice response")
-	}
-	options := reflect.ValueOf(question.Criteria)
-	if !options.IsValid() || options.Kind() != reflect.Map || options.Type().Key().Kind() != reflect.String {
-		return "", errors.New("invalid JEV choice criteria")
-	}
-	key := reflect.ValueOf(a.Choice).Convert(options.Type().Key())
-	if !options.MapIndex(key).IsValid() {
-		return "", errors.New("invalid JEV choice binding")
-	}
-	return a.Choice, nil
-}
-
-// Score returns the native weighted level index, not an application verdict.
-func (r *Response) Score(name string, question Question) (float64, error) {
-	levels := reflect.ValueOf(question.Criteria)
-	if question.Type != "score" || !levels.IsValid() || (levels.Kind() != reflect.Slice && levels.Kind() != reflect.Array) || (levels.Kind() == reflect.Slice && levels.Type().Elem().Kind() == reflect.Uint8) || levels.Len() < 2 || levels.Len() > 10 {
-		return 0, errors.New("invalid JEV score criteria")
-	}
-	return r.number(name, "score", float64(levels.Len()-1))
-}
-
-// Noul returns a probability. The caller owns any threshold or consequence.
-func (r *Response) Noul(name string) (float64, error) {
-	return r.number(name, "noul", 1)
-}
-
-func (r *Response) number(name, kind string, upper float64) (float64, error) {
-	if r == nil {
-		return 0, errors.New("missing JEV response")
-	}
-	a, ok := r.Answers[name]
-	value := a.Noul
-	if kind == "score" {
-		value = a.Score
-	}
-	if !ok || a.Type != kind || value == nil || math.IsNaN(*value) || math.IsInf(*value, 0) || *value < 0 || *value > upper {
-		return 0, fmt.Errorf("invalid JEV %s response", kind)
-	}
-	return *value, nil
 }

@@ -36,6 +36,7 @@ var aopProtos = []string{
 }
 
 var typeProtos = []string{
+	"decision/claim.proto",
 	"types/agent.proto",
 	"types/artifact.proto",
 	"types/chat.proto",

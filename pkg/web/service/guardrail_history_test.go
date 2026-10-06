@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chainreactors/cyber/internal/jevwire"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -60,14 +61,14 @@ func TestGuardrailDecisionsSurviveTimelineRestart(t *testing.T) {
 				timeout = 30 * time.Millisecond
 			}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var body jevapi.Request
+				var body jevwire.Request
 				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 					t.Error(err)
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
 				choice := "review"
-				instructions, _ := body.Questions["action"].Instructions.(string)
+				instructions := body.Questions["action"].Instructions
 				if strings.Contains(instructions, "Stage 2:") {
 					if tc.mode != guardrail.ModeAuto {
 						t.Error("safe mode called automatic confirmation")

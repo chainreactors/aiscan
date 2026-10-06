@@ -45,6 +45,17 @@ arguments together before external work. Example values are never runtime defaul
 JSON-encode the source and argument strings once; compare decoded strings, not
 their escaped appearance. command(program, argv) handles shell encoding.
 
+Semantic decisions use jev({type:"choice",context:"meaning and current facts",
+options:["candidate","defer"]}) and return an option string directly. score uses
+ordered levels and returns a weighted index; noul has no options and returns a
+probability. Claim content has no question/criteria/request envelope. Keep current
+evidence in the temporary context, not in a published reusable Claim.
+
+The ordinary jev command can read the library, publish a typed Claim or request
+compilation from host-recorded evidence. A function that uses these library effects
+must declare the jev-library contract, step and occurrence just like every other
+native effect. It receives no bootstrap identity or validation exemption.
+
 Each write declares its step's tool-owned contract and count/count_argument.
 Use read:false, that step ID, and an explicit zero-based occurrence. Two intended
 identical writes are two distinct occurrences. Reads and polls use read:true and

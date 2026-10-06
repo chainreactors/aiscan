@@ -2,6 +2,7 @@ package jev
 
 import (
 	"context"
+	"github.com/chainreactors/cyber/internal/jevwire"
 	"strings"
 	"testing"
 
@@ -34,7 +35,7 @@ func TestOffNeedsNoCapabilitiesAndAddsNothing(t *testing.T) {
 
 func TestAutoLoadsWithoutObserverProtocol(t *testing.T) {
 	e := New(Config{Mode: "auto", Directory: t.TempDir()})
-	client := fakeJEV(t, func(jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(jevwire.Request) map[string]jevwire.Answer {
 		t.Error("inactive extension called JEV")
 		return nil
 	})
@@ -81,7 +82,7 @@ func TestLongContextProjectionPreservesConstraintsWithoutChangingHistory(t *test
 func TestDeferAndInvalidAnswerLeaveHistoryUntouched(t *testing.T) {
 	for _, choice := range []string{Defer, "unbound"} {
 		t.Run(choice, func(t *testing.T) {
-			client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+			client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
 				return runtimeAnswers(req, choice)
 			})
 			e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client, coretool.Command{Name: "step", Run: func(context.Context, *coretool.Execution) (any, error) { t.Error("unexpected action"); return nil, nil }})

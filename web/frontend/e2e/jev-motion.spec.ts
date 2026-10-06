@@ -1,3 +1,4 @@
+import { ClaimType } from '../src/gen/decision/claim_pb'
 import { test, expect, type Page } from '@playwright/test'
 import { create, createRegistry, fromJson, toBinary } from '@bufbuild/protobuf'
 import { readFileSync } from 'node:fs'
@@ -22,22 +23,22 @@ const event = (seq: number, payload: any) => create(EventSchema, { id: `motion-$
 const trace = (seq: number, payload: any, background = false) => event(seq, { case: 'extension', value: anyPack(RuntimeEventSchema,
   create(RuntimeEventSchema, { taskId: 'task', segmentId: background ? '' : 'segment', step: 1, background, payload })) })
 const definition = { id: 'inspect-evidence', when: 'Read the current documentation', decide: 'Select a recorded operation', observe: 'js:()=>({state:{},candidates:[]})' }
-const questions = {
-  next: { type: 'choice', criteriaJson: '{"read":"Read current evidence","defer":"Return to main model"}' },
-  enough: { type: 'choice', criteriaJson: '{"yes":"Evidence is complete","no":"More evidence required"}' },
+const claims = {
+  next: { type: ClaimType.choice, context: "Choose the current operation." + "\nread: Read current evidence\ndefer: Return to main model", options: ["read","defer"] },
+  enough: { type: ClaimType.choice, context: "Choose the current operation." + "\nyes: Evidence is complete\nno: More evidence required", options: ["yes","no"] },
 }
 const call = { id: 'read', name: 'bash', arguments: { data: new TextEncoder().encode('{"command":"playwright evaluate reference document.body.innerText"}') } }
 const initial = [event(1, { case: 'turnStarted', value: {} }), event(2, { case: 'message', value: { id: 'plan', role: 'assistant', content: [
   { value: { case: 'reasoning', value: { text: 'Inspect the current documentation and verify the recorded evidence.' } } },
-] } }), trace(3, { case: 'takeover', value: { definition } }), trace(4, { case: 'decisionRequest', value: { requestId: 'next', questions } })]
-const answer = trace(5, { case: 'decisionResult', value: { requestId: 'next', elapsedMs: 186, answers: {
-  next: { type: 'choice', choice: 'read', probabilities: { read: .94, defer: .06 } },
-  enough: { type: 'choice', choice: 'no', probabilities: { yes: .2, no: .8 } },
+] } }), trace(3, { case: 'takeover', value: { definition } }), trace(4, { case: 'decisionRequest', value: { requestId: 'next', claims } })]
+const answer = trace(5, { case: 'decisionResult', value: { requestId: 'next', elapsedMs: 186, evaluations: {
+  next: { value: { case: 'choice', value: 'read' }, probabilities: { read: .94, defer: .06 } },
+  enough: { value: { case: 'choice', value: 'no' }, probabilities: { yes: .2, no: .8 } },
 } } })
 const dispatch = trace(6, { case: 'dispatch', value: { call } })
 const result = trace(7, { case: 'result', value: { elapsedMs: 42, result: { callId: 'read', name: 'bash', output: [{ value: { case: 'text', value: { text: 'Current page evidence: ensure_ascii escapes non-ASCII characters.' } } }] } } })
-const next = trace(8, { case: 'decisionRequest', value: { requestId: 'report', questions: { next: { type: 'choice', criteriaJson: '{"report":"Compose answer","defer":"New reasoning"}' } } } })
-const returned = [trace(9, { case: 'decisionResult', value: { requestId: 'report', elapsedMs: 153, answers: { next: { type: 'choice', choice: 'report', probabilities: { report: .97, defer: .03 } } } } }),
+const next = trace(8, { case: 'decisionRequest', value: { requestId: 'report', claims: { next: { type: ClaimType.choice, context: "Choose the current operation." + "\nreport: Compose answer\ndefer: New reasoning", options: ["report","defer"] } } } })
+const returned = [trace(9, { case: 'decisionResult', value: { requestId: 'report', elapsedMs: 153, evaluations: { next: { value: { case: 'choice', value: 'report' }, probabilities: { report: .97, defer: .03 } } } } }),
   trace(10, { case: 'handoff', value: { reason: 'report' } }),
   event(11, { case: 'message', value: { id: 'answer', role: 'assistant', content: [{ value: { case: 'text', value: { text: 'Verified against recorded documentation: ensure_ascii=True escapes non-ASCII characters.' } } }] } }),
   event(12, { case: 'turnEnded', value: { stopReason: 'completed' } })]
@@ -162,12 +163,13 @@ test('ordinary chat preserves reasoning and tool disclosures without JEV activit
 test('ordinary tool calls use the model path and background decisions do not control execution', async ({ page }) => {
   await mount(page)
   await render(page, [initial[0], initial[1],
-    trace(3, { case: 'decisionRequest', value: { requestId: 'background-entry', questions } }, true),
+    trace(3, { case: 'decisionRequest', value: { requestId: 'background-entry', claims } }, true),
     event(4, { case: 'toolCall', value: call })])
   await expect(page.locator('[data-control-route=model-executor-0]')).toHaveAttribute('data-active', 'true')
   await expect(page.locator('[data-control-route=judgment-executor-0]')).toHaveAttribute('data-active', 'false')
   await render(page, [event(5, { case: 'toolResult', value: { callId: call.id, name: call.name } }), event(6, { case: 'turnEnded', value: {} }),
-    trace(7, { case: 'decisionRequest', value: { requestId: 'background', questions } }, true)], true)
+    trace(7, { case: 'decisionRequest', value: { requestId: 'background', claims } }, true)], true)
+
   await expect(page.getByTestId('jev-control-flow')).toHaveAttribute('data-stage', 'background')
   await expect(page.locator('[data-control-route^=judgment-executor][data-active=true]')).toHaveCount(0)
 })
@@ -176,7 +178,7 @@ test('parallel tools retain their own arrival route while sibling calls are stil
   await mount(page)
   const other = { ...call, id: 'http', name: 'http-reader' }
   await render(page, [initial[0], initial[1],
-    trace(3, { case: 'decisionRequest', value: { requestId: 'background-entry', questions } }, true),
+    trace(3, { case: 'decisionRequest', value: { requestId: 'background-entry', claims } }, true),
     event(4, { case: 'toolCall', value: call }), event(5, { case: 'toolCall', value: other })])
   await expect(page.locator('[data-control-route^=model-executor][data-active=true]')).toHaveCount(2)
   await render(page, [event(6, { case: 'toolResult', value: { callId: 'http', name: 'http-reader' } })], true)

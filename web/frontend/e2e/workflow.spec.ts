@@ -1,3 +1,4 @@
+import { ClaimType } from '../src/gen/decision/claim_pb'
 import { test, expect, type Page } from '@playwright/test'
 import { showExecutionLanes } from './jev-helpers'
 import { create, toBinary } from '@bufbuild/protobuf'
@@ -17,7 +18,7 @@ function trace(seq: number, payload: any, background = false, session = 'session
     taskId: 'task', segmentId: background ? '' : 'loop', step: 1, background, payload,
   })) }, session, turn)
 }
-const question = { type: 'choice', criteriaJson: '{"read":"Read evidence","defer":"More reasoning"}' }
+const question = { type: ClaimType.choice, context: "Choose the current operation." + "\nread: Read evidence\ndefer: More reasoning", options: ["read","defer"] }
 const call = { id: 'call', name: 'read-evidence', arguments: { data: new TextEncoder().encode('{"target":"current"}') } }
 const definition = { id: 'read-loop', when: 'Read current evidence', decide: 'Choose a supplied operation', observe: 'js:function(){return {report:1}}' }
 const project = (events: ReturnType<typeof event>[]) => withWorkflows(withJEV(reduceAOPToTimeline(events), projectJEV(events)), events)
@@ -52,8 +53,8 @@ test('reused request and call IDs stay separate across sessions and turns', () =
   const events = ['a', 'b'].flatMap((session, index) => ['one', 'two'].flatMap((turn, turnIndex) => {
     const n = index * 20 + turnIndex * 10
     return [event(n + 1, { case: 'turnStarted', value: {} }, session, turn), trace(n + 2, { case: 'takeover', value: { definition } }, false, session, turn),
-      trace(n + 3, { case: 'decisionRequest', value: { requestId: 'same', questions: { next: question } } }, false, session, turn),
-      trace(n + 4, { case: 'decisionResult', value: { requestId: 'same', answers: { next: { type: 'choice', choice: 'read' } } } }, false, session, turn),
+      trace(n + 3, { case: 'decisionRequest', value: { requestId: 'same', claims: { next: question } } }, false, session, turn),
+      trace(n + 4, { case: 'decisionResult', value: { requestId: 'same', evaluations: { next: { value: { case: 'choice', value: 'read' } } } } }, false, session, turn),
       trace(n + 5, { case: 'dispatch', value: { call } }, false, session, turn), trace(n + 6, { case: 'result', value: { result: { callId: call.id, name: call.name } } }, false, session, turn)]
   }))
   const workflows = turns(events)
@@ -87,13 +88,13 @@ test('delegated execution branches once and background events stay in their orig
 test('live decision and tool results update the same nodes and animate only actual routes', async ({ page }, info) => {
   await mount(page)
   const initial = [event(1, { case: 'turnStarted', value: {} }), trace(2, { case: 'takeover', value: { definition } }),
-    trace(3, { case: 'decisionRequest', value: { requestId: 'next', questions: { next: question } } })]
+    trace(3, { case: 'decisionRequest', value: { requestId: 'next', claims: { next: question } } })]
   await render(page, initial)
   const decision = page.locator('[data-workflow-node][data-kind=decision]')
   await expect(decision).toHaveAttribute('data-state', 'pending')
   const id = await decision.getAttribute('data-workflow-node')
   await expect(page.locator('.workflow-packet')).toHaveCount(1)
-  await render(page, [trace(4, { case: 'decisionResult', value: { requestId: 'next', answers: { next: { type: 'choice', choice: 'read', probabilities: { read: .95, defer: .05 } } } } }),
+  await render(page, [trace(4, { case: 'decisionResult', value: { requestId: 'next', evaluations: { next: { value: { case: 'choice', value: 'read' }, probabilities: { read: .95, defer: .05 } } } } }),
     trace(5, { case: 'dispatch', value: { call } })], true)
   await expect(decision).toHaveAttribute('data-workflow-node', id!)
   await expect(decision).toHaveAttribute('data-state', 'completed')
@@ -134,7 +135,7 @@ test('reduced motion disables packets while preserving pending status and feedba
   await mount(page)
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await render(page, [event(1, { case: 'turnStarted', value: {} }), trace(2, { case: 'observation', value: { stateJson: '{}' } }),
-    trace(3, { case: 'decisionRequest', value: { requestId: 'pending', questions: { next: question } } })])
+    trace(3, { case: 'decisionRequest', value: { requestId: 'pending', claims: { next: question } } })])
   await expect(page.locator('[data-workflow-node][data-kind=decision]')).toHaveAttribute('data-state', 'pending')
   for (const packet of await page.locator('.workflow-packet').all()) await expect(packet).toBeHidden()
   expect(await page.locator('.workflow-wire.is-active').evaluate(el => getComputedStyle(el).animationName)).toBe('none')
@@ -153,7 +154,7 @@ for (const width of [390, 1440]) test(`recorded order, summaries and scoped navi
   }
   expect(await page.locator('.workflow-viewport').evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
   await expect(page.locator('[data-kind=tool] .workflow-node-description').first()).toContainText('playwright open')
-  await expect(page.locator('[data-kind=decision] .workflow-node-description')).toContainText('Read current page')
+  await expect(page.locator('[data-kind=decision] .workflow-node-description')).toContainText('inspect')
   await page.getByRole('button', { name: '前台执行 6', exact: true }).click()
   await expect(nodes).toHaveCount(6)
   await expect(page.locator('[data-background=true][data-workflow-node]')).toHaveCount(0)
@@ -188,10 +189,10 @@ test('Markdown replies stay outside the diagram and details open only on inspect
 test('history stays selected during live updates and follow returns to the active node', async ({ page }) => {
   await mount(page)
   await render(page, [event(1, { case: 'turnStarted', value: {} }), trace(2, { case: 'takeover', value: { definition } }),
-    trace(3, { case: 'decisionRequest', value: { requestId: 'next', questions: { next: question } } })])
+    trace(3, { case: 'decisionRequest', value: { requestId: 'next', claims: { next: question } } })])
   const takeover = page.locator('[data-record-id="session-1-turn-1-2"]')
   await takeover.click()
-  await render(page, [trace(4, { case: 'decisionResult', value: { requestId: 'next', answers: { next: { type: 'choice', choice: 'read' } } } }),
+  await render(page, [trace(4, { case: 'decisionResult', value: { requestId: 'next', evaluations: { next: { value: { case: 'choice', value: 'read' } } } } }),
     trace(5, { case: 'dispatch', value: { call } })], true)
   await expect(takeover).toHaveAttribute('aria-pressed', 'true')
   const follow = page.getByRole('button', { name: '跟随运行', exact: true })
@@ -207,16 +208,18 @@ test('history stays selected during live updates and follow returns to the activ
 
 test('generated drafts link to their matching publication and retain unrelated drafts', async ({ page }) => {
   await mount(page)
-  const draft = { when: 'Unique generated condition', question: 'Unique generated question', options: { read: 'Read evidence', stop: 'Finish' } }
+  const draft = { type: 'choice', context: 'Unique generated condition. read: Read evidence; stop: Finish.', options: ['read', 'stop'] }
   await render(page, [event(1, { case: 'turnStarted', value: {} }),
     trace(2, { case: 'generation', value: { kind: 'claim_llm', state: 'finished', output: JSON.stringify([draft]), requestId: 'draft' } }, true),
-    trace(3, { case: 'libraryChange', value: { state: 'claim_published', claim: { ...draft, id: 'other', when: 'An unrelated condition' } } }, true)])
+    trace(3, { case: 'libraryChange', value: { state: 'claim_published', claim: { ...draft, type: ClaimType.choice, id: 'other', context: 'An unrelated condition' } } }, true)])
   await page.locator('[data-kind=generation]').click()
-  await expect(page.getByTestId('jev-claim-definition')).toContainText(draft.when)
+  await expect(page.getByTestId('jev-claim-definition')).toContainText(draft.context)
   await expect(page.getByRole('button', { name: '查看发布内容', exact: true })).toHaveCount(0)
-  await render(page, [trace(4, { case: 'libraryChange', value: { state: 'claim_published', claim: { ...draft, id: 'matching', options: { stop: 'Finish', read: 'Read evidence' } } } }, true)], true)
+  await render(page, [trace(4, { case: 'libraryChange', value: { state: 'claim_published', claim: { ...draft, type: ClaimType.choice, id: 'reordered', options: ['stop', 'read'] } } }, true)], true)
+  await expect(page.getByRole('button', { name: '查看发布内容', exact: true })).toHaveCount(0)
+  await render(page, [trace(5, { case: 'libraryChange', value: { state: 'claim_published', claim: { ...draft, type: ClaimType.choice, id: 'matching' } } }, true)], true)
   await expect(page.getByTestId('jev-claim-definition')).toHaveCount(0)
   await page.getByRole('button', { name: '查看发布内容', exact: true }).click()
-  await expect(page.locator('[data-record-id="session-1-turn-1-4"]')).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByTestId('jev-claim-definition')).toContainText(draft.when)
+  await expect(page.locator('[data-record-id="session-1-turn-1-5"]')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('jev-claim-definition')).toContainText(draft.context)
 })

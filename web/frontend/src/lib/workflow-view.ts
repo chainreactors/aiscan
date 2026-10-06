@@ -3,7 +3,7 @@ import { observation } from '../../cyber-ui/packages/viewer/src/lib/observations
 import { resolveTimelineRenderer } from '../../cyber-ui/packages/viewer/src/components/chat/timeline-registry'
 import type { ToolCallEntry } from '../../cyber-ui/packages/viewer/src/types/timeline'
 import { eventTime, jevEvent, runtimeEvents, type JEVCompilation, type JEVSegment, type JEVCheck, type JEVRecord, type JEVStep } from './jev-view'
-import { decisionOptions, decisionText, parseJEVJSON } from './jev-decisions'
+import { decisionOptions, decisionText, parseJEVJSON, evaluationChoice } from './jev-decisions'
 
 export type WorkflowState = 'pending' | 'completed' | 'failed' | 'interrupted'
 export type WorkflowNode = {
@@ -23,9 +23,9 @@ export function workflowNodeSummary(node: WorkflowNode): string {
   if (node.kind === 'decision') {
     const result = node.related?.find(record => record.value.payload.case === 'decisionResult')?.value.payload
     const answers = result?.case === 'decisionResult' ? result.value : payload?.case === 'decisionResult' ? payload.value : undefined
-    text = answers?.error || Object.entries(answers?.answers || {}).flatMap(([id, answer]) => {
-      const question = payload?.case === 'decisionRequest' ? payload.value.questions[id] : undefined
-      if (answer.choice) return [question ? decisionOptions(question, answer).find(option => option.selected)?.description || answer.choice : answer.choice]
+    text = answers?.error || Object.entries(answers?.evaluations || {}).flatMap(([id, answer]) => {
+      const question = payload?.case === 'decisionRequest' ? payload.value.claims[id] : undefined
+      if (evaluationChoice(answer)) return [question ? decisionOptions(question, answer).find(option => option.selected)?.description || evaluationChoice(answer) : evaluationChoice(answer)]
       return []
     }).join(' · ')
   } else if (node.kind === 'tool') {
@@ -38,7 +38,7 @@ export function workflowNodeSummary(node: WorkflowNode): string {
     text = typeof value === 'string' ? value : typeof argument === 'string' ? argument : decoded
   } else if (payload?.case === 'takeover') text = payload.value.definition?.when || ''
   else if (payload?.case === 'generation') text = latest?.case === 'generation' ? latest.value.error : payload.value.error
-  else if (payload?.case === 'libraryChange') text = payload.value.reason || payload.value.claim?.when || payload.value.reflex?.when || ''
+  else if (payload?.case === 'libraryChange') text = payload.value.reason || payload.value.claim?.context || payload.value.reflex?.when || ''
   else if (node.item?.kind === 'assistant_response') text = node.item.thinking || node.item.response?.content || ''
   return decisionText(text).replace(/\s+/g, ' ').trim().slice(0, 180)
 }

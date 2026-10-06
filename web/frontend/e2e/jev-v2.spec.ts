@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { anyPack, timestampFromDate } from '@bufbuild/protobuf/wkt'
 import { EventSchema } from '../cyber-ui/packages/aop/src/gen/aop/event_pb'
 import { RuntimeEventSchema } from '../src/gen/types/jev_pb'
+import { ClaimType } from '../src/gen/decision/claim_pb'
+import { claimDefinitions } from '../src/lib/jev-decisions'
 import { file_types_chat } from '../src/gen/types/chat_pb'
 import { file_types_agent } from '../src/gen/types/agent_pb'
 import { file_aop_operation_protocol } from '../cyber-ui/packages/aop/src/gen/aop/operation/protocol_pb'
@@ -33,11 +35,11 @@ test.beforeEach(async ({ page }) => {
 test('natural-language Claims and candidates remain distinct from qualified Reflexes', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
-  await page.evaluate(({ claim, source }) => (window as any).renderJEVLibrary({ mode: 'auto', status: 'ready',
-    claims: [{ id: 'claim-natural', text: claim }],
+  await page.evaluate(({ claim, source, type }) => (window as any).renderJEVLibrary({ mode: 'auto', status: 'ready',
+    claims: [{ id: 'claim-natural', type, context: claim }],
     candidates: [{ id: 'candidate-v2', when: 'Inspect an order', observe: source, apiVersion: 2, manifestJson: '{"steps":{}}', blocker: 'no complete replay of the current recorded trajectory' }],
     reflexes: [{ id: 'qualified-v2', when: 'Inspect an order with native contracts', observe: source, apiVersion: 2, qualificationJson: '{"format":"native-mechanism/1","checks":["syntax","recorded_replay"],"replayed":1,"coverage_gaps":["fault branch has no recorded evidence"]}', manifestJson: '{"steps":{}}' }],
-  }), { claim, source })
+  }), { claim, source, type: ClaimType.noul })
   await page.getByRole('button', { name: 'Reflex', exact: true }).click()
   await page.getByRole('tab', { name: 'Reflex 库' }).click()
   const dialog = page.getByRole('dialog')
@@ -79,15 +81,16 @@ test('compiler rounds and mechanism diagnostics retain separate usage', async ({
   await page.screenshot({ path: info.outputPath('compile-runtime-usage.png'), fullPage: true })
 })
 
-test('Claim generation renders plain descriptions and links to publication', async ({ page }) => {
+test('typed Claim generation rejects legacy drafts and links to publication', async ({ page }) => {
+  expect(claimDefinitions({ claims: [{ text: claim }, '检查当前查询能力是否可用。'] })).toEqual([])
   await render(page, [event(1, { case: 'turnStarted', value: {} }),
-    runtime(2, { case: 'generation', value: { kind: 'claim_llm', state: 'finished', output: JSON.stringify({ claims: [{ text: claim }, '检查当前查询能力是否可用。'] }) } }, true)])
+    runtime(2, { case: 'generation', value: { kind: 'claim_llm', state: 'finished', output: JSON.stringify({ claims: [{ type: 'noul', context: claim }, { type: 'noul', context: '检查当前查询能力是否可用。' }] }) } }, true)])
   await page.locator('[data-record-id="v2-2"]').click()
   await expect(page.getByTestId('workflow-detail').getByTestId('jev-claim-definition')).toHaveCount(2)
   await expect(page.getByTestId('workflow-detail')).toContainText(claim)
   await render(page, [event(1, { case: 'turnStarted', value: {} }),
-    runtime(2, { case: 'generation', value: { kind: 'claim_llm', state: 'finished', output: JSON.stringify({ claims: [{ text: claim }] }) } }, true),
-    runtime(3, { case: 'libraryChange', value: { state: 'claim_published', claim: { id: 'claim-natural', text: claim } } }, true)])
+    runtime(2, { case: 'generation', value: { kind: 'claim_llm', state: 'finished', output: JSON.stringify({ claims: [{ type: 'noul', context: claim }] }) } }, true),
+    runtime(3, { case: 'libraryChange', value: { state: 'claim_published', claim: { id: 'claim-natural', type: ClaimType.noul, context: claim } } }, true)])
   await page.locator('[data-record-id="v2-2"]').click()
   await page.getByRole('button', { name: '查看发布内容' }).click()
   await expect(page.getByTestId('workflow-detail')).toContainText(claim)

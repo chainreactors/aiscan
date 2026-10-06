@@ -122,8 +122,8 @@ func (e *Extension) beforeModel(ctx context.Context, ev hooks.ContextEvent) ([]*
 		e.enqueue(cfg, ev)
 		return nil, nil
 	}
-	question := jevapi.Question{Type: "choice", Instructions: decisionInstructions + " Select the applicable generated capability. Final composition stays with the main model.", Criteria: options}
-	response, err := e.exchange(ctx, "jev_execution", map[string]any{"context": raw, "reflexes": reflexCatalog(lib.Reflexes)}, map[string]jevapi.Question{"entry": question})
+	question := choiceClaim(decisionInstructions+" Select the applicable generated capability. Final composition stays with the main model.", options)
+	response, err := e.exchange(ctx, "jev_execution", json.RawMessage(jsonText(map[string]any{"context": raw, "reflexes": reflexCatalog(lib.Reflexes)})), map[string]Claim{"entry": question})
 	if err != nil {
 		return nil, nil
 	}
@@ -174,7 +174,6 @@ func (e *Extension) beforeModel(ctx context.Context, ev hooks.ContextEvent) ([]*
 	}
 	input["system"] = cfg.SystemPrompt
 	e.updateTask(run, task, func(r *taskRecord) { r.Input = cloneJSONMap(input) })
-	initial := len(private)
 	path := filepath.Join(e.config.Directory, "execution-"+digest([]string{ev.SessionID, ev.TurnID})[:24]+".jsonl")
 	facts := []string{}
 	var reason string
@@ -187,18 +186,18 @@ func (e *Extension) beforeModel(ctx context.Context, ev hooks.ContextEvent) ([]*
 		trace.step = uint32(decisions + calls)
 		return nil
 	})
-	judge := func(request jevapi.Request) (*jevapi.Response, error) {
+	judge := func(claim Claim) (*jevapi.Evaluation, error) {
 		if decisions >= maxDecisions {
 			return nil, handoffError{"JEV decision budget reached"}
 		}
 		decisions++
 		trace.step = uint32(decisions + calls)
 		// Raw constraints are supplied by the host, not replaceable by generated summaries.
-		response, err := e.exchange(ctx, "jev_execution", map[string]any{"context": raw, "state": request.State, "arguments": record.Arguments}, request.Questions)
+		response, err := e.exchange(ctx, "jev_execution", json.RawMessage(jsonText(map[string]any{"context": raw, "arguments": record.Arguments})), map[string]Claim{"runtime": claim})
 		if err != nil {
 			return nil, handoffError{"JEV judgment unavailable: " + err.Error()}
 		}
-		return response, nil
+		return response.Values["runtime"], nil
 	}
 	execute := func(candidate binding) (map[string]any, error) {
 		if cfg.Tools == nil {
@@ -274,7 +273,23 @@ func (e *Extension) beforeModel(ctx context.Context, ev hooks.ContextEvent) ([]*
 			status = "Attempted (tool error; outcome requires review) "
 		}
 		facts = append(facts, status+receiptBinding(call)+"\n"+resultSummary(coretool.ResultText(result)))
-		private = append(private, &aop.Message{Role: "assistant", Name: "jev-step", Content: []*aop.Content{{Value: &aop.Content_ToolCall{ToolCall: call}}}}, &aop.Message{Role: "tool", Name: "jev-step", Content: []*aop.Content{{Value: &aop.Content_ToolResult{ToolResult: result}}}})
+		completed := []*aop.Message{{Role: "assistant", Name: "jev-step", Content: []*aop.Content{{Value: &aop.Content_ToolCall{ToolCall: call}}}}, {Role: "tool", Name: "jev-step", Content: []*aop.Content{{Value: &aop.Content_ToolResult{ToolResult: result}}}}}
+		private = append(private, completed...)
+		// Every ordinary native operation can use completed host evidence at
+		// the next call, including publication and compilation from a Reflex.
+		// The current in-flight call has no result and is never replay evidence.
+		messages := evidenceMessages(completed)
+		data, _ := json.Marshal(messages)
+		e.updateTask(run, task, func(r *taskRecord) {
+			r.Bytes += len(data)
+			if r.Bytes > 32<<10 {
+				r.Evidence = nil
+				r.Overflow = true
+			} else if !r.Overflow {
+				r.Evidence = append(r.Evidence, evidenceSegment{At: len(ev.Messages), Messages: messages})
+			}
+		})
+
 		// Subsequent semantic checks must see the handle/result just returned by
 		// this task. Keeping the entry projection here incorrectly rejects the
 		// next read because its prerequisite did not exist at task entry.
@@ -379,17 +394,6 @@ func (e *Extension) beforeModel(ctx context.Context, ev hooks.ContextEvent) ([]*
 	e.updateTask(run, task, func(r *taskRecord) {
 		r.Blocked = boundary
 		r.Handoff, _ = json.Marshal(map[string]any{"context": raw, "result": output, "reason": ending, "reflex_id": id})
-		if len(private) > initial {
-			messages := evidenceMessages(private[initial:])
-			data, _ := json.Marshal(messages)
-			r.Bytes += len(data)
-			if r.Bytes > 32<<10 {
-				r.Evidence = nil
-				r.Overflow = true
-			} else {
-				r.Evidence = append(r.Evidence, evidenceSegment{At: len(ev.Messages), Messages: messages})
-			}
-		}
 	})
 	facts = append(facts, "Reflex handoff: "+jsonText(map[string]any{"code": code, "detail": ending, "effects": record.Ledger.summary(), "result": output}))
 	return receipt(facts, path, ending), nil

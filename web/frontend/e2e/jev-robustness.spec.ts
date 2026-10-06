@@ -1,3 +1,4 @@
+import { ClaimType } from '../src/gen/decision/claim_pb'
 import { test, expect, type Page } from '@playwright/test'
 import { showExecutionLanes } from './jev-helpers'
 import { create, toBinary, type MessageInitShape } from '@bufbuild/protobuf'
@@ -35,14 +36,14 @@ for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 })
     await mount(page)
     const description = '连续证据与完整参数'.repeat(64)
-    const questions = Object.fromEntries(Array.from({ length: 4 }, (_, i) => [`q${i}`, {
-      type: 'choice', instructionsJson: JSON.stringify(description.repeat(2)),
-      criteriaJson: JSON.stringify(Object.fromEntries(Array.from({ length: 16 }, (_, j) => [`c${j}`, description]))),
+    const claims = Object.fromEntries(Array.from({ length: 4 }, (_, i) => [`q${i}`, {
+      type: ClaimType.choice, context: description.repeat(2),
+      options: Array.from({ length: 16 }, (_, j) => `c${j}: ${description}`),
     }]))
     await render(page, [runtime(1, { case: 'boundary', value: { reason: 'checking' } }),
-      runtime(2, { case: 'decisionRequest', value: { requestId: 'long', questions } }),
-      runtime(3, { case: 'decisionResult', value: { requestId: 'long', answers: Object.fromEntries(
-        Object.keys(questions).map(id => [id, { type: 'choice', choice: 'c15', probabilities: { c15: .9 } }])) } }),
+      runtime(2, { case: 'decisionRequest', value: { requestId: 'long', claims } }),
+      runtime(3, { case: 'decisionResult', value: { requestId: 'long', evaluations: Object.fromEntries(
+        Object.keys(claims).map(id => [id, { value: { case: 'choice', value: `c15: ${description}` }, probabilities: { [`c15: ${description}`]: .9 } }])) } }),
       runtime(4, { case: 'boundary', value: { reason: 'defer' } })])
     const card = page.getByTestId('agent-workflow')
     await expect(card).toHaveCount(1)
@@ -73,10 +74,10 @@ test('200 checkpoints survive duplicate delivery and later updates without losin
   const events = Array.from({ length: 200 }, (_, i) => {
     const segment = `checkpoint-${i}`, seq = i * 4 + 1, requestId = `request-${i}`
     return [runtime(seq, { case: 'boundary', value: { reason: 'checking' } }, segment),
-      runtime(seq + 1, { case: 'decisionRequest', value: { requestId, questions: {
-        next: { type: 'choice', criteriaJson: '{"read":"Inspect","defer":"New reasoning"}' },
+      runtime(seq + 1, { case: 'decisionRequest', value: { requestId, claims: {
+        next: { type: ClaimType.choice, context: "Choose the current operation." + "\nread: Inspect\ndefer: New reasoning", options: ["read","defer"] },
       } } }, segment),
-      runtime(seq + 2, { case: 'decisionResult', value: { requestId, answers: { next: { type: 'choice', choice: 'defer' } } } }, segment),
+      runtime(seq + 2, { case: 'decisionResult', value: { requestId, evaluations: { next: { value: { case: 'choice', value: 'defer' } } } } }, segment),
       runtime(seq + 3, { case: 'boundary', value: { reason: 'defer' } }, segment)]
   }).flat()
   const started = Date.now()
@@ -97,8 +98,8 @@ test('motion inspection records pending and selected states under both motion pr
   for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     await page.emulateMedia({ reducedMotion })
     await render(page, [runtime(1, { case: 'boundary', value: { reason: 'checking' } }),
-      runtime(2, { case: 'decisionRequest', value: { requestId: 'motion', questions: {
-        next: { type: 'choice', criteriaJson: '{"read":"Inspect","defer":"New reasoning"}' },
+      runtime(2, { case: 'decisionRequest', value: { requestId: 'motion', claims: {
+        next: { type: ClaimType.choice, context: "Choose the current operation." + "\nread: Inspect\ndefer: New reasoning", options: ["read","defer"] },
       } } })])
     await page.locator('[data-workflow-node][data-kind=decision]').click()
     await expect(page.getByTestId('jev-decision')).toHaveAttribute('data-state', 'judging')
@@ -106,8 +107,8 @@ test('motion inspection records pending and selected states under both motion pr
     const pending = await page.getByTestId('jev-decision').evaluate(el => [...el.querySelectorAll('*')]
       .map(node => ({ tag: node.tagName, animation: getComputedStyle(node).animationName }))
       .filter(value => value.animation !== 'none'))
-    await render(page, [runtime(3, { case: 'decisionResult', value: { requestId: 'motion', answers: {
-      next: { type: 'choice', choice: 'read', probabilities: { read: .9, defer: .1 } },
+    await render(page, [runtime(3, { case: 'decisionResult', value: { requestId: 'motion', evaluations: {
+      next: { value: { case: 'choice', value: 'read' }, probabilities: { read: .9, defer: .1 } },
     } } })], true)
     await expect(page.getByTestId('jev-decision')).toHaveAttribute('data-state', 'answered')
     await expect(page.locator('[data-option-id=read]')).toHaveAttribute('data-selected', 'true')

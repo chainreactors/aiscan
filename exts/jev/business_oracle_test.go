@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chainreactors/cyber/internal/jevwire"
 	"sort"
 	"sync"
 
@@ -14,8 +15,8 @@ import (
 
 // A test oracle for the laboratory protocol, not a production validator or
 // evidence of real JEV accuracy.
-func independentRuntimeJudgments(req jevapi.Request) map[string]jevapi.Answer {
-	out := map[string]jevapi.Answer{}
+func independentRuntimeJudgments(req jevwire.Request) map[string]jevwire.Answer {
+	out := map[string]jevwire.Answer{}
 	var payload struct {
 		State struct {
 			Arguments map[string]any            `json:"arguments"`
@@ -62,7 +63,7 @@ type VerificationCase struct {
 	ID        string
 	Input     map[string]any
 	Arguments map[string]any
-	Judge     func(jevapi.Request) (*jevapi.Response, error)
+	Judge     func(Claim) (*jevapi.Evaluation, error)
 	Execute   func(NativeCall) (map[string]any, error)
 	Check     func(VerificationRun) error
 }
@@ -265,7 +266,7 @@ func qualifyIndependent(e *Extension, ctx context.Context, r *Reflex, caps map[s
 		}
 		judge := c.Judge
 		if judge == nil {
-			judge = func(jevapi.Request) (*jevapi.Response, error) {
+			judge = func(Claim) (*jevapi.Evaluation, error) {
 				return nil, errors.New("verification case has no judgment evidence")
 			}
 		}
@@ -274,12 +275,12 @@ func qualifyIndependent(e *Extension, ctx context.Context, r *Reflex, caps map[s
 		}
 		originalJudge := judge
 		decisions := 0
-		judge = func(request jevapi.Request) (*jevapi.Response, error) {
+		judge = func(claim Claim) (*jevapi.Evaluation, error) {
 			decisions++
 			if decisions > maxDecisions {
 				return nil, handoffError{"JEV decision budget reached"}
 			}
-			return originalJudge(request)
+			return originalJudge(claim)
 		}
 		if err := s.CheckInput(input, c.Arguments); err != nil {
 			return fmt.Errorf("case %s input: %w", c.ID, err)

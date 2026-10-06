@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 	"github.com/dop251/goja"
 )
 
@@ -13,35 +14,11 @@ const (
 	maxClaims      = 32
 	maxReflexes    = 16
 	maxSourceBytes = 8 << 10
+	libraryFormat  = "claim/2"
 )
 
-// Claim records a reusable judgment for compilation, never an execution route.
-type Claim struct {
-	Text     string            `json:"text,omitempty"`
-	When     string            `json:"when,omitempty"`
-	Question string            `json:"question,omitempty"`
-	Options  map[string]string `json:"options,omitempty"`
-}
-
-func (c *Claim) UnmarshalJSON(data []byte) error {
-	var text string
-	if len(data) > 0 && data[0] == '"' {
-		if err := json.Unmarshal(data, &text); err != nil {
-			return err
-		}
-		*c = Claim{Text: text}
-		return nil
-	}
-	type plain Claim
-	var value plain
-	decoder := json.NewDecoder(strings.NewReader(string(data)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&value); err != nil {
-		return err
-	}
-	*c = Claim(value)
-	return nil
-}
+// Claim describes a semantic judgment; evidence and execution belong to its consumers.
+type Claim = jevapi.Claim
 
 // Reflex is one runtime-generated JavaScript function. The historical field
 // name Observe contains the whole executable function, not a second observer.
@@ -61,22 +38,48 @@ type Reflex struct {
 
 type claimRecord struct {
 	Claim
-	Task     string `json:"task"`
-	Consumed bool   `json:"consumed"`
+	Task string `json:"task"`
 }
 
 func (c *claimRecord) UnmarshalJSON(data []byte) error {
-	type claimPlain Claim
-	var value struct {
-		claimPlain
-		Task     string `json:"task"`
-		Consumed bool   `json:"consumed"`
-	}
-	if err := json.Unmarshal(data, &value); err != nil {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	*c = claimRecord{Claim: Claim(value.claimPlain), Task: value.Task, Consumed: value.Consumed}
+	task := fields["task"]
+	delete(fields, "task")
+	claim, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	var value Claim
+	if err = json.Unmarshal(claim, &value); err != nil {
+		return err
+	}
+	var source string
+	if len(task) != 0 {
+		if err = json.Unmarshal(task, &source); err != nil {
+			return err
+		}
+	}
+	*c = claimRecord{Claim: value, Task: source}
 	return nil
+}
+
+func (c claimRecord) MarshalJSON() ([]byte, error) {
+	data, err := json.Marshal(c.Claim)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err = json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	fields["task"], err = json.Marshal(c.Task)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(fields)
 }
 
 type reflexRecord struct {
@@ -86,36 +89,12 @@ type reflexRecord struct {
 	Blocker   string            `json:"blocker,omitempty"`
 }
 type library struct {
+	Format     string                  `json:"format"`
 	Claims     map[string]claimRecord  `json:"claims"`
 	Reflexes   map[string]reflexRecord `json:"reflexes"`
 	Candidates map[string]reflexRecord `json:"candidates,omitempty"`
-	Compiled   map[string]bool         `json:"compiled"` // Derived compatibility field, never an execution index.
 }
 
-func (c Claim) validate() error {
-	if c.Text != "" {
-		if strings.TrimSpace(c.Text) == "" || len(c.Text) > 8192 {
-			return errors.New("invalid natural-language Claim")
-		}
-		return nil
-	}
-	if strings.TrimSpace(c.When) == "" || strings.TrimSpace(c.Question) == "" || len(c.When)+len(c.Question) > 4096 || len(c.Options) < 2 || len(c.Options) > 16 || strings.TrimSpace(c.Options[Defer]) == "" {
-		return errors.New("invalid Claim decision space")
-	}
-	for id, option := range c.Options {
-		if strings.TrimSpace(id) == "" || len(id) > 64 || strings.TrimSpace(option) == "" || len(option) > 1024 {
-			return errors.New("invalid Claim option")
-		}
-	}
-	return nil
-}
-
-func (c Claim) description() string {
-	if c.Text != "" {
-		return c.Text
-	}
-	return strings.TrimSpace(c.When + "\n" + c.Question + "\n" + jsonText(c.Options))
-}
 func (r *Reflex) validate() error {
 	if strings.TrimSpace(r.When) == "" || strings.TrimSpace(r.Decide) == "" || len(r.When)+len(r.Decide) > 8192 || strings.TrimSpace(r.Observe) == "" || len(r.Observe) > 16<<10 {
 		return errors.New("invalid Reflex scene")

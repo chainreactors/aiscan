@@ -1,3 +1,4 @@
+import { ClaimType } from '../src/gen/decision/claim_pb'
 import { test, expect } from '@playwright/test'
 import { showExecutionLanes } from './jev-helpers'
 import { create, toBinary, type MessageInitShape } from '@bufbuild/protobuf'
@@ -6,10 +7,10 @@ import { EventSchema } from '../cyber-ui/packages/aop/src/gen/aop/event_pb'
 import { RuntimeEventSchema } from '../src/gen/types/jev_pb'
 
 const definition = { id: 'evidence-loop', when: 'Read requested public evidence', decide: 'Inspect, execute a bound read, then report or defer', observe: 'js:({state: {}, candidates: []})', claimIds: ['evidence-claim'] }
-const questions = {
-  next: { type: 'choice', instructionsJson: 'Choose the next operation', criteriaJson: JSON.stringify({ winner: 'Highest probability', picked: 'Actual returned selection', unknown: 'Probability not returned' }) },
-  risk: { type: 'score', instructionsJson: 'How much risk does this action carry?', criteriaJson: JSON.stringify(['Low', 'Medium', 'High']) },
-  enough: { type: 'noul', instructionsJson: 'Is the evidence sufficient?', criteriaJson: 'null' },
+const claims = {
+  next: { type: ClaimType.choice, context: 'Choose the next operation' + "\nwinner: Highest probability\npicked: Actual returned selection\nunknown: Probability not returned", options: ["winner","picked","unknown"] },
+  risk: { type: ClaimType.score, context: 'How much risk does this action carry?', options: ['Low', 'Medium', 'High'] },
+  enough: { type: ClaimType.noul, context: 'Is the evidence sufficient?' },
 }
 function event(seq: number, payload: MessageInitShape<typeof EventSchema>['payload']) {
   return create(EventSchema, { id: `event-${seq}`, sessionId: 'session-1', turnId: 'turn-1', emitter: 'agent', seq: BigInt(seq), emittedAt: timestampFromDate(new Date(1700000000000 + seq * 1000)), payload })
@@ -27,16 +28,16 @@ test('live judgments show choice distribution, native score and noul before actu
   await page.goto('/e2e/fixtures/jev.html')
   await render(page, [event(1, { case: 'turnStarted', value: {} }),
     runtime(2, { case: 'observation', value: { stateJson: '{"page":"Public documentation","items":[1,2]}', candidatesJson: '{}' } }),
-    runtime(3, { case: 'decisionRequest', value: { requestId: 'live', purpose: 'jev_execution', questions } })])
+    runtime(3, { case: 'decisionRequest', value: { requestId: 'live', purpose: 'jev_execution', claims } })])
   await expect(page.getByTestId('agent-workflow')).toHaveAttribute('open', '')
   await page.locator('[data-record-id="event-3"]').click()
   await expect(page.getByTestId('jev-decision')).toHaveAttribute('data-state', 'judging')
   await expect(page.locator('[data-selected=true]')).toHaveCount(0)
   await expect(page.getByTestId('jev-question').filter({ hasText: '正在判断' })).toHaveCount(3)
   const call = { id: 'read', name: 'read-evidence', arguments: { data: new TextEncoder().encode('{"target":"public"}') } }
-  await render(page, [runtime(4, { case: 'decisionResult', value: { requestId: 'live', elapsedMs: 275, usage: {inputTokens:120n,outputTokens:15n}, answers: {
-    next: { type: 'choice', choice: 'picked', confidence: .7, probabilities: { winner: .7, picked: .3 } },
-    risk: { type: 'score', score: 1.4, confidence: .8 }, enough: { type: 'noul', noul: .73, confidence: .6 },
+  await render(page, [runtime(4, { case: 'decisionResult', value: { requestId: 'live', elapsedMs: 275, usage: {inputTokens:120n,outputTokens:15n}, evaluations: {
+    next: { value: { case: 'choice', value: 'picked' }, confidence: .7, probabilities: { winner: .7, picked: .3 } },
+    risk: { value: { case: 'score', value: 1.4 }, confidence: .8 }, enough: { value: { case: 'noul', value: .73 }, confidence: .6 },
   } } }), runtime(5, { case: 'takeover', value: { definition } }), runtime(6, { case: 'dispatch', value: { call, candidateId: 'picked', read: true } })], true)
   await expect(page.getByTestId('jev-check')).toHaveCount(0)
   await expect(page.getByTestId('agent-workflow')).toHaveAttribute('open', '')
@@ -65,10 +66,10 @@ test('compilation keeps generation, review, publication and a failed retry in ch
   await page.addInitScript(() => localStorage.setItem('cyber-locale', 'zh'))
   await page.goto('/e2e/fixtures/jev.html')
   const records = [runtime(1, { case: 'generation', value: { kind: 'claim_llm', state: 'started' } }, true),
-    runtime(2, { case: 'generation', value: { kind: 'claim_llm', state: 'finished', output: '[{"when":"Evidence is needed","question":"What next?","options":{"read":"Read evidence","stop":"Done"}}]' } }, true),
-    runtime(3, { case: 'libraryChange', value: { state: 'claim_published', claim: { id: 'evidence-claim', when: 'Evidence is needed', question: 'What next?', options: { read: 'Read evidence', stop: 'Done' } } } }, true),
-    runtime(4, { case: 'decisionRequest', value: { requestId: 'compile', questions: { compile: { type: 'choice', criteriaJson: '{"compile":"Build scene","defer":"Wait"}' } } } }, true),
-    runtime(5, { case: 'decisionResult', value: { requestId: 'compile', answers: { compile: { type: 'choice', choice: 'compile', probabilities: { compile: .8, defer: .2 } } } } }, true),
+    runtime(2, { case: 'generation', value: { kind: 'claim_llm', state: 'finished', output: '[{"type":"choice","context":"Evidence is needed. read: Read evidence; stop: Done.","options":["read","stop"]}]' } }, true),
+    runtime(3, { case: 'libraryChange', value: { state: 'claim_published', claim: { id: 'evidence-claim', type: ClaimType.choice, context: 'Evidence is needed. read: Read evidence; stop: Done.', options: ['read', 'stop'] } } }, true),
+    runtime(4, { case: 'decisionRequest', value: { requestId: 'compile', claims: { compile: { type: ClaimType.choice, context: "Choose the current operation." + "\ncompile: Build scene\ndefer: Wait", options: ["compile","defer"] } } } }, true),
+    runtime(5, { case: 'decisionResult', value: { requestId: 'compile', evaluations: { compile: { value: { case: 'choice', value: 'compile' }, probabilities: { compile: .8, defer: .2 } } } } }, true),
     runtime(6, { case: 'generation', value: { kind: 'reflex_llm', state: 'started' } }, true),
     runtime(7, { case: 'generation', value: { kind: 'reflex_llm', state: 'finished', error: 'Invalid binding', errorStage:'reader', attempt:2,requestId:'reflex-draft-2' } }, true),
     runtime(8, { case: 'libraryChange', value: { state: 'failed', reason: 'Native binding is missing' } }, true)]

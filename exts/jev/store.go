@@ -1,6 +1,7 @@
 package jev
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -126,23 +127,23 @@ func (r *Extension) audit(kind string, value any) error {
 }
 
 // snapshot transfers immutable definitions to an in-flight decision. Publication
-// and one-shot consumption are serialized with the durable library replacement.
+// is serialized with the durable library replacement.
 func (e *Extension) snapshot() library {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	out := e.library.clone()
-	out.Compiled = publishedGroups(out)
 	return out
 }
 
 func (lib library) clone() library {
 	out := library{
+		Format:     lib.Format,
 		Claims:     maps.Clone(lib.Claims),
 		Reflexes:   maps.Clone(lib.Reflexes),
 		Candidates: maps.Clone(lib.Candidates),
 	}
 	for id, claim := range out.Claims {
-		claim.Options = maps.Clone(claim.Options)
+		claim.Options = append([]string(nil), claim.Options...)
 		out.Claims[id] = claim
 	}
 	for id, reflex := range out.Reflexes {
@@ -197,23 +198,23 @@ func (e *Extension) loadLibrary() error {
 		return err
 	}
 	var lib library
-	if len(data) > 2<<20 || json.Unmarshal(data, &lib) != nil || lib.Claims == nil || lib.Reflexes == nil || len(lib.Claims) > maxClaims || len(lib.Reflexes) > maxReflexes || len(lib.Candidates) > maxReflexes {
+	var header struct {
+		Format string `json:"format"`
+	}
+	if json.Unmarshal(data, &header) != nil || header.Format != libraryFormat {
+		return errors.New("unsupported JEV library format")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if len(data) > 2<<20 || decoder.Decode(&lib) != nil || lib.Format != libraryFormat || lib.Claims == nil || lib.Reflexes == nil || len(lib.Claims) > maxClaims || len(lib.Reflexes) > maxReflexes || len(lib.Candidates) > maxReflexes {
 		return errors.New("invalid JEV library format")
 	}
 	for id, c := range lib.Claims {
-		if c.validate() != nil || id != "c"+digest(c.Claim)[:16] {
+		if c.Validate() != nil || id != "c"+digest(c.Claim)[:16] {
 			return fmt.Errorf("invalid Claim %s", id)
 		}
 	}
-	var fields map[string]json.RawMessage
-	_ = json.Unmarshal(data, &fields)
 	changed := false
-	for field := range fields {
-		if field != "claims" && field != "reflexes" && field != "compiled" && field != "candidates" {
-			changed = true
-		}
-	}
-	lib.Compiled = nil
 	for id, r := range lib.Candidates {
 		if r.Proof != nil || r.validate() != nil || id != "r"+digest(r.Reflex)[:16] {
 			return fmt.Errorf("invalid candidate %s", id)
@@ -252,16 +253,6 @@ func (e *Extension) loadLibrary() error {
 		lib.Reflexes[id] = r
 	}
 	if changed {
-		for id, c := range lib.Claims {
-			c.Consumed = false
-			for _, r := range lib.Reflexes {
-				if slices.Contains(r.Claims, id) {
-					c.Consumed = true
-					break
-				}
-			}
-			lib.Claims[id] = c
-		}
 		if err = e.backupLibrary(data); err != nil {
 			return fmt.Errorf("back up unsupported source: %w", err)
 		}
@@ -284,7 +275,7 @@ func (e *Extension) backupLibrary(data []byte) error {
 }
 
 func (e *Extension) saveLibrary(lib library) error {
-	lib.Compiled = publishedGroups(lib)
+	lib.Format = libraryFormat
 	data, err := json.MarshalIndent(lib, "", "  ")
 	if err != nil {
 		return err
@@ -368,7 +359,7 @@ func (e *Extension) archivedReflex(id, claim string) (string, reflexRecord, bool
 			continue
 		}
 		var archived library
-		if json.Unmarshal(data, &archived) != nil {
+		if json.Unmarshal(data, &archived) != nil || archived.Format != libraryFormat {
 			continue
 		}
 		for key, source := range archived.Reflexes {

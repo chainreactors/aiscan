@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
+	"github.com/chainreactors/cyber/internal/jevwire"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +21,7 @@ func TestClientUsesReusableHTTP1WhenServerAlsoOffersHTTP2(t *testing.T) {
 		if r.ProtoMajor != 1 {
 			t.Errorf("unexpected inference protocol: %s", r.Proto)
 		}
-		_, _ = w.Write([]byte(`{"answers":{"q":{"type":"choice","choice":"yes"}},"usage":{"input_tokens":20,"output_tokens":1}}`))
+		_, _ = w.Write([]byte(`{"answers":{"claim":{"type":"choice","choice":"yes"}},"usage":{"input_tokens":20,"output_tokens":1}}`))
 	}))
 	server.EnableHTTP2 = true
 	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
@@ -39,8 +39,8 @@ func TestClientUsesReusableHTTP1WhenServerAlsoOffersHTTP2(t *testing.T) {
 	// conceal a mismatch inherited from an initialized default transport.
 	transport.TLSClientConfig.RootCAs = server.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs
 	for range 2 {
-		out, err := client.Exchange(t.Context(), Request{State: json.RawMessage(`{}`), Questions: map[string]Question{"q": {Type: "choice", Criteria: map[string]string{"yes": "Ready"}}}})
-		if err != nil || out.Answers["q"].Choice != "yes" {
+		out, err := client.Choice(t.Context(), &Claim{Type: ClaimChoice, Context: "Ready?", Options: []string{"yes", "no"}})
+		if err != nil || out != "yes" {
 			t.Fatalf("response=%v err=%v", out, err)
 		}
 	}
@@ -49,11 +49,16 @@ func TestClientUsesReusableHTTP1WhenServerAlsoOffersHTTP2(t *testing.T) {
 	}
 }
 
-func TestNativePrimitivesPreserveStructuredQuestionsAndAnswers(t *testing.T) {
-	questions := map[string]Question{
-		"route":   {Type: "choice", Instructions: map[string]any{"question": "Select a route", "context": []string{"current goal"}}, Criteria: map[string]any{"browser": map[string]string{"description": "Interactive page"}, "other": nil}},
-		"impact":  {Type: "score", Instructions: "Rate impact", Criteria: []any{"none", map[string]string{"description": "bounded"}, "large"}},
-		"present": {Type: "noul", Instructions: "Is the element present?"},
+func TestEvaluatePreservesTypedClaimsAndNativeMetadata(t *testing.T) {
+	claims := map[string]Claim{
+		"route":   {Type: ClaimChoice, Context: "Select browser for an interactive page, otherwise other.", Options: []string{"browser", "other"}},
+		"impact":  {Type: ClaimScore, Context: "Rate impact from none to large.", Options: []string{"none", "bounded", "large"}},
+		"present": {Type: ClaimNoul, Context: "Is the element present?"},
+	}
+	questions := map[string]jevwire.Question{
+		"route":   {Type: "choice", Instructions: claims["route"].Context, Criteria: json.RawMessage(`{"browser":"browser","other":"other"}`)},
+		"impact":  {Type: "score", Instructions: claims["impact"].Context, Criteria: json.RawMessage(`["none","bounded","large"]`)},
+		"present": {Type: "noul", Instructions: claims["present"].Context},
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
@@ -79,42 +84,48 @@ func TestNativePrimitivesPreserveStructuredQuestionsAndAnswers(t *testing.T) {
 	client := New("key", DefaultModel, time.Second)
 	defer client.Close()
 	client.Endpoint = server.URL
-	out, err := client.Exchange(t.Context(), Request{State: json.RawMessage(`{"page":"current"}`), Questions: questions})
+	out, err := client.Evaluate(t.Context(), claims)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if choice, err := out.Choice("route", questions["route"]); err != nil || choice != "browser" {
+	if choice, err := out.Choice("route", claims["route"]); err != nil || choice != "browser" {
 		t.Fatalf("choice: %q %v", choice, err)
 	}
-	if score, err := out.Score("impact", questions["impact"]); err != nil || score != 1.25 {
+	if score, err := out.Score("impact", claims["impact"]); err != nil || score != 1.25 {
 		t.Fatalf("score: %v %v", score, err)
 	}
-	if probability, err := out.Noul("present"); err != nil || probability != 0 {
+	if probability, err := out.Noul("present", claims["present"]); err != nil || probability != 0 {
 		t.Fatalf("noul: %v %v", probability, err)
 	}
-	if out.Answers["impact"].Legend["1"] != "bounded" || out.Answers["route"].Probabilities["browser"] != 0.8 {
+	if out.Values["impact"].Probabilities["1"] != 0.75 || out.Values["route"].Probabilities["browser"] != 0.8 || out.Values["route"].Confidence != 0.6 {
 		t.Fatal("native evidence lost")
 	}
 }
 
 func TestNumericAnswersRejectMissingWrongTypeAndOutOfRangeValues(t *testing.T) {
-	for _, kind := range []string{"score", "noul"} {
-		for _, test := range []struct {
-			name       string
-			value      *float64
-			answerType string
-		}{
-			{"missing", nil, kind}, {"negative", new(-0.1), kind}, {"too large", new(1.1), kind},
-			{"nan", new(math.NaN()), kind}, {"infinite", new(math.Inf(1)), kind}, {"wrong type", new(0.5), "choice"},
+	for _, kind := range []ClaimType{ClaimScore, ClaimNoul} {
+		for _, head := range []string{
+			`{"type":"` + kind.String() + `"}`, `{"type":"choice","choice":"yes"}`,
+			`{"type":"` + kind.String() + `","` + kind.String() + `":-0.1}`,
+			`{"type":"` + kind.String() + `","` + kind.String() + `":1.1}`,
+			`{"type":"` + kind.String() + `","` + kind.String() + `":"NaN"}`,
+			`{"type":"` + kind.String() + `","` + kind.String() + `":1e400}`,
 		} {
-			t.Run(kind+"/"+test.name, func(t *testing.T) {
-				answer := Answer{Type: test.answerType, Score: test.value, Noul: test.value}
-				out := &Response{Answers: map[string]Answer{"q": answer}}
+			t.Run(head, func(t *testing.T) {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_, _ = w.Write([]byte(`{"answers":{"claim":` + head + `}}`))
+				}))
+				defer server.Close()
+				client := New("", "", time.Second)
+				defer client.Close()
+				client.Endpoint = server.URL
+				claim := &Claim{Type: kind, Context: "Evaluate current evidence"}
 				var err error
-				if kind == "score" {
-					_, err = out.Score("q", Question{Type: "score", Criteria: []string{"low", "high"}})
+				if kind == ClaimScore {
+					claim.Options = []string{"low", "high"}
+					_, err = client.Score(t.Context(), claim)
 				} else {
-					_, err = out.Noul("q")
+					_, err = client.Noul(t.Context(), claim)
 				}
 				if err == nil {
 					t.Fatal("invalid numeric answer accepted")
@@ -127,7 +138,7 @@ func TestNumericAnswersRejectMissingWrongTypeAndOutOfRangeValues(t *testing.T) {
 func TestRetriesAccountForMissingUsageAndPreserveBatch(t *testing.T) {
 	var calls atomic.Int64
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req Request
+		var req jevwire.Request
 		if json.NewDecoder(r.Body).Decode(&req) != nil || len(req.Questions) != 2 {
 			t.Error("batch not preserved")
 		}
@@ -141,8 +152,8 @@ func TestRetriesAccountForMissingUsageAndPreserveBatch(t *testing.T) {
 	c := New("key", DefaultModel, time.Second)
 	defer c.Close()
 	c.Endpoint = s.URL
-	q := map[string]Question{"entry": {Type: "choice", Criteria: map[string]string{"run": "run"}}, "run": {Type: "choice", Criteria: map[string]string{"go": "go"}}}
-	out, err := c.Exchange(t.Context(), Request{State: json.RawMessage(`{}`), Questions: q})
+	q := map[string]jevwire.Question{"entry": {Type: "choice", Criteria: json.RawMessage(`{"run":"run"}`)}, "run": {Type: "choice", Criteria: json.RawMessage(`{"go":"go"}`)}}
+	out, err := c.exchange(t.Context(), jevwire.Request{State: json.RawMessage(`{}`), Questions: q})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,12 +172,16 @@ func TestClientRejectsRedirectsAndInvalidSelectedAnswers(t *testing.T) {
 	c := New("key", DefaultModel, time.Second)
 	defer c.Close()
 	c.Endpoint = s.URL
-	_, err := c.Exchange(t.Context(), Request{State: json.RawMessage(`{}`), Questions: map[string]Question{"q": {Type: "choice"}}})
+	_, err := c.exchange(t.Context(), jevwire.Request{State: json.RawMessage(`{}`), Questions: map[string]jevwire.Question{"q": {Type: "choice"}}})
 	if err == nil || targetCalls.Load() != 0 {
 		t.Fatal("redirect followed")
 	}
-	out := &Response{Answers: map[string]Answer{"q": {Type: "choice", Choice: "unknown"}}}
-	if _, err = out.Choice("q", Question{Type: "choice", Criteria: map[string]string{"known": "known"}}); err == nil {
+	invalid := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"answers":{"claim":{"type":"choice","choice":"unknown"}}}`))
+	}))
+	defer invalid.Close()
+	c.Endpoint = invalid.URL
+	if _, err = c.Choice(t.Context(), &Claim{Type: ClaimChoice, Context: "Choose a known result", Options: []string{"known", "defer"}}); err == nil {
 		t.Fatal("unbound answer accepted")
 	}
 }
@@ -177,7 +192,7 @@ func TestDroppedConnectionsRetryTheSameJudgmentAndAccountForUsage(t *testing.T) 
 			var calls atomic.Int64
 			body := `{"answers":{"q":{"type":"choice","choice":"yes"}},"usage":{"input_tokens":20,"output_tokens":1}}`
 			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var req Request
+				var req jevwire.Request
 				if json.NewDecoder(r.Body).Decode(&req) != nil || len(req.Questions) != 1 || string(req.State) != `{"ready":true}` {
 					t.Error("retry changed the judgment")
 				}
@@ -201,12 +216,12 @@ func TestDroppedConnectionsRetryTheSameJudgmentAndAccountForUsage(t *testing.T) 
 			c := New("key", DefaultModel, 2*time.Second)
 			defer c.Close()
 			c.Endpoint = s.URL
-			q := Question{Type: "choice", Criteria: map[string]string{"yes": "ready", "no": "not ready"}}
-			out, err := c.Exchange(t.Context(), Request{State: json.RawMessage(`{"ready":true}`), Questions: map[string]Question{"q": q}})
+			q := Claim{Type: ClaimChoice, Context: "Is it ready?" + jevwire.EvidenceMarker + `{"ready":true}`, Options: []string{"yes", "no"}}
+			out, err := c.Evaluate(t.Context(), map[string]Claim{"q": q})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if choice, err := out.Choice("q", q); err != nil || choice != "yes" || calls.Load() != 2 || out.Attempts != 2 || out.TokenUsage().Detail["usage_missing"] != 1 || c.Usage().Detail["usage_missing"] != 1 || c.Usage().InputTokens != 20 {
+			if choice, err := out.Choice("q", q); err != nil || choice != "yes" || calls.Load() != 2 || out.TokenUsage().Detail["requests"] != 2 || out.TokenUsage().Detail["usage_missing"] != 1 || c.Usage().Detail["usage_missing"] != 1 || c.Usage().InputTokens != 20 {
 				t.Fatalf("choice=%s error=%v calls=%d usage=%v", choice, err, calls.Load(), c.Usage())
 			}
 		})
@@ -230,7 +245,7 @@ func TestDroppedConnectionRetriesRespectAttemptAndTimeBudgets(t *testing.T) {
 			c := New("key", DefaultModel, budget)
 			defer c.Close()
 			c.Endpoint = s.URL
-			out, err := c.Exchange(t.Context(), Request{State: json.RawMessage(`{}`), Questions: map[string]Question{"q": {Type: "choice"}}})
+			out, err := c.exchange(t.Context(), jevwire.Request{State: json.RawMessage(`{}`), Questions: map[string]jevwire.Question{"q": {Type: "choice"}}})
 			want := int64(3)
 			if budget < 250*time.Millisecond {
 				want = 1
