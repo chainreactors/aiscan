@@ -103,7 +103,7 @@ func TestLiveClaimToReflexPipeline(t *testing.T) {
 			}
 		}
 		var err error
-		llm, err = provider.NewProvider(&provider.ProviderConfig{Provider: os.Getenv("CYBER_PROVIDER"), APIKey: os.Getenv("CYBER_API_KEY"), BaseURL: os.Getenv("CYBER_BASE_URL"), Model: os.Getenv("CYBER_MODEL"), Timeout: 60})
+		llm, err = provider.NewProvider(&provider.ProviderConfig{Provider: os.Getenv("CYBER_PROVIDER"), APIKey: os.Getenv("CYBER_API_KEY"), BaseURL: os.Getenv("CYBER_BASE_URL"), Model: os.Getenv("CYBER_MODEL"), Timeout: int(backgroundRequestTimeout / time.Second)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -367,7 +367,7 @@ func runClaimPipeline(t *testing.T, mode string, client *jevapi.Client, real pro
 			}
 		}()
 	}
-	e, cfg, _ := testInstallationWithExtensions(t, Config{Mode: "auto", Directory: dir, CompilationTimeout: "90s"}, client, f.contribution())
+	e, cfg, _ := testInstallationWithExtensions(t, Config{Mode: "auto", Directory: dir}, client, f.contribution())
 	observePipeline(t, e)
 	if lib := e.snapshot(); len(lib.Claims)+len(lib.Reflexes)+len(lib.Candidates) != 0 {
 		t.Fatal("cold installation is not empty")
@@ -379,8 +379,7 @@ func runClaimPipeline(t *testing.T, mode string, client *jevapi.Client, real pro
 	}
 	cfg.SystemPrompt += "\n" + Prompt + "\n" + "claimlab inspect <target> is an effect-free native command returning JSON {target,receipt}. Invoke it through bash with its documented command string and quote the literal target exactly."
 	cfg.SessionID = "claim-pipeline-cold"
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
-	defer cancel()
+	ctx := t.Context()
 	result, err := agent.NewAgent(cfg).Run(ctx, agent.TextInput(pipelineTask(coldTarget)))
 	if err != nil {
 		report.Error = err.Error()

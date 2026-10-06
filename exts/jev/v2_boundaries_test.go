@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chainreactors/cyber/agent"
 	"github.com/chainreactors/cyber/agent/hooks"
@@ -379,6 +380,9 @@ func TestReflexV2CompilerEffortAndCancellationOwnItsLifetime(t *testing.T) {
 		providerCalls++
 		if req.ReasoningEffort != "none" {
 			t.Error("compiler lost configured reasoning effort")
+		}
+		if req.Timeout < 30*time.Minute {
+			t.Error("compiler inherited a short foreground request deadline")
 		}
 		return reply(provider.TextMessage("assistant", "null")), nil
 	})}}}

@@ -55,6 +55,7 @@ func (p compilerProvider) ChatCompletion(ctx context.Context, req *provider.Chat
 	copy := *req
 	copy.ReasoningEffort = p.effort
 	copy.Purpose = "compilation"
+	copy.Timeout = backgroundRequestTimeout
 	p.owner.rounds++
 	id := aop.EnvelopeID()
 	start := time.Now()

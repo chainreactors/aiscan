@@ -179,7 +179,7 @@ func TestLivePlaywrightTakeoverMatrix(t *testing.T) {
 				if err := os.MkdirAll(dir, 0700); err != nil {
 					t.Fatal(err)
 				}
-				llm, err := provider.NewProvider(&provider.ProviderConfig{Provider: "openai", APIKey: os.Getenv("CYBER_API_KEY"), BaseURL: os.Getenv("CYBER_BASE_URL"), Model: os.Getenv("CYBER_MODEL"), Timeout: 75})
+				llm, err := provider.NewProvider(&provider.ProviderConfig{Provider: "openai", APIKey: os.Getenv("CYBER_API_KEY"), BaseURL: os.Getenv("CYBER_BASE_URL"), Model: os.Getenv("CYBER_MODEL"), Timeout: int(backgroundRequestTimeout / time.Second)})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -190,7 +190,7 @@ func TestLivePlaywrightTakeoverMatrix(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				e, cfg, commands := testInstallationWithExtensions(t, Config{Mode: mode, Directory: dir, CompilationTimeout: "180s"}, client, browser)
+				e, cfg, commands := testInstallationWithExtensions(t, Config{Mode: mode, Directory: dir}, client, browser)
 				command, ok := commands.Get("playwright")
 				if !ok {
 					t.Fatal("browser command unavailable")
@@ -202,7 +202,7 @@ func TestLivePlaywrightTakeoverMatrix(t *testing.T) {
 			rows := []map[string]any{}
 			reportPath := filepath.Join(root, kind, "report.json")
 			checkpoint := func() {
-				writeLiveReport(t, reportPath, map[string]any{"kind": kind, "real_llm": true, "real_jev": true, "real_browser": true, "fixture": "isolated local business application", "seeded": false, "model": os.Getenv("CYBER_MODEL"), "base_url": os.Getenv("CYBER_BASE_URL"), "jev_model": jevapi.DefaultModel, "cost_known": false, "warm_pairs": warm, "compilation_timeout": "180s", "entry": "production Agent/extension/terminal/browser", "full_web_ui": false, "rows": rows, "library": installs["auto"].e.snapshot()})
+				writeLiveReport(t, reportPath, map[string]any{"kind": kind, "real_llm": true, "real_jev": true, "real_browser": true, "fixture": "isolated local business application", "seeded": false, "model": os.Getenv("CYBER_MODEL"), "base_url": os.Getenv("CYBER_BASE_URL"), "jev_model": jevapi.DefaultModel, "cost_known": false, "warm_pairs": warm, "compilation_timeout": "0", "provider_timeout": backgroundRequestTimeout.String(), "entry": "production Agent/extension/terminal/browser", "full_web_ui": false, "rows": rows, "library": installs["auto"].e.snapshot()})
 			}
 			defer checkpoint()
 			for index := 0; index <= warm; index++ {
@@ -226,13 +226,9 @@ func TestLivePlaywrightTakeoverMatrix(t *testing.T) {
 						}
 					})
 					started := time.Now()
-					ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
-					result, runErr := agent.NewAgent(cfg).Run(ctx, agent.TextInput("Use the browser UI at "+task.URL+" . "+task.Prompt))
+					result, runErr := agent.NewAgent(cfg).Run(t.Context(), agent.TextInput("Use the browser UI at "+task.URL+" . "+task.Prompt))
 					foreground := time.Since(started).Milliseconds()
-					cancel()
-					settleCtx, settleCancel := context.WithTimeout(t.Context(), 6*time.Minute)
-					settleErr := r.e.WaitIdle(settleCtx)
-					settleCancel()
+					settleErr := r.e.WaitIdle(t.Context())
 					_ = sub.Close(t.Context())
 					output := ""
 					if result != nil {

@@ -19,6 +19,8 @@ import (
 	coretool "github.com/chainreactors/cyber/core/tool"
 )
 
+const backgroundRequestTimeout = 30 * time.Minute
+
 // declaration is one admitted output boundary, not a collection of examples.
 type declaration struct {
 	cfg         agent.Config
@@ -273,7 +275,7 @@ func (e *Extension) generate(ctx context.Context, cfg agent.Config, prompt strin
 	if prompt == compilePrompt {
 		maxTokens = 16384 // Includes provider reasoning; code/output size stays bounded below.
 	}
-	resp, err := cfg.Provider.ChatCompletion(ctx, &provider.ChatCompletionRequest{Model: cfg.Model, Messages: []*aop.Message{provider.TextMessage("system", prompt), provider.TextMessage("user", string(data))}, MaxTokens: maxTokens, CacheRetention: cfg.CacheRetention, ReasoningEffort: e.config.DeclarationEffort, JSONOutput: true})
+	resp, err := cfg.Provider.ChatCompletion(ctx, &provider.ChatCompletionRequest{Model: cfg.Model, Messages: []*aop.Message{provider.TextMessage("system", prompt), provider.TextMessage("user", string(data))}, MaxTokens: maxTokens, CacheRetention: cfg.CacheRetention, ReasoningEffort: e.config.DeclarationEffort, JSONOutput: true, Timeout: backgroundRequestTimeout})
 	record := map[string]any{"request_id": requestID, "attempt": attempt, "requested_effort": e.config.DeclarationEffort, "model": cfg.Model, "elapsed_ms": time.Since(started).Milliseconds()}
 	if trace := traceFrom(ctx); trace != nil {
 		record["session_id"], record["turn_id"], record["task_id"], record["boundary_id"] = trace.session, trace.turn, trace.task, trace.boundary

@@ -40,6 +40,8 @@ flowchart LR
 
 编译失败保留 Claim，证据或契约不足时可以保留待验证候选。修复只有通过验证并成功持久化后才替换原 Reflex；失败保留原源码。Reflex 退役也不会删除它覆盖的 Claim，后续证据可以再次触发编译。`learning=frozen` 禁止学习写入，仍允许临时判断和已验证 Reflex 的复用。
 
+后台 Claim 生成和编译的单次 LLM 请求使用 30 分钟兜底期限，独立于前台 Provider 的短请求超时。总编译期限 `compilation_timeout` 默认 `0`，允许普通编译 Agent 持续生成、验证和修复；显式配置正值才增加整体兜底。扩展关闭或宿主取消仍立即终止请求。超时用于回收异常挂起，不用于限制正常编译耗时。
+
 持久库使用 `format: "claim/2"`。缺少该版本、旧 Claim 字段或旧库版本直接拒绝加载，不迁移、不重写旧文件。
 
 ## 普通 Reflex 的自举
@@ -92,7 +94,7 @@ go test -tags 'full sqlite' ./cmd/aiscan -run '^TestJEVProfileStreamingCompilati
 普通测试只替换模型推理，仍使用真实宿主和验证器。`TestLiveClaimToReflexPipeline` 提供两个明确区分的真实接口模式：设置 `JEV_PIPELINE_LIVE=1` 和 `TYPESAFE_API_KEY`，所有 JEV 判定调用真实接口，LLM 生成仍由固定测试响应提供；额外设置 `JEV_PIPELINE_LLM_LIVE=1`、`CYBER_API_KEY`、`CYBER_BASE_URL`、`CYBER_MODEL`、`CYBER_PROVIDER`，则 Claim 生成、编译、参数提取和最终整理也调用真实 LLM。
 
 ```text
-go test ./exts/jev -run '^TestLiveClaimToReflexPipeline$' -count=1 -v -timeout 240s
+go test ./exts/jev -run '^TestLiveClaimToReflexPipeline$' -count=1 -v -timeout 3h
 ```
 
 可设置 `JEV_PIPELINE_REPORT_DIR` 保存 `pipeline-report.json`、`library.json`、决策日志、原生执行证据和完整 JEV 事件。每次使用新的报告目录，以保证真正从空库启动；日志不记录凭证。真实接口测试会检查完整验收条件，defer、未发布源码、模型调用失败或新任务重新规划都会导致失败，不能作为成功的端到端验证。
@@ -131,18 +133,22 @@ Reflex 将已验证流程的重复规划变为普通代码执行和有限语义�
 
 自动模式最终发布 Reflex 为零，六次热任务接管为零，实时验收测试失败。基线业务正确 7/9，自动模式 8/9；双方成功率不同，不能把失败造成的低消耗解释为节省。即便两边全部正确的加购场景，自动模式热任务也没有减少前台 token。每种模式只有两次热任务，这些数据用于定位当前机制，不能推断整体成功率或长期性能。
 
-全程基线记录 691,488 个 LLM token；自动模式记录前台 780,860、Claim 生成 59,154、编译 103,154 个 LLM token，另有 2,437,864 个 JEV token，总工作量至少 3,381,032。自动模式有八次编译请求在 75 秒超时且未返回用量，完整总量保持未知，不能计为零。后台编译流程期限为 180 秒，单次 Provider 请求期限为 75 秒。不同 Provider 的 token 合计只代表工作量，网关价格未知，未推导货币费用或回本任务数。
+全程基线记录 691,488 个 LLM token；自动模式记录前台 780,860、Claim 生成 59,154、编译 103,154 个 LLM token，另有 2,437,864 个 JEV token，总工作量至少 3,381,032。自动模式有八次编译请求在 75 秒超时且未返回用量，完整总量保持未知，不能计为零。这轮源码记录于 `990782c6`：后台编译流程期限为 180 秒，单次 Provider 请求期限为 75 秒。不同 Provider 的 token 合计只代表工作量，网关价格未知，未推导货币费用或回本任务数。
 
 报销自动模式的一次失败在提交前读取了不存在的状态，被独立 oracle 记录为错误操作。Shadow DOM 基线的两次失败均以 `finish_reason: length` 结束，单次 8,192 输出 token 全部属于 reasoning，没有最终正文或工具调用。自动模式的八次编译超时使普通 Reflex 未完成发布；前台还使用了任意 `evaluate` 与复合 Shell 命令，这些操作不属于当前可验证原生契约，不能通过放宽验证将普通工具执行记成接管。当前数据不支持 JEV 已降低总 token 或费用的结论。
 
-复现时设置真实 `CYBER_API_KEY`、`TYPESAFE_API_KEY`、`CYBER_BASE_URL=https://api.chainreactors.cn/v1`、`CYBER_MODEL=deepseek-v4-flash`，并使用新的报告目录：
+后续版本已移除浏览器基准的 180 秒总编译、3 分钟任务和 6 分钟后台等待期限，Provider 使用 30 分钟兜底；每次测试由测试运行器的整体期限保护。上述历史失败数据保持原样，不能作为放宽期限后的新结果。
+
+同日单独重放此前加购场景超时的编译第二轮请求，使用实际 Provider、保留其 75 秒默认值，并由本次请求覆盖为 30 分钟兜底。网关在 203,549 ms 后返回，记录输入 19,549、输出 16,384 token；全部输出属于 reasoning，`finish_reason: length`，没有最终文本或工具调用。这验证了短超时已解除，同时确认输出预算耗尽仍阻止产物生成。该检查没有执行验证工具或浏览器，不代表完整编译、发布或热任务接管通过，结果独立保存。
+
+运行当前版本时设置真实 `CYBER_API_KEY`、`TYPESAFE_API_KEY`、`CYBER_BASE_URL=https://api.chainreactors.cn/v1`、`CYBER_MODEL=deepseek-v4-flash`，并使用新的报告目录：
 
 ```text
 JEV_TAKEOVER_LIVE=1
 JEV_TAKEOVER_CASES=expense,shadow,repeat
 JEV_TAKEOVER_WARM=2
 JEV_TAKEOVER_REPORT_DIR=<新的外部目录>
-go test -p 2 -tags 'emptytemplates full noembed' ./exts/jev -run '^TestLivePlaywrightTakeoverMatrix$' -parallel 1 -count=1 -v -timeout 45m
+go test -p 2 -tags 'emptytemplates full noembed' ./exts/jev -run '^TestLivePlaywrightTakeoverMatrix$' -parallel 1 -count=1 -v -timeout 3h
 ```
 
 每个场景的 `report.json` 保存所有成功和失败行，`llm.jsonl`、`decisions.jsonl`、`events-*.jsonl` 与 `library.json` 保存原始证据，`source.json` 保存本轮源码身份。此次外部数据另提供逐任务 `results.csv`、分类汇总 `summary.json` 和 SHA-256 清单；凭证及运行产物不进入源码库。
