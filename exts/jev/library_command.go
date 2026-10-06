@@ -87,12 +87,16 @@ func (e *Extension) runLibraryCommand(ctx context.Context, ex *coretool.Executio
 		}
 		ev := hooks.ContextEvent{SessionID: cfg.SessionID, TurnID: cfg.TurnID, Messages: cfg.Messages}
 		messages := e.interaction(ev)
-		state, ok := contextState(append([]*aop.Message{provider.TextMessage("system", cfg.SystemPrompt)}, messages...))
+		state, ok := contextState(append([]*aop.Message{provider.TextMessage("system", cfg.SystemPrompt)}, messages...), 32<<10)
 		if !ok || messages == nil {
 			return nil, errors.New("current evidence exceeds the compilation budget")
 		}
+		trajectory, ok := contextState(append([]*aop.Message{provider.TextMessage("system", cfg.SystemPrompt)}, messages...), 0)
+		if !ok {
+			return nil, errors.New("complete native trajectory cannot be represented")
+		}
 		_, task := taskIdentity(ev)
-		job := declaration{cfg: cfg, session: cfg.SessionID, turn: cfg.TurnID, task: task, state: state, repair: replace, boundary: digest(state)}
+		job := declaration{cfg: cfg, session: cfg.SessionID, turn: cfg.TurnID, task: task, state: state, trajectory: trajectory, repair: replace, boundary: digest(state)}
 		if timeout, _ := time.ParseDuration(e.config.CompilationTimeout); timeout > 0 {
 			var cancel context.CancelFunc
 			ctx, cancel = context.WithTimeout(ctx, timeout)

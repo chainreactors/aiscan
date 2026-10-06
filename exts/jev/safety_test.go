@@ -66,7 +66,7 @@ func TestEffectIdentityPreservesAllNativeJSONShapes(t *testing.T) {
 func TestMediaConstraintsCannotSilentlyBecomeTextOnly(t *testing.T) {
 	m := provider.TextMessage("user", "Use the target shown in this image")
 	m.Content = append(m.Content, &aop.Content{Value: &aop.Content_Media{Media: &aop.MediaContent{Kind: "image"}}})
-	if _, ok := contextState([]*aop.Message{m}); ok {
+	if _, ok := contextState([]*aop.Message{m}, 32<<10); ok {
 		t.Fatal("controller accepted task without its media constraints")
 	}
 }

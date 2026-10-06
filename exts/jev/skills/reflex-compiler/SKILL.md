@@ -38,8 +38,8 @@ missing. Changing a read flag or inventing a response cannot fill that gap.
 
 ## Build the artifact
 
-Supply api_version:2, observe as a synchronous js:function(context,args), steps,
-optional parameters_schema/readers, and arguments as the exact current example.
+Supply api_version:2, when describing the supported user goal at task entry, decide describing the work and completion/handoff owned by this function, observe as a synchronous js:function(context,args), steps,
+parameters_schema when using arguments, optional readers, and arguments as the exact current example. The schema describes every field and its source: current user values, existing native evidence, or a fresh name for a resource this function creates. An opening/creation handle is not a missing user requirement. Do not require a user to know a selector/address that your current native inspection can discover from their requested label.
 Use args or current native results for all task values. Guard all required
 arguments together before external work. Example values are never runtime defaults.
 JSON-encode the source and argument strings once; compare decoded strings, not
@@ -92,6 +92,10 @@ Read diagnostic.code, stage, status, action, expected and actual:
 | trajectory_incomplete | Inspect replayed/recorded and the next expected result. Implement missing polls/reads/effects. Do not return early or treat defer as continuation. |
 | completion_missing | The calls replayed, but the function still handed off. Process fresh execute return values and return the requested grounded report; entry history is a snapshot. |
 | unrecorded_native_call | Use already available evidence if the read is redundant. A necessary alternative execution path requires its own actual trajectory; do not fabricate it. |
+| output_limit | Generate the complete artifact again with the increased output budget. Truncated reasoning, source and tool calls were discarded; no validation tool ran. |
+| review_input_limit | Simplify redundant semantic branches/facts; deterministic matching of current user labels against native values needs no JEV choice. Preserve required alternatives and exact replay. No evidence was truncated. |
+| parameter_boundary_invalid | Acquire created handles and native-discovered addresses inside the function; require current user labels/values instead of facts unavailable at entry. |
+| parameter_schema_missing | Define the runtime argument schema and field meanings; distinguish existing handles from fresh allocation names. |
 | example_arguments_invalid | Supply all current example fields used by guards and calls. Inspect the trajectory to recover exact values. |
 | effect_identity_invalid | Fix the manifest, declared step, explicit occurrence and requested multiplicity. |
 | native_access_invalid | Correct the read/effect operation or helper, using the native contract. |

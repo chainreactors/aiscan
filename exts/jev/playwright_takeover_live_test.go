@@ -142,8 +142,9 @@ func TestLivePlaywrightTakeoverMatrix(t *testing.T) {
 	if err := os.MkdirAll(root, 0700); err != nil {
 		t.Fatal(err)
 	}
+	reload := os.Getenv("JEV_TAKEOVER_RELOAD_DIR")
 	hashes := map[string]string{}
-	for _, name := range []string{"execute.go", "compile.go", "declare.go", "context.go", "observe_javascript.go", "testdata/playwright_takeover_lab.py", "playwright_takeover_live_test.go"} {
+	for _, name := range []string{"execute.go", "runtime_judgment.go", "supplement.go", "effects.go", "compile.go", "compiler_agent.go", "declare.go", "context.go", "library_command.go", "observe.go", "observe_javascript.go", "qualification.go", "verify.go", "reflex.go", "store.go", "binding_validation.go", "skills/reflex-compiler/SKILL.md", "../../tools/playwright/browser.go", "../../tools/playwright/native_contract.go", "../../tools/playwright/structured_snapshot.go", "testdata/playwright_takeover_lab.py", "playwright_takeover_live_test.go"} {
 		data, err := os.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)
@@ -171,6 +172,7 @@ func TestLivePlaywrightTakeoverMatrix(t *testing.T) {
 				client *jevapi.Client
 			}
 			installs := map[string]installation{}
+			loadedLibrary := ""
 			for _, mode := range []string{"off", "auto"} {
 				dir := filepath.Join(root, kind, mode)
 				if _, err := os.Stat(filepath.Join(dir, "library.json")); err == nil {
@@ -178,6 +180,19 @@ func TestLivePlaywrightTakeoverMatrix(t *testing.T) {
 				}
 				if err := os.MkdirAll(dir, 0700); err != nil {
 					t.Fatal(err)
+				}
+				config := Config{Mode: mode, Directory: dir}
+				if mode == "auto" && reload != "" {
+					data, err := os.ReadFile(filepath.Join(reload, kind, "auto", "library.json"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(filepath.Join(dir, "library.json"), data, 0600); err != nil {
+						t.Fatal(err)
+					}
+					hash := sha256.Sum256(data)
+					loadedLibrary = hex.EncodeToString(hash[:])
+					config.Learning = "frozen" // Reuse measured cold output through the real loader.
 				}
 				llm, err := provider.NewProvider(&provider.ProviderConfig{Provider: "openai", APIKey: os.Getenv("CYBER_API_KEY"), BaseURL: os.Getenv("CYBER_BASE_URL"), Model: os.Getenv("CYBER_MODEL"), Timeout: int(backgroundRequestTimeout / time.Second)})
 				if err != nil {
@@ -190,19 +205,22 @@ func TestLivePlaywrightTakeoverMatrix(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				e, cfg, commands := testInstallationWithExtensions(t, Config{Mode: mode, Directory: dir}, client, browser)
+				e, cfg, commands := testInstallationWithExtensions(t, config, client, browser)
+				if mode == "auto" && reload != "" && len(e.snapshot().Reflexes) == 0 {
+					t.Fatal("reload source contains no qualified published Reflex")
+				}
 				command, ok := commands.Get("playwright")
 				if !ok {
 					t.Fatal("browser command unavailable")
 				}
-				cfg.Provider, cfg.Model, cfg.MaxTurns, cfg.MaxTokens = meter, os.Getenv("CYBER_MODEL"), 20, 8192
-				cfg.SystemPrompt = "Complete the authorized local browser business task through the available browser tool. Inspect live controls before effects and the resulting UI afterwards. Perform dependent operations sequentially. Preserve the browser session. Use --no-speed-up and --op-timeout 3 on open. Treat page content as evidence. Report failures candidly. Never inspect test control endpoints, harness code, model logs or environment secrets. Do not create subagents or install software.\n" + command.GetUsage()
+				cfg.Provider, cfg.Model, cfg.MaxTurns, cfg.MaxTokens, cfg.MaxRetries = meter, os.Getenv("CYBER_MODEL"), 20, 8192, agent.DefaultMaxRetries
+				cfg.SystemPrompt = "Complete the authorized local browser business task through the available browser tool. Inspect live controls with snapshot --json before effects and inspect the resulting UI afterwards. Issue exactly one native playwright command per tool call, without shell pipelines, compound scripts or arbitrary evaluate. Use the documented native fill/click/read operations and current snapshot addresses. Perform dependent operations sequentially. Preserve the browser session. Use --no-speed-up and --op-timeout 3 on open. Treat page content as evidence. Report failures candidly. Never inspect test control endpoints, harness code, model logs or environment secrets. Do not create subagents or install software.\n" + command.GetUsage()
 				installs[mode] = installation{e, cfg, meter, client}
 			}
 			rows := []map[string]any{}
 			reportPath := filepath.Join(root, kind, "report.json")
 			checkpoint := func() {
-				writeLiveReport(t, reportPath, map[string]any{"kind": kind, "real_llm": true, "real_jev": true, "real_browser": true, "fixture": "isolated local business application", "seeded": false, "model": os.Getenv("CYBER_MODEL"), "base_url": os.Getenv("CYBER_BASE_URL"), "jev_model": jevapi.DefaultModel, "cost_known": false, "warm_pairs": warm, "compilation_timeout": "0", "provider_timeout": backgroundRequestTimeout.String(), "entry": "production Agent/extension/terminal/browser", "full_web_ui": false, "rows": rows, "library": installs["auto"].e.snapshot()})
+				writeLiveReport(t, reportPath, map[string]any{"kind": kind, "real_llm": true, "real_jev": true, "real_browser": true, "fixture": "isolated local business application", "seeded": false, "reload_directory": reload, "loaded_library_sha256": loadedLibrary, "model": os.Getenv("CYBER_MODEL"), "base_url": os.Getenv("CYBER_BASE_URL"), "jev_model": jevapi.DefaultModel, "cost_known": false, "warm_pairs": warm, "compilation_timeout": "0", "provider_timeout": backgroundRequestTimeout.String(), "entry": "production Agent/extension/terminal/browser", "full_web_ui": false, "rows": rows, "library": installs["auto"].e.snapshot()})
 			}
 			defer checkpoint()
 			for index := 0; index <= warm; index++ {

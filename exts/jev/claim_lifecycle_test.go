@@ -69,7 +69,7 @@ func TestOrdinaryReflexPublishesAndCompilesItsOwnReplacement(t *testing.T) {
 	childSource := `js:function(context,args){if(!args)return {defer:"missing arguments",parameters:"claim"};const published=execute({name:"bash",arguments:{command:command("jev",["claim",JSON.stringify(args.claim)])},read:false,step:"publish",occurrence:0});return {report:published.data};}`
 	parent := Reflex{APIVersion: 2, When: "Publish a requested judgment and compile its replacement", Decide: "Publish current arguments, compile with host evidence, and report the returned IDs.", Observe: parentSource, Steps: map[string]StepDefinition{
 		"publish": {Contract: "jev-library", Count: 1}, "compile": {Contract: "jev-library", Count: 1},
-	}, arguments: map[string]any{"claim": c, "previous": "recorded-parent"}}
+	}, Parameters: json.RawMessage(`{"type":"object","required":["claim","previous"],"properties":{"claim":{"type":"object"},"previous":{"type":"string"}},"additionalProperties":false}`), arguments: map[string]any{"claim": c, "previous": "recorded-parent"}}
 	// Recorded native results are replayed during qualification. Compilation
 	// cannot dispatch these effects, and no bootstrap source bypass is installed.
 	rows := []map[string]any{{"role": "user", "text": "Publish the requested judgment and compile a replacement for recorded-parent."}}
@@ -101,7 +101,7 @@ func TestOrdinaryReflexPublishesAndCompilesItsOwnReplacement(t *testing.T) {
 			if rounds > 1 {
 				return nil, errors.New("replacement failed ordinary validation")
 			}
-			return reply(provider.TextMessage("assistant", jsonText(map[string]any{"api_version": 2, "steps": map[string]StepDefinition{"publish": {Contract: "jev-library", Count: 1}}, "observe": childSource, "arguments": map[string]any{"claim": c}}))), nil
+			return reply(provider.TextMessage("assistant", jsonText(map[string]any{"api_version": 2, "steps": map[string]StepDefinition{"publish": {Contract: "jev-library", Count: 1}}, "parameters_schema": json.RawMessage(`{"type":"object","required":["claim"],"properties":{"claim":{"type":"object"}},"additionalProperties":false}`), "observe": childSource, "arguments": map[string]any{"claim": c}}))), nil
 		default:
 			return nil, errors.New("unexpected model invocation")
 		}

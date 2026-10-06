@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 	"github.com/chainreactors/cyber/core/decision"
@@ -28,7 +29,9 @@ func newObservationReplay(reflex *Reflex, state json.RawMessage, capabilities ma
 		Messages []map[string]any `json:"messages"`
 		Omitted  int              `json:"omitted_evidence"`
 	}
-	if err := json.Unmarshal(state, &projection); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(string(state)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&projection); err != nil {
 		return nil, err
 	}
 	replay := &observationReplay{reflex: reflex, capabilities: capabilities, messages: projection.Messages, omitted: projection.Omitted, cache: map[string]replayResult{}}

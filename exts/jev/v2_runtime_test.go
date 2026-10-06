@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"strings"
 	"sync"
 	"testing"
@@ -17,7 +16,122 @@ import (
 	"github.com/chainreactors/cyber/aop"
 	coretool "github.com/chainreactors/cyber/core/tool"
 	toolhooks "github.com/chainreactors/cyber/core/tool/hooks"
+	"github.com/chainreactors/cyber/internal/jevwire"
 )
+
+func TestReflexV2ParameterFailureReleasesOrdinaryExecution(t *testing.T) {
+	for _, output := range []string{"null", `{"actor":null,"count":2,"query":true}`} {
+		t.Run(output, func(t *testing.T) {
+			entries := 0
+			client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+				if runtimeRequest(req) {
+					if _, ok := req.Questions["entry"]; ok {
+						entries++
+					}
+					return runtimeAnswers(req, "run")
+				}
+				return declarationAnswers(req, false)
+			})
+			effects := 0
+			e, cfg, _ := testInstallation(t, Config{Mode: "auto", Learning: "frozen"}, client, coretool.Command{Name: "lab", Run: func(_ context.Context, ex *coretool.Execution) (any, error) {
+				effects++
+				return "ordinary effect completed", nil
+			}})
+			if err := testVerification(e).Register(laboratorySuite()); err != nil {
+				t.Fatal(err)
+			}
+			r := laboratoryReflex()
+			caps, _ := e.capabilities(cfg)
+			if err := qualifyIndependent(e, t.Context(), &r, caps); err != nil {
+				t.Fatal(err)
+			}
+			e.library.Reflexes["r-test"] = reflexRecord{Reflex: r}
+			parameters, ordinary := 0, 0
+			cfg.Provider = testProvider(func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+				if req.Purpose == "parameters" {
+					parameters++
+					return reply(provider.TextMessage("assistant", output)), nil
+				}
+				ordinary++
+				if ordinary == 1 {
+					return reply(compilerTool("bash", map[string]string{"command": "lab add current"})), nil
+				}
+				if effects != 1 {
+					t.Fatal("failed parameter takeover blocked the ordinary effect")
+				}
+				return reply(provider.TextMessage("assistant", "ordinary task completed")), nil
+			})
+			cfg.SessionID = "parameter-fallback"
+			result, err := agent.NewAgent(cfg).Run(t.Context(), agent.TextInput("Add the current item."))
+			if err != nil || result.Output != "ordinary task completed" || parameters != 1 || ordinary != 2 || effects != 1 || entries != 1 {
+				t.Fatalf("ordinary execution did not recover: entries=%d parameters=%d ordinary=%d effects=%d err=%v", entries, parameters, ordinary, effects, err)
+			}
+		})
+	}
+}
+
+func TestReflexV2ParameterExtractionPreservesVerbatimConstraints(t *testing.T) {
+	e, cfg, _ := testInstallation(t, Config{Mode: "off"}, nil)
+	actor := "当前 'quoted' \\ path"
+	r := laboratoryReflex()
+	r.Observe = "source-must-not-be-parameter-context"
+	state, ok := contextState([]*aop.Message{provider.TextMessage("system", "Preserve current authorization."), provider.TextMessage("user", "Read the receipt for "+actor), provider.TextMessage("assistant", "Actual history is retained as evidence.")}, 32<<10)
+	if !ok {
+		t.Fatal("invalid current context")
+	}
+	allocationNames := map[string]bool{}
+	cfg.Provider = testProvider(func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+		joined := ""
+		for _, message := range req.Messages {
+			joined += provider.MessageText(message)
+		}
+		if strings.Count(joined, actor) != 1 || strings.Count(joined, "Preserve current authorization.") != 1 || !strings.Contains(joined, "Actual history is retained as evidence.") || strings.Contains(joined, r.Observe) {
+			t.Fatal("parameter context escaped or duplicated current constraints, lost evidence or included source")
+		}
+		var input struct {
+			FreshAllocationName string `json:"fresh_allocation_name"`
+		}
+		if json.Unmarshal([]byte(provider.MessageText(req.Messages[len(req.Messages)-1])), &input) != nil || !strings.HasPrefix(input.FreshAllocationName, "resource-") || allocationNames[input.FreshAllocationName] {
+			t.Fatal("host allocation name missing or reused across extractions")
+		}
+		allocationNames[input.FreshAllocationName] = true
+		return reply(provider.TextMessage("assistant", jsonText(map[string]any{"actor": actor, "count": 2, "query": true}))), nil
+	})
+	ctx := traceContext(t.Context(), &runtimeTrace{session: "parameters", turn: "t"})
+	for range 2 {
+		arguments, err := e.supplyArguments(ctx, cfg, state, r, "actor, count, query")
+		if err != nil || arguments["actor"] != actor {
+			t.Fatalf("literal parameter characters changed: arguments=%v err=%v", arguments, err)
+		}
+	}
+}
+
+func TestReflexV2ParameterExtractionRetriesTruncationAndAccountsUsage(t *testing.T) {
+	e, cfg, _ := testInstallation(t, Config{Mode: "off"}, nil)
+	trace := &runtimeTrace{session: "parameter-retry", turn: "t", task: "task"}
+	run := digest([]string{trace.session, trace.turn})
+	e.tasks[run] = taskRecord{Key: trace.task}
+	requests := 0
+	cfg.Provider = testProvider(func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
+		requests++
+		if req.MaxTokens != 2048<<(requests-1) || req.Timeout != backgroundRequestTimeout {
+			t.Fatal("parameter retry did not increase output space")
+		}
+		response := reply(provider.TextMessage("assistant", `{"actor":"wrong partial value"}`))
+		response.Usage = &aop.TokenUsage{TotalTokens: 7}
+		if requests < 3 {
+			response.Choices[0].FinishReason = "length"
+		} else {
+			response.Choices[0].Message = provider.TextMessage("assistant", `{"actor":"current","count":2,"query":true}`)
+		}
+		return response, nil
+	})
+	arguments, err := e.supplyArguments(traceContext(t.Context(), trace), cfg, json.RawMessage(`{"messages":[{"role":"user","text":"Inspect current"}]}`), laboratoryReflex(), "actor,count,query")
+	usage := e.tasks[run].ParameterUsage
+	if err != nil || requests != 3 || arguments["actor"] != "current" || usage.GetTotalTokens() != 21 || usage.GetDetail()["requests"] != 3 {
+		t.Fatalf("truncated parameters accepted or usage lost: requests=%d args=%v usage=%v err=%v", requests, arguments, usage, err)
+	}
+}
 
 func TestReflexV2AgentExecutorAndHandoff(t *testing.T) {
 	for seed := 0; seed < 20; seed++ {

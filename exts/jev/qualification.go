@@ -155,6 +155,9 @@ func (e *Extension) qualify(ctx context.Context, r *Reflex, caps map[string]any,
 	if size > maxSourceBytes {
 		return errors.New("Reflex source exceeds 8 KiB")
 	}
+	if len(r.arguments) > 0 && (len(r.Parameters) == 0 || string(r.Parameters) == "null") {
+		return compilerValidationError{CompilerDiagnostic{Code: "parameter_schema_missing", Stage: "parameters", Status: "repair", Message: "The artifact supplies example arguments but no runtime parameter schema.", Action: "Declare parameters_schema with each argument's type and meaning, including all required user fields. Distinguish existing handles from fresh names for resources created by this function; example values are not runtime defaults."}}
+	}
 	if err := validateParameters(r, r.arguments); err != nil {
 		return fmt.Errorf("current example parameters: %w", err)
 	}

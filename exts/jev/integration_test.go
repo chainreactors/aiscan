@@ -62,7 +62,7 @@ func TestLongContextProjectionPreservesConstraintsWithoutChangingHistory(t *test
 		messages = append(messages, provider.TextMessage("tool", strings.Repeat("evidence", 1000)))
 	}
 	copy := cloneMessages(messages)
-	data, ok := contextState(messages)
+	data, ok := contextState(messages, 32<<10)
 	if !ok || len(data) > 32<<10 || !strings.Contains(string(data), "Do not submit") || strings.Contains(string(data), `"omitted_evidence":0`) {
 		t.Fatalf("bad projection %d %v", len(data), ok)
 	}
@@ -71,7 +71,7 @@ func TestLongContextProjectionPreservesConstraintsWithoutChangingHistory(t *test
 			t.Fatal("history rewritten")
 		}
 	}
-	if _, ok = contextState([]*aop.Message{provider.TextMessage("user", strings.Repeat("constraint", 4000))}); ok {
+	if _, ok = contextState([]*aop.Message{provider.TextMessage("user", strings.Repeat("constraint", 4000))}, 32<<10); ok {
 		t.Fatal("oversized task constraints were silently truncated")
 	}
 }

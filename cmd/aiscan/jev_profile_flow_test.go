@@ -62,7 +62,7 @@ func (profileJEVTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 				}
 			}
 		case strings.HasPrefix(id, "compile") || strings.HasPrefix(id, "coverage"):
-			if bytes.Contains(request.State, []byte(`"reflex":`)) || (bytes.Contains(request.State, []byte(`call_id`)) && bytes.Contains(request.State, []byte(`Current sessions verified`))) {
+			if bytes.Contains(request.State, []byte(`"reflex":`)) || (bytes.Contains(request.State, []byte(`call_id`)) && bytes.Contains(request.State, []byte(`"native_access":"read"`))) {
 				choice = "compile"
 			}
 		case strings.HasPrefix(id, "c"):

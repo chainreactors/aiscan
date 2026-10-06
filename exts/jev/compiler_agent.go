@@ -28,6 +28,7 @@ type compilerAgent struct {
 	blocker     error
 	waiting     *CompilerDiagnostic
 	fatal       error
+	maxTokens   int
 }
 
 type compilerProvider struct {
@@ -67,6 +68,17 @@ func (p compilerProvider) ChatCompletion(ctx context.Context, req *provider.Chat
 		usage = response.Usage
 		if len(response.Choices) > 0 {
 			output = provider.MessageText(response.Choices[0].Message)
+			if err == nil && response.Choices[0].FinishReason == "length" {
+				// Truncated reasoning, source and tool arguments are not artifacts.
+				// Retry through the same Agent with more output space; its request
+				// builder still clamps this to the available context window.
+				if copy.MaxTokens >= p.owner.maxTokens && p.owner.maxTokens < 65536 {
+					p.owner.maxTokens = min(p.owner.maxTokens*2, 65536)
+					err = compilationOutputError{compilerValidationError{CompilerDiagnostic{Code: "output_limit", Stage: "generation", Status: "repair", Message: "Model exhausted its output budget before completing the artifact.", Action: fmt.Sprintf("Generate the complete artifact again; output budget increased to %d tokens. Truncated output was discarded and no tool was executed.", p.owner.maxTokens)}}}
+				} else {
+					err = fmt.Errorf("Reflex compilation exhausted output budget (%d tokens, finish_reason=length); no truncated artifact was executed", copy.MaxTokens)
+				}
+			}
 		}
 	}
 	p.owner.extension.emit(ctx, &Generation{Kind: "compiler_round", State: "finished", RequestId: id, ParentRequestId: p.owner.requestID, Attempt: p.owner.rounds, Phase: "compilation", Output: output, Usage: usage, Error: errorText(err), ElapsedMs: time.Since(start).Milliseconds()})
@@ -74,7 +86,7 @@ func (p compilerProvider) ChatCompletion(ctx context.Context, req *provider.Chat
 }
 
 func (e *Extension) newCompilerAgent(plan *compilation) *compilerAgent {
-	c := &compilerAgent{extension: e, plan: plan}
+	c := &compilerAgent{extension: e, plan: plan, maxTokens: 16384}
 	c.worker = agent.NewAgent(agent.Config{
 		Loop:             agent.StandardLoop{},
 		Provider:         compilerProvider{Provider: plan.job.cfg.Provider, effort: e.config.DeclarationEffort, owner: c},
@@ -86,7 +98,7 @@ func (e *Extension) newCompilerAgent(plan *compilation) *compilerAgent {
 		Compaction:       plan.job.cfg.Compaction,
 		MaxTurns:         0,
 		MaxTokens:        16384,
-		MaxRetries:       -1,
+		MaxRetries:       plan.job.cfg.MaxRetries,
 		MaxParallelTools: 1,
 		CacheRetention:   plan.job.cfg.CacheRetention,
 		AgentName:        "jev-compiler",
@@ -208,8 +220,12 @@ func (c *compilerAgent) ExecuteTool(ctx context.Context, name, arguments string)
 
 func (c *compilerAgent) refreshEvidence() bool {
 	if latest, ok := c.extension.latestDeclaration(c.plan.job); ok {
-		updated := string(c.plan.state) != string(latest.state)
-		c.plan.job, c.plan.state = latest, latest.state
+		state := latest.trajectory
+		if len(state) == 0 {
+			state = latest.state
+		}
+		updated := string(c.plan.state) != string(state)
+		c.plan.job, c.plan.state = latest, state
 		return updated
 	}
 	return false
@@ -220,7 +236,7 @@ func (c *compilerAgent) generate(ctx context.Context, input map[string]any, outp
 	started := time.Now()
 	c.extension.emit(ctx, &Generation{Kind: "reflex_llm", State: "started", RequestId: request, RequestedEffort: c.extension.config.DeclarationEffort})
 	input["native_contracts"] = c.extension.contracts.Catalog()
-	result, err := c.worker.Run(ctx, provider.TextMessage("user", jsonText(input)))
+	result, err := c.worker.Run(ctx, provider.TextMessage("user", jsonText(input)), func(cfg *agent.Config) { cfg.MaxTokens = c.maxTokens })
 	var text string
 	var usage *aop.TokenUsage
 	if result != nil {
@@ -265,7 +281,7 @@ func (e *Extension) fillScope(r *Reflex, p *compilation) {
 	var descriptions []string
 	for _, id := range p.ids {
 		if c, ok := p.claims[id]; ok {
-			descriptions = append(descriptions, c.Description())
+			descriptions = append(descriptions, c.Context)
 		}
 	}
 	r.When = "The current user requests a capability described by these related natural-language Claims: " + jsonText(descriptions)

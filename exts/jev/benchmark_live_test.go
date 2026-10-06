@@ -379,9 +379,6 @@ func (p *benchmarkProvider) ChatCompletion(ctx context.Context, req *provider.Ch
 		kind = "reflex"
 	} else if req.SessionID == "" && req.Purpose != "parameters" {
 		kind = "claim"
-		if len(req.Messages) > 0 && provider.MessageText(req.Messages[0]) == compilePrompt {
-			kind = "reflex"
-		}
 	}
 	if p.byKind == nil {
 		p.byKind = map[string]*aop.TokenUsage{}
