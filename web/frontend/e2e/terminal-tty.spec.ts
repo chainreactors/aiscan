@@ -7,6 +7,9 @@ async function screen(page: Page) {
 }
 
 async function clearEditor(page: Page) {
+  await page.getByRole('button', { name: /Main REPL/ }).click()
+  await expect(page.getByRole('button', { name: /Main REPL/ })).toHaveAttribute('aria-current', 'true')
+  await expect(page.locator('.xterm-rows')).toContainText('aiscan')
   const input = page.getByRole('textbox', { name: 'Terminal input' })
   await input.press('Control+u')
   await input.press('Control+l')
@@ -24,7 +27,42 @@ test.beforeEach(async ({ page }) => {
   await page.getByRole('button', { name: /agent\(s\) connected/ }).click()
   await page.getByRole('dialog', { name: 'Agent Console', exact: true })
     .getByRole('button').filter({ has: page.getByText('e2e-node', { exact: true }) }).click()
-  await expect(page.locator('.xterm-rows')).toContainText('aiscan')
+  await expect(page.getByRole('button', { name: /Main REPL/ })).toHaveAttribute('aria-current', 'true')
+})
+
+test('remote system shell retains state across REPL switches and browser reconnects', async ({ page }) => {
+  const shell = page.getByRole('button', { name: /^Remote Shell/ })
+  const input = page.getByRole('textbox', { name: 'Terminal input' })
+  await shell.click()
+  await expect(shell).toHaveAttribute('aria-current', 'true')
+  await input.pressSequentially(process.platform === 'win32' ? 'set TTY_SHELL_STATE=REMOTE_SESSION_KEPT' : 'export TTY_SHELL_STATE=REMOTE_SESSION_KEPT')
+  await input.press('Enter')
+  const echoState = process.platform === 'win32' ? 'echo %TTY_SHELL_STATE%' : 'echo "$TTY_SHELL_STATE"'
+  await input.pressSequentially(echoState)
+  await input.press('Enter')
+  await expect.poll(() => screen(page)).toContain('REMOTE_SESSION_KEPT')
+
+  await clearEditor(page)
+  await shell.click()
+  await expect(shell).toHaveAttribute('aria-current', 'true')
+  await page.getByRole('button', { name: 'Close panel', exact: true }).click()
+  await page.reload()
+  await page.getByRole('button', { name: /agent\(s\) connected/ }).click()
+  await expect(page.getByRole('button', { name: /Main REPL/ })).toHaveAttribute('aria-current', 'true')
+  await shell.click()
+  await expect(shell).toHaveAttribute('aria-current', 'true')
+  await input.pressSequentially(echoState)
+  await input.press('Enter')
+  await expect.poll(async () => (await screen(page)).filter(line => line === 'REMOTE_SESSION_KEPT').length).toBe(2)
+
+  // exit ends the real shell; it must not silently start another process.
+  await input.pressSequentially('exit')
+  await input.press('Enter')
+  await expect(shell).not.toHaveAttribute('aria-current', 'true')
+  await expect(page.getByRole('dialog', { name: 'Agent Console', exact: true })).toContainText('closed')
+  await shell.click()
+  await expect(shell).toHaveAttribute('aria-current', 'true')
+  await expect(page.locator('.xterm-rows')).not.toContainText('REMOTE_SESSION_KEPT')
 })
 
 test('short REPL input stays on the prompt row and retains the editing cursor', async ({ page }) => {
