@@ -78,6 +78,11 @@ export default function AgentTerminal({ agent }: { agent: AgentView }) {
     setStatus('connecting')
     setSessions([])
     setActiveID('')
+    activeRef.current = ''
+    sessionsRef.current = []
+    seenActivityRef.current = {}
+    activityReadyRef.current = false
+    setUnreadIDs(new Set())
     const streamID = globalThis.crypto?.randomUUID?.() ?? `pty-${Date.now().toString(36)}`
     streamIDRef.current = streamID
     const list = create(PtyProtocolMessageSchema, { message: { case: 'list', value: { streamId: streamID, nodeId: agent.hello?.nodeId || '' } } })
@@ -113,6 +118,9 @@ export default function AgentTerminal({ agent }: { agent: AgentView }) {
           }
           setStatus('connected')
           try { fit.fit() } catch {}
+          // A fit while detached can precede the server's stream binding.
+          // Always synchronize again once the attach/open is acknowledged.
+          sendFrame(create(PtyProtocolMessageSchema, { message: { case: 'resize', value: { streamId: streamID, cols: term.cols, rows: term.rows } } }))
           term.focus()
           break
         }
@@ -134,12 +142,19 @@ export default function AgentTerminal({ agent }: { agent: AgentView }) {
         case 'error': setStatus('error'); term.write(`\r\n[pty error] ${frame.message.value.message}\r\n`); break
       }
     }, { id: streamID })
-    const dataDisposable = term.onData((data) => sendFrame(create(PtyProtocolMessageSchema, { message: { case: 'input', value: { streamId: streamID, data: encodeTerminalData(data) } } })))
-    const resizeDisposable = term.onResize(({ cols, rows }) => sendFrame(create(PtyProtocolMessageSchema, { message: { case: 'resize', value: { streamId: streamID, cols, rows } } })))
+    const sendInput = (data: Uint8Array) => {
+      if (activeRef.current) sendFrame(create(PtyProtocolMessageSchema, { message: { case: 'input', value: { streamId: streamID, data } } }))
+    }
+    const dataDisposable = term.onData((data) => sendInput(encodeTerminalData(data)))
+    const binaryDisposable = term.onBinary((data) => sendInput(Uint8Array.from(data, char => char.charCodeAt(0) & 0xff)))
+    const resizeDisposable = term.onResize(({ cols, rows }) => {
+      if (activeRef.current) sendFrame(create(PtyProtocolMessageSchema, { message: { case: 'resize', value: { streamId: streamID, cols, rows } } }))
+    })
     cleanupRef.current = () => {
       sendFrame(create(PtyProtocolMessageSchema, { message: { case: 'detach', value: { streamId: streamID } } }))
       unsubscribe()
       dataDisposable.dispose()
+      binaryDisposable.dispose()
       resizeDisposable.dispose()
       if (streamIDRef.current === streamID) streamIDRef.current = ''
     }
@@ -165,7 +180,7 @@ export default function AgentTerminal({ agent }: { agent: AgentView }) {
 
   function markSessionRead(id: string, session?: PTYSession | null) { if (!id) return; const value = session || sessionsRef.current.find((s) => s.id === id); if (value) seenActivityRef.current[id] = activitySeq(value); setUnreadIDs((items) => { const next = new Set(items); next.delete(id); return next }) }
   function rememberSession(session: PTYSession) { sessionsRef.current = mergeSession(sessionsRef.current, session); upsertSession(setSessions, session) }
-  function terminalSize() { const term = termRef.current; return term ? { cols: term.cols, rows: term.rows } : { cols: 80, rows: 24 } }
+  function terminalSize() { try { fitRef.current?.fit() } catch {}; const term = termRef.current; return term ? { cols: term.cols, rows: term.rows } : { cols: 80, rows: 24 } }
   function attachSession(session: PTYSession) { const streamId = streamIDRef.current; if (!streamId || !session.id) return; termRef.current?.reset(); activeRef.current = session.id; setActiveID(session.id); markSessionRead(session.id, session); sendFrame(create(PtyProtocolMessageSchema, { message: { case: 'attach', value: { streamId, sessionId: session.id, ...terminalSize() } } })) }
   function attachRepl() { if (replSession) attachSession(replSession); else sendList() }
   function openShell() { const streamId = streamIDRef.current; if (!streamId) return; termRef.current?.reset(); sendFrame(create(PtyProtocolMessageSchema, { message: { case: 'open', value: { streamId, nodeId: agent.hello?.nodeId || '', kind: 'shell', name: `shell-${agent.hello?.name || 'agent'}`, ...terminalSize() } } })) }

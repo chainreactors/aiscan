@@ -152,8 +152,8 @@ func TestRecapRemoteConsoleUsesPromptWriter(t *testing.T) {
 	if r.readlineBridge == nil || r.output.recapWriter != r.readlineBridge {
 		t.Fatal("remote recap is not connected to readline")
 	}
-	if r.output.readline {
-		t.Fatal("remote streaming renderer changed")
+	if !r.output.readline || r.stdout != r.readlineBridge || r.stderr != r.readlineBridge {
+		t.Fatal("remote output is not coordinated with the readline editor")
 	}
 }
 

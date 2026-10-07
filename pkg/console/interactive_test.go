@@ -30,13 +30,13 @@ import (
 func TestIsLocalAgentTerminal(t *testing.T) {
 	local := rlterm.Local()
 	if !isLocalAgentTerminal(local) {
-		t.Fatal("local terminal should be eligible for native readline rendering")
+		t.Fatal("local terminal should be recognized as process stdin/stdout")
 	}
 
 	var output bytes.Buffer
 	remote := rlterm.Stream(bytes.NewReader(nil), &output, &output, rlterm.NewControl(true, 80, 24))
 	if isLocalAgentTerminal(remote) {
-		t.Fatal("remote terminal must not use local readline rendering")
+		t.Fatal("remote terminal must not be classified as process stdin/stdout")
 	}
 }
 

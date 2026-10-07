@@ -247,6 +247,8 @@ github.com/chainreactors/tui/console v0.0.0-20260712082522-2ba36ad7841f h1:QfP7i
 github.com/chainreactors/tui/console v0.0.0-20260712082522-2ba36ad7841f/go.mod h1:lVNsVwhAj7AqSiw53pbktHmDRp0KoZI7n1VMVaAn+GI=
 github.com/chainreactors/tui/readline v0.0.0-20260723062039-ed89e758c21b h1:OeflBONN55oQ++CFJDE47pW5GfyXJpiQClFzD1aYK+o=
 github.com/chainreactors/tui/readline v0.0.0-20260723062039-ed89e758c21b/go.mod h1:nEHRbLD/s2GWdAGbNVjz/KDF0ac7WZ3tPMgWmW8sZWA=
+github.com/chainreactors/tui/readline v0.0.0-20261007150247-7e3db8329bc4 h1:QzbkItZjSiV7FHZkVKg//iEw43gvvPRoPujN+PxdrEY=
+github.com/chainreactors/tui/readline v0.0.0-20261007150247-7e3db8329bc4/go.mod h1:nEHRbLD/s2GWdAGbNVjz/KDF0ac7WZ3tPMgWmW8sZWA=
 github.com/chainreactors/utils v0.0.0-20240716182459-e85f2b01ee16/go.mod h1:LajXuvESQwP+qCMAvlcoSXppQCjuLlBrnQpu9XQ1HtU=
 github.com/chainreactors/utils v0.0.0-20260711153742-f3d210a5fa9d h1:wlJ6oMbVLKrpxHmaXGSxmJt1F8l3kvqily0N58FGfLM=
 github.com/chainreactors/utils v0.0.0-20260711153742-f3d210a5fa9d/go.mod h1:xwbUlFoSSxLHujyb8D48o1s2DqmEAxUNfxIy0DVUmcg=
