@@ -3,14 +3,14 @@ import { Check, CircuitBoard, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { DecisionRequest, DecisionResult } from '../../gen/types/jev_pb'
 import type { TokenUsage } from '../../../cyber-ui/packages/aop/src/gen/aop/event_pb'
-import { decisionOptions, decisionQuestions, evaluationNumber } from '../../lib/jev-decisions'
+import { decisionOptions, decisionQuestions, evaluationNumber, evaluationChoice } from '../../lib/jev-decisions'
 import './JEVTimeline.css'
 
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`
 
 export function TokenUsageLine({ source, usage }: { source: string; usage?: TokenUsage }) {
   const { t } = useTranslation('jev')
-  return <p className="mt-2 text-[10px] tabular-nums text-muted-foreground" data-testid="jev-token-usage">{source} · {usage && !usage.detail.usage_missing
+  return <p className="mt-2 text-[10px] tabular-nums text-muted-foreground" data-testid="jev-token-usage" title={t('tokenExplanation')}>{source} · {usage && !usage.detail.usage_missing
     ? t('tokenUsage', { input: usage.inputTokens.toString(), output: usage.outputTokens.toString() }) : t('usageUnknown')}</p>
 }
 
@@ -19,14 +19,12 @@ export function ChoiceBranches({ question, answer, definition = false }: { quest
   const options = decisionOptions(question, answer)
   return <><p className="mt-3 text-[10px] text-muted-foreground">{t(!definition && answer ? 'rankedOptions' : 'candidateOptions', { count: options.length })}</p><div className="jev-branches" data-testid="jev-options">
     {options.map((option, rank) => <div key={option.id} className={`jev-option ${option.selected ? 'jev-option-selected' : ''}`}
-      data-option-id={option.id} data-selected={option.selected}>
+      data-option-id={option.id} data-runtime-claim={option.id} data-selected={answer ? option.selected : undefined}>
       <div className="flex min-w-0 items-center gap-2 text-xs">
-        {!definition && <span className="w-3 shrink-0 text-[10px] tabular-nums text-muted-foreground">{rank + 1}</span>}
-        <span className="min-w-0 flex-1 break-words font-medium" title={option.id}>{t(`optionTitles.${option.id}`, { defaultValue: option.description || option.id })}</span>
+        <span className="min-w-0 flex-1 break-words font-medium" title={option.id}>{option.description || option.id}</span>
         {option.selected && <Check aria-label={t('selected')} className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />}
         {!definition && <span className="shrink-0 tabular-nums" data-testid="jev-probability">{option.probability === undefined ? '—' : percent(option.probability)}</span>}
       </div>
-      {option.description && t(`optionTitles.${option.id}`, { defaultValue: option.description }) !== option.description && <p className={`mt-1 break-words text-[11px] leading-relaxed text-muted-foreground ${definition ? '' : 'pl-5'}`}>{option.description}</p>}
       {!definition && <div className="jev-probability-track" aria-hidden="true"><span style={{ width: `${(option.probability ?? 0) * 100}%` }} /></div>}
     </div>)}
     {!options.length && <p className="text-xs text-muted-foreground">{t('noOptions')}</p>}
@@ -41,7 +39,7 @@ function QuestionView({ id, question, answer, purpose, finished }: { id: string;
   const levels = question.type === ClaimType.score ? question.options : []
   const scalar = evaluationNumber(answer)
   const maximum = question.type === ClaimType.score ? levels.length ? levels.length - 1 : undefined : 1
-  return <section className="jev-question" data-testid="jev-question" data-question-id={id}>
+  return <section className="jev-question" data-testid="jev-question" data-question-id={id} data-control-question={id} data-choice={evaluationChoice(answer)}>
     <header className="flex min-w-0 items-center justify-between gap-2 text-xs">
       <span className="font-medium" title={id}>{title}</span><span className="font-mono text-[10px] text-muted-foreground">{ClaimType[question.type]}</span>
     </header>
@@ -71,7 +69,7 @@ export function DecisionBatch({ request, result, bodyOnly = false }: { request: 
     </div>
   const body = <>{result && <TokenUsageLine source="JEV" usage={result.usage} />}{result?.error && <p className="mt-2 break-words text-xs text-destructive">{result.error}</p>}
     <div className="jev-question-grid">{questions.map(([id, question]) => <QuestionView key={id} id={id} question={question} answer={result?.evaluations[id]} purpose={request.purpose} finished={!!result} />)}</div></>
-  const attributes = { 'data-testid': 'jev-decision', 'data-request-id': request.requestId, 'data-state': result ? result.error ? 'failed' : 'answered' : 'judging' }
+  const attributes = { 'data-testid': 'jev-decision', 'data-request-id': request.requestId, 'data-runtime-request': request.requestId, 'data-state': result ? result.error ? 'failed' : 'answered' : 'judging' }
   return <div className={`jev-decision ${bodyOnly ? 'jev-decision-body' : ''}`} {...attributes}>{bodyOnly ? <div className="flex items-center justify-between text-[10px] text-muted-foreground">
     <span>{questions.length > 1 ? t('parallelQuestions', { count: questions.length }) : t('singleQuestion')}</span>
     {result ? <span>{Number(result.elapsedMs)} ms</span> : <Loader2 className="h-3 w-3 animate-spin" />}

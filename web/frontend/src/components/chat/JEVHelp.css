@@ -1,0 +1,9 @@
+.jev-help-trigger { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; color: hsl(var(--muted-foreground)); transition: background .12s, color .12s; }
+.jev-help-trigger svg { width: 14px; height: 14px; }
+.jev-help-trigger:hover, .jev-help-trigger[data-state=open] { background: hsl(var(--accent)); color: hsl(var(--foreground)); }
+.jev-help-trigger:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.jev-help-content { width: 320px; max-width: calc(100vw - 24px); max-height: var(--radix-popover-content-available-height); overflow-y: auto; font-size: 11px; border-radius: 9px; }
+.jev-help-content h3 { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+.jev-help-content p { color: hsl(var(--muted-foreground)); line-height: 1.8; }
+.jev-help-content p + p { margin-top: 8px; }
+@media (prefers-reduced-motion: reduce) { .jev-help-trigger { transition: none; } }

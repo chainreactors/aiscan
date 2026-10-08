@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test'
-import { showExecutionLanes } from './jev-helpers'
 import { create, toBinary } from '@bufbuild/protobuf'
 import { EventSchema } from '../cyber-ui/packages/aop/src/gen/aop/event_pb'
 
@@ -15,10 +14,9 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       }, { theme })
       await page.goto('/e2e/fixtures/jev.html')
       await expect(page.getByTestId('agent-workflow')).toHaveCount(1)
-      await showExecutionLanes(page)
       await expect(page.getByTestId('agent-workflow')).toContainText('已交还 LLM')
-      await page.locator('[data-workflow-node][data-kind=tool]').first().click()
-      await expect(page.getByTestId('workflow-detail')).toContainText('playwright open')
+      await page.locator('[data-control-node][data-kind=tool][data-control-stage=execution]').first().click()
+      await expect(page.locator('[data-control-current=true]')).toContainText('playwright open')
       await page.screenshot({ path: info.outputPath('timeline.png'), fullPage: true })
       await page.getByRole('button', { name: 'Reflex', exact: true }).click()
       await expect(page.getByRole('tab', { name: '运行网络' })).toHaveAttribute('aria-selected', 'true')

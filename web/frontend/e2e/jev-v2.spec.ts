@@ -13,7 +13,6 @@ import { file_aop_operation_protocol } from '../cyber-ui/packages/aop/src/gen/ao
 import { file_aop_file_protocol } from '../cyber-ui/packages/aop/src/gen/aop/file/protocol_pb'
 import { file_aop_pty_protocol } from '../cyber-ui/packages/aop/src/gen/aop/pty/protocol_pb'
 import { jevEvent } from '../src/lib/jev-view'
-import { showExecutionLanes } from './jev-helpers'
 
 const claim = '提交订单后结果未知时，读取当前订单状态；确认操作身份后继续，缺少查询能力时交还主模型。'
 const source = 'js:function(context,args){return {defer:"waiting for a trusted contract"};}'
@@ -25,7 +24,6 @@ function runtime(seq: number, payload: MessageInitShape<typeof RuntimeEventSchem
 }
 async function render(page: import('@playwright/test').Page, events: ReturnType<typeof event>[]) {
   await page.evaluate(values => (window as any).renderJEVEvents(values), events.map(value => [...toBinary(EventSchema, value)]))
-  await showExecutionLanes(page)
 }
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('cyber-locale', 'zh'))
@@ -67,7 +65,7 @@ test('compiler rounds and mechanism diagnostics retain separate usage', async ({
     runtime(9, { case: 'decisionResult', value: { requestId: 'missing-usage' } })]
   await render(page, [...events, ...events])
   await page.locator('[data-record-id="v2-3"]').click()
-  const detail = page.getByTestId('workflow-detail')
+  const detail = page.locator('[data-control-current=true]')
   await expect(detail).toContainText('native read flag contradicts trusted contract')
   await expect(detail).not.toContainText('用量缺失')
   await page.getByRole('button', { name: 'Reflex', exact: true }).click()
@@ -86,14 +84,14 @@ test('typed Claim generation rejects legacy drafts and links to publication', as
   await render(page, [event(1, { case: 'turnStarted', value: {} }),
     runtime(2, { case: 'generation', value: { kind: 'claim_llm', state: 'finished', output: JSON.stringify({ claims: [{ type: 'noul', context: claim }, { type: 'noul', context: '检查当前查询能力是否可用。' }] }) } }, true)])
   await page.locator('[data-record-id="v2-2"]').click()
-  await expect(page.getByTestId('workflow-detail').getByTestId('jev-claim-definition')).toHaveCount(2)
-  await expect(page.getByTestId('workflow-detail')).toContainText(claim)
+  await expect(page.locator('[data-control-current=true]').getByTestId('jev-claim-definition')).toHaveCount(2)
+  await expect(page.locator('[data-control-current=true]')).toContainText(claim)
   await render(page, [event(1, { case: 'turnStarted', value: {} }),
     runtime(2, { case: 'generation', value: { kind: 'claim_llm', state: 'finished', output: JSON.stringify({ claims: [{ type: 'noul', context: claim }] }) } }, true),
     runtime(3, { case: 'libraryChange', value: { state: 'claim_published', claim: { id: 'claim-natural', type: ClaimType.noul, context: claim } } }, true)])
   await page.locator('[data-record-id="v2-2"]').click()
   await page.getByRole('button', { name: '查看发布内容' }).click()
-  await expect(page.getByTestId('workflow-detail')).toContainText(claim)
+  await expect(page.locator('[data-control-current=true]')).toContainText(claim)
 })
 
 test('handoff preserves reason, effect states and the computed result before any call', async ({ page }) => {
@@ -101,7 +99,7 @@ test('handoff preserves reason, effect states and the computed result before any
     runtime(2, { case: 'takeover', value: { definition: { id: 'v2', apiVersion: 2, when: 'Inspect orders', observe: source } } }),
     runtime(3, { case: 'handoff', value: { reason: 'defer', code: 'missing_input', detail: 'Order identity is required', effectsJson: '{"effect-1":{"step":"submit","occurrence":0,"state":"unknown"}}', resultJson: '{"defer":"missing parameters","parameters":"order_id"}' } })])
   await page.locator('[data-record-id="v2-3"]').click()
-  const detail = page.getByTestId('workflow-detail')
+  const detail = page.locator('[data-control-current=true]')
   await expect(detail).toContainText('Order identity is required')
   await expect(detail).toContainText('missing_input')
   await expect(detail).toContainText('unknown')
@@ -116,7 +114,7 @@ test('compiler diagnostics explain replay position, exact mismatch and repair ac
     kind: 'reflex_validation', state: 'finished', attempt: 5, error: diagnostic.message, output: JSON.stringify({ artifact: {}, diagnostic }),
   } }, true)])
   await page.locator('[data-record-id="v2-2"]').click()
-  const detail = page.getByTestId('jev-compiler-diagnostic')
+  const detail = page.locator('[data-control-current=true]').getByTestId('jev-compiler-diagnostic')
   await expect(detail).toContainText('原生调用不匹配')
   await expect(detail).toContainText('已回放 1 / 4 个结果')
   await expect(detail).toContainText('inspect_evidence')
@@ -135,7 +133,7 @@ test('completion and unsupported evidence diagnostics retain distinct repair act
     case: 'generation', value: { kind: 'reflex_validation', state: 'finished', attempt: index + 1, error: diagnostic.message, output: JSON.stringify({ artifact: {}, diagnostic }) },
   }, true))])
   await page.locator('[data-record-id="v2-2"]').click()
-  const detail = page.getByTestId('jev-compiler-diagnostic')
+  const detail = page.locator('[data-control-current=true]').getByTestId('jev-compiler-diagnostic')
   await expect(detail).toContainText('缺少完成报告')
   await expect(detail).toContainText('已回放 3 / 3 个结果')
   await expect(detail).toContainText('fresh execute return value')
@@ -156,12 +154,12 @@ test('production profile streaming events render publication, native execution a
     && (jevEvent(event)?.payload as any).value.state === 'reflex_published')
   expect(publication).toBeTruthy()
   await page.locator(`[data-record-id="${publication.id}"]`).click()
-  await expect(page.getByTestId('workflow-detail')).toContainText('已通过机制验证')
+  await expect(page.locator(`[data-record-id="${publication.id}"]`)).toContainText('已通过机制验证')
   const handoff = events.find((event: any) => jevEvent(event)?.payload.case === 'handoff'
     && (jevEvent(event)?.payload as any).value.reason === 'report')
   expect(handoff).toBeTruthy()
   await page.locator(`[data-record-id="${handoff.id}"]`).click()
-  await expect(page.getByRole('region', { name: '已交还 LLM', exact: true })).toContainText('report')
+  await expect(page.locator(`[data-record-id="${handoff.id}"]`)).toContainText('report')
   await expect(page.getByTestId('agent-workflow')).toHaveCount(3)
   await page.screenshot({ path: info.outputPath('production-profile-flow.png'), fullPage: true })
   expect(errors).toEqual([])

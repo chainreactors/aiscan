@@ -3,7 +3,7 @@ import { observation } from '../../cyber-ui/packages/viewer/src/lib/observations
 import { resolveTimelineRenderer } from '../../cyber-ui/packages/viewer/src/components/chat/timeline-registry'
 import type { ToolCallEntry } from '../../cyber-ui/packages/viewer/src/types/timeline'
 import { eventTime, jevEvent, runtimeEvents, type JEVCompilation, type JEVSegment, type JEVCheck, type JEVRecord, type JEVStep } from './jev-view'
-import { decisionOptions, decisionText, parseJEVJSON, evaluationChoice } from './jev-decisions'
+import { decisionOptions, decisionText, parseJEVJSON, evaluationChoice, evaluationNumber } from './jev-decisions'
 
 export type WorkflowState = 'pending' | 'completed' | 'failed' | 'interrupted'
 export type WorkflowNode = {
@@ -15,7 +15,15 @@ export type WorkflowEdge = { id: string; source: string; target: string; feedbac
 export type WorkflowTurn = { id: string; sessionId: string; turnId: string; timestamp: number; nodes: WorkflowNode[]; edges: WorkflowEdge[]; live: boolean }
 const scope = (...parts: string[]) => JSON.stringify(parts)
 
-// Summaries describe recorded inputs and answers; full evidence stays in the detail.
+export function workflowDecision(node: WorkflowNode) {
+  const records = node.related || (node.record ? [node.record] : [])
+  const request = records.find(record => record.value.payload.case === 'decisionRequest')?.value.payload
+  const result = records.find(record => record.value.payload.case === 'decisionResult')?.value.payload
+  return { request: request?.case === 'decisionRequest' ? request.value : undefined,
+    result: result?.case === 'decisionResult' ? result.value : undefined }
+}
+
+// Summaries describe recorded inputs and answers; full evidence stays in the graph cards.
 export function workflowNodeSummary(node: WorkflowNode): string {
   const payload = node.record?.value.payload
   const latest = node.related?.[node.related.length - 1]?.value.payload
@@ -23,11 +31,15 @@ export function workflowNodeSummary(node: WorkflowNode): string {
   if (node.kind === 'decision') {
     const result = node.related?.find(record => record.value.payload.case === 'decisionResult')?.value.payload
     const answers = result?.case === 'decisionResult' ? result.value : payload?.case === 'decisionResult' ? payload.value : undefined
-    text = answers?.error || Object.entries(answers?.evaluations || {}).flatMap(([id, answer]) => {
-      const question = payload?.case === 'decisionRequest' ? payload.value.claims[id] : undefined
-      if (evaluationChoice(answer)) return [question ? decisionOptions(question, answer).find(option => option.selected)?.description || evaluationChoice(answer) : evaluationChoice(answer)]
-      return []
-    }).join(' · ')
+    const questions = payload?.case === 'decisionRequest' ? payload.value.claims : {}
+    text = answers?.error || [...new Set([...Object.keys(questions), ...Object.keys(answers?.evaluations || {})])].map(id => {
+      const question = questions[id], answer = answers?.evaluations[id]
+      const prompt = question ? decisionText(question.context) : ''
+      const choice = evaluationChoice(answer), number = evaluationNumber(answer)
+      const selected = choice ? question ? decisionOptions(question, answer).find(option => option.selected)?.description || choice : choice
+        : number !== undefined ? answer?.value.case === 'noul' ? `${(number * 100).toFixed(1)}%` : number.toFixed(2) : ''
+      return [prompt, selected].filter(Boolean).join(' → ')
+    }).filter(Boolean).join(' · ')
   } else if (node.kind === 'tool') {
     const args = node.item?.kind === 'tool_call' ? node.item.toolCall.toolArgs
       : node.step?.call?.arguments?.data || (payload?.case === 'dispatch' ? payload.value.call?.arguments?.data : undefined)
@@ -58,10 +70,11 @@ export function workflowRecords(records: JEVRecord[], owner: JEVSegment | JEVChe
   for (const record of records) {
     const { event, value } = record, p = value.payload
     if (!p.case || p.case === 'libraryChange' && p.value.state === 'settled') continue
-    const key = p.case === 'decisionRequest' || p.case === 'decisionResult' ? `decision:${p.value.requestId}`
+    const identity = p.case === 'decisionRequest' || p.case === 'decisionResult' ? p.value.requestId && `decision:${p.value.requestId}`
       : p.case === 'dispatch' ? `call:${p.value.call?.id || event.id}`
       : p.case === 'result' ? `call:${p.value.result?.callId || event.id}`
       : p.case === 'generation' ? `generation:${p.value.requestId || `${p.value.kind}:${p.value.attempt}`}` : undefined
+    const key = identity ? scope(event.sessionId, event.turnId, identity) : undefined
     let node = key ? paired.get(key) : undefined
     // Older traces omit generation request IDs. A later start is a new attempt.
     if (p.case === 'generation' && p.value.state === 'started' && node?.state !== 'pending') node = undefined
@@ -103,10 +116,18 @@ export function workflowRecords(records: JEVRecord[], owner: JEVSegment | JEVChe
   })
 }
 
+// Library inspectors use the same projection and layout as the conversation.
+export function recordWorkflows(owner: JEVSegment | JEVCompilation | JEVCheck): WorkflowTurn[] {
+  const segment = 'steps' in owner
+  const item: ViewerTimelineItem = { id: owner.id, kind: 'extension', timestamp: owner.timestamp,
+    extensionType: segment ? 'jev_segment' : 'state' in owner ? 'jev_compilation' : 'jev_check',
+    data: segment ? { segment: owner } : 'state' in owner ? { compilation: owner } : { check: owner } }
+  const live = 'status' in owner ? owner.status === 'running' : ['reviewing', 'generating', 'compiling'].includes(owner.state)
+  return withWorkflows([item], owner.records.map(record => record.event)).flatMap(item =>
+    item.kind === 'extension' && item.extensionType === 'workflow' ? [{ ...(item.data.workflow as WorkflowTurn), live }] : [])
+}
+
 export function withWorkflows(items: ViewerTimelineItem[], source: readonly AOPEvent[]): ViewerTimelineItem[] {
-  // Ordinary conversations retain their streaming reasoning, tool disclosure
-  // and feedback cards. The control-flow view needs actual JEV activity.
-  if (!source.some(event => jevEvent(event))) return items
   const events = runtimeEvents(source), turns = new Map<string, WorkflowTurn>()
   const parents = new Map(events.flatMap(event => event.payload.case === 'sessionStarted' && event.payload.value.parentToolCallId
     ? [[event.sessionId, event] as const] : []))

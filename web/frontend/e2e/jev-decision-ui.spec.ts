@@ -1,6 +1,5 @@
 import { ClaimType } from '../src/gen/decision/claim_pb'
 import { test, expect } from '@playwright/test'
-import { showExecutionLanes } from './jev-helpers'
 import { create, toBinary, type MessageInitShape } from '@bufbuild/protobuf'
 import { anyPack, timestampFromDate } from '@bufbuild/protobuf/wkt'
 import { EventSchema } from '../cyber-ui/packages/aop/src/gen/aop/event_pb'
@@ -20,7 +19,6 @@ function runtime(seq: number, payload: MessageInitShape<typeof RuntimeEventSchem
 }
 async function render(page: import('@playwright/test').Page, events: ReturnType<typeof event>[], append = false) {
   await page.evaluate(({ values, append }) => (window as any).renderJEVEvents(values, append), { values: events.map(value => [...toBinary(EventSchema, value)]), append })
-  await showExecutionLanes(page)
 }
 
 test('live judgments show choice distribution, native score and noul before actual execution feedback', async ({ page }, info) => {
@@ -54,11 +52,11 @@ test('live judgments show choice distribution, native score and noul before actu
   await expect(score.getByTestId('jev-scale')).not.toContainText('%')
   await expect(page.locator('[data-question-id=enough]').getByTestId('jev-scale')).toContainText('73.0%')
   await page.locator('[data-record-id="event-5"]').click()
-  await expect(page.getByTestId('jev-reflex-loop')).toBeVisible()
+  await expect(page.locator('[data-control-reflex]')).toBeVisible()
   await render(page, [runtime(7, { case: 'result', value: { elapsedMs: 42, result: { callId: 'read', name: 'read-evidence', output: [{ value: { case: 'text', value: { text: 'Recorded evidence' } } }] } } }),
     runtime(8, { case: 'handoff', value: { reason: 'report' } }), event(9, { case: 'turnEnded', value: { stopReason: 'completed' } })], true)
   await expect(page.getByTestId('agent-workflow')).toContainText('已交还 LLM')
-  expect(await page.getByTestId('agent-workflow').locator('[data-event-kind]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-event-kind')).sort())).toEqual(['decisionRequest', 'dispatch', 'handoff', 'observation', 'takeover'])
+  expect(await page.getByTestId('agent-workflow').locator('[data-event-kind]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-event-kind')).sort())).toEqual(['decisionRequest', 'dispatch', 'handoff', 'observation', 'result', 'takeover'])
   await page.screenshot({ path: info.outputPath('live-typed-decisions.png'), fullPage: true })
 })
 
@@ -77,17 +75,17 @@ test('compilation keeps generation, review, publication and a failed retry in ch
   await expect(page.getByTestId('agent-workflow')).toHaveCount(1)
   expect(await page.getByTestId('agent-workflow').locator('[data-event-seq]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-event-seq')))).toEqual(['1', '3', '4', '6', '7', '8'])
   await page.locator('[data-record-id="event-1"]').click()
-  await expect(page.getByTestId('jev-claim-definition')).toHaveCount(0)
+  await expect(page.locator('[data-record-id=event-1]').getByTestId('jev-claim-definition')).toHaveCount(0)
   await page.locator('[data-record-id="event-3"]').click()
   await expect(page.getByTestId('jev-claim-definition')).toHaveCount(1)
   await page.locator('[data-record-id="event-4"]').click()
   await expect(page.getByTestId('jev-decision')).toBeVisible()
-  await expect(page.getByTestId('workflow-detail')).toHaveCount(1)
+  await expect(page.getByTestId('workflow-detail')).toHaveCount(0)
   await expect(page.locator('.jev-inspector, .jev-flow-node')).toHaveCount(0)
   await expect(page.getByTestId('jev-reflex-definition')).toHaveCount(0)
   await page.locator('[data-record-id="event-7"]').click()
-  await expect(page.getByTestId('workflow-detail')).toContainText('生成失败')
-  await expect(page.getByTestId('workflow-detail')).toContainText('Invalid binding')
+  await expect(page.locator('[data-control-current=true]')).toContainText('生成失败')
+  await expect(page.locator('[data-control-current=true]')).toContainText('Invalid binding')
   await expect(page.locator('[data-generation-request-id="reflex-draft-2"]')).toContainText('第 2 次生成 · 错误阶段：reader')
   await expect(page.getByTestId('jev-token-usage').filter({hasText:'Reflex LLM'})).toContainText('token 用量未知')
 })
