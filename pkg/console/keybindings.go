@@ -172,7 +172,7 @@ func agentConsoleEscapeSequenceFeed(binds map[string]inputrc.Bind, pending strin
 		if len(readlineSeq) <= 1 || !strings.HasPrefix(readlineSeq, inputrc.Unescape(`\e`)) {
 			continue
 		}
-		if strings.HasPrefix(sequence, readlineSeq) {
+		if strings.Contains(sequence, readlineSeq) {
 			matches = append(matches, seq)
 		}
 	}
@@ -184,15 +184,20 @@ func agentConsoleEscapeSequenceFeed(binds map[string]inputrc.Bind, pending strin
 		}
 		return len(left) > len(right)
 	})
+	matched := false
 	for _, seq := range matches {
 		bind := binds[seq]
 		replacement, ok := agentConsoleEquivalentNonEscapeBind(binds, bind)
 		if !ok {
 			continue
 		}
-		return replacement + sequence[len(agentConsoleReadlineSequence(seq)):], true
+		// One remote input read may contain several direction keys. Convert
+		// every complete sequence before feeding the macro queue; Keys.Read
+		// only drains raw input, so a later ESC in that queue loses its tail.
+		sequence = strings.ReplaceAll(sequence, agentConsoleReadlineSequence(seq), replacement)
+		matched = true
 	}
-	return "", false
+	return sequence, matched
 }
 
 func agentConsoleEquivalentNonEscapeBind(binds map[string]inputrc.Bind, target inputrc.Bind) (string, bool) {

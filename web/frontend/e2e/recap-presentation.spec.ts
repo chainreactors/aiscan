@@ -114,7 +114,8 @@ test('approved Goal rounds preserve feedback and compaction order through recap 
     const second = order.findIndex(text => text.includes('Second round answer'))
     expect(order.findIndex(text => text.includes('Run the next round'))).toBeLessThan(second)
     expect(order.findIndex(text => text.includes('Context compacted'))).toBeLessThan(second)
-    await expect(page.locator('[data-guardrail-turn]')).toHaveCount(1)
+    await expect(page.locator('[data-guardrail-review]')).toHaveCount(1)
+    await expect(page.locator('[data-guardrail-review]')).toHaveAttribute('data-guardrail-state', 'approved')
   }
   await expect(page.getByTestId('task-recap')).toHaveText('Checked the implementation.')
   await expect(page.getByTestId('assistant-response-footer')).toHaveCount(1)

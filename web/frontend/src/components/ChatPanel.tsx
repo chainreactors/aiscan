@@ -900,7 +900,10 @@ function timelineContent(
       if (item.extensionType === 'workflow') return <Workflow workflow={item.data.workflow as WorkflowTurn}
         renderItem={node => node.kind === 'assistant_response'
           ? <div data-testid="assistant-response">
-              {node.thinking?.trim() && <MarkdownContent content={trimDisplayContent(node.thinking)} compact muted />}
+              {node.thinking?.trim() && <div role="region" aria-label={i18n.t('chat:thinkingLabel')} tabIndex={0}
+                className="max-h-64 overflow-auto overscroll-contain focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                <MarkdownContent content={trimDisplayContent(node.thinking)} compact muted />
+              </div>}
               {node.response?.content.trim() && <div data-testid="assistant-response-content"><MarkdownContent content={trimDisplayContent(node.response.content)} compact /></div>}
               {typeof node.response?.metadata?.recap === 'string' && <div data-testid="assistant-response-footer" className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground"><span data-testid="task-recap">{node.response.metadata.recap}</span></div>}
             </div>

@@ -143,6 +143,25 @@ func TestAgentReadlinePendingBracketedPaste(t *testing.T) {
 	}
 }
 
+func TestAgentReadlineBatchedDirectionKeysPreserveDraft(t *testing.T) {
+	for _, keys := range []string{
+		"\x1b[D\x1b[D\x1b[D",
+		"\x1b[D\x1b[D\x1b[D\x1b[D\x1b[C",
+	} {
+		t.Run(fmt.Sprintf("%q", keys), func(t *testing.T) {
+			repl, _ := newTestConsole(t, &cfg.Option{}, nil, io.Discard, io.Discard)
+			shell := repl.console.Shell()
+			// A PTY input frame can combine several key events and following
+			// text. Exercise the editor rather than just the sequence mapper.
+			shell.Keys.SetInput(strings.NewReader("!echo TTY_END" + keys + "KEPT_\r"))
+			line, err := shell.Readline()
+			if err != nil || line != "!echo TTY_KEPT_END" {
+				t.Fatalf("draft=%q error=%v", line, err)
+			}
+		})
+	}
+}
+
 func TestAgentReadlinePendingMultilinePasteReference(t *testing.T) {
 	repl, _ := newTestConsole(t, &cfg.Option{}, nil, io.Discard, io.Discard)
 	shell := repl.console.Shell()

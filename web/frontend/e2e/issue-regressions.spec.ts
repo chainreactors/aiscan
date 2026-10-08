@@ -58,8 +58,6 @@ for (const scenario of ['retry', 'reconnect']) {
       await expect(content).toContainText('Replacement answer')
       await expect(pause).toBeVisible()
       await expect(content).not.toContainText('Stale attempt answer')
-      const thinking = page.getByRole('button', { name: 'Thinking', exact: true })
-      if (await thinking.getAttribute('aria-expanded') !== 'true') await thinking.click()
       await expect(page.getByRole('region', { name: 'Thinking', exact: true })).toContainText('Mixed frame thought')
       await expect(page.getByRole('region', { name: 'Thinking', exact: true })).not.toContainText('Stale attempt thought')
     } else {
@@ -117,9 +115,6 @@ for (const width of [1280, 520]) {
     await page.getByRole('textbox', { name: 'Your goal' }).fill('ISSUE-143-145: complete both regression rounds using local checks only')
     await page.getByRole('button', { name: 'Send message' }).click()
 
-    const reasoning = page.getByRole('button', { name: 'Thinking', exact: true }).first()
-    await expect(reasoning).toBeVisible()
-    await expect(reasoning).toHaveAttribute('aria-expanded', 'true')
     // An extended reasoning stream must remain inside its own scroll area.
     const thinkingBody = page.getByRole('region', { name: 'Thinking', exact: true }).first()
     await expect(thinkingBody).toBeVisible()
@@ -142,18 +137,17 @@ for (const width of [1280, 520]) {
     const compact = page.getByRole('status').filter({ hasText: 'Context compacted' })
     await expect(compact).toBeVisible()
     await expect(compact).not.toContainText('?')
-    const compactBox = (await compact.boundingBox())!
-    const nextRoundBox = (await page.getByTestId('assistant-response').nth(1).boundingBox())!
-    expect(nextRoundBox.y - compactBox.y - compactBox.height).toBeGreaterThanOrEqual(0)
-    expect(nextRoundBox.y - compactBox.y - compactBox.height).toBeLessThan(50)
+    const workflow = page.getByTestId('agent-workflow').first()
+    await expect(workflow.locator('[data-kind="compact"]')).toHaveCount(1)
+    const kinds = await workflow.locator('[data-control-node]').evaluateAll(cards => cards.map(card => card.getAttribute('data-kind')))
+    expect(kinds.indexOf('compact')).toBeLessThan(kinds.lastIndexOf('response'))
 
-    const firstCard = page.getByTestId('assistant-response').first()
-    await firstCard.getByRole('button', { name: 'Thinking', exact: true }).click()
-    await expect(firstCard).toContainText('ISSUE-143-145 first reasoning')
-    await expect(firstCard).toContainText('ISSUE-143-145 second reasoning')
-    await firstCard.getByRole('button', { name: /2 tools/i }).click()
-    await expect(firstCard).not.toContainText('virtual filesystem is not mounted')
-    await expect(firstCard).not.toContainText('unknown flag')
+    const reasoning = page.getByRole('region', { name: 'Thinking', exact: true })
+    await expect(reasoning.filter({ hasText: 'ISSUE-143-145 first reasoning' })).toHaveCount(1)
+    await expect(reasoning.filter({ hasText: 'ISSUE-143-145 second reasoning' })).toHaveCount(1)
+    await expect(workflow.locator('[data-kind="tool"][data-control-stage="execution"]')).toHaveCount(2)
+    await expect(workflow).not.toContainText('virtual filesystem is not mounted')
+    await expect(workflow).not.toContainText('unknown flag')
     const sessionID = new URL(page.url()).pathname.split('/').filter(Boolean).at(-1)
     const events = await page.request.post('/cyber.rpc.chat.SessionService/ListEvents', {
       headers: { Authorization: `Bearer ${process.env.ACCESS_KEY || 'test-token'}`, 'Connect-Protocol-Version': '1' },
@@ -167,8 +161,6 @@ for (const width of [1280, 520]) {
     expect(JSON.stringify(results)).toContain('ISSUE-143-145-shell-ok')
     expect(JSON.stringify(results)).not.toContain('unknown flag')
     expect(body.events.some((delivery: any) => delivery.event?.status?.state === 'compact_end')).toBeTruthy()
-    await firstCard.getByRole('button', { name: 'Thinking', exact: true }).click()
-    await firstCard.getByRole('button', { name: /2 tools/i }).click()
     await page.screenshot({ path: testInfo.outputPath('goal-completed.png'), fullPage: true })
     await page.reload()
     await expect(page.getByText('Round two complete.', { exact: false }).first()).toBeVisible()
