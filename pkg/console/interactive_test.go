@@ -153,7 +153,9 @@ func TestAgentReadlineBatchedDirectionKeysPreserveDraft(t *testing.T) {
 			shell := repl.console.Shell()
 			// A PTY input frame can combine several key events and following
 			// text. Exercise the editor rather than just the sequence mapper.
-			shell.Keys.SetInput(strings.NewReader("!echo TTY_END" + keys + "KEPT_\r"))
+			shell.OnReadlineReady = func() {
+				shell.Keys.SetInput(strings.NewReader("!echo TTY_END" + keys + "KEPT_\r"))
+			}
 			line, err := shell.Readline()
 			if err != nil || line != "!echo TTY_KEPT_END" {
 				t.Fatalf("draft=%q error=%v", line, err)
