@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"io"
 	"net/http"
 	"os"
@@ -34,11 +33,16 @@ func (profileJEVTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	if r.URL.String() != jevapi.Endpoint {
 		return nil, fmt.Errorf("fixture rejects external request")
 	}
-	var request jevwire.Request
+	var request struct {
+		State     json.RawMessage `json:"state"`
+		Questions map[string]struct {
+			Criteria json.RawMessage `json:"criteria"`
+		} `json:"questions"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		return nil, err
 	}
-	answers := map[string]jevwire.Answer{}
+	answers := map[string]map[string]string{}
 	for id, q := range request.Questions {
 		var options map[string]string
 		_ = json.Unmarshal(q.Criteria, &options)
@@ -68,7 +72,7 @@ func (profileJEVTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		case strings.HasPrefix(id, "c"):
 			choice = "include"
 		}
-		answers[id] = jevwire.Answer{Type: "choice", Choice: choice}
+		answers[id] = map[string]string{"type": "choice", "choice": choice}
 	}
 	data, _ := json.Marshal(map[string]any{"answers": answers, "usage": map[string]int{"input_tokens": 10, "output_tokens": 1}})
 	return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(bytes.NewReader(data)), Request: r}, nil

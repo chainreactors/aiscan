@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/chainreactors/cyber/core/decision"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"os"
 	"path/filepath"
 	"strings"
@@ -153,7 +152,7 @@ func TestReflexV2CandidatePromotionAndValidation(t *testing.T) {
 }
 
 func TestReflexV2CandidateCanRebindAfterSuiteRegistration(t *testing.T) {
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer { return declarationAnswers(req, true) })
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer { return declarationAnswers(req, true) })
 	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client)
 	c := Claim{Type: jevapi.ClaimNoul, Context: "Add current items and inspect their completion."}
 	cid := "c" + digest(c)[:16]
@@ -262,7 +261,7 @@ func TestReflexV2OrdinaryReadRecoveryAndInputSteering(t *testing.T) {
 				}
 				return nil, nil
 			}}
-			client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+			client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 				if runtimeRequest(req) {
 					return runtimeAnswers(req, "run")
 				}
@@ -448,13 +447,13 @@ func TestReflexV2PureSemanticCapabilityAndFreshArguments(t *testing.T) {
 		}
 		return cases
 	}}
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		if _, ok := req.Questions["runtime"]; ok {
 			mode := "keep"
 			if strings.Contains(string(req.State), "upper:") {
 				mode = "upper"
 			}
-			return map[string]jevwire.Answer{"runtime": answer(mode)}
+			return map[string]inferenceAnswer{"runtime": answer(mode)}
 		}
 		if runtimeRequest(req) {
 			return runtimeAnswers(req, "run")

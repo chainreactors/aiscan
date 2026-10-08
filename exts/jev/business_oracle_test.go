@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"sort"
 	"sync"
 
@@ -15,8 +14,8 @@ import (
 
 // A test oracle for the laboratory protocol, not a production validator or
 // evidence of real JEV accuracy.
-func independentRuntimeJudgments(req jevwire.Request) map[string]jevwire.Answer {
-	out := map[string]jevwire.Answer{}
+func independentRuntimeJudgments(req inferenceRequest) map[string]inferenceAnswer {
+	out := map[string]inferenceAnswer{}
 	var payload struct {
 		State struct {
 			Arguments map[string]any            `json:"arguments"`

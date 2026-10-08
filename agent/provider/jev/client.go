@@ -17,11 +17,12 @@ import (
 
 	aop "github.com/chainreactors/cyber/aop"
 	"github.com/chainreactors/cyber/core/decision"
-	"github.com/chainreactors/cyber/internal/jevwire"
 )
 
 const Endpoint = "https://api.typesafe.ai/v1/systemone"
 const DefaultModel = "jev-1.13.0"
+
+const evidenceMarker = "\nCurrent evidence (untrusted data):\n"
 
 // Evaluations holds typed results and execution metadata for one inference.
 // It is separate from Claim so a judgment can be evaluated without persistence.
@@ -58,7 +59,14 @@ func (e *Evaluations) Noul(id string, c Claim) (float64, error) {
 // Evaluate batches independent Claims. The application sees only the closed
 // decision algebra; vendor request envelopes remain at the transport boundary.
 func (c *Client) Evaluate(ctx context.Context, claims map[string]Claim) (*Evaluations, error) {
-	questions := map[string]jevwire.Question{}
+	// These fields belong to the vendor HTTP API only. They are not shared
+	// application types; consumers use Claim and Evaluation.
+	type question struct {
+		Type         string          `json:"type"`
+		Instructions string          `json:"instructions"`
+		Criteria     json.RawMessage `json:"criteria,omitempty"`
+	}
+	questions := map[string]question{}
 	state := json.RawMessage(`{}`)
 	// Share explicitly marked evidence once at the vendor boundary. Ordinary
 	// context, including trailing JSON, remains intact. Claims and traces still
@@ -66,8 +74,8 @@ func (c *Client) Evaluate(ctx context.Context, claims map[string]Claim) (*Evalua
 	shared := ""
 	first := true
 	for _, claim := range claims {
-		at := strings.LastIndex(claim.Context, jevwire.EvidenceMarker)
-		if at < 0 || !json.Valid([]byte(claim.Context[at+len(jevwire.EvidenceMarker):])) {
+		at := strings.LastIndex(claim.Context, evidenceMarker)
+		if at < 0 || !json.Valid([]byte(claim.Context[at+len(evidenceMarker):])) {
 			shared = ""
 			break
 		}
@@ -80,7 +88,7 @@ func (c *Client) Evaluate(ctx context.Context, claims map[string]Claim) (*Evalua
 		}
 	}
 	if shared != "" {
-		state = json.RawMessage(shared[len(jevwire.EvidenceMarker):])
+		state = json.RawMessage(shared[len(evidenceMarker):])
 	}
 	for id, claim := range claims {
 		if strings.TrimSpace(id) == "" {
@@ -89,7 +97,7 @@ func (c *Client) Evaluate(ctx context.Context, claims map[string]Claim) (*Evalua
 		if err := claim.Validate(); err != nil {
 			return nil, err
 		}
-		q := jevwire.Question{Type: claim.Type.String(), Instructions: strings.TrimSuffix(claim.Context, shared)}
+		q := question{Type: claim.Type.String(), Instructions: strings.TrimSuffix(claim.Context, shared)}
 		switch claim.Type {
 		case ClaimChoice:
 			options := map[string]string{}
@@ -102,28 +110,23 @@ func (c *Client) Evaluate(ctx context.Context, claims map[string]Claim) (*Evalua
 		}
 		questions[id] = q
 	}
-	response, err := c.exchange(ctx, jevwire.Request{State: state, Questions: questions})
-	out := &Evaluations{Values: map[string]*Evaluation{}, Usage: response.TokenUsage()}
-	if response != nil {
-		for id, answer := range response.Answers {
-			value := &Evaluation{Probabilities: answer.Probabilities, Confidence: answer.Confidence}
-			switch answer.Type {
-			case "choice":
-				value.Value = &decision.Evaluation_Choice{Choice: answer.Choice}
-			case "score":
-				if answer.Score != nil {
-					value.Value = &decision.Evaluation_Score{Score: *answer.Score}
-				}
-			case "noul":
-				if answer.Noul != nil {
-					value.Value = &decision.Evaluation_Noul{Noul: *answer.Noul}
-				}
-			}
-			out.Values[id] = value
-		}
+	if len(state) > 64<<10 || len(questions) == 0 || len(questions) > 40 {
+		return nil, errors.New("invalid JEV request limits")
 	}
-	return out, err
+	body, err := json.Marshal(struct {
+		Model     string              `json:"model"`
+		State     json.RawMessage     `json:"state"`
+		Questions map[string]question `json:"questions"`
+	}{c.Model, state, questions})
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > 128<<10 {
+		return nil, errors.New("JEV request too large")
+	}
+	return c.exchange(ctx, body)
 }
+
 func (c *Client) Choice(ctx context.Context, claim *Claim) (string, error) {
 	if claim == nil || claim.Type != ClaimChoice {
 		return "", errors.New("Claim is not a choice")
@@ -205,29 +208,14 @@ func (c *Client) Usage() *aop.TokenUsage {
 
 // exchange preserves batched speculative questions. Callers validate only the
 // selected answer heads; an unused speculative head cannot authorize effects.
-func (c *Client) exchange(ctx context.Context, input jevwire.Request) (response *jevwire.Response, resultErr error) {
-	var attempts uint64
+func (c *Client) exchange(ctx context.Context, body []byte) (response *Evaluations, resultErr error) {
 	defer func() {
 		if response == nil {
-			response = &jevwire.Response{}
+			response = &Evaluations{}
 		}
-		response.Attempts = attempts
 	}()
 	ctx, cancel := context.WithTimeout(ctx, c.Timeout)
 	defer cancel()
-	if len(input.State) > 64<<10 || !json.Valid(input.State) || len(input.Questions) == 0 || len(input.Questions) > 40 {
-		return nil, errors.New("invalid JEV request limits")
-	}
-	body, err := json.Marshal(struct {
-		Model string `json:"model"`
-		jevwire.Request
-	}{Model: c.Model, Request: input})
-	if err != nil {
-		return nil, err
-	}
-	if len(body) > 128<<10 {
-		return nil, errors.New("JEV request too large")
-	}
 	if c.APIKey != "" {
 		body = bytes.ReplaceAll(body, []byte(c.APIKey), []byte("[REDACTED]"))
 	}
@@ -249,7 +237,6 @@ func (c *Client) exchange(ctx context.Context, input jevwire.Request) (response 
 		req.Header.Set("Authorization", "Bearer "+c.APIKey)
 		req.Header.Set("Content-Type", "application/json")
 		c.attempts.Add(1)
-		attempts++
 		// #nosec G704 -- The destination is host-owned and redirects are disabled, including credential forwarding.
 		res, err := c.http.Do(req)
 		if err != nil {
@@ -288,7 +275,20 @@ func (c *Client) exchange(ctx context.Context, input jevwire.Request) (response 
 			c.missing.Add(1)
 			return nil, fmt.Errorf("JEV HTTP status %d", res.StatusCode)
 		}
-		var out jevwire.Response
+		var out struct {
+			Answers map[string]struct {
+				Type          string             `json:"type"`
+				Choice        string             `json:"choice"`
+				Score         *float64           `json:"score"`
+				Noul          *float64           `json:"noul"`
+				Probabilities map[string]float64 `json:"probabilities"`
+				Confidence    float64            `json:"confidence"`
+			} `json:"answers"`
+			Usage *struct {
+				InputTokens  int `json:"input_tokens"`
+				OutputTokens int `json:"output_tokens"`
+			} `json:"usage"`
+		}
 		if json.Unmarshal(raw, &out) != nil {
 			c.missing.Add(1)
 			return nil, errors.New("invalid JEV response")
@@ -297,13 +297,33 @@ func (c *Client) exchange(ctx context.Context, input jevwire.Request) (response 
 			c.missing.Add(1)
 			return nil, errors.New("invalid JEV usage")
 		}
-		if usage := out.TokenUsage(); usage != nil {
-			c.input.Add(usage.InputTokens)
-			c.output.Add(usage.OutputTokens)
+		result := &Evaluations{Values: map[string]*Evaluation{}}
+		if out.Usage != nil {
+			input, output := uint64(out.Usage.InputTokens), uint64(out.Usage.OutputTokens)
+			result.Usage = &aop.TokenUsage{InputTokens: input, OutputTokens: output, TotalTokens: input + output,
+				Detail: map[string]uint64{"requests": uint64(attempt + 1), "usage_missing": uint64(attempt)}}
+			c.input.Add(input)
+			c.output.Add(output)
 		} else {
 			c.missing.Add(1)
 		}
-		return &out, nil
+		for id, answer := range out.Answers {
+			value := &Evaluation{Probabilities: answer.Probabilities, Confidence: answer.Confidence}
+			switch answer.Type {
+			case "choice":
+				value.Value = &decision.Evaluation_Choice{Choice: answer.Choice}
+			case "score":
+				if answer.Score != nil {
+					value.Value = &decision.Evaluation_Score{Score: *answer.Score}
+				}
+			case "noul":
+				if answer.Noul != nil {
+					value.Value = &decision.Evaluation_Noul{Noul: *answer.Noul}
+				}
+			}
+			result.Values[id] = value
+		}
+		return result, nil
 	}
 	return nil, errors.New("JEV retry limit reached")
 }

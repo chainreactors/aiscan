@@ -3,7 +3,6 @@ package jev
 import (
 	"context"
 	"encoding/json"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"io"
 	"math"
 	"net/http"
@@ -20,7 +19,7 @@ func TestClaimDecisionMethodsUseClosedTypes(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		data, _ := io.ReadAll(r.Body)
 		var request struct {
-			Questions map[string]jevwire.Question `json:"questions"`
+			Questions map[string]inferenceQuestion `json:"questions"`
 		}
 		if err := json.Unmarshal(data, &request); err != nil {
 			t.Fatal(err)
@@ -134,9 +133,9 @@ func TestEvaluationRejectsWrongHeadsAndUnboundedNumbers(t *testing.T) {
 }
 
 func TestEvaluateSharesOnlyExplicitIdenticalEvidence(t *testing.T) {
-	var requests []jevwire.Request
+	var requests []inferenceRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var envelope jevwire.Request
+		var envelope inferenceRequest
 		if err := json.NewDecoder(r.Body).Decode(&envelope); err != nil {
 			t.Error(err)
 		}
@@ -150,8 +149,8 @@ func TestEvaluateSharesOnlyExplicitIdenticalEvidence(t *testing.T) {
 	client.Endpoint = server.URL
 	contexts := [][2]string{
 		{"First\n{\"fact\":1}", "Second\n{\"fact\":1}"},
-		{"First" + jevwire.EvidenceMarker + "{\n\"fact\":1\n}", "Second" + jevwire.EvidenceMarker + "{\n\"fact\":1\n}"},
-		{"First" + jevwire.EvidenceMarker + `{"fact":1}`, "Second" + jevwire.EvidenceMarker + `{"fact":2}`},
+		{"First" + evidenceMarker + "{\n\"fact\":1\n}", "Second" + evidenceMarker + "{\n\"fact\":1\n}"},
+		{"First" + evidenceMarker + `{"fact":1}`, "Second" + evidenceMarker + `{"fact":2}`},
 	}
 	for _, pair := range contexts {
 		claims := map[string]Claim{"a": {Type: ClaimNoul, Context: pair[0]}, "b": {Type: ClaimNoul, Context: pair[1]}}

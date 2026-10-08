@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -19,7 +18,7 @@ import (
 
 func TestClaimOnlyFeedsCompilationAndNeverRunsWithoutReflex(t *testing.T) {
 	var judgments atomic.Int64
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		if runtimeRequest(req) {
 			judgments.Add(1)
 			return runtimeAnswers(req, "advance")
@@ -80,7 +79,7 @@ func TestGeneratedDeclarationsRejectUnknownFieldsAndCapabilities(t *testing.T) {
 		`{"when":"x","decide":"y","observe":"ExecuteTool('bash', '{}')"}`,
 	} {
 		t.Run(output, func(t *testing.T) {
-			client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer { return declarationAnswers(req, true) })
+			client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer { return declarationAnswers(req, true) })
 			e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client)
 			requests := 0
 			cfg.Provider = testProvider(func(context.Context, *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
@@ -108,7 +107,7 @@ func TestGeneratedDeclarationsRejectUnknownFieldsAndCapabilities(t *testing.T) {
 
 func TestCloseCancelsBackgroundModelCall(t *testing.T) {
 	entered := make(chan struct{})
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer { return declarationAnswers(req, false) })
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer { return declarationAnswers(req, false) })
 	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client)
 	cfg.Provider = testProvider(func(ctx context.Context, _ *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 		close(entered)
@@ -144,8 +143,8 @@ func TestCloseCancelsBackgroundModelCall(t *testing.T) {
 
 func TestExistingSceneSkipsPageActionDeclarations(t *testing.T) {
 	var discovered atomic.Int64
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
-		out := map[string]jevwire.Answer{}
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
+		out := map[string]inferenceAnswer{}
 		for id, q := range req.Questions {
 			if !strings.HasPrefix(id, "claim") {
 				t.Errorf("unexpected compilation request %s", id)

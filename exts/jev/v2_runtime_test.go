@@ -16,14 +16,13 @@ import (
 	"github.com/chainreactors/cyber/aop"
 	coretool "github.com/chainreactors/cyber/core/tool"
 	toolhooks "github.com/chainreactors/cyber/core/tool/hooks"
-	"github.com/chainreactors/cyber/internal/jevwire"
 )
 
 func TestReflexV2ParameterFailureReleasesOrdinaryExecution(t *testing.T) {
 	for _, output := range []string{"null", `{"actor":null,"count":2,"query":true}`} {
 		t.Run(output, func(t *testing.T) {
 			entries := 0
-			client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+			client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 				if runtimeRequest(req) {
 					if _, ok := req.Questions["entry"]; ok {
 						entries++
@@ -140,7 +139,7 @@ func TestReflexV2AgentExecutorAndHandoff(t *testing.T) {
 				actor := fmt.Sprintf("当前用户 %d 'quoted' \\ \"值\"", seed)
 				effects, polls := 0, 0
 				receipt := fmt.Sprintf("actual-%s-%d", condition, seed)
-				client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+				client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 					if runtimeRequest(req) {
 						return runtimeAnswers(req, "run")
 					}
@@ -256,7 +255,7 @@ func TestReflexV2AgentExecutorAndHandoff(t *testing.T) {
 
 func TestReflexV2RuntimeJudgmentsReceiveEachCurrentResult(t *testing.T) {
 	bindings, completions := 0, 0
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		if runtimeRequest(req) {
 			return runtimeAnswers(req, "run")
 		}
@@ -321,7 +320,7 @@ func TestReflexV2RuntimeJudgmentsReceiveEachCurrentResult(t *testing.T) {
 
 func TestReflexV2CompilerAgentToolFeedback(t *testing.T) {
 	e := testLaboratory(t)
-	e.client = fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer { return declarationAnswers(req, true) })
+	e.client = fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer { return declarationAnswers(req, true) })
 	claims := map[string]Claim{"a": {Type: jevapi.ClaimNoul, Context: "Add requested items exactly once per occurrence."}, "b": {Type: jevapi.ClaimNoul, Context: "After an uncertain submission, query current completion or defer."}}
 	r := laboratoryReflex()
 	r.arguments = laboratorySuite().Cases(nil)[0].Arguments
@@ -376,7 +375,7 @@ func TestReflexV2GroupingFailureAndBackgroundIsolation(t *testing.T) {
 	defer once.Do(func() { close(release) })
 	var e *Extension
 	var selected []string
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		out := declarationAnswers(req, true)
 		for id, q := range req.Questions {
 			if strings.HasPrefix(id, "c") && id != "compile" {
@@ -397,7 +396,7 @@ func TestReflexV2GroupingFailureAndBackgroundIsolation(t *testing.T) {
 		ids = append(ids, id)
 		e.library.Claims[id] = claimRecord{Claim: c, Task: "old"}
 	}
-	client2 := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	client2 := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		out := declarationAnswers(req, true)
 		for id := range req.Questions {
 			if strings.HasPrefix(id, "claim") {

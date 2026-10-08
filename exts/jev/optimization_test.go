@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"strings"
 	"testing"
 	"time"
@@ -36,7 +35,7 @@ func TestReceiptCompactionPreservesOutcomesAndExactArguments(t *testing.T) {
 
 func TestCompilationCooldownCoversOtherClaimAndSession(t *testing.T) {
 	groups := 0
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer { groups++; return declarationAnswers(req, true) })
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer { groups++; return declarationAnswers(req, true) })
 	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client)
 	var claims []Claim
 	_ = json.Unmarshal([]byte(fixtureClaim), &claims)

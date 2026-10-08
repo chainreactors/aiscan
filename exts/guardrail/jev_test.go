@@ -8,7 +8,6 @@ import (
 	"github.com/chainreactors/cyber/aop"
 	"github.com/chainreactors/cyber/core/events"
 	"github.com/chainreactors/cyber/core/extension"
-	"github.com/chainreactors/cyber/internal/jevwire"
 
 	"github.com/chainreactors/cyber/core/hooks"
 	toolhooks "github.com/chainreactors/cyber/core/tool/hooks"
@@ -20,6 +19,16 @@ import (
 	"testing"
 	"time"
 )
+
+type inferenceRequest struct {
+	Model     string          `json:"model"`
+	State     json.RawMessage `json:"state"`
+	Questions map[string]struct {
+		Type         string          `json:"type"`
+		Instructions string          `json:"instructions"`
+		Criteria     json.RawMessage `json:"criteria"`
+	} `json:"questions"`
+}
 
 type policyConfig struct {
 	APIKey, Timeout, OnError, Level string
@@ -39,7 +48,7 @@ func TestConfiguredKeyAlwaysInstallsTwoStageChecks(t *testing.T) {
 		t.Run(consequence, func(t *testing.T) {
 			var requests, executions atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var body jevwire.Request
+				var body inferenceRequest
 				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 					t.Error(err)
 				}
@@ -104,10 +113,7 @@ func TestChoiceWireAndPerInvocationJudgment(t *testing.T) {
 		if r.Method != "POST" || r.Header.Get("Authorization") != "Bearer fixture-key" {
 			t.Error("bad authentication")
 		}
-		var body struct {
-			jevwire.Request
-			Model string `json:"model"`
-		}
+		var body inferenceRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
 		}

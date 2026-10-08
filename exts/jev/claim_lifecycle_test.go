@@ -16,13 +16,14 @@ import (
 	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 	"github.com/chainreactors/cyber/aop"
 	coretool "github.com/chainreactors/cyber/core/tool"
-	"github.com/chainreactors/cyber/internal/jevwire"
 )
 
-func TestClaimLibraryRejectsOldFormatsWithoutRewriting(t *testing.T) {
+func TestClaimLibraryRejectsUnknownAndInvalidFormatsWithoutRewriting(t *testing.T) {
 	for _, data := range []string{
-		`{"claims":{},"reflexes":{}}`,
-		`{"format":"claim/1","claims":{},"reflexes":{}}`,
+		`{"format":"claim/99","claims":{},"reflexes":{}}`,
+		`{"claims":null,"reflexes":{}}`,
+		`{"unrelated":"file"}`,
+		`{"format":"claim/2"`,
 		`{"format":"claim/2","claims":{},"reflexes":{},"compiled":{}}`,
 		`{"format":"claim/2","claims":{},"reflexes":{},"unknown":true}`,
 		`{"format":"claim/2","claims":{"c":{"text":"old","task":"x"}},"reflexes":{}}`,
@@ -43,11 +44,59 @@ func TestClaimLibraryRejectsOldFormatsWithoutRewriting(t *testing.T) {
 	}
 }
 
+func TestClaimLibraryUpgradeArchivesOnceAndRemainsUsable(t *testing.T) {
+	for _, format := range []string{"", "claim/1"} {
+		for _, mode := range []string{"off", "auto"} {
+			t.Run(format+"/"+mode, func(t *testing.T) {
+				directory := t.TempDir()
+				original := `{"claims":{"old":{"text":"Historical judgment","task":"previous","consumed":true}},"reflexes":{"old":{"observe":"old executable source"}},"compiled":{"old":true}}`
+				if format != "" {
+					original = `{"format":"` + format + `",` + original[1:]
+				}
+				path := filepath.Join(directory, "library.json")
+				if err := os.WriteFile(path, []byte(original), 0600); err != nil {
+					t.Fatal(err)
+				}
+				client := fakeJEV(t, func(inferenceRequest) map[string]inferenceAnswer { return map[string]inferenceAnswer{} })
+				e, _, _ := testInstallation(t, Config{Directory: directory, Mode: mode}, client)
+				current := e.snapshot()
+				if current.Format != libraryFormat || len(current.Claims) != 0 || len(current.Reflexes) != 0 || len(current.Candidates) != 0 {
+					t.Fatal("historical definitions became active without current validation")
+				}
+				archives, err := filepath.Glob(filepath.Join(directory, "library-backup-*.json"))
+				if err != nil || len(archives) != 1 {
+					t.Fatalf("archives=%v error=%v", archives, err)
+				}
+				got, err := os.ReadFile(archives[0])
+				if err != nil || string(got) != original {
+					t.Fatal("historical library bytes were not preserved", err)
+				}
+				claim := Claim{Type: jevapi.ClaimNoul, Context: "Current observed page is ready."}
+				id := "c" + digest(claim)[:16]
+				if _, err := e.updateLibrary(func(lib *library) (bool, error) { lib.Claims[id] = claimRecord{Claim: claim}; return true, nil }); err != nil {
+					t.Fatal(err)
+				}
+				reloaded := New(Config{Directory: directory})
+				if err := reloaded.loadLibrary(); err != nil {
+					t.Fatal(err)
+				}
+				if reloaded.snapshot().Claims[id].Context != claim.Context {
+					t.Fatal("current Claim was not persisted")
+				}
+				archives, err = filepath.Glob(filepath.Join(directory, "library-backup-*.json"))
+				if err != nil || len(archives) != 1 {
+					t.Fatal("a normal reload archived the library again", err)
+				}
+			})
+		}
+	}
+}
+
 func TestOrdinaryReflexPublishesAndCompilesItsOwnReplacement(t *testing.T) {
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		for _, kind := range []string{"input", "binding", "completion"} {
 			if _, ok := req.Questions[kind]; ok {
-				return map[string]jevwire.Answer{kind: answer("accept")}
+				return map[string]inferenceAnswer{kind: answer("accept")}
 			}
 		}
 		if runtimeRequest(req) {
@@ -179,7 +228,7 @@ func TestClaimCommandIsOrdinaryDeduplicatedPublication(t *testing.T) {
 
 func TestEmptyLibraryCompilesAtFirstReadyBoundary(t *testing.T) {
 	checks := 0
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		if _, ok := req.Questions["compile"]; ok {
 			checks++
 		}

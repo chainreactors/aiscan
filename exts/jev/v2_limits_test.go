@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/chainreactors/cyber/core/decision"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"strings"
 	"sync"
 	"testing"
@@ -25,7 +24,7 @@ func TestReflexV2NewInputDuringEntryPreventsDispatch(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	defer once.Do(func() { close(release) })
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		if runtimeRequest(req) {
 			close(entered)
 			<-release
@@ -84,12 +83,12 @@ func TestReflexV2NativeAndJudgmentLimits(t *testing.T) {
 	for _, mode := range []string{"calls", "judgments"} {
 		t.Run(mode, func(t *testing.T) {
 			executions := 0
-			client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+			client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 				if runtimeRequest(req) {
 					return runtimeAnswers(req, "run")
 				}
 				if _, ok := req.Questions["progress"]; ok {
-					return map[string]jevwire.Answer{"progress": answer("continue")}
+					return map[string]inferenceAnswer{"progress": answer("continue")}
 				}
 				return declarationAnswers(req, false)
 			})

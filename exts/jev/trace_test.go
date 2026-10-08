@@ -10,7 +10,6 @@ import (
 	"github.com/chainreactors/cyber/agent/provider"
 	"github.com/chainreactors/cyber/aop"
 	coretool "github.com/chainreactors/cyber/core/tool"
-	"github.com/chainreactors/cyber/internal/jevwire"
 )
 
 func TestProjectionKeepsFullConstraintsAndEvictsCallResultGroups(t *testing.T) {
@@ -70,13 +69,13 @@ func TestRuntimeBindingJudgmentKeepsConstraintsWithoutWholeCatalog(t *testing.T)
 		t.Fatal("fixture does not reproduce oversized binding context")
 	}
 	requests := 0
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		requests++
 		data := req.Questions["binding"].Instructions + string(req.State)
 		if strings.Count(data, constraint) != 1 || !strings.Contains(data, "read the actor's current receipt") || !strings.Contains(data, "lab status current") || strings.Contains(data, "unrelated manual") || strings.Contains(data, "host-only verification") {
 			t.Error("binding judgment lost current authorization or selected protocol")
 		}
-		return map[string]jevwire.Answer{"binding": answer("accept")}
+		return map[string]inferenceAnswer{"binding": answer("accept")}
 	})
 	e, _, _ := testInstallation(t, Config{Mode: "off"}, client)
 	e.client = client
@@ -101,7 +100,7 @@ func TestCompilationKeepsHandoffBoundaryWithoutDuplicatingConstraints(t *testing
 		t.Fatalf("handoff projection lost evidence: %s, %v", projected, err)
 	}
 	requests := 0
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		requests++
 		if len(req.State) > 64<<10 || strings.Count(string(req.State), constraint) != 1 || !strings.Contains(string(req.State), "entry missing") {
 			t.Error("compilation request duplicated or lost task evidence")
@@ -135,7 +134,7 @@ func TestLargeCapabilityCatalogPreservesObservedNativeDocumentation(t *testing.T
 	for i := range commands {
 		commands[i].Run = func(context.Context, *coretool.Execution) (any, error) { return nil, nil }
 	}
-	client := fakeJEV(t, func(jevwire.Request) map[string]jevwire.Answer {
+	client := fakeJEV(t, func(inferenceRequest) map[string]inferenceAnswer {
 		t.Error("catalog inspection dispatched a judgment")
 		return nil
 	})

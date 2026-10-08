@@ -197,16 +197,40 @@ func (e *Extension) loadLibrary() error {
 	if err != nil {
 		return err
 	}
-	var lib library
+	if len(data) > 2<<20 {
+		return errors.New("invalid JEV library format")
+	}
 	var header struct {
-		Format string `json:"format"`
+		Format   string          `json:"format"`
+		Claims   json.RawMessage `json:"claims"`
+		Reflexes json.RawMessage `json:"reflexes"`
 	}
-	if json.Unmarshal(data, &header) != nil || header.Format != libraryFormat {
-		return errors.New("unsupported JEV library format")
+	if json.Unmarshal(data, &header) != nil {
+		return errors.New("invalid JEV library format")
 	}
+	if header.Format != libraryFormat {
+		// An old semantic schema cannot preserve current executable proofs.
+		// Archive once and start the current library, using the same durable
+		// publication path. Future formats and malformed files remain errors.
+		if (header.Format != "" && header.Format != "claim/1") ||
+			!bytes.HasPrefix(bytes.TrimSpace(header.Claims), []byte("{")) ||
+			!bytes.HasPrefix(bytes.TrimSpace(header.Reflexes), []byte("{")) {
+			return errors.New("unsupported JEV library format")
+		}
+		if err = e.backupLibrary(data); err != nil {
+			return fmt.Errorf("archive old JEV library: %w", err)
+		}
+		lib := library{Format: libraryFormat, Claims: map[string]claimRecord{}, Reflexes: map[string]reflexRecord{}}
+		if err = e.saveLibrary(lib); err != nil {
+			return fmt.Errorf("initialize current JEV library: %w", err)
+		}
+		e.library = lib
+		return nil
+	}
+	var lib library
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if len(data) > 2<<20 || decoder.Decode(&lib) != nil || lib.Format != libraryFormat || lib.Claims == nil || lib.Reflexes == nil || len(lib.Claims) > maxClaims || len(lib.Reflexes) > maxReflexes || len(lib.Candidates) > maxReflexes {
+	if decoder.Decode(&lib) != nil || lib.Format != libraryFormat || lib.Claims == nil || lib.Reflexes == nil || len(lib.Claims) > maxClaims || len(lib.Reflexes) > maxReflexes || len(lib.Candidates) > maxReflexes {
 		return errors.New("invalid JEV library format")
 	}
 	for id, c := range lib.Claims {

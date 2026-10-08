@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"strings"
 	"testing"
 
@@ -13,8 +12,8 @@ import (
 )
 
 func TestIdleAutoPreservesOrdinaryModelPrompt(t *testing.T) {
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
-		out := map[string]jevwire.Answer{}
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
+		out := map[string]inferenceAnswer{}
 		for id := range req.Questions {
 			out[id] = answer(Defer)
 		}
@@ -44,7 +43,7 @@ func TestIdleAutoPreservesOrdinaryModelPrompt(t *testing.T) {
 
 func TestJEVDefersRepairBeforeAnyLLMGeneration(t *testing.T) {
 	judgments, generated := 0, 0
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		judgments++
 		if !strings.Contains(fmt.Sprint(req.Questions["compile"].Instructions), "recorded handoff BEFORE") || !strings.Contains(string(req.State), "redundant verification") {
 			t.Error("repair judgment lost its specific pre-supplementation evidence")

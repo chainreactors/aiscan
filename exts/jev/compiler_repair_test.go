@@ -14,13 +14,12 @@ import (
 	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 	"github.com/chainreactors/cyber/aop"
 	coretool "github.com/chainreactors/cyber/core/tool"
-	"github.com/chainreactors/cyber/internal/jevwire"
 )
 
-func compilerReadPlan(t *testing.T, review func(jevwire.Request) map[string]jevwire.Answer) (*Extension, *compilation, string) {
+func compilerReadPlan(t *testing.T, review func(inferenceRequest) map[string]inferenceAnswer) (*Extension, *compilation, string) {
 	t.Helper()
 	if review == nil {
-		review = func(req jevwire.Request) map[string]jevwire.Answer { return declarationAnswers(req, true) }
+		review = func(req inferenceRequest) map[string]inferenceAnswer { return declarationAnswers(req, true) }
 	}
 	executions := 0
 	client := fakeJEV(t, review)
@@ -118,7 +117,7 @@ func TestReflexV2CompilerRepairsPastOldLimits(t *testing.T) {
 
 func TestReflexV2CompilerSemanticRejectionReturnsToAgent(t *testing.T) {
 	reviews := 0
-	e, plan, actor := compilerReadPlan(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	e, plan, actor := compilerReadPlan(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		out := declarationAnswers(req, true)
 		if _, ok := req.Questions["coverage_freshness"]; ok {
 			reviews++
@@ -360,7 +359,7 @@ func TestReflexV2CompilerRequiresRuntimeSchema(t *testing.T) {
 
 func TestReflexV2CompilerRepairsUnavailableEntryArguments(t *testing.T) {
 	reviews := 0
-	e, plan, actor := compilerReadPlan(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	e, plan, actor := compilerReadPlan(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		out := declarationAnswers(req, true)
 		if _, ok := req.Questions["coverage_arguments"]; ok {
 			reviews++
@@ -448,7 +447,7 @@ func TestReflexV2CompilerRetainsTrajectoryBeyondJudgmentProjection(t *testing.T)
 func TestReflexV2CompilerMissingEvidenceWaitsWithoutPublishing(t *testing.T) {
 	for _, stage := range []string{"mechanism", "semantic"} {
 		t.Run(stage, func(t *testing.T) {
-			e, plan, actor := compilerReadPlan(t, func(req jevwire.Request) map[string]jevwire.Answer {
+			e, plan, actor := compilerReadPlan(t, func(req inferenceRequest) map[string]inferenceAnswer {
 				out := declarationAnswers(req, true)
 				out["compile"], out["defect"] = answer(Defer), answer(Defer)
 				return out

@@ -5,14 +5,62 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+type inferenceQuestion struct {
+	Type         string          `json:"type"`
+	Instructions string          `json:"instructions"`
+	Criteria     json.RawMessage `json:"criteria,omitempty"`
+}
+type inferenceRequest struct {
+	State     json.RawMessage              `json:"state"`
+	Questions map[string]inferenceQuestion `json:"questions"`
+}
+
+func TestEvaluateEnforcesBatchLimitsBeforeSending(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		count   int
+		context string
+		valid   bool
+	}{
+		{"empty", 0, "Ready?", false},
+		{"maximum", 40, "Ready?", true},
+		{"too many", 41, "Ready?", false},
+		{"too large", 3, strings.Repeat("x", 48<<10), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls atomic.Int64
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				_, _ = w.Write([]byte(`{"answers":{}}`))
+			}))
+			defer server.Close()
+			client := New("", "", time.Second)
+			defer client.Close()
+			client.Endpoint = server.URL
+			claims := map[string]Claim{}
+			for i := range tc.count {
+				claims[fmt.Sprintf("c%d", i)] = Claim{Type: ClaimNoul, Context: tc.context}
+			}
+			out, err := client.Evaluate(t.Context(), claims)
+			if tc.valid {
+				if err != nil || calls.Load() != 1 || out.TokenUsage() != nil {
+					t.Fatalf("valid batch or unknown usage changed: calls=%d result=%v error=%v", calls.Load(), out, err)
+				}
+			} else if err == nil || calls.Load() != 0 || client.Usage().Detail["requests"] != 0 {
+				t.Fatalf("invalid batch sent: calls=%d usage=%v error=%v", calls.Load(), client.Usage(), err)
+			}
+		})
+	}
+}
 
 func TestClientUsesReusableHTTP1WhenServerAlsoOffersHTTP2(t *testing.T) {
 	var connections, requests atomic.Int64
@@ -55,7 +103,7 @@ func TestEvaluatePreservesTypedClaimsAndNativeMetadata(t *testing.T) {
 		"impact":  {Type: ClaimScore, Context: "Rate impact from none to large.", Options: []string{"none", "bounded", "large"}},
 		"present": {Type: ClaimNoul, Context: "Is the element present?"},
 	}
-	questions := map[string]jevwire.Question{
+	questions := map[string]inferenceQuestion{
 		"route":   {Type: "choice", Instructions: claims["route"].Context, Criteria: json.RawMessage(`{"browser":"browser","other":"other"}`)},
 		"impact":  {Type: "score", Instructions: claims["impact"].Context, Criteria: json.RawMessage(`["none","bounded","large"]`)},
 		"present": {Type: "noul", Instructions: claims["present"].Context},
@@ -138,7 +186,7 @@ func TestNumericAnswersRejectMissingWrongTypeAndOutOfRangeValues(t *testing.T) {
 func TestRetriesAccountForMissingUsageAndPreserveBatch(t *testing.T) {
 	var calls atomic.Int64
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req jevwire.Request
+		var req inferenceRequest
 		if json.NewDecoder(r.Body).Decode(&req) != nil || len(req.Questions) != 2 {
 			t.Error("batch not preserved")
 		}
@@ -152,12 +200,15 @@ func TestRetriesAccountForMissingUsageAndPreserveBatch(t *testing.T) {
 	c := New("key", DefaultModel, time.Second)
 	defer c.Close()
 	c.Endpoint = s.URL
-	q := map[string]jevwire.Question{"entry": {Type: "choice", Criteria: json.RawMessage(`{"run":"run"}`)}, "run": {Type: "choice", Criteria: json.RawMessage(`{"go":"go"}`)}}
-	out, err := c.exchange(t.Context(), jevwire.Request{State: json.RawMessage(`{}`), Questions: q})
+	claims := map[string]Claim{
+		"entry": {Type: ClaimChoice, Context: "Should execution run?", Options: []string{"run", "defer"}},
+		"run":   {Type: ClaimChoice, Context: "What is next?", Options: []string{"go", "defer"}},
+	}
+	out, err := c.Evaluate(t.Context(), claims)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Attempts != 2 || out.TokenUsage().Detail["usage_missing"] != 1 || c.Usage().Detail["usage_missing"] != 1 || c.Usage().InputTokens != 20 {
+	if out.TokenUsage().Detail["requests"] != 2 || out.TokenUsage().Detail["usage_missing"] != 1 || c.Usage().Detail["usage_missing"] != 1 || c.Usage().InputTokens != 20 {
 		t.Fatalf("incomplete retry accounting: %v %v", out, c.Usage())
 	}
 }
@@ -172,7 +223,7 @@ func TestClientRejectsRedirectsAndInvalidSelectedAnswers(t *testing.T) {
 	c := New("key", DefaultModel, time.Second)
 	defer c.Close()
 	c.Endpoint = s.URL
-	_, err := c.exchange(t.Context(), jevwire.Request{State: json.RawMessage(`{}`), Questions: map[string]jevwire.Question{"q": {Type: "choice"}}})
+	_, err := c.Evaluate(t.Context(), map[string]Claim{"q": {Type: ClaimChoice, Context: "Ready?", Options: []string{"yes", "no"}}})
 	if err == nil || targetCalls.Load() != 0 {
 		t.Fatal("redirect followed")
 	}
@@ -192,7 +243,7 @@ func TestDroppedConnectionsRetryTheSameJudgmentAndAccountForUsage(t *testing.T) 
 			var calls atomic.Int64
 			body := `{"answers":{"q":{"type":"choice","choice":"yes"}},"usage":{"input_tokens":20,"output_tokens":1}}`
 			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var req jevwire.Request
+				var req inferenceRequest
 				if json.NewDecoder(r.Body).Decode(&req) != nil || len(req.Questions) != 1 || string(req.State) != `{"ready":true}` {
 					t.Error("retry changed the judgment")
 				}
@@ -216,7 +267,7 @@ func TestDroppedConnectionsRetryTheSameJudgmentAndAccountForUsage(t *testing.T) 
 			c := New("key", DefaultModel, 2*time.Second)
 			defer c.Close()
 			c.Endpoint = s.URL
-			q := Claim{Type: ClaimChoice, Context: "Is it ready?" + jevwire.EvidenceMarker + `{"ready":true}`, Options: []string{"yes", "no"}}
+			q := Claim{Type: ClaimChoice, Context: "Is it ready?" + evidenceMarker + `{"ready":true}`, Options: []string{"yes", "no"}}
 			out, err := c.Evaluate(t.Context(), map[string]Claim{"q": q})
 			if err != nil {
 				t.Fatal(err)
@@ -245,7 +296,7 @@ func TestDroppedConnectionRetriesRespectAttemptAndTimeBudgets(t *testing.T) {
 			c := New("key", DefaultModel, budget)
 			defer c.Close()
 			c.Endpoint = s.URL
-			out, err := c.exchange(t.Context(), jevwire.Request{State: json.RawMessage(`{}`), Questions: map[string]jevwire.Question{"q": {Type: "choice"}}})
+			_, err := c.Evaluate(t.Context(), map[string]Claim{"q": {Type: ClaimChoice, Context: "Ready?", Options: []string{"yes", "no"}}})
 			want := int64(3)
 			if budget < 250*time.Millisecond {
 				want = 1
@@ -253,8 +304,8 @@ func TestDroppedConnectionRetriesRespectAttemptAndTimeBudgets(t *testing.T) {
 					t.Fatalf("lost request deadline: %v", err)
 				}
 			}
-			if err == nil || calls.Load() != want || out.Attempts != uint64(want) || c.Usage().Detail["usage_missing"] != uint64(want) {
-				t.Fatalf("calls=%d attempts=%d usage=%v error=%v", calls.Load(), out.Attempts, c.Usage(), err)
+			if err == nil || calls.Load() != want || c.Usage().Detail["requests"] != uint64(want) || c.Usage().Detail["usage_missing"] != uint64(want) {
+				t.Fatalf("calls=%d attempts=%d usage=%v error=%v", calls.Load(), c.Usage().Detail["requests"], c.Usage(), err)
 			}
 		})
 	}

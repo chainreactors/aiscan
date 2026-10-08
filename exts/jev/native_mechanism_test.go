@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -42,7 +41,7 @@ func TestReflexV2ReplayLiteralShellEncoding(t *testing.T) {
 
 func TestReflexV2FrozenReusesWithoutLearning(t *testing.T) {
 	effects := 0
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer { return runtimeAnswers(req, "run") })
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer { return runtimeAnswers(req, "run") })
 	e, cfg, _ := testInstallation(t, Config{Mode: "auto", Learning: "frozen"}, client, coretool.Command{Name: "lab", Run: func(_ context.Context, ex *coretool.Execution) (any, error) {
 		if ex.Args[0] == "add" {
 			effects++
@@ -184,7 +183,7 @@ func TestReflexV2RuntimeSemanticJudgmentsDefer(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			e := testLaboratory(t)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_ = json.NewEncoder(w).Encode(jevwire.Response{Answers: map[string]jevwire.Answer{kind: {Type: "choice", Choice: Defer}}})
+				_ = json.NewEncoder(w).Encode(inferenceResponse{Answers: map[string]inferenceAnswer{kind: {Type: "choice", Choice: Defer}}})
 			}))
 			defer server.Close()
 			e.client = jevapi.New("test-only", "test", time.Second)

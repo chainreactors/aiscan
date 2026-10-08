@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -61,7 +60,11 @@ func TestGuardrailDecisionsSurviveTimelineRestart(t *testing.T) {
 				timeout = 30 * time.Millisecond
 			}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var body jevwire.Request
+				var body struct {
+					Questions map[string]struct {
+						Instructions string `json:"instructions"`
+					} `json:"questions"`
+				}
 				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 					t.Error(err)
 					w.WriteHeader(http.StatusBadRequest)

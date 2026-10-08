@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"strings"
 	"sync"
 	"testing"
@@ -255,7 +254,7 @@ func TestReflexV2ClaimTriggerAndCandidate(t *testing.T) {
 	var claimID string
 	compileDecision := false
 	generations := 0
-	client := fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		out := declarationAnswers(req, true)
 		if _, ok := req.Questions["claim0"]; ok {
 			if claimID != "" {

@@ -3,7 +3,6 @@ package jev
 import (
 	"context"
 	"encoding/json"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -23,6 +22,31 @@ import (
 	coretool "github.com/chainreactors/cyber/core/tool"
 	terminalext "github.com/chainreactors/cyber/exts/terminal"
 )
+
+// The mock describes the external inference API independently of the adapter.
+type inferenceRequest struct {
+	State     json.RawMessage `json:"state"`
+	Questions map[string]struct {
+		Type         string          `json:"type"`
+		Instructions string          `json:"instructions"`
+		Criteria     json.RawMessage `json:"criteria,omitempty"`
+	} `json:"questions"`
+}
+type inferenceAnswer struct {
+	Type          string             `json:"type"`
+	Choice        string             `json:"choice,omitempty"`
+	Score         *float64           `json:"score,omitempty"`
+	Noul          *float64           `json:"noul,omitempty"`
+	Probabilities map[string]float64 `json:"probabilities,omitempty"`
+	Confidence    float64            `json:"confidence,omitempty"`
+}
+type inferenceResponse struct {
+	Answers map[string]inferenceAnswer `json:"answers"`
+	Usage   *struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+	} `json:"usage,omitempty"`
+}
 
 type testProvider func(context.Context, *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error)
 
@@ -91,10 +115,10 @@ func testInstallationWithExtensions(t *testing.T, config Config, client *jevapi.
 	})
 	return e, agent.Config{Loop: agent.StandardLoop{}, Tools: tools, Hooks: registry, Model: "test", SystemPrompt: "Use supplied tools to complete the task. Observe the result before reporting success.", MaxTokens: agent.DefaultMaxTokens, MaxTurns: 20, MaxRetries: -1}, cmds
 }
-func fakeJEV(t *testing.T, choose func(jevwire.Request) map[string]jevwire.Answer) *jevapi.Client {
+func fakeJEV(t *testing.T, choose func(inferenceRequest) map[string]inferenceAnswer) *jevapi.Client {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req jevwire.Request
+		var req inferenceRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Error(err)
 			w.WriteHeader(400)
@@ -112,7 +136,7 @@ func fakeJEV(t *testing.T, choose func(jevwire.Request) map[string]jevwire.Answe
 	t.Cleanup(client.Close)
 	return client
 }
-func answer(id string) jevwire.Answer { return jevwire.Answer{Type: "choice", Choice: id} }
+func answer(id string) inferenceAnswer { return inferenceAnswer{Type: "choice", Choice: id} }
 func installReflex(e *Extension, sources ...string) {
 	calls := map[string]string{}
 	for _, source := range sources {
@@ -180,7 +204,7 @@ func stepObserve(command string, withArgument bool) string {
  })()`)
 }
 
-func runtimeRequest(req jevwire.Request) bool {
+func runtimeRequest(req inferenceRequest) bool {
 	if _, ok := req.Questions["entry"]; ok {
 		return true
 	}
@@ -192,8 +216,8 @@ func runtimeRequest(req jevwire.Request) bool {
 	return false
 }
 
-func runtimeAnswers(req jevwire.Request, choice string) map[string]jevwire.Answer {
-	out := map[string]jevwire.Answer{}
+func runtimeAnswers(req inferenceRequest, choice string) map[string]inferenceAnswer {
+	out := map[string]inferenceAnswer{}
 
 	for id := range req.Questions {
 		out[id] = answer(Defer)
@@ -245,8 +269,8 @@ func runtimeAnswers(req jevwire.Request, choice string) map[string]jevwire.Answe
 
 const fixtureClaim = `[{"type":"choice","context":"A task requires finite step advancement. Can the task advance now? advance: known step; defer: missing information or completed task.","options":["advance","defer"]}]`
 
-func declarationAnswers(req jevwire.Request, compile bool) map[string]jevwire.Answer {
-	out := map[string]jevwire.Answer{}
+func declarationAnswers(req inferenceRequest, compile bool) map[string]inferenceAnswer {
+	out := map[string]inferenceAnswer{}
 
 	if runtimeRequest(req) {
 		return runtimeAnswers(req, "advance/go")

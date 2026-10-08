@@ -3,7 +3,6 @@ package jev
 import (
 	"context"
 	"encoding/json"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"strings"
 	"testing"
 	"time"
@@ -32,7 +31,7 @@ func TestRuntimeCancellationCannotBeCaughtByGeneratedCode(t *testing.T) {
 }
 
 func TestParameterResponseRejectsTrailingDataAndUnknownInput(t *testing.T) {
-	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, fakeJEV(t, func(req jevwire.Request) map[string]jevwire.Answer { return runtimeAnswers(req, Defer) }))
+	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer { return runtimeAnswers(req, Defer) }))
 	for _, output := range []string{`null`, `{"actor":"bob"} broken`, `{"actor":"bob"} {}`} {
 		cfg.Provider = testProvider(func(context.Context, *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 			return reply(provider.TextMessage("assistant", output)), nil

@@ -441,7 +441,7 @@ jobs:
         run: |
           # Untracked output is drift too: a new proto yields a new binding file,
           # which `git diff` never reports.
-          test -z "$(git status --porcelain -- pkg/rpc core/types exts/guardrail/guardrail.pb.go exts/jev/jev.pb.go web/frontend/src/gen)"
+          test -z "$(git status --porcelain -- pkg/rpc core/decision core/types exts/guardrail/guardrail.pb.go exts/jev/jev.pb.go web/frontend/src/gen)"
           # The AOP bindings are generated into the cyber-ui submodule, where the
           # superproject tracks only the gitlink, so a regeneration inside it is
           # invisible from here and the check has to run in the submodule.

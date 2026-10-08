@@ -22,7 +22,6 @@ import (
 	"github.com/chainreactors/cyber/aop"
 	"github.com/chainreactors/cyber/core/extension"
 	coretool "github.com/chainreactors/cyber/core/tool"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -59,7 +58,7 @@ func TestClaimPipelineLiteralEncoding(t *testing.T) {
 
 func TestClaimPipelineReviewReceivesResolvedReport(t *testing.T) {
 	var reviewed atomic.Bool
-	e, plan, actor := compilerReadPlan(t, func(req jevwire.Request) map[string]jevwire.Answer {
+	e, plan, actor := compilerReadPlan(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		if strings.Contains(string(req.State), `"reflex":`) {
 			reviewed.Store(true)
 			if !strings.Contains(string(req.State), `\"report\":\"current-native-receipt\"`) && !strings.Contains(string(req.State), `"report":"current-native-receipt"`) {
@@ -112,7 +111,7 @@ func TestLiveClaimToReflexPipeline(t *testing.T) {
 	runClaimPipeline(t, mode, client, llm, Claim{Type: jevapi.ClaimNoul, Context: "Inspect the currently requested target through claimlab inspect and report its actual current receipt."})
 }
 
-func pipelineDecisions(req jevwire.Request) map[string]jevwire.Answer {
+func pipelineDecisions(req inferenceRequest) map[string]inferenceAnswer {
 	if runtimeRequest(req) {
 		return runtimeAnswers(req, "run")
 	}
@@ -353,9 +352,10 @@ func runClaimPipeline(t *testing.T, mode string, client *jevapi.Client, real pro
 			}
 			counts, reads := f.snapshot()
 			report.NativeReads = reads
-			if report.Stage == "cold" {
+			switch report.Stage {
+			case "cold":
 				report.ColdModel = counts
-			} else if report.Stage == "reuse" {
+			case "reuse":
 				report.WarmModel = counts
 			}
 			data, err := json.MarshalIndent(report, "", "  ")

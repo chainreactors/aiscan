@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/chainreactors/cyber/internal/jevwire"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -234,7 +233,7 @@ func usageDifference(after, before *aop.TokenUsage) *aop.TokenUsage {
 func llmFiniteJudge(t *testing.T, meter *paidMeter, model string) *jevapi.Client {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req jevwire.Request
+		var req inferenceRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request", 400)
 			return
@@ -248,7 +247,7 @@ func llmFiniteJudge(t *testing.T, meter *paidMeter, model string) *jevapi.Client
 			http.Error(w, "finite LLM judgment unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		var answer jevwire.Response
+		var answer inferenceResponse
 		if json.Unmarshal([]byte(provider.MessageText(response.Choices[0].Message)), &answer) != nil || len(answer.Answers) != len(req.Questions) {
 			http.Error(w, "invalid finite answer", http.StatusBadGateway)
 			return
