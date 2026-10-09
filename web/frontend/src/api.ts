@@ -1,10 +1,10 @@
 import type { SCONode } from '@cyber/cstx-easm';
-import { Code, ConnectError, createClient } from '@connectrpc/connect'
-import { createConnectTransport } from '@connectrpc/connect-web'
+import { ConnectError } from '@connectrpc/connect'
+import { requireAuth, requireConnection, aopClient } from './runtime/api-bridge'
+import { AuthError } from './runtime/auth'
 import { create, type MessageInitShape } from '@bufbuild/protobuf'
 import { anyPack } from '@bufbuild/protobuf/wkt'
 import {
-  AOPClient,
   newID as newRPCID,
   AOPProtocolMessageSchema,
   FileProtocolMessageSchema,
@@ -17,7 +17,6 @@ import {
   type TurnReceipt,
 } from '@cyber/aop';
 import {
-  AgentService,
   CommandProtocolMessageSchema,
   GuardrailProtocolMessageSchema,
   JEVProtocolMessageSchema,
@@ -25,18 +24,12 @@ import {
   type JEVLibrary,
   type GuardrailProtocolMessage,
   type Review,
-  ConfigService,
   DistributeConfigSchema,
   LLMProbeRequestSchema,
   ReloadProtocolMessageSchema,
   AgentRunOptionsSchema,
-  ArtifactService,
-  ScanProtocolMessageSchema,
-  ScanService,
   ScanStatus,
   SessionBindingSchema,
-  SessionService,
-  SystemService,
   type AgentView,
   type AgentListMetadata,
   type CommandProtocolMessage,
@@ -70,38 +63,11 @@ export { ScanStatus };
 // JSON framing expands an Any by looking its type up in a client-side registry,
 // so one unregistered extension makes the entire response undecodable; binary
 // framing leaves the Any as {typeUrl, value} for the caller's own anyUnpack.
-const connectTransport = createConnectTransport({
-  baseUrl: window.location.origin,
-  useBinaryFormat: true,
+// Resolve clients at call time. Only the authenticated Cordis Hub owns them.
+const cyberRPC = new Proxy({} as import('./runtime/connection').ConnectionService['rpc'], {
+  get: (_target, name) => requireConnection().rpc[name as keyof import('./runtime/connection').ConnectionService['rpc']],
 })
 
-// One Cyber facade is initialized for the application. The generated service
-// clients are lightweight API groups and all share this single transport.
-const cyberRPC = {
-  sessions: createClient(SessionService, connectTransport),
-  scans: createClient(ScanService, connectTransport),
-  config: createClient(ConfigService, connectTransport),
-  agents: createClient(AgentService, connectTransport),
-  system: createClient(SystemService, connectTransport),
-  artifacts: createClient(ArtifactService, connectTransport),
-}
-const aopClient = new AOPClient()
-  .register(CommandProtocolMessageSchema)
-  .register(ReloadProtocolMessageSchema)
-  .register(GuardrailProtocolMessageSchema)
-  .register(JEVProtocolMessageSchema)
-
-const registeredCapabilities = new Set<string>()
-// Protocol packages are mounted from the server manifest. A profile-neutral
-// Hub therefore does not register or dispatch scan messages unless the Hub or
-// a connected profile advertises the scan capability.
-export function registerCapabilityProtocols(capability: string): void {
-  if (registeredCapabilities.has(capability)) return
-  if (capability === 'scan') aopClient.register(ScanProtocolMessageSchema)
-  registeredCapabilities.add(capability)
-}
-
-export const AUTH_REQUIRED_EVENT = 'cyber:auth-required'
 export const CONFIG_CHANGED_EVENT = 'cyber:config-changed'
 
 export class APIError extends Error {
@@ -111,31 +77,12 @@ export class APIError extends Error {
   }
 }
 
-export async function getAuthSession(): Promise<boolean> {
-  const res = await fetch('/api/auth/session', { cache: 'no-store' })
-  if (!res.ok) return false
-  const body = await res.json() as { authenticated?: boolean }
-  return body.authenticated === true
-}
-
+export async function getAuthSession(): Promise<boolean> { return requireAuth().check() }
 export async function login(token: string): Promise<void> {
-  const res = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token }),
-  })
-  if (!res.ok) {
-    throw new APIError(await errorMessage(res, 'Login failed'), res.status)
-  }
+  try { await requireAuth().login(token) }
+  catch (error) { if (error instanceof AuthError) throw new APIError(error.message, error.status); throw error }
 }
-
-export async function logout(): Promise<void> {
-  try {
-    await fetch('/api/auth/logout', { method: 'POST' })
-  } finally {
-    notifyAuthRequired()
-  }
-}
+export async function logout(): Promise<void> { await requireAuth().logout() }
 
 export async function getAgentConnectToken(): Promise<string> {
   const body = await apiJSON<{ token?: string }>(
@@ -534,7 +481,6 @@ function rejectionError(value: { code?: string; message?: string } | undefined, 
 function connectFailure(error: unknown, fallback: string): Error {
   if ((error as { rejected?: boolean })?.rejected && error instanceof Error) return error
   const failure = ConnectError.from(error)
-  if (failure.code === Code.Unauthenticated) window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT))
   return new Error(failure.rawMessage || failure.message || fallback)
 }
 
@@ -571,14 +517,9 @@ async function apiJSON<T>(path: string, fallbackMessage: string, init?: RequestI
 }
 
 async function authenticatedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const res = await fetch(input, init)
-  if (res.status === 401) notifyAuthRequired()
-  return res
+  return requireConnection().fetch(input, init)
 }
 
-function notifyAuthRequired() {
-  window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT))
-}
 
 async function errorMessage(res: Response, fallback: string) {
   try {

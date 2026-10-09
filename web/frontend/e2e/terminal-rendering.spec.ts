@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-const fixtureURL = `http://127.0.0.1:${process.env.CYBER_E2E_FIXTURE_PORT || '38082'}`
+const fixtureURL = `http://127.0.0.1:${process.env.CYBER_UI_TEST_PORT || '38185'}`
 
 test.beforeEach(async ({ page }) => {
   await page.goto(`${fixtureURL}/e2e/fixtures/terminal-rendering.html`)

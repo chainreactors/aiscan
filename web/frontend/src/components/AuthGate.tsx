@@ -1,35 +1,18 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Eye, EyeOff, KeyRound, LoaderCircle } from 'lucide-react'
 import { Button, Input, TooltipProvider } from '@cyber/ui'
-import { APIError, AUTH_REQUIRED_EVENT, getAuthSession, login } from '../api'
+import { APIError, login } from '../api'
 import BrandLogo from './brand/BrandLogo'
 import LanguageToggle from './LanguageToggle'
 
-type AuthState = 'checking' | 'authenticated' | 'unauthenticated'
+import type { AuthService } from '../runtime/auth'
+import { useObservable } from '../runtime/react'
 
-export default function AuthGate({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>('checking')
-
-  useEffect(() => {
-    let active = true
-    const requireAuth = () => setState('unauthenticated')
-    window.addEventListener(AUTH_REQUIRED_EVENT, requireAuth)
-
-    void getAuthSession()
-      .then((authenticated) => { if (active) setState(authenticated ? 'authenticated' : 'unauthenticated') })
-      .catch(() => { if (active) setState('unauthenticated') })
-
-    return () => {
-      active = false
-      window.removeEventListener(AUTH_REQUIRED_EVENT, requireAuth)
-    }
-  }, [])
-
-  if (state === 'checking') return <AuthLoading />
-  if (state === 'unauthenticated') {
-    return <LoginPage onAuthenticated={() => setState('authenticated')} />
-  }
+export default function AuthGate({ children, auth, ready }: { children: ReactNode; auth: AuthService; ready: boolean }) {
+  const { state } = useObservable(auth)
+  if (state === 'unauthenticated') return <LoginPage />
+  if (state === 'checking' || !ready) return <AuthLoading />
   return children
 }
 
@@ -45,7 +28,7 @@ function AuthLoading() {
   )
 }
 
-function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) {
+function LoginPage() {
   const { t } = useTranslation('app')
   const [token, setToken] = useState('')
   const [showToken, setShowToken] = useState(false)
@@ -64,7 +47,6 @@ function LoginPage({ onAuthenticated }: { onAuthenticated: () => void }) {
     setError('')
     try {
       await login(value)
-      onAuthenticated()
     } catch (err) {
       setError(err instanceof APIError && err.status === 401 ? t('loginInvalid') : t('loginUnavailable'))
     } finally {

@@ -36,7 +36,6 @@ import {
   ChatThinking,
   MessageBubble as ChatMessageBubble,
   createAOPTimelineReducer,
-  resolveTimelineRenderer,
   summarizeArgs,
   type ChatAttachment,
   type CommandHint,
@@ -63,7 +62,8 @@ import { withRecaps } from '../lib/recap-view'
 import { isJEVBoundary, jevTimelineEvents, projectJEV, runtimeEvents, withJEV } from '../lib/jev-view'
 import { withWorkflows, type WorkflowTurn } from '../lib/workflow-view'
 import { Workflow } from './chat/Workflow'
-import './chat/JEVTimeline'
+import { emptyExtensionResolver, type ExtensionResolver } from '../runtime/conversation'
+import { ContributionBoundary } from '../runtime/contribution-boundary'
 import { ReviewState, type Review } from '../cyber-proto'
 import type { IOAConsoleTarget } from '../lib/ioa-navigation'
 
@@ -413,6 +413,8 @@ const contentOffsetClass = 'xl:ml-[8.75rem] 2xl:ml-[10.75rem]'
 const threadOffsetClass = 'lg:mr-[10.75rem] xl:mr-[11.75rem] 2xl:mr-[14.75rem]'
 
 interface Props {
+  resolveExtension?: ExtensionResolver
+  extensionRevision?: number
   timeline: TimelineItem[]
   aopEvents?: AOPEvent[]
   guardrailUnavailable?: boolean
@@ -440,6 +442,8 @@ interface Props {
 }
 
 export default function ChatPanel({
+  resolveExtension = emptyExtensionResolver,
+  extensionRevision = 0,
   timeline,
   aopEvents = [],
   guardrailReviews,
@@ -505,8 +509,8 @@ export default function ChatPanel({
 
     return withWorkflows(withRecaps(withJEV(groupGuardrailTurns(withGuardrailReviews([...platformItems, ...visibleAopItems].sort(
       (left, right) => left.timestamp - right.timestamp || left.id.localeCompare(right.id),
-    ), guardrailReviews, aopEvents, !guardrailUnavailable)), projectJEV(aopEvents)), aopEvents), aopEvents)
-  }, [agentEvents, aopEvents, aopReducers, isBusy, liveThinkingItem, timeline, guardrailReviews, guardrailUnavailable])
+    ), guardrailReviews, aopEvents, !guardrailUnavailable)), projectJEV(aopEvents)), aopEvents), aopEvents, resolveExtension)
+  }, [agentEvents, aopEvents, aopReducers, isBusy, liveThinkingItem, timeline, guardrailReviews, guardrailUnavailable, resolveExtension, extensionRevision])
   // Keep the transcript geometry stable as IOA messages arrive. The right rail
   // is part of the desktop workspace even when the current session has no IOA
   // activity, so the conversation and composer never jump horizontally.
@@ -664,12 +668,12 @@ export default function ChatPanel({
           <div className="min-w-0 flex-1"><GuardrailReviewCard review={item.data.review as Review} unavailable={item.data.unavailable === true} intercepted={item.data.intercepted === true} outcome={item.data.outcome as string | undefined} actionable={item.data.actionable === true}
             reviewedAt={item.data.reviewedAt as number | undefined} onResolve={onResolveGuardrail} /></div>
         </div>
-      : timelineContent(item, activeThinkingResponseID, onResolveGuardrail),
-    [activeThinkingResponseID, onResolveGuardrail],
+      : timelineContent(item, activeThinkingResponseID, onResolveGuardrail, resolveExtension),
+    [activeThinkingResponseID, onResolveGuardrail, resolveExtension, extensionRevision],
   )
   const renderViewerMark = useCallback(
-    (item: ViewerTimelineItem) => <TimelineMark item={item} />,
-    [],
+    (item: ViewerTimelineItem) => <ContributionBoundary id={item.id} resetKey={extensionRevision}><TimelineMark item={item} resolveExtension={resolveExtension} /></ContributionBoundary>,
+    [resolveExtension, extensionRevision],
   )
   const ioaRailItems = useMemo(() => {
     const entries = viewerTimeline.map((item) => ({ item, note: describeIOAThreadItem(item, t) }))
@@ -840,6 +844,7 @@ function timelineContent(
   item: ViewerTimelineItem,
   activeThinkingResponseID: string | null,
   onResolveGuardrail: (review: Review, approve: boolean) => Promise<void>,
+  resolveExtension: ExtensionResolver,
 ): ReactNode {
   switch (item.kind) {
     case 'message': {
@@ -870,7 +875,7 @@ function timelineContent(
     }
 
     case 'assistant_response':
-      return <AssistantResponseEntry response={item} activeThinking={item.id === activeThinkingResponseID} onResolveGuardrail={onResolveGuardrail} />
+      return <AssistantResponseEntry response={item} resolveExtension={resolveExtension} activeThinking={item.id === activeThinkingResponseID} onResolveGuardrail={onResolveGuardrail} />
 
     case 'tool_call':
       return (
@@ -891,7 +896,7 @@ function timelineContent(
       return (
         <SubagentRunCard run={item}>
           {item.items.map((child) => (
-            <div key={child.id}>{timelineContent(child, activeThinkingResponseID, onResolveGuardrail)}</div>
+            <div key={child.id}>{timelineContent(child, activeThinkingResponseID, onResolveGuardrail, resolveExtension)}</div>
           ))}
         </SubagentRunCard>
       )
@@ -910,7 +915,7 @@ function timelineContent(
           : node.kind === 'extension' && node.extensionType === 'guardrail'
           ? <GuardrailReviewCard review={node.data.review as Review} unavailable={node.data.unavailable === true} intercepted={node.data.intercepted === true}
               outcome={node.data.outcome as string | undefined} actionable={node.data.actionable === true} reviewedAt={node.data.reviewedAt as number | undefined} onResolve={onResolveGuardrail} />
-          : timelineContent(node, activeThinkingResponseID, onResolveGuardrail)} />
+          : timelineContent(node, activeThinkingResponseID, onResolveGuardrail, resolveExtension)} />
       if (item.event && observation(item.event)) return <ObservedEvent event={item.event} />
       if (item.extensionType === 'eval') {
         return (
@@ -938,10 +943,10 @@ function timelineContent(
           />
         )
       }
-      const config = resolveTimelineRenderer(item.extensionType)
-      if (!config) return null
+      const config = resolveExtension(item.extensionType)
+      if (!config) return <div data-unknown-extension={item.extensionType} className="text-xs text-muted-foreground">{item.extensionType}</div>
       const Renderer = config.renderer
-      return <Renderer item={item} context={{}} />
+      return <ContributionBoundary id={item.extensionType} resetKey={config}><Renderer item={item} context={{}} /></ContributionBoundary>
     }
 
     case 'divider':
@@ -1095,7 +1100,9 @@ function AssistantResponseEntry({
   activeThinking,
   embedded = false,
   onResolveGuardrail,
+  resolveExtension,
 }: {
+  resolveExtension: ExtensionResolver
   response: Extract<ViewerTimelineItem, { kind: 'assistant_response' }>
   activeThinking: boolean
   embedded?: boolean
@@ -1184,14 +1191,14 @@ function AssistantResponseEntry({
         <div data-guardrail-turn-steps className="divide-y divide-border">
         {response.steps.map(step => step.kind === 'assistant_response'
           ? <AssistantResponseEntry key={step.id} response={step} embedded
-              activeThinking={activeThinking && step.id === latestStreamingResponseID(response.steps!)} onResolveGuardrail={onResolveGuardrail} />
+              activeThinking={activeThinking && step.id === latestStreamingResponseID(response.steps!)} onResolveGuardrail={onResolveGuardrail} resolveExtension={resolveExtension} />
           : step.kind === 'extension' && step.extensionType === 'guardrail'
             ? <div key={step.id} className="px-3 py-2" data-guardrail-turn-step>
                 <GuardrailReviewCard review={step.data.review as Review} unavailable={step.data.unavailable === true} intercepted={step.data.intercepted === true} outcome={step.data.outcome as string | undefined} actionable={step.data.actionable === true}
                   reviewedAt={step.data.reviewedAt as number | undefined} onResolve={onResolveGuardrail} embedded />
               </div>
             : <div key={step.id} className="px-3 py-2" data-guardrail-turn-step>
-                {timelineContent(step, null, onResolveGuardrail)}
+                {timelineContent(step, null, onResolveGuardrail, resolveExtension)}
               </div>)}
         </div>
       </div>}
@@ -1216,9 +1223,9 @@ function latestStreamingResponseID(items: ViewerTimelineItem[]): string | null {
   return latestID
 }
 
-function TimelineMark({ item }: { item: ViewerTimelineItem }) {
+function TimelineMark({ item, resolveExtension }: { item: ViewerTimelineItem; resolveExtension: ExtensionResolver }) {
   const { t } = useTranslation('chat')
-  const descriptor = describeTimelineItem(item, t)
+  const descriptor = describeTimelineItem(item, t, resolveExtension)
   if (!descriptor) return <div className="hidden w-full xl:block" />
 
   return (
@@ -1491,7 +1498,7 @@ interface TimelineDescriptor {
   dotClass: string
 }
 
-function describeTimelineItem(item: ViewerTimelineItem, t: (key: string) => string): TimelineDescriptor | null {
+function describeTimelineItem(item: ViewerTimelineItem, t: (key: string) => string, resolveExtension: ExtensionResolver): TimelineDescriptor | null {
   const time = formatRailTime(item)
 
   switch (item.kind) {
@@ -1595,7 +1602,7 @@ function describeTimelineItem(item: ViewerTimelineItem, t: (key: string) => stri
           dotClass: 'border-warning bg-warning',
         }
       }
-      const config = resolveTimelineRenderer(item.extensionType)
+      const config = resolveExtension(item.extensionType)
       if (config?.mark) {
         const markLabel = typeof config.mark.label === 'function'
           ? config.mark.label(item) : (config.mark.label || item.extensionType)

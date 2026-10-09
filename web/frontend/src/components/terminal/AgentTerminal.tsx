@@ -154,7 +154,9 @@ export default function AgentTerminal({ agent }: { agent: AgentView }) {
       if (activeRef.current && !attachingRef.current) sendFrame(create(PtyProtocolMessageSchema, { message: { case: 'resize', value: { streamId: streamID, cols, rows } } }))
     })
     cleanupRef.current = () => {
-      sendFrame(create(PtyProtocolMessageSchema, { message: { case: 'detach', value: { streamId: streamID } } }))
+      // Logout stops API admission before unmounting consumers. The owning
+      // connection closes the stream; local listeners must still be released.
+      if (aopClient.connected) sendFrame(create(PtyProtocolMessageSchema, { message: { case: 'detach', value: { streamId: streamID } } }))
       unsubscribe()
       dataDisposable.dispose()
       binaryDisposable.dispose()

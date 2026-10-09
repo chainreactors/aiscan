@@ -1,3 +1,4 @@
+import { startFixtureRuntime } from './runtime'
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { create, fromBinary, toBinary } from '@bufbuild/protobuf'
@@ -64,6 +65,7 @@ class Socket {
   close() { this.readyState = 3; this.onclose?.() }
 }
 window.WebSocket = Socket as any
+const runtime = await startFixtureRuntime()
 Object.assign(window, { guardrailFixture: fixture, guardrailClient: aopClient })
 
 function Fixture() {

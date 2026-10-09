@@ -1,6 +1,6 @@
 import type { AOPEvent, ViewerTimelineItem } from '@/viewer'
 import { observation } from '../../cyber-ui/packages/viewer/src/lib/observations'
-import { resolveTimelineRenderer } from '../../cyber-ui/packages/viewer/src/components/chat/timeline-registry'
+import type { ExtensionResolver } from '../runtime/conversation'
 import type { ToolCallEntry } from '../../cyber-ui/packages/viewer/src/types/timeline'
 import { eventTime, jevEvent, runtimeEvents, type JEVCompilation, type JEVSegment, type JEVCheck, type JEVRecord, type JEVStep } from './jev-view'
 import { decisionOptions, decisionText, parseJEVJSON, evaluationChoice, evaluationNumber } from './jev-decisions'
@@ -127,7 +127,7 @@ export function recordWorkflows(owner: JEVSegment | JEVCompilation | JEVCheck): 
     item.kind === 'extension' && item.extensionType === 'workflow' ? [{ ...(item.data.workflow as WorkflowTurn), live }] : [])
 }
 
-export function withWorkflows(items: ViewerTimelineItem[], source: readonly AOPEvent[]): ViewerTimelineItem[] {
+export function withWorkflows(items: ViewerTimelineItem[], source: readonly AOPEvent[], resolveExtension: ExtensionResolver = () => undefined): ViewerTimelineItem[] {
   const events = runtimeEvents(source), turns = new Map<string, WorkflowTurn>()
   const parents = new Map(events.flatMap(event => event.payload.case === 'sessionStarted' && event.payload.value.parentToolCallId
     ? [[event.sessionId, event] as const] : []))
@@ -221,7 +221,7 @@ export function withWorkflows(items: ViewerTimelineItem[], source: readonly AOPE
       }
       const event = item.kind === 'extension' ? item.event : undefined
       if (item.kind === 'extension' && !['guardrail', 'eval', 'compact', 'token_budget'].includes(item.extensionType)
-        && !resolveTimelineRenderer(item.extensionType) && !(event && observation(event))) continue
+        && !resolveExtension(item.extensionType) && !(event && observation(event))) { retained.push(item); continue }
       const nearby = event || [...events].reverse().find(candidate => !parents.has(candidate.sessionId) && eventTime(candidate) <= item.timestamp)
       const sid = event?.sessionId || session || nearby?.sessionId || 'conversation', tid = event?.turnId || turn || nearby?.turnId || ''
       const base = { actor: item.actorName || 'Agent', sessionId: sid, turnId: tid, timestamp: item.timestamp, lane: scope(sid, 'foreground') }

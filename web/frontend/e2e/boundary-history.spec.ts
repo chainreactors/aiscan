@@ -16,7 +16,8 @@ test('frontend follows every history page beyond 500 events in cursor order', as
     })
     await route.fulfill({ contentType: 'application/proto', body: Buffer.from(toBinary(ListEventsResponseSchema, fromJson(ListEventsResponseSchema, { events, nextCursor: count ? String(after + count) : '' }))) })
   })
-  await page.goto('/')
+  await page.goto('/e2e/fixtures/api.html')
+  await page.waitForFunction(() => !!(window as any).fixtureRuntime)
   const history = await page.evaluate(async () => {
     const api = await import('/src/api.ts')
     const list = api.listChatEvents || api.listChatMessages
@@ -33,7 +34,8 @@ test('a stuck history cursor fails explicitly instead of fetching indefinitely',
     requests++
     await route.fulfill({ contentType: 'application/proto', body: Buffer.from(toBinary(ListEventsResponseSchema, fromJson(ListEventsResponseSchema, { events: [], nextCursor: '12' }))) })
   })
-  await page.goto('/')
+  await page.goto('/e2e/fixtures/api.html')
+  await page.waitForFunction(() => !!(window as any).fixtureRuntime)
   const error = await page.evaluate(async () => {
     const api = await import('/src/api.ts')
     const list = api.listChatEvents || api.listChatMessages

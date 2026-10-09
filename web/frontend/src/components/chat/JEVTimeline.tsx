@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { CircuitBoard, Repeat2, Layers } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { create } from '@bufbuild/protobuf'
-import { registerTimelineRenderer } from '@/viewer'
+import type { TimelineRendererConfig } from '@/viewer'
 import { CodeBlock } from '@/markdown'
 import type { ExtensionTimelineItem } from '@/viewer'
 import { DecisionRequestSchema } from '../../gen/types/jev_pb'
@@ -142,15 +142,15 @@ function JEVCheckView({ check }: { check: JEVCheck }) {
   return <div data-testid="jev-check" id={`jev-${check.id}`}><RecordedWorkflow owner={check} /></div>
 }
 
-registerTimelineRenderer('jev_segment', {
+export const jevSegmentRenderer: TimelineRendererConfig = {
   renderer: ({ item }: { item: ExtensionTimelineItem }) => <JEVSegmentView segment={item.data.segment as JEVSegment} />,
   mark: { label: 'JEV', icon: Repeat2, dotClass: 'border-emerald-500 bg-emerald-500' },
-})
-registerTimelineRenderer('jev_compilation', {
+}
+export const jevCompilationRenderer: TimelineRendererConfig = {
   renderer: ({ item }: { item: ExtensionTimelineItem }) => <JEVCompilationView compilation={item.data.compilation as JEVCompilation} />,
   mark: { label: 'Reflex', icon: Layers, dotClass: 'border-border bg-muted-foreground/60' },
-})
-registerTimelineRenderer('jev_check', {
+}
+export const jevCheckRenderer: TimelineRendererConfig = {
   renderer: ({ item }: { item: ExtensionTimelineItem }) => <JEVCheckView check={item.data.check as JEVCheck} />,
   mark: { label: 'JEV', icon: CircuitBoard, dotClass: 'border-border bg-muted-foreground/60' },
-})
+}

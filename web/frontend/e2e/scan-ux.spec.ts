@@ -11,7 +11,7 @@ import { GetSessionRequestSchema, GetSessionResponseSchema } from '../src/gen/ty
 import { ListEventsRequestSchema, ListEventsResponseSchema } from '../cyber-ui/packages/aop/src/gen/aop/chat_pb'
 
 const preamble = `<script type="module">import RefreshRuntime from '/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$ = () => {}; window.$RefreshSig$ = () => (type) => type; window.__vite_plugin_react_preamble_installed__ = true;</script>`
-const fixtureURL = `http://127.0.0.1:${process.env.CYBER_E2E_FIXTURE_PORT || '38082'}`
+const fixtureURL = `http://127.0.0.1:${process.env.CYBER_UI_TEST_PORT || '38185'}`
 
 function artifact(id: string, operationId: string, data: unknown, tool = 'gogo', resultId = id): AOPEvent {
   return create(EventSchema, { id, emittedAt: timestampNow(), sessionId: 'session',
@@ -32,8 +32,9 @@ async function archive(page: Page, entries: AOPEvent[]) {
     const response = create(SyncArtifactsResponseSchema, { artifacts: entries.slice(offset, offset + 100).map((event, index) => ({ cursor: String(offset + index + 1), event })) })
     await route.fulfill({ contentType: 'application/proto', body: Buffer.from(toBinary(SyncArtifactsResponseSchema, response)) })
   })
-  await page.route('**/cstx-test', (route) => route.fulfill({ contentType: 'text/html', body: `<html><head>${preamble}</head><body>Asset test</body></html>` }))
+  await page.route('**/cstx-test', (route) => route.fulfill({ contentType: 'text/html', body: `<html><head>${preamble}</head><body>Asset test<script type="module">import { startFixtureRuntime } from "/e2e/fixtures/runtime.ts"; window.fixtureRuntime = await startFixtureRuntime();</script></body></html>` }))
   await page.goto(`${fixtureURL}/cstx-test`)
+  await page.waitForFunction(() => !!(window as any).fixtureRuntime)
   await page.evaluate(async () => { (window as any).runtime = await import('/src/lib/cstx-runtime.ts') })
 }
 
@@ -53,6 +54,7 @@ test('history is isolated and Loot joins in either order without crossing operat
   const next = await page.evaluate(() => (window as any).runtime.listSCONodes({ scanId: 'op2' }))
   expect(next.items.some((node: any) => node._evidence.some((e: any) => e.status === 'confirmed'))).toBeTruthy()
   await page.reload()
+  await page.waitForFunction(() => !!(window as any).fixtureRuntime)
   await page.evaluate(async () => { (window as any).runtime = await import('/src/lib/cstx-runtime.ts') })
   expect(await page.evaluate(() => (window as any).runtime.listSCONodes({ scanId: 'op1' }))).toEqual(before)
 })

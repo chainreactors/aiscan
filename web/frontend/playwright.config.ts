@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { uiTestFiles, jevTestFiles } from './e2e/suites'
 
 const baseURL = process.env.BASE_URL || `http://127.0.0.1:${process.env.CYBER_E2E_PORT || '38080'}`;
 const manageServer = !process.env.BASE_URL;
@@ -6,7 +7,7 @@ const fixturePort = process.env.CYBER_E2E_FIXTURE_PORT || '38082';
 
 export default defineConfig({
   testDir: './e2e',
-  testIgnore: ['**/boundary*.spec.ts', '**/jev-*.spec.ts', '**/workflow.spec.ts'],
+  testIgnore: ['**/*.test.mjs', ...uiTestFiles.map(file => `**/${file}`), ...jevTestFiles.map(file => `**/${file}`), '**/boundary*.spec.ts', '**/jev-*.spec.ts', '**/workflow.spec.ts'],
   timeout: 60_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,

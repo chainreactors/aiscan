@@ -1,20 +1,16 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense, type ReactNode } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Box, CircuitBoard, LogOut, Menu, Monitor, Network, Settings, Wrench } from 'lucide-react'
+import { LogOut, Menu, Monitor } from 'lucide-react'
 import SessionList from './components/SessionList'
 import ChatPanel from './components/ChatPanel'
-import ConfigPanel from './components/ConfigPanel'
-import ReflexPanel from './components/ReflexPanel'
-import AgentPanel from './components/AgentPanel'
-import ToolRegistryPanel from './components/ToolRegistryPanel'
-import AssetPanel, { assetMentionables } from './components/AssetPanel'
+import { assetMentionables } from './components/AssetPanel'
 import MentionPicker from './components/MentionPicker'
 import QuickConnect from './components/QuickConnect'
 import BrandLogo from './components/brand/BrandLogo'
-const IOAConsole = lazy(() => import('./components/IOAConsole'))
+import { useObservations } from '@/viewer'
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, useConfirm } from '@cyber/ui'
-import { ThemeProvider } from '@cyber/theme'
-import { activateLLMProfile, getConfigStatus, getIOAOverview, getStatus, logout, registerCapabilityProtocols } from './api'
+import { ThemeProvider, cn } from '@cyber/theme'
+import { activateLLMProfile, getConfigStatus, getIOAOverview, getStatus, logout } from './api'
 import type { IOAMessage, IOANode, LLMProviderView, ServerStatus } from './api'
 import type { SCONode } from '@cyber/cstx-easm'
 import type { MentionPopupApi } from './viewer'
@@ -24,15 +20,15 @@ import { GuardrailToggle } from './components/GuardrailToggle'
 import { usePolling } from './hooks/usePolling'
 import { isSessionAgentOnline } from './lib/session-agent'
 import type { IOAConsoleTarget } from './lib/ioa-navigation'
-import { cn } from '@cyber/theme'
 import { listSCONodes, subscribeCSTXChanges, syncCSTXArtifacts } from './lib/cstx-runtime'
-import { capabilityPlugin, loadCapabilityManifest, WebPluginRuntime, type CapabilityManifest } from './lib/plugin-runtime'
+
+import { useObservable, WorkbenchSlots } from './runtime/react'
+import type { HubServices } from './runtime/services'
+import type { CapabilityManifest } from './runtime/capabilities'
 
 const sidebarStorageKey = 'cyber-sidebar-open'
 
 const EMPTY_SEED = { text: '', nonce: 0 }
-type ToolPanel = 'assets' | 'ioa' | 'agents' | 'tools' | 'settings' | 'reflex'
-const NODE_TRANSPORT_CAPABILITIES = new Set(['repl', 'pty', 'tmux', 'file', 'sco'])
 
 // Respect a previously-chosen theme on boot. ThemeProvider's own initializer is
 // short-circuited by the `initial` prop (it returns `initial` before ever reading
@@ -52,11 +48,12 @@ function getInitialSidebarOpen() {
   return window.matchMedia('(min-width: 1024px)').matches
 }
 
-export default function App() {
+export default function App({ services }: { services: HubServices }) {
   const { t } = useTranslation('app')
   const { t: tc } = useTranslation('chat')
   const confirm = useConfirm()
   const chat = useChatSession()
+  const observations = useObservations(chat.aopEvents)
   const guardrailSessions = useMemo(() => {
     const online = new Set(chat.agents.map(agent => agent.hello?.nodeId))
     const ids = chat.sessions.filter(record => online.has(record.session?.nodeId) && record.session?.state !== 'closed')
@@ -70,59 +67,23 @@ export default function App() {
   const [llmProfiles, setLLMProfiles] = useState<LLMProviderView[]>([])
   const [activeLLMProfile, setActiveLLMProfile] = useState('')
   const [switchingLLM, setSwitchingLLM] = useState(false)
-  const [activeToolPanel, setActiveToolPanel] = useState<ToolPanel | null>(null)
-  const [settingsSection, setSettingsSection] = useState<'llm' | 'jev'>('llm')
-  const [ioaConsoleTarget, setIOAConsoleTarget] = useState<IOAConsoleTarget | null>(null)
-  const [agentPanelFocusNodeID, setAgentPanelFocusNodeID] = useState<string | null>(null)
+  const panelSelection = useObservable(services.panels)
+  const activeToolPanel = panelSelection?.id ?? null
   const [sidebarOpen, setSidebarOpen] = useState(getInitialSidebarOpen)
-  const [capabilityManifest, setCapabilityManifest] = useState<CapabilityManifest | null>(null)
-  const effectiveManifest = useMemo<CapabilityManifest | null>(() => {
-    if (!capabilityManifest) return null
-    const ids = new Set(capabilityManifest.capabilities.map(item => item.id))
-    for (const agent of chat.agents) {
-      for (const id of agent.hello?.capabilities || []) {
-        if (!NODE_TRANSPORT_CAPABILITIES.has(id)) ids.add(id)
-      }
-    }
-    return {
-      ...capabilityManifest,
-      capabilities: [...ids].map(id => capabilityManifest.capabilities.find(item => item.id === id) || { id }),
-    }
-  }, [capabilityManifest, chat.agents])
-  const pluginRuntime = useMemo(() => effectiveManifest ? new WebPluginRuntime(effectiveManifest) : null, [effectiveManifest])
-  const capabilityIDs = useMemo(() => effectiveManifest?.capabilities.map(item => item.id) || [], [effectiveManifest])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    void loadCapabilityManifest(controller.signal).then(setCapabilityManifest).catch(() => {
-      setCapabilityManifest({ product: 'cyber-harness', capabilities: [{ id: 'core' }] })
-    })
-    return () => controller.abort()
-  }, [])
-
-  useEffect(() => {
-    if (!pluginRuntime) return
-    pluginRuntime.mount([
-      capabilityPlugin('scan-protocol', ['scan'], () => {
-        registerCapabilityProtocols('scan')
-      }),
-    ])
-    return () => pluginRuntime.dispose()
-  }, [pluginRuntime])
-
-  const toggleToolPanel = useCallback((panel: ToolPanel) => {
-    setActiveToolPanel((current) => current === panel ? null : panel)
-  }, [])
-
-  const openSettings = useCallback((section: 'llm' | 'jev' = 'llm') => {
-    setSettingsSection(section)
-    setActiveToolPanel('settings')
-  }, [])
-
-  const openIOAConsole = useCallback((target?: IOAConsoleTarget) => {
-    setIOAConsoleTarget(target ?? null)
-    setActiveToolPanel('ioa')
-  }, [])
+  const extensionRevision = useObservable(services.slots.revision)
+  const capabilityState = useObservable(services.capabilities)
+  const capabilityManifest = capabilityState.manifest
+  useLayoutEffect(() => {
+    services.capabilities.setNodes(Object.fromEntries(chat.agents.map(agent => [agent.hello?.nodeId || '',
+      agent.hello?.capabilities || []])))
+  }, [services, chat.agents])
+  const capabilityIDs = capabilityState.advertised
+  const effectiveManifest = useMemo<CapabilityManifest | null>(() => capabilityManifest ? {
+    ...capabilityManifest, capabilities: capabilityIDs.map(id => capabilityManifest.capabilities.find(item => item.id === id) || { id }),
+  } : null, [capabilityManifest, capabilityIDs])
+  const scanEnabled = capabilityIDs.includes('scan')
+  const openSettings = useCallback((section: 'llm' | 'jev' = 'llm') => services.panels.open('settings', { section }), [services])
+  const openIOAConsole = useCallback((target?: IOAConsoleTarget) => services.panels.open('ioa', { target }), [services])
 
   const refreshStatus = useCallback(async () => {
     const [statusResult, configResult] = await Promise.allSettled([getStatus(), getConfigStatus()])
@@ -149,35 +110,40 @@ export default function App() {
   // nodes/messages. Both refresh when the timeline advances — a finished scan or
   // agent turn often means new assets landed or new IOA traffic was exchanged.
   const [scoNodes, setScoNodes] = useState<SCONode[]>([])
+  const [ioaAvailable, setIoaAvailable] = useState(false)
+  const ioaEnabled = capabilityManifest?.capabilities.some(item => item.id === 'ioa') || ioaAvailable
   const [ioaNodes, setIoaNodes] = useState<IOANode[]>([])
   const [ioaMessages, setIoaMessages] = useState<IOAMessage[]>([])
   const [composerSeed, setComposerSeed] = useState(EMPTY_SEED)
 
   const refreshSCONodes = useCallback(async () => {
+    if (!scanEnabled) { setScoNodes([]); return }
     try {
       const { items: data } = await listSCONodes()
       setScoNodes(data)
     } catch { /* non-critical */ }
-  }, [])
+  }, [scanEnabled])
 
   const refreshIOA = useCallback(async () => {
     try {
       const overview = await getIOAOverview()
+      setIoaAvailable(true)
       setIoaNodes(overview.nodes)
       setIoaMessages(overview.messages)
-    } catch { /* non-critical — the hub may be unconfigured or offline */ }
+    } catch { setIoaAvailable(false) }
   }, [])
 
   useEffect(() => {
+    if (!scanEnabled) { setScoNodes([]); return }
     void refreshSCONodes()
     const unsubscribe = subscribeCSTXChanges(() => { void refreshSCONodes() })
     return unsubscribe
-  }, [refreshSCONodes])
+  }, [refreshSCONodes, scanEnabled])
   // Refresh mentionables when scans finish (timeline changes often signal new results)
   useEffect(() => {
-    void syncCSTXArtifacts().catch(() => {})
+    if (scanEnabled) void syncCSTXArtifacts().catch(() => {})
     void refreshIOA()
-  }, [chat.timeline.length, refreshIOA])
+  }, [chat.timeline.length, refreshIOA, scanEnabled])
 
   const mentionables = useMemo(() => assetMentionables(scoNodes), [scoNodes])
 
@@ -196,14 +162,6 @@ export default function App() {
   )
 
   const model = serverStatus?.llmModel || ''
-  // Agents that already joined a collaboration space are where a newly connected
-  // node belongs; with none connected there is nothing to align to.
-  const agentSpace = chat.agents.find((a) => a.status?.space)?.status?.space
-  const bashToolCount = useMemo(() => chat.agents.reduce(
-    (total, agent) => total + agent.commands.filter((command) => command.name.startsWith('!')).length,
-    0,
-  ), [chat.agents])
-
   const handleSwitchLLM = useCallback(async (profileID: string) => {
     if (!profileID || profileID === activeLLMProfile) return
     setSwitchingLLM(true)
@@ -234,20 +192,19 @@ export default function App() {
   }
 
   function handleOpenTerminal(nodeID: string) {
-    setAgentPanelFocusNodeID(nodeID)
-    setActiveToolPanel('agents')
+    services.panels.open('agents', { focusNodeID: nodeID })
     chat.selectNode(nodeID)
     closeSidebarOnMobile()
   }
 
   function handleSelectSession(id: string) {
-    setActiveToolPanel((current) => current === 'agents' ? null : current)
+    if (activeToolPanel === 'agents') services.panels.close()
     chat.selectSession(id)
     closeSidebarOnMobile()
   }
 
   function handleCreateSession(nodeID: string) {
-    setActiveToolPanel((current) => current === 'agents' ? null : current)
+    if (activeToolPanel === 'agents') services.panels.close()
     chat.createSession(nodeID)
     closeSidebarOnMobile()
   }
@@ -262,14 +219,14 @@ export default function App() {
   // Agent node clicked (roster / terminal open) → open the agent console focused
   // on that node.
   function handleOpenNode(nodeID: string) {
-    setAgentPanelFocusNodeID(nodeID)
-    setActiveToolPanel('agents')
+    services.panels.open('agents', { focusNodeID: nodeID })
   }
 
-  function handleOpenAgentPanel() {
-    setAgentPanelFocusNodeID(null)
-    toggleToolPanel('agents')
-  }
+  useLayoutEffect(() => {
+    services.workbench.publish({ chat, serverStatus, capabilityIDs, ioaEnabled, observationCount: observations.length,
+      assetCount: scoNodes.length, refreshStatus, refreshAssets: refreshSCONodes, sendToChat: handleAssetSendToChat })
+  })
+  useLayoutEffect(() => () => { services.workbench.set(null) }, [services])
 
   return (
     <ThemeProvider initial={getInitialTheme()} storageKey="cyber-theme" className="aspect-theme-root h-full text-foreground font-sans antialiased">
@@ -301,24 +258,8 @@ export default function App() {
           </div>
           <div className="flex items-center gap-0.5 sm:gap-2">
             <GuardrailToggle disabled={activeToolPanel === 'settings'} onConfigure={() => openSettings('jev')} />
-            <HeaderIconButton label="Reflex" active={activeToolPanel === 'reflex'} toolDrawerTrigger onClick={() => toggleToolPanel('reflex')}><CircuitBoard className="h-3.5 w-3.5" /></HeaderIconButton>
-            <AssetPoolButton count={scoNodes.length} open={activeToolPanel === 'assets'} onClick={() => toggleToolPanel('assets')} />
-            <IOAConsoleButton open={activeToolPanel === 'ioa'} onClick={() => {
-              setIOAConsoleTarget(null)
-              toggleToolPanel('ioa')
-            }} />
-            <AgentsButton count={chat.agents.length} open={activeToolPanel === 'agents'} onClick={handleOpenAgentPanel} />
-            <ToolsButton count={bashToolCount} open={activeToolPanel === 'tools'} onClick={() => toggleToolPanel('tools')} />
+            <WorkbenchSlots services={services} name="shell.header.actions" />
             <QuickConnect serverURL={serverStatus?.serverUrl} version={serverStatus?.version} profiles={effectiveManifest?.profiles} />
-            {/* Separate workspace nav (assets / IOA / agents / connect) from the
-                account utilities (settings / logout) so the row reads as two groups. */}
-            <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-border/70 sm:block" aria-hidden="true" />
-            <HeaderIconButton label={t('openSettings')} active={activeToolPanel === 'settings'} toolDrawerTrigger onClick={() => {
-              if (activeToolPanel === 'settings') setActiveToolPanel(null)
-              else openSettings()
-            }}>
-              <Settings className="h-3.5 w-3.5" />
-            </HeaderIconButton>
             <HeaderIconButton label={t('logout')} onClick={() => { void logout() }}>
               <LogOut className="h-3.5 w-3.5" />
             </HeaderIconButton>
@@ -345,6 +286,8 @@ export default function App() {
           />
 
           <ChatPanel
+            resolveExtension={services.slots.resolve}
+            extensionRevision={extensionRevision}
             timeline={chat.timeline}
             guardrailUnavailable={guardrails.unavailable[chat.activeSessionID || ''] === true}
             guardrailReviews={guardrails.bySession[chat.activeSessionID || ''] || []}
@@ -373,50 +316,7 @@ export default function App() {
         </div>
       </div>
 
-      <ReflexPanel open={activeToolPanel === 'reflex'} onClose={() => setActiveToolPanel(null)} sessionID={chat.activeSessionID} events={chat.aopEvents} />
-
-      <ConfigPanel
-        open={activeToolPanel === 'settings'}
-        status={serverStatus}
-        capabilities={capabilityIDs}
-        initialSection={settingsSection}
-        onClose={() => setActiveToolPanel(null)}
-        onSaved={() => { refreshStatus() }}
-      />
-
-      <AgentPanel
-        open={activeToolPanel === 'agents'}
-        agents={chat.agents}
-        focusNodeID={agentPanelFocusNodeID ?? undefined}
-        onClose={() => setActiveToolPanel(null)}
-      />
-
-      <ToolRegistryPanel
-        open={activeToolPanel === 'tools'}
-        agents={chat.agents}
-        onClose={() => setActiveToolPanel(null)}
-      />
-
-      <AssetPanel
-        open={activeToolPanel === 'assets'}
-        onClose={() => setActiveToolPanel(null)}
-        onSendToChat={handleAssetSendToChat}
-        onChanged={refreshSCONodes}
-      />
-
-      {activeToolPanel === 'ioa' && (
-        <Suspense fallback={null}>
-          <IOAConsole
-            open
-            initialSpaceID={ioaConsoleTarget?.spaceID}
-            initialMessageID={ioaConsoleTarget?.messageID}
-            onClose={() => {
-              setActiveToolPanel(null)
-              setIOAConsoleTarget(null)
-            }}
-          />
-        </Suspense>
-      )}
+      <WorkbenchSlots services={services} name="shell.panels" />
     </TooltipProvider>
     </ThemeProvider>
   )
@@ -458,122 +358,6 @@ function LLMProfileSwitcher({
         ))}
       </SelectContent>
     </Select>
-  )
-}
-
-function AssetPoolButton({ count, open, onClick }: { count: number; open: boolean; onClick: () => void }) {
-  const { t } = useTranslation('assets')
-  const active = count > 0
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          active={open}
-          data-tool-drawer-trigger
-          onClick={onClick}
-          aria-label={t('openAssets')}
-          className={cn(
-            'h-7 w-7 shrink-0 cursor-pointer gap-0 rounded-md border px-0 hover:opacity-80 sm:w-auto sm:gap-1.5 sm:px-2.5',
-            active
-              ? 'border-primary/30'
-              : 'border-border bg-secondary/50 text-muted-foreground hover:bg-secondary/50 hover:text-muted-foreground',
-          )}
-        >
-          <Box className="h-3 w-3" aria-hidden="true" />
-          <span className="hidden font-mono sm:inline" aria-hidden="true">{count}</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{t('openAssets')}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-function AgentsButton({ count, open, onClick }: { count: number; open: boolean; onClick: () => void }) {
-  const { t } = useTranslation('app')
-  const active = count > 0
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          active={open}
-          data-tool-drawer-trigger
-          onClick={onClick}
-          aria-label={active ? t('agentsConnected', { count }) : t('noAgents')}
-          className={cn(
-            'h-7 w-7 shrink-0 cursor-pointer gap-0 rounded-md border px-0 hover:opacity-80 sm:w-auto sm:gap-1.5 sm:px-2.5',
-            // A connection count is neutral status, not an alert — keep warm hues for
-            // severity only. Blue when connected, quiet neutral when none.
-            active
-              ? 'border-primary/30'
-              : 'border-border bg-secondary/50 text-muted-foreground hover:bg-secondary/50 hover:text-muted-foreground',
-          )}
-        >
-          <Monitor className="h-3 w-3" aria-hidden="true" />
-          <span className="hidden font-mono sm:inline" aria-hidden="true">{count}</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{active ? t('agentsConnected', { count }) : t('noAgents')}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-function ToolsButton({ count, open, onClick }: { count: number; open: boolean; onClick: () => void }) {
-  const { t } = useTranslation('tools')
-  const active = count > 0
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          active={open}
-          data-tool-drawer-trigger
-          onClick={onClick}
-          aria-label={active ? t('toolsAvailable', { count }) : t('noTools')}
-          className={cn(
-            'h-7 w-7 shrink-0 cursor-pointer gap-0 rounded-md border px-0 hover:opacity-80 sm:w-auto sm:gap-1.5 sm:px-2.5',
-            active
-              ? 'border-primary/30'
-              : 'border-border bg-secondary/50 text-muted-foreground hover:bg-secondary/50 hover:text-muted-foreground',
-          )}
-        >
-          <Wrench className="h-3 w-3" aria-hidden="true" />
-          <span className="hidden font-mono sm:inline" aria-hidden="true">{count}</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{t('openTools')}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-function IOAConsoleButton({ open, onClick }: { open: boolean; onClick: () => void }) {
-  const { t } = useTranslation('ioa')
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          active={open}
-          data-tool-drawer-trigger
-          onClick={onClick}
-          aria-label={t('openConsole')}
-          className="h-7 w-7 shrink-0 cursor-pointer gap-0 rounded-md border border-border bg-secondary/50 px-0 text-muted-foreground hover:border-primary/30 hover:bg-primary/10 hover:text-primary sm:w-auto sm:gap-1.5 sm:px-2.5"
-        >
-          <Network className="h-3 w-3" aria-hidden="true" />
-          <span className="hidden font-mono text-[10px] font-semibold sm:inline" aria-hidden="true">IOA</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{t('openConsole')}</TooltipContent>
-    </Tooltip>
   )
 }
 
