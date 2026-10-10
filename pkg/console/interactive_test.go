@@ -30,13 +30,13 @@ import (
 func TestIsLocalAgentTerminal(t *testing.T) {
 	local := rlterm.Local()
 	if !isLocalAgentTerminal(local) {
-		t.Fatal("local terminal should be eligible for native readline rendering")
+		t.Fatal("local terminal should be recognized as process stdin/stdout")
 	}
 
 	var output bytes.Buffer
 	remote := rlterm.Stream(bytes.NewReader(nil), &output, &output, rlterm.NewControl(true, 80, 24))
 	if isLocalAgentTerminal(remote) {
-		t.Fatal("remote terminal must not use local readline rendering")
+		t.Fatal("remote terminal must not be classified as process stdin/stdout")
 	}
 }
 
@@ -140,6 +140,27 @@ func TestAgentReadlinePendingBracketedPaste(t *testing.T) {
 	}
 	if got := string(*shell.Line()); got != "demo_reqresp" {
 		t.Fatalf("single-line paste = %q", got)
+	}
+}
+
+func TestAgentReadlineBatchedDirectionKeysPreserveDraft(t *testing.T) {
+	for _, keys := range []string{
+		"\x1b[D\x1b[D\x1b[D",
+		"\x1b[D\x1b[D\x1b[D\x1b[D\x1b[C",
+	} {
+		t.Run(fmt.Sprintf("%q", keys), func(t *testing.T) {
+			repl, _ := newTestConsole(t, &cfg.Option{}, nil, io.Discard, io.Discard)
+			shell := repl.console.Shell()
+			// A PTY input frame can combine several key events and following
+			// text. Exercise the editor rather than just the sequence mapper.
+			shell.OnReadlineReady = func() {
+				shell.Keys.SetInput(strings.NewReader("!echo TTY_END" + keys + "KEPT_\r"))
+			}
+			line, err := shell.Readline()
+			if err != nil || line != "!echo TTY_KEPT_END" {
+				t.Fatalf("draft=%q error=%v", line, err)
+			}
+		})
 	}
 }
 

@@ -1,59 +1,35 @@
-.jev-flow { position: relative; min-width: 0; border: 1px solid hsl(var(--border)); border-radius: 10px; overflow: hidden; background: hsl(var(--muted) / .12); }
 .jev-decision { padding: 12px; border: 1px solid rgb(16 185 129 / .35); border-radius: 10px; background: rgb(16 185 129 / .025); }
-.jev-question-grid { position: relative; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 14px; padding-top: 18px; }
-.jev-question-grid::before { content: ''; position: absolute; left: 14px; right: 14px; top: 9px; border-top: 1px solid rgb(16 185 129 / .3); }
+.jev-question-grid { position: relative; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 12px; padding-top: 12px; }
 .jev-question { position: relative; min-width: 0; padding: 12px; border: 1px solid hsl(var(--border)); border-radius: 8px; background: hsl(var(--background)); }
-.jev-question::before { content: ''; position: absolute; left: 14px; top: -10px; height: 9px; border-left: 1px solid rgb(16 185 129 / .3); }
-.jev-branches { position: relative; display: grid; gap: 8px; margin-top: 12px; padding-left: 12px; }
-.jev-branches::before { content: ''; position: absolute; left: 0; top: 0; bottom: 18px; border-left: 1px solid hsl(var(--border)); }
-.jev-option { position: relative; min-width: 0; padding: 8px 9px; border: 1px solid hsl(var(--border) / .7); border-radius: 6px; transition: border-color 180ms ease, background-color 180ms ease; }
-.jev-option::before { content: ''; position: absolute; left: -13px; top: 17px; width: 12px; border-top: 1px solid hsl(var(--border)); }
+.jev-branches { display: grid; gap: 5px; margin-top: 9px; }
+.jev-option { position: relative; min-width: 0; overflow: hidden; padding: 9px 10px; border: 1px solid hsl(var(--border) / .7); border-radius: 6px; transition: border-color 180ms ease, background-color 180ms ease; }
+.jev-option > div:first-child { position: relative; z-index: 1; }
 .jev-option-selected { border-color: rgb(16 185 129 / .65); background: rgb(16 185 129 / .07); }
-.jev-option-selected::before { border-color: rgb(16 185 129 / .7); }
-.jev-probability-track { height: 3px; margin-top: 7px; overflow: hidden; border-radius: 2px; background: hsl(var(--muted)); }
-.jev-probability-track span { display: block; height: 100%; background: hsl(var(--muted-foreground) / .35); transition: width 200ms ease, background-color 180ms ease; }
-.jev-option-selected .jev-probability-track span { background: rgb(16 185 129 / .85); }
+.jev-option-current { border-color: hsl(var(--primary) / .35); }
+.jev-probability-track { position: absolute; inset: 0; pointer-events: none; }
+.jev-probability-track span { display: block; height: 100%; background: hsl(var(--muted-foreground) / .055); transition: width 240ms ease, background-color 180ms ease; }
+.jev-option-selected .jev-probability-track span { background: rgb(16 185 129 / .085); }
+.jev-option-selected svg { animation: jev-selection-in .2s ease-out; }
+@keyframes jev-selection-in { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
+.jev-scale-legend { display: grid; gap: 5px; margin-top: 10px; font-size: 11px; color: hsl(var(--muted-foreground)); }
+.jev-scale-legend li { display: flex; gap: 7px; }
+@media (prefers-reduced-motion: reduce) { .jev-option-selected svg { animation: none; } }
 .jev-scalar-track { position: relative; height: 5px; margin: 8px 4px; border-radius: 3px; background: hsl(var(--muted)); }
 .jev-scalar-track span { position: absolute; top: -3px; width: 11px; height: 11px; transform: translateX(-50%); border: 2px solid hsl(var(--background)); border-radius: 50%; background: rgb(16 185 129); transition: left 200ms ease; }
 .jev-reflex-loop { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 0; border-top: 1px solid hsl(var(--border)); border-bottom: 1px solid hsl(var(--border)); color: hsl(var(--muted-foreground)); font-size: 11px; }
 .jev-reflex-loop span { display: inline-flex; align-items: center; gap: 5px; }
 .jev-reflex-loop svg { width: 12px; height: 12px; }
 .jev-decision[data-state='judging'] { border-style: dashed; }
-.jev-history { display: flex; gap: 5px 0; margin: 10px 0 7px; padding-bottom: 6px; overflow-x: auto; }
-.jev-history-step { display: flex; align-items: center; min-width: 0; flex-shrink: 0; }
-.jev-history-arrow { width: 18px; height: 12px; padding: 0 3px; color: hsl(var(--muted-foreground)); flex-shrink: 0; }
-.jev-history-node { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 0; max-width: 220px; border: 1px solid hsl(var(--border)); border-radius: 6px; padding: 5px 7px; text-align: left; font-size: 10px; transition: background .15s; }
-.jev-history-node:hover { background: hsl(var(--muted)); }
-.jev-history-node[aria-pressed='true'] { border-color: rgb(16 185 129 / .65); background: rgb(16 185 129 / .07); }
-.jev-history-number { font-variant-numeric: tabular-nums; color: hsl(var(--muted-foreground)); }
-.jev-history-result { color: hsl(var(--muted-foreground)); overflow: hidden; max-width: 110px; white-space: nowrap; text-overflow: ellipsis; }
-.jev-flow .jev-history { margin: 0; padding: 12px 12px 8px; background: hsl(var(--background)); }
-.jev-flow-body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 12px; padding: 14px; border-top: 1px solid rgb(16 185 129 / .25); }
-.jev-flow-body::before { content: ''; position: absolute; top: -5px; left: 28px; width: 8px; height: 8px; transform: rotate(45deg); background: hsl(var(--background)); border-left: 1px solid rgb(16 185 129 / .25); border-top: 1px solid rgb(16 185 129 / .25); }
-.jev-flow-body > *, .jev-body-section, .jev-flow-section { min-width: 0; }
-.jev-body-section:empty { display: none; }
-.jev-body-section { animation: jev-feedback 180ms ease-out; }
 .jev-detail, .jev-definition-details { min-width: 0; margin-top: 8px; }
-@keyframes jev-feedback { from { opacity: .4; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) {
   .jev-option, .jev-probability-track span, .jev-scalar-track span { transition: none; }
-  .jev-body-section { animation: none; }
 }
-.jev-flow-section { padding-top: 10px; border-top: 1px solid hsl(var(--border) / .65); }
-.jev-flow-section:first-child { padding-top: 0; border-top: 0; }
 .jev-decision-body { padding: 0; border: 0; background: transparent; }
-.jev-flow-return { display: flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 10px; color: hsl(var(--muted-foreground)); border-top: 1px dashed hsl(var(--border)); }
-.jev-flow-return svg { width: 12px; height: 12px; }
 .jev-instructions { max-height: 130px; overflow-y: auto; }
 .jev-facts-scroll { max-height: 260px; overflow-y: auto; min-width: 0; font-size: 11px; }
 .jev-facts { display: grid; gap: 5px; min-width: 0; }
 .jev-facts > div { display: grid; grid-template-columns: minmax(65px, 22%) minmax(0, 1fr); gap: 10px; padding: 4px 0; border-bottom: 1px solid hsl(var(--border) / .5); }
 .jev-facts dt { color: hsl(var(--muted-foreground)); overflow-wrap: anywhere; }
 .jev-facts dd { min-width: 0; overflow-wrap: anywhere; }
-.jev-task-path { margin: 6px 0 12px; padding: 10px; border: 1px solid hsl(var(--border)); border-radius: 8px; }
-.jev-task-operations { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; font-size: 10px; color: hsl(var(--muted-foreground)); }
-.jev-task-operations > span, .jev-task-operations > span > span { display: inline-flex; align-items: center; gap: 5px; }
-.jev-task-operations > span > span { border: 1px solid hsl(var(--border)); padding: 4px 6px; border-radius: 6px; }
-.jev-task-operations svg { width: 12px; height: 12px; }
-@media (max-width: 500px) { .jev-question-grid { grid-template-columns: 1fr; } .jev-history-node { max-width: 180px; } .jev-flow-body { padding: 10px; } }
+@media (max-width: 500px) { .jev-question-grid { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: no-preference) { .jev-decision[data-state='judging'] > div:first-child > svg:first-child { animation: pulse 1.5s ease-in-out infinite; } }

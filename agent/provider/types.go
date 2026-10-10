@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	aop "github.com/chainreactors/cyber/aop"
 )
@@ -22,7 +23,8 @@ const (
 // back into aop types; nothing upstream of this package sees vendor JSON.
 
 type ChatCompletionRequest struct {
-	Purpose         string // Host-only request purpose; never serialized to the provider.
+	Purpose         string        // Host-only request purpose; never serialized to the provider.
+	Timeout         time.Duration // Host-only request fallback; zero uses the provider configuration.
 	Model           string
 	Messages        []*aop.Message
 	Tools           []*aop.ToolDefinition

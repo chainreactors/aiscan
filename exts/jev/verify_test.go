@@ -7,8 +7,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 )
 
 func TestObservationReplayPreservesSamplingAndInputIdentity(t *testing.T) {
@@ -72,7 +70,7 @@ func TestFreshnessReviewRetainsConcreteRejectionWithEitherGlobalVerdict(t *testi
 	for _, verdict := range []string{"compile", Defer} {
 		t.Run(verdict, func(t *testing.T) {
 			requests, checked := 0, false
-			client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+			client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 				requests++
 				out := declarationAnswers(req, true)
 				if _, exists := req.Questions["coverage_freshness"]; exists {
@@ -104,7 +102,7 @@ func TestFreshnessReviewRetainsConcreteRejectionWithEitherGlobalVerdict(t *testi
 
 func TestReviewRetainsBoundaryRejectionWithGlobalDefer(t *testing.T) {
 	requests := 0
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		requests++
 		out := declarationAnswers(req, true)
 		out["compile"], out["coverage0"] = answer(Defer), answer(Defer)
@@ -125,7 +123,7 @@ func TestReviewRetainsBoundaryRejectionWithGlobalDefer(t *testing.T) {
 
 func TestResultReviewDistinguishesCompletionFromReadClassification(t *testing.T) {
 	requests := 0
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		requests++
 		out := declarationAnswers(req, true)
 		out["compile"], out["coverage_result"] = answer(Defer), answer(Defer)

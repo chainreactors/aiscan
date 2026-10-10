@@ -145,7 +145,7 @@ func TestLiveAutomaticReflexAB(t *testing.T) {
 			}
 			defer checkpoint()
 			for _, mode := range []string{"off", "auto"} {
-				llm, err := provider.NewProvider(&provider.ProviderConfig{Provider: os.Getenv("CYBER_PROVIDER"), BaseURL: base, APIKey: key, Model: model, Timeout: 90})
+				llm, err := provider.NewProvider(&provider.ProviderConfig{Provider: os.Getenv("CYBER_PROVIDER"), BaseURL: base, APIKey: key, Model: model, Timeout: int(backgroundRequestTimeout / time.Second)})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -191,16 +191,11 @@ func TestLiveAutomaticReflexAB(t *testing.T) {
 				beforeActions := executedJEVActions(t, r.ext)
 				cfg := r.cfg
 				cfg.SessionID = fmt.Sprintf("%s-%s-%d-%t", scenario, mode, index, warm)
-				ctx, cancel := context.WithTimeout(t.Context(), 4*time.Minute)
-				defer cancel()
 				started := time.Now()
-				result, err := agent.NewAgent(cfg).Run(ctx, agent.TextInput(prompt))
+				result, err := agent.NewAgent(cfg).Run(t.Context(), agent.TextInput(prompt))
 				foreground := time.Since(started).Milliseconds()
-				// A foreground deadline must not discard its failed sample. Settle
-				// separately before attributing any new background usage to a task.
-				settleCtx, settleCancel := context.WithTimeout(t.Context(), 2*time.Minute)
-				settleErr := r.ext.WaitIdle(settleCtx)
-				settleCancel()
+				// Attribute background usage only after admitted learning settles.
+				settleErr := r.ext.WaitIdle(t.Context())
 				settled := time.Since(started).Milliseconds()
 				after := r.meter.snapshot()
 				row := benchmarkRow{Index: index, Warm: warm, ForegroundMS: foreground, SettledMS: settled, L2: subtractUsage(after.usage, beforeL.usage), JEV: subtractUsage(r.client.Usage(), beforeJ), ForegroundCalls: after.foreground - beforeL.foreground, Correct: err == nil && result != nil && oracle(result.Output)}
@@ -380,11 +375,10 @@ func (p *benchmarkProvider) ChatCompletion(ctx context.Context, req *provider.Ch
 	}
 	p.usage.Detail["requests"]++
 	kind := "foreground"
-	if req.SessionID == "" {
+	if req.Purpose == "compilation" {
+		kind = "reflex"
+	} else if req.SessionID == "" && req.Purpose != "parameters" {
 		kind = "claim"
-		if len(req.Messages) > 0 && provider.MessageText(req.Messages[0]) == compilePrompt {
-			kind = "reflex"
-		}
 	}
 	if p.byKind == nil {
 		p.byKind = map[string]*aop.TokenUsage{}
@@ -394,7 +388,7 @@ func (p *benchmarkProvider) ChatCompletion(ctx context.Context, req *provider.Ch
 	}
 	kindUsage := p.byKind[kind]
 	kindUsage.Detail["requests"]++
-	if req.SessionID != "" {
+	if kind == "foreground" {
 		p.foreground++
 	}
 	if resp == nil || resp.Usage == nil {

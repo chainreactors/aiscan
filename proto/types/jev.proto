@@ -2,16 +2,16 @@ syntax = "proto3";
 package cyber.jev;
 import "aop/content.proto";
 import "aop/event.proto";
+import "decision/claim.proto";
 option go_package = "github.com/chainreactors/cyber/exts/jev;jev";
 
 message ClaimDefinition {
   string id = 1;
-  string when = 2;
-  string question = 3;
-  map<string, string> options = 4;
+  decision.ClaimType type = 2;
+  string context = 3;
+  repeated string options = 4;
   string source_task_id = 5;
-  bool consumed = 6;
-  string text = 7;
+  reserved 6, 7;
 }
 message ReflexDefinition {
   string id = 1;
@@ -26,31 +26,17 @@ message ReflexDefinition {
   string manifest_json = 10;
   string blocker = 11;
 }
-message Question {
-  string type = 1;
-  string instructions_json = 2;
-  string criteria_json = 3;
-}
-message Answer {
-  string type = 1;
-  string choice = 2;
-  optional double score = 3;
-  optional double noul = 4;
-  map<string, string> legend = 5;
-  map<string, double> probabilities = 6;
-  double confidence = 7;
-}
 message Boundary { string reason = 1; }
 message Observation { string state_json = 1; string candidates_json = 2; }
 message DecisionRequest {
   string request_id = 1;
   string purpose = 2;
-  map<string, Question> questions = 3;
+  map<string, decision.Claim> claims = 3;
 }
 message DecisionResult {
   string request_id = 1;
   string purpose = 2;
-  map<string, Answer> answers = 3;
+  map<string, decision.Evaluation> evaluations = 3;
   int64 elapsed_ms = 4;
   string error = 5;
   aop.TokenUsage usage = 6;

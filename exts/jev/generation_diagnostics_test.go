@@ -12,7 +12,7 @@ import (
 
 func TestStructuredGenerationUnwrapsArtifactsBeforeValidationAndObservation(t *testing.T) {
 	e, cfg, _ := testInstallation(t, Config{Mode: "off"}, nil)
-	source := `js:(() => ({state: {content: "observed"}, candidates: choices([])}))()`
+	source := `[{"type":"noul","context":"The requested current native result is available."}]`
 	var observed *Generation
 	sub := e.stream.Observe(func(event *aop.Event) {
 		value := new(RuntimeEvent)
@@ -23,25 +23,25 @@ func TestStructuredGenerationUnwrapsArtifactsBeforeValidationAndObservation(t *t
 	defer sub.Close(t.Context())
 	cfg.Provider = testProvider(func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 		if !req.JSONOutput {
-			t.Fatal("compiler omitted structured output control")
+			t.Fatal("Claim generation omitted structured output control")
 		}
-		data, _ := json.Marshal(map[string]string{"observe": source})
+		data, _ := json.Marshal(map[string]json.RawMessage{"claims": json.RawMessage(source)})
 		return reply(provider.TextMessage("assistant", string(data))), nil
 	})
-	var artifact *Reflex
+	var artifact []Claim
 	ctx := traceContext(t.Context(), declaration{session: "s", turn: "t", task: "task"}.trace())
-	if err := e.generate(ctx, cfg, compilePrompt, map[string]string{}, &artifact); err != nil {
+	if err := e.generateClaims(ctx, cfg, map[string]string{}, &artifact); err != nil {
 		t.Fatal(err)
 	}
-	if artifact == nil || artifact.Observe != source || observed == nil || observed.Output != source || observed.Error != "" {
+	if len(artifact) != 1 || artifact[0].Context != "The requested current native result is available." || observed == nil || observed.Output != source || observed.Error != "" {
 		t.Fatal("transport JSON leaked into executable artifact or timeline")
 	}
-	for _, invalid := range []string{`{"observe": "js:({})", "analysis": "extra"}`, `{"observe": {"code": "js:({})"}}`, `{"code": "js:({})"}`} {
-		if _, err := declarationArtifact(invalid, "observe"); err == nil {
+	for _, invalid := range []string{`{"claims": [], "analysis": "extra"}`, `{"observe":"js:({})"}`, `{"code":"js:({})"}`} {
+		if _, err := declarationArtifact(invalid); err == nil {
 			t.Fatalf("accepted invalid envelope: %s", invalid)
 		}
 	}
-	claims, err := declarationArtifact(`{"claims": []}`, "claims")
+	claims, err := declarationArtifact(`{"claims": []}`)
 	if err != nil || claims != "[]" {
 		t.Fatalf("claim array changed: %s %v", claims, err)
 	}
@@ -49,7 +49,7 @@ func TestStructuredGenerationUnwrapsArtifactsBeforeValidationAndObservation(t *t
 
 func TestGenerationFailureRetainsEvidenceWithoutPublishingPartialArtifact(t *testing.T) {
 	for _, tc := range []struct{ name, output, finish, diagnostic string }{
-		{"truncated", "js:(() => {", "length", "truncated at 16384 tokens"},
+		{"truncated", "{\"claims\":[", "length", "truncated at 8192 tokens"},
 		{"reasoning_only", "", "stop", "returned no artifact"},
 		{"tool_markup", "<｜DSML｜function_calls>read</｜DSML｜function_calls>", "stop", "tool-call markup"},
 	} {
@@ -73,8 +73,8 @@ func TestGenerationFailureRetainsEvidenceWithoutPublishingPartialArtifact(t *tes
 				}
 			})
 			defer sub.Close(t.Context())
-			var artifact *Reflex
-			err := e.generate(traceContext(t.Context(), declaration{session: "session", turn: "turn", task: "task"}.trace()), cfg, compilePrompt, map[string]string{"evidence": "recorded task"}, &artifact)
+			var artifact []Claim
+			err := e.generateClaims(traceContext(t.Context(), declaration{session: "session", turn: "turn", task: "task"}.trace()), cfg, map[string]string{"evidence": "recorded task"}, &artifact)
 			if err == nil || !strings.Contains(err.Error(), tc.diagnostic) || artifact != nil {
 				t.Fatalf("artifact=%v error=%v", artifact, err)
 			}

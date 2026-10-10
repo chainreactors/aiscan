@@ -85,6 +85,29 @@ func (e *Extension) capabilities(cfg agent.Config, states ...json.RawMessage) (m
 	return capabilities, nil
 }
 
+// Semantic authorization needs the proposed operation's protocol, not every
+// installed tool's manual or the host's deterministic verification catalog.
+// Keep current constraints and evidence intact while avoiding catalog overflow.
+func bindingCapabilities(candidate binding, capabilities map[string]any) map[string]any {
+	tools, commands := []any{}, []any{}
+	definitions, _ := capabilities["tools"].([]any)
+	for _, value := range definitions {
+		if tool, ok := value.(map[string]any); ok && tool["name"] == candidate.Name {
+			tools = append(tools, tool)
+		}
+	}
+	if prepared, err := prepareBinding(candidate); err == nil && len(prepared.Argv) > 0 {
+		if catalog, ok := capabilities["commands"].([]any); ok {
+			for _, value := range catalog {
+				if command, ok := value.(map[string]any); ok && command["name"] == prepared.Argv[0] {
+					commands = append(commands, command)
+				}
+			}
+		}
+	}
+	return map[string]any{"tools": tools, "commands": commands}
+}
+
 // Parse recorded native shell calls without evaluating expansions or executing
 // user content. Documentation selection does not authorize tool dispatch.
 func interactionCommands(states []json.RawMessage) map[string]bool {
@@ -150,6 +173,11 @@ func observeInput(state json.RawMessage, capabilities map[string]any) (map[strin
 		// Named user messages are control receipts, not new user requirements.
 		// Actual native evidence is retained as associated calls/results.
 		if message["role"] != "user" || message["name"] == nil {
+			if message["call_id"] != nil && message["data"] != nil && message["text"] == nil {
+				// Keep the JS history/messages ABI while serializing native JSON
+				// only once in the bounded host evidence projection.
+				message["text"] = jsonText(message["data"])
+			}
 			current = append(current, message)
 		}
 	}

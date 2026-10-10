@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test'
-import { showExecutionLanes } from './jev-helpers'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createRegistry, fromJson, toBinary } from '@bufbuild/protobuf'
@@ -25,7 +24,6 @@ test('recorded provider events render honest background outcomes and deduplicate
   await page.goto('/e2e/fixtures/jev.html')
   const binary = events.map(event => [...toBinary(EventSchema, event)])
   await page.evaluate(values => (window as any).renderJEVEvents(values), [...binary, ...binary])
-  await showExecutionLanes(page)
   await expect(page.getByTestId('agent-workflow')).toHaveCount(3)
   await expect(page.getByTestId('jev-compilation')).toHaveCount(0)
   await expect(page.getByTestId('jev-segment')).toHaveCount(0)
@@ -35,7 +33,7 @@ test('recorded provider events render honest background outcomes and deduplicate
   expect(reason).not.toBe('')
   const generation = projection.compilations[0].records.find(record => record.value.payload.case === 'generation' && record.value.payload.value.error === reason)
   await page.evaluate(id => window.dispatchEvent(new CustomEvent('cyber-workflow-select', { detail: id })), (generation || failure)!.event.id)
-  const feedback = page.getByTestId('jev-compilation-error').first()
+  const feedback = page.getByTestId('jev-compilation-error').filter({ hasText: reason.split('Actual evaluated native bindings: ')[0] }).first()
   await expect(feedback).toBeVisible()
   await page.screenshot({ path: info.outputPath('real-background-failure.png'), fullPage: true })
   await expect(feedback).toContainText(reason.split('Actual evaluated native bindings: ')[0])

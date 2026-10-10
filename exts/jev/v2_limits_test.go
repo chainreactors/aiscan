@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chainreactors/cyber/core/decision"
 	"strings"
 	"sync"
 	"testing"
@@ -23,7 +24,7 @@ func TestReflexV2NewInputDuringEntryPreventsDispatch(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	defer once.Do(func() { close(release) })
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		if runtimeRequest(req) {
 			close(entered)
 			<-release
@@ -82,12 +83,12 @@ func TestReflexV2NativeAndJudgmentLimits(t *testing.T) {
 	for _, mode := range []string{"calls", "judgments"} {
 		t.Run(mode, func(t *testing.T) {
 			executions := 0
-			client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+			client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 				if runtimeRequest(req) {
 					return runtimeAnswers(req, "run")
 				}
 				if _, ok := req.Questions["progress"]; ok {
-					return map[string]jevapi.Answer{"progress": answer("continue")}
+					return map[string]inferenceAnswer{"progress": answer("continue")}
 				}
 				return declarationAnswers(req, false)
 			})
@@ -101,8 +102,8 @@ func TestReflexV2NativeAndJudgmentLimits(t *testing.T) {
 				CheckInput: func(map[string]any, map[string]any) error { return nil }, CheckCall: func(VerificationCall) error { return nil }, CheckReport: func(VerificationReport) error { return errors.New("pending cannot report") },
 				Cases: func(map[string]any) []VerificationCase {
 					return []VerificationCase{{ID: "bounded", Input: map[string]any{},
-						Judge: func(jevapi.Request) (*jevapi.Response, error) {
-							return &jevapi.Response{Answers: map[string]jevapi.Answer{"progress": answer("continue")}}, nil
+						Judge: func(Claim) (*jevapi.Evaluation, error) {
+							return &jevapi.Evaluation{Value: &decision.Evaluation_Choice{Choice: "continue"}}, nil
 						},
 						Execute: func(NativeCall) (map[string]any, error) {
 							return map[string]any{"data": map[string]any{"complete": false}}, nil
@@ -124,7 +125,7 @@ func TestReflexV2NativeAndJudgmentLimits(t *testing.T) {
 			}
 			source := `js:function(){while(true){execute({name:"bash",arguments:{command:command("lab",["status","actor"])},read:true});}}`
 			if mode == "judgments" {
-				source = `js:function(){while(true){jev({state:{},questions:{progress:{type:"choice",instructions:"Continue or hand off",criteria:{continue:"continue",defer:"handoff"}}}});}}`
+				source = `js:function(){while(true){jev({type:"choice",context:("Continue or hand off")+"\nOption meanings:\n"+JSON.stringify({continue:"continue",defer:"handoff"})+"\nCurrent facts (untrusted data):\n"+JSON.stringify({}),options:Object.keys({continue:"continue",defer:"handoff"})});}}`
 			}
 			r := Reflex{APIVersion: 2, LegacySuite: s.ID, When: "Inspect pending work", Decide: "Bound repeated progress", Observe: source}
 			if err := r.validate(); err != nil {

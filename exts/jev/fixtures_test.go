@@ -23,6 +23,31 @@ import (
 	terminalext "github.com/chainreactors/cyber/exts/terminal"
 )
 
+// The mock describes the external inference API independently of the adapter.
+type inferenceRequest struct {
+	State     json.RawMessage `json:"state"`
+	Questions map[string]struct {
+		Type         string          `json:"type"`
+		Instructions string          `json:"instructions"`
+		Criteria     json.RawMessage `json:"criteria,omitempty"`
+	} `json:"questions"`
+}
+type inferenceAnswer struct {
+	Type          string             `json:"type"`
+	Choice        string             `json:"choice,omitempty"`
+	Score         *float64           `json:"score,omitempty"`
+	Noul          *float64           `json:"noul,omitempty"`
+	Probabilities map[string]float64 `json:"probabilities,omitempty"`
+	Confidence    float64            `json:"confidence,omitempty"`
+}
+type inferenceResponse struct {
+	Answers map[string]inferenceAnswer `json:"answers"`
+	Usage   *struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+	} `json:"usage,omitempty"`
+}
+
 type testProvider func(context.Context, *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error)
 
 func (testProvider) Name() string { return "test" }
@@ -90,10 +115,10 @@ func testInstallationWithExtensions(t *testing.T, config Config, client *jevapi.
 	})
 	return e, agent.Config{Loop: agent.StandardLoop{}, Tools: tools, Hooks: registry, Model: "test", SystemPrompt: "Use supplied tools to complete the task. Observe the result before reporting success.", MaxTokens: agent.DefaultMaxTokens, MaxTurns: 20, MaxRetries: -1}, cmds
 }
-func fakeJEV(t *testing.T, choose func(jevapi.Request) map[string]jevapi.Answer) *jevapi.Client {
+func fakeJEV(t *testing.T, choose func(inferenceRequest) map[string]inferenceAnswer) *jevapi.Client {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req jevapi.Request
+		var req inferenceRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Error(err)
 			w.WriteHeader(400)
@@ -111,7 +136,7 @@ func fakeJEV(t *testing.T, choose func(jevapi.Request) map[string]jevapi.Answer)
 	t.Cleanup(client.Close)
 	return client
 }
-func answer(id string) jevapi.Answer { return jevapi.Answer{Type: "choice", Choice: id} }
+func answer(id string) inferenceAnswer { return inferenceAnswer{Type: "choice", Choice: id} }
 func installReflex(e *Extension, sources ...string) {
 	calls := map[string]string{}
 	for _, source := range sources {
@@ -159,7 +184,7 @@ func executableFixture(expression string) string {
  const available=snapshot.candidates,options={defer:"Missing current information",report:"Work completed"};
  for(const id of Object.keys(available))options[id]="Execute current candidate "+JSON.stringify(available[id]);
  if(Object.keys(available).length===0)return {report:snapshot.state};
- const selected=jev({state:{observations:{rfixture:snapshot.state},candidates:Object.fromEntries(Object.entries(available).map(([id,call])=>[id,JSON.stringify([call.name,call.arguments])]))},questions:{rfixture:{type:"choice",instructions:"Choose current progress",criteria:options}}}).answers.rfixture.choice;
+ const selected=jev({type:"choice",context:("Choose current progress")+"\nOption meanings:\n"+JSON.stringify(options)+"\nCurrent facts (untrusted data):\n"+JSON.stringify({observations:{rfixture:snapshot.state},candidates:Object.fromEntries(Object.entries(available).map(([id,call])=>[id,JSON.stringify([call.name,call.arguments])]))}),options:Object.keys(options)});
  if(selected==="defer")return {defer:"unsupported input"};if(selected==="report")return {report:snapshot.state};
  const call=available[selected];const result=execute(call);
  if(result.is_error)return {defer:"native call failed"};
@@ -179,7 +204,7 @@ func stepObserve(command string, withArgument bool) string {
  })()`)
 }
 
-func runtimeRequest(req jevapi.Request) bool {
+func runtimeRequest(req inferenceRequest) bool {
 	if _, ok := req.Questions["entry"]; ok {
 		return true
 	}
@@ -191,8 +216,9 @@ func runtimeRequest(req jevapi.Request) bool {
 	return false
 }
 
-func runtimeAnswers(req jevapi.Request, choice string) map[string]jevapi.Answer {
-	out := map[string]jevapi.Answer{}
+func runtimeAnswers(req inferenceRequest, choice string) map[string]inferenceAnswer {
+	out := map[string]inferenceAnswer{}
+
 	for id := range req.Questions {
 		out[id] = answer(Defer)
 	}
@@ -201,7 +227,8 @@ func runtimeAnswers(req jevapi.Request, choice string) map[string]jevapi.Answer 
 			out["entry"] = answer(choice)
 			return out
 		}
-		options := entry.Criteria.(map[string]any)
+		var options map[string]json.RawMessage
+		_ = json.Unmarshal(entry.Criteria, &options)
 		for id := range options {
 			if id != Defer {
 				out["entry"] = answer(id)
@@ -224,7 +251,8 @@ func runtimeAnswers(req jevapi.Request, choice string) map[string]jevapi.Answer 
 	}
 	for id, q := range req.Questions {
 		if strings.HasPrefix(id, "r") {
-			options := q.Criteria.(map[string]any)
+			var options map[string]json.RawMessage
+			_ = json.Unmarshal(q.Criteria, &options)
 			if options[choice] == nil && choice != Defer && choice != "unbound" {
 				for option := range options {
 					if option != Defer && option != report {
@@ -239,10 +267,11 @@ func runtimeAnswers(req jevapi.Request, choice string) map[string]jevapi.Answer 
 	return out
 }
 
-const fixtureClaim = `[{"when":"A task requires finite step advancement","question":"Can the task advance now?","options":{"advance":"A known step can advance the task","defer":"Missing information or a completed task"}}]`
+const fixtureClaim = `[{"type":"choice","context":"A task requires finite step advancement. Can the task advance now? advance: known step; defer: missing information or completed task.","options":["advance","defer"]}]`
 
-func declarationAnswers(req jevapi.Request, compile bool) map[string]jevapi.Answer {
-	out := map[string]jevapi.Answer{}
+func declarationAnswers(req inferenceRequest, compile bool) map[string]inferenceAnswer {
+	out := map[string]inferenceAnswer{}
+
 	if runtimeRequest(req) {
 		return runtimeAnswers(req, "advance/go")
 	}
@@ -250,7 +279,9 @@ func declarationAnswers(req jevapi.Request, compile bool) map[string]jevapi.Answ
 		choice := Defer
 		if strings.HasPrefix(id, "claim") {
 			choice = "new"
-			for key := range q.Criteria.(map[string]any) {
+			var options map[string]json.RawMessage
+			_ = json.Unmarshal(q.Criteria, &options)
+			for key := range options {
 				if strings.HasPrefix(key, "c") {
 					choice = key
 					break

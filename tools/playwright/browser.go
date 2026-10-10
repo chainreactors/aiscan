@@ -105,6 +105,13 @@ Selector Syntax:
   Extended CSS pseudo-classes such as :has-text() and :text-is() are not supported.
   A selector must resolve to the intended current element; use a unique existing address.
 
+Structured Inspection:
+  Prefer snapshot <session> --json to inspect live controls and their exact addresses,
+  labels, values and visibility, including open Shadow DOM. Use the returned address
+  for interactions. Send one native operation per tool call so each result identifies
+  its operation. Arbitrary evaluate and compound shell scripts have no trusted
+  read/effect classification and cannot be qualified for automatic reuse.
+
 JavaScript Evaluation:
   Pass an evaluated expression, for example (() => { return document.body.innerText; })().
   Object results are returned as JSON. A function without invocation is not a page read.

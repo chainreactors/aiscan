@@ -1,3 +1,4 @@
+import { ClaimType } from '../../src/gen/decision/claim_pb'
 import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { create, fromBinary } from '@bufbuild/protobuf'
@@ -24,10 +25,10 @@ const trace = (seq: number, payload: any, fields = {}) => event(seq, { case: 'ex
 const call = { id: 'browser-open', name: 'bash', arguments: { data: new TextEncoder().encode(JSON.stringify({ command: 'playwright open https://docs.python.org/3/library/json.html --session reference' })) } }
 const initial = [event(1, { case: 'turnStarted', value: {} }), event(2, { case: 'message', value: { id: 'user', role: 'user', content: [{ value: { case: 'text', value: { text: '读取 Python 官方 json 文档，说明 ensure_ascii 的行为。' } } }] } }, { emitter: 'cyber.web' }),
   trace(3, { case: 'takeover', value: { definition } }),
-  trace(4, { case: 'decisionRequest', value: { requestId: 'request-1', purpose: 'jev_execution', questions: {
-    scene: { type: 'choice', instructionsJson: JSON.stringify('Which current operation advances this read-only task?'), criteriaJson: JSON.stringify({ inspect: 'Read current page', report: 'Compose answer from evidence', defer: 'New reasoning required' }) },
+  trace(4, { case: 'decisionRequest', value: { requestId: 'request-1', purpose: 'jev_execution', claims: {
+    scene: { type: ClaimType.choice, context: 'Which current operation advances this read-only task?' + "\ninspect: Read current page\nreport: Compose answer from evidence\ndefer: New reasoning required", options: ["inspect","report","defer"] },
   } } }),
-  trace(5, { case: 'decisionResult', value: { requestId: 'request-1', answers: { scene: { type: 'choice', choice: 'inspect', confidence: .94, probabilities: { inspect: .94, report: .04, defer: .02 } } } } }),
+  trace(5, { case: 'decisionResult', value: { requestId: 'request-1', evaluations: { scene: { value: { case: 'choice', value: 'inspect' }, confidence: .94, probabilities: { inspect: .94, report: .04, defer: .02 } } } } }),
   trace(6, { case: 'dispatch', value: { call, candidateId: 'reflex-browser-evidence/open' } }, { callId: call.id }),
   event(7, { case: 'extension', value: anyPack(StartedSchema, create(StartedSchema, { kind: 'command', name: 'playwright' })) },
     { emitter: 'jev', extensions: [anyPack(RefSchema, create(RefSchema, { callId: call.id, operationId: 'operation-1' }))] }),
@@ -42,8 +43,8 @@ const initial = [event(1, { case: 'turnStarted', value: {} }), event(2, { case: 
 Object.defineProperty(aopClient, 'connected', { configurable: true, get: () => true })
 // Fixture-only transport: production components still use their real query API.
 let fixtureLibrary = create(GetLibraryResponseSchema, { mode: 'auto', status: 'ready',
-  reflexes: [definition], claims: [{ id: 'claim-browser', when: definition.when, question: 'Which next operation advances page inspection?',
-    options: { inspect: 'Read fresh page state', report: 'Report observed content', defer: 'New reasoning' }, sourceTaskId: 'task-1', consumed: true }] })
+  reflexes: [definition], claims: [{ id: 'claim-browser', type: ClaimType.choice, context: definition.when + '\nChoose the next operation: inspect reads fresh page state; report uses observed content; defer asks for new reasoning.',
+    options: ['inspect', 'report', 'defer'], sourceTaskId: 'task-1' }] })
 ;(window as any).renderJEVLibrary = (value: any) => { fixtureLibrary = create(GetLibraryResponseSchema, value) }
 aopClient.request = async () => create(ProtocolMessageSchema, { message: { case: 'library', value: fixtureLibrary } })
 

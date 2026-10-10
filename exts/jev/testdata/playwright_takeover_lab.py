@@ -161,7 +161,10 @@ class Lab:
             "files": f"Upload the supplied CSV {c['upload_path']} using the browser file control, Validate export once, download the resulting file through its download link and save it as {c['download_path']}. Report the displayed receipt and the saved file SHA-256. A fetch body or suggested path without an actual saved file is insufficient.",
             "drag": f"Find item {c['item']} in the virtual inventory list, then drag its card onto Approved. This requires browser pointer input; synthetic DOM events are not accepted. Report the displayed receipt.",
         }
-        return {k: c[k] for k in ("id", "kind", "employee", "reference", "amount", "area", "item", "upload_path", "download_path")} | {"url": f"{self.url}/case/{ident}/", "prompt": goals[kind]}
+        prompt = goals[kind]
+        if kind in ("expense", "shadow"):
+            prompt += " Quoted field values above are JSON-encoded strings: decode each exactly once before entering it, preserving its decoded literal quotes and backslashes."
+        return {k: c[k] for k in ("id", "kind", "employee", "reference", "amount", "area", "item", "upload_path", "download_path")} | {"url": f"{self.url}/case/{ident}/", "prompt": prompt}
 
     def check(self, ident, output):
         c = self.cases[ident]

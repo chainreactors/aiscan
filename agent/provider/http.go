@@ -26,11 +26,16 @@ func timeoutFromConfig(seconds int) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+func (r *ChatCompletionRequest) timeout(seconds int) time.Duration {
+	if r.Timeout > 0 {
+		return r.Timeout
+	}
+	return timeoutFromConfig(seconds)
+}
+
 func newHTTPClient(cfg *ProviderConfig) (*http.Client, error) {
-	timeout := timeoutFromConfig(cfg.Timeout)
 	transport := &http.Transport{
-		ResponseHeaderTimeout: timeout,
-		IdleConnTimeout:       90 * time.Second,
+		IdleConnTimeout: 90 * time.Second,
 	}
 	if cfg.Proxy != "" {
 		proxyURL, err := url.Parse(cfg.Proxy)
@@ -137,28 +142,33 @@ func streamSSE(
 		setHeaders(httpReq)
 	}
 
-	resp, err := client.Do(httpReq) //nolint:bodyclose // closed in goroutine below
-	if err != nil {
-		reqCancel()
-		return nil, fmt.Errorf("http request: %w", err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		defer resp.Body.Close()
-		defer reqCancel()
-		respBody, timedOut, readErr := readAllWithCancelTimeout(resp.Body, reqCancel, timeout)
-		if readErr != nil {
-			return nil, wrapReadError(ctx, timedOut, timeout, "read response", readErr)
-		}
-		captureFrame(ctx, RawFrame{Provider: providerName, Protocol: protocol, EventType: "error", Direction: "response", Transport: "sse", Payload: respBody, MediaType: "application/json"})
-		return nil, &APIError{StatusCode: resp.StatusCode, Message: string(respBody), Header: resp.Header.Clone()}
-	}
-
+	// The request owns its fallback, including the wait for response headers.
+	// A transport-wide deadline would cap longer background requests.
 	var stallDetected atomic.Bool
 	stallTimer := time.AfterFunc(timeout, func() {
 		stallDetected.Store(true)
 		reqCancel()
 	})
+	resp, err := client.Do(httpReq) //nolint:bodyclose // closed in goroutine below
+	if err != nil {
+		stallTimer.Stop()
+		reqCancel()
+		return nil, wrapReadError(ctx, stallDetected.Load(), timeout, "http request", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		defer stallTimer.Stop()
+		defer resp.Body.Close()
+		defer reqCancel()
+		respBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return nil, wrapReadError(ctx, stallDetected.Load(), timeout, "read response", readErr)
+		}
+		captureFrame(ctx, RawFrame{Provider: providerName, Protocol: protocol, EventType: "error", Direction: "response", Transport: "sse", Payload: respBody, MediaType: "application/json"})
+		return nil, &APIError{StatusCode: resp.StatusCode, Message: string(respBody), Header: resp.Header.Clone()}
+	}
+
+	stallTimer.Reset(timeout)
 
 	events := make(chan ChatCompletionStreamEvent, 32)
 	go func() {
@@ -271,17 +281,6 @@ func wrapReadError(parentCtx context.Context, timedOut bool, timeout time.Durati
 		return fmt.Errorf("%s: %w", op, ErrCallTimeout)
 	}
 	return fmt.Errorf("%s: %w", op, err)
-}
-
-func readAllWithCancelTimeout(r io.Reader, cancel context.CancelFunc, timeout time.Duration) ([]byte, bool, error) {
-	var timedOut atomic.Bool
-	timer := time.AfterFunc(timeout, func() {
-		timedOut.Store(true)
-		cancel()
-	})
-	defer timer.Stop()
-	body, err := io.ReadAll(r)
-	return body, timedOut.Load(), err
 }
 
 func clampInt(v, min, max, fallback int) int {

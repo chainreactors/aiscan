@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/chainreactors/cyber/agent/provider"
-	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 	"github.com/chainreactors/cyber/aop"
 )
 
@@ -36,12 +35,12 @@ func TestReceiptCompactionPreservesOutcomesAndExactArguments(t *testing.T) {
 
 func TestCompilationCooldownCoversOtherClaimAndSession(t *testing.T) {
 	groups := 0
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer { groups++; return declarationAnswers(req, true) })
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer { groups++; return declarationAnswers(req, true) })
 	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client)
 	var claims []Claim
 	_ = json.Unmarshal([]byte(fixtureClaim), &claims)
 	other := claims[0]
-	other.Question = "Should the current operation continue?"
+	other.Context = "Should the current operation continue?"
 	ids := []string{"c" + digest(claims[0])[:16], "c" + digest(other)[:16]}
 	e.library.Claims[ids[0]], e.library.Claims[ids[1]] = claimRecord{Claim: claims[0]}, claimRecord{Claim: other}
 	generation := 0

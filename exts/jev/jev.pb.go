@@ -8,6 +8,7 @@ package jev
 
 import (
 	aop "github.com/chainreactors/cyber/aop"
+	decision "github.com/chainreactors/cyber/core/decision"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -25,12 +26,10 @@ const (
 type ClaimDefinition struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	When          string                 `protobuf:"bytes,2,opt,name=when,proto3" json:"when,omitempty"`
-	Question      string                 `protobuf:"bytes,3,opt,name=question,proto3" json:"question,omitempty"`
-	Options       map[string]string      `protobuf:"bytes,4,rep,name=options,proto3" json:"options,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Type          decision.ClaimType     `protobuf:"varint,2,opt,name=type,proto3,enum=decision.ClaimType" json:"type,omitempty"`
+	Context       string                 `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
+	Options       []string               `protobuf:"bytes,4,rep,name=options,proto3" json:"options,omitempty"`
 	SourceTaskId  string                 `protobuf:"bytes,5,opt,name=source_task_id,json=sourceTaskId,proto3" json:"source_task_id,omitempty"`
-	Consumed      bool                   `protobuf:"varint,6,opt,name=consumed,proto3" json:"consumed,omitempty"`
-	Text          string                 `protobuf:"bytes,7,opt,name=text,proto3" json:"text,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -72,21 +71,21 @@ func (x *ClaimDefinition) GetId() string {
 	return ""
 }
 
-func (x *ClaimDefinition) GetWhen() string {
+func (x *ClaimDefinition) GetType() decision.ClaimType {
 	if x != nil {
-		return x.When
+		return x.Type
+	}
+	return decision.ClaimType(0)
+}
+
+func (x *ClaimDefinition) GetContext() string {
+	if x != nil {
+		return x.Context
 	}
 	return ""
 }
 
-func (x *ClaimDefinition) GetQuestion() string {
-	if x != nil {
-		return x.Question
-	}
-	return ""
-}
-
-func (x *ClaimDefinition) GetOptions() map[string]string {
+func (x *ClaimDefinition) GetOptions() []string {
 	if x != nil {
 		return x.Options
 	}
@@ -96,20 +95,6 @@ func (x *ClaimDefinition) GetOptions() map[string]string {
 func (x *ClaimDefinition) GetSourceTaskId() string {
 	if x != nil {
 		return x.SourceTaskId
-	}
-	return ""
-}
-
-func (x *ClaimDefinition) GetConsumed() bool {
-	if x != nil {
-		return x.Consumed
-	}
-	return false
-}
-
-func (x *ClaimDefinition) GetText() string {
-	if x != nil {
-		return x.Text
 	}
 	return ""
 }
@@ -238,158 +223,6 @@ func (x *ReflexDefinition) GetBlocker() string {
 	return ""
 }
 
-type Question struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Type             string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	InstructionsJson string                 `protobuf:"bytes,2,opt,name=instructions_json,json=instructionsJson,proto3" json:"instructions_json,omitempty"`
-	CriteriaJson     string                 `protobuf:"bytes,3,opt,name=criteria_json,json=criteriaJson,proto3" json:"criteria_json,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *Question) Reset() {
-	*x = Question{}
-	mi := &file_types_jev_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Question) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Question) ProtoMessage() {}
-
-func (x *Question) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Question.ProtoReflect.Descriptor instead.
-func (*Question) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *Question) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *Question) GetInstructionsJson() string {
-	if x != nil {
-		return x.InstructionsJson
-	}
-	return ""
-}
-
-func (x *Question) GetCriteriaJson() string {
-	if x != nil {
-		return x.CriteriaJson
-	}
-	return ""
-}
-
-type Answer struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	Choice        string                 `protobuf:"bytes,2,opt,name=choice,proto3" json:"choice,omitempty"`
-	Score         *float64               `protobuf:"fixed64,3,opt,name=score,proto3,oneof" json:"score,omitempty"`
-	Noul          *float64               `protobuf:"fixed64,4,opt,name=noul,proto3,oneof" json:"noul,omitempty"`
-	Legend        map[string]string      `protobuf:"bytes,5,rep,name=legend,proto3" json:"legend,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Probabilities map[string]float64     `protobuf:"bytes,6,rep,name=probabilities,proto3" json:"probabilities,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
-	Confidence    float64                `protobuf:"fixed64,7,opt,name=confidence,proto3" json:"confidence,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Answer) Reset() {
-	*x = Answer{}
-	mi := &file_types_jev_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Answer) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Answer) ProtoMessage() {}
-
-func (x *Answer) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Answer.ProtoReflect.Descriptor instead.
-func (*Answer) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *Answer) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *Answer) GetChoice() string {
-	if x != nil {
-		return x.Choice
-	}
-	return ""
-}
-
-func (x *Answer) GetScore() float64 {
-	if x != nil && x.Score != nil {
-		return *x.Score
-	}
-	return 0
-}
-
-func (x *Answer) GetNoul() float64 {
-	if x != nil && x.Noul != nil {
-		return *x.Noul
-	}
-	return 0
-}
-
-func (x *Answer) GetLegend() map[string]string {
-	if x != nil {
-		return x.Legend
-	}
-	return nil
-}
-
-func (x *Answer) GetProbabilities() map[string]float64 {
-	if x != nil {
-		return x.Probabilities
-	}
-	return nil
-}
-
-func (x *Answer) GetConfidence() float64 {
-	if x != nil {
-		return x.Confidence
-	}
-	return 0
-}
-
 type Boundary struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Reason        string                 `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
@@ -399,7 +232,7 @@ type Boundary struct {
 
 func (x *Boundary) Reset() {
 	*x = Boundary{}
-	mi := &file_types_jev_proto_msgTypes[4]
+	mi := &file_types_jev_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -411,7 +244,7 @@ func (x *Boundary) String() string {
 func (*Boundary) ProtoMessage() {}
 
 func (x *Boundary) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[4]
+	mi := &file_types_jev_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -424,7 +257,7 @@ func (x *Boundary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Boundary.ProtoReflect.Descriptor instead.
 func (*Boundary) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{4}
+	return file_types_jev_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Boundary) GetReason() string {
@@ -444,7 +277,7 @@ type Observation struct {
 
 func (x *Observation) Reset() {
 	*x = Observation{}
-	mi := &file_types_jev_proto_msgTypes[5]
+	mi := &file_types_jev_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -456,7 +289,7 @@ func (x *Observation) String() string {
 func (*Observation) ProtoMessage() {}
 
 func (x *Observation) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[5]
+	mi := &file_types_jev_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -469,7 +302,7 @@ func (x *Observation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Observation.ProtoReflect.Descriptor instead.
 func (*Observation) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{5}
+	return file_types_jev_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Observation) GetStateJson() string {
@@ -487,17 +320,17 @@ func (x *Observation) GetCandidatesJson() string {
 }
 
 type DecisionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Purpose       string                 `protobuf:"bytes,2,opt,name=purpose,proto3" json:"purpose,omitempty"`
-	Questions     map[string]*Question   `protobuf:"bytes,3,rep,name=questions,proto3" json:"questions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	RequestId     string                     `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Purpose       string                     `protobuf:"bytes,2,opt,name=purpose,proto3" json:"purpose,omitempty"`
+	Claims        map[string]*decision.Claim `protobuf:"bytes,3,rep,name=claims,proto3" json:"claims,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DecisionRequest) Reset() {
 	*x = DecisionRequest{}
-	mi := &file_types_jev_proto_msgTypes[6]
+	mi := &file_types_jev_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -509,7 +342,7 @@ func (x *DecisionRequest) String() string {
 func (*DecisionRequest) ProtoMessage() {}
 
 func (x *DecisionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[6]
+	mi := &file_types_jev_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -522,7 +355,7 @@ func (x *DecisionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DecisionRequest.ProtoReflect.Descriptor instead.
 func (*DecisionRequest) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{6}
+	return file_types_jev_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *DecisionRequest) GetRequestId() string {
@@ -539,28 +372,28 @@ func (x *DecisionRequest) GetPurpose() string {
 	return ""
 }
 
-func (x *DecisionRequest) GetQuestions() map[string]*Question {
+func (x *DecisionRequest) GetClaims() map[string]*decision.Claim {
 	if x != nil {
-		return x.Questions
+		return x.Claims
 	}
 	return nil
 }
 
 type DecisionResult struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	Purpose       string                 `protobuf:"bytes,2,opt,name=purpose,proto3" json:"purpose,omitempty"`
-	Answers       map[string]*Answer     `protobuf:"bytes,3,rep,name=answers,proto3" json:"answers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ElapsedMs     int64                  `protobuf:"varint,4,opt,name=elapsed_ms,json=elapsedMs,proto3" json:"elapsed_ms,omitempty"`
-	Error         string                 `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
-	Usage         *aop.TokenUsage        `protobuf:"bytes,6,opt,name=usage,proto3" json:"usage,omitempty"`
+	state         protoimpl.MessageState          `protogen:"open.v1"`
+	RequestId     string                          `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Purpose       string                          `protobuf:"bytes,2,opt,name=purpose,proto3" json:"purpose,omitempty"`
+	Evaluations   map[string]*decision.Evaluation `protobuf:"bytes,3,rep,name=evaluations,proto3" json:"evaluations,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ElapsedMs     int64                           `protobuf:"varint,4,opt,name=elapsed_ms,json=elapsedMs,proto3" json:"elapsed_ms,omitempty"`
+	Error         string                          `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
+	Usage         *aop.TokenUsage                 `protobuf:"bytes,6,opt,name=usage,proto3" json:"usage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DecisionResult) Reset() {
 	*x = DecisionResult{}
-	mi := &file_types_jev_proto_msgTypes[7]
+	mi := &file_types_jev_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -572,7 +405,7 @@ func (x *DecisionResult) String() string {
 func (*DecisionResult) ProtoMessage() {}
 
 func (x *DecisionResult) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[7]
+	mi := &file_types_jev_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -585,7 +418,7 @@ func (x *DecisionResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DecisionResult.ProtoReflect.Descriptor instead.
 func (*DecisionResult) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{7}
+	return file_types_jev_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DecisionResult) GetRequestId() string {
@@ -602,9 +435,9 @@ func (x *DecisionResult) GetPurpose() string {
 	return ""
 }
 
-func (x *DecisionResult) GetAnswers() map[string]*Answer {
+func (x *DecisionResult) GetEvaluations() map[string]*decision.Evaluation {
 	if x != nil {
-		return x.Answers
+		return x.Evaluations
 	}
 	return nil
 }
@@ -639,7 +472,7 @@ type Takeover struct {
 
 func (x *Takeover) Reset() {
 	*x = Takeover{}
-	mi := &file_types_jev_proto_msgTypes[8]
+	mi := &file_types_jev_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -651,7 +484,7 @@ func (x *Takeover) String() string {
 func (*Takeover) ProtoMessage() {}
 
 func (x *Takeover) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[8]
+	mi := &file_types_jev_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -664,7 +497,7 @@ func (x *Takeover) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Takeover.ProtoReflect.Descriptor instead.
 func (*Takeover) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{8}
+	return file_types_jev_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Takeover) GetDefinition() *ReflexDefinition {
@@ -688,7 +521,7 @@ type Dispatch struct {
 
 func (x *Dispatch) Reset() {
 	*x = Dispatch{}
-	mi := &file_types_jev_proto_msgTypes[9]
+	mi := &file_types_jev_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -700,7 +533,7 @@ func (x *Dispatch) String() string {
 func (*Dispatch) ProtoMessage() {}
 
 func (x *Dispatch) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[9]
+	mi := &file_types_jev_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -713,7 +546,7 @@ func (x *Dispatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Dispatch.ProtoReflect.Descriptor instead.
 func (*Dispatch) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{9}
+	return file_types_jev_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Dispatch) GetCall() *aop.ToolCall {
@@ -768,7 +601,7 @@ type Result struct {
 
 func (x *Result) Reset() {
 	*x = Result{}
-	mi := &file_types_jev_proto_msgTypes[10]
+	mi := &file_types_jev_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -780,7 +613,7 @@ func (x *Result) String() string {
 func (*Result) ProtoMessage() {}
 
 func (x *Result) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[10]
+	mi := &file_types_jev_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -793,7 +626,7 @@ func (x *Result) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Result.ProtoReflect.Descriptor instead.
 func (*Result) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{10}
+	return file_types_jev_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Result) GetResult() *aop.ToolResult {
@@ -823,7 +656,7 @@ type Handoff struct {
 
 func (x *Handoff) Reset() {
 	*x = Handoff{}
-	mi := &file_types_jev_proto_msgTypes[11]
+	mi := &file_types_jev_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -835,7 +668,7 @@ func (x *Handoff) String() string {
 func (*Handoff) ProtoMessage() {}
 
 func (x *Handoff) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[11]
+	mi := &file_types_jev_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -848,7 +681,7 @@ func (x *Handoff) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Handoff.ProtoReflect.Descriptor instead.
 func (*Handoff) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{11}
+	return file_types_jev_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Handoff) GetReason() string {
@@ -906,7 +739,7 @@ type Generation struct {
 
 func (x *Generation) Reset() {
 	*x = Generation{}
-	mi := &file_types_jev_proto_msgTypes[12]
+	mi := &file_types_jev_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -918,7 +751,7 @@ func (x *Generation) String() string {
 func (*Generation) ProtoMessage() {}
 
 func (x *Generation) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[12]
+	mi := &file_types_jev_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -931,7 +764,7 @@ func (x *Generation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Generation.ProtoReflect.Descriptor instead.
 func (*Generation) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{12}
+	return file_types_jev_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Generation) GetKind() string {
@@ -1032,7 +865,7 @@ type LibraryChange struct {
 
 func (x *LibraryChange) Reset() {
 	*x = LibraryChange{}
-	mi := &file_types_jev_proto_msgTypes[13]
+	mi := &file_types_jev_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1044,7 +877,7 @@ func (x *LibraryChange) String() string {
 func (*LibraryChange) ProtoMessage() {}
 
 func (x *LibraryChange) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[13]
+	mi := &file_types_jev_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1057,7 +890,7 @@ func (x *LibraryChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LibraryChange.ProtoReflect.Descriptor instead.
 func (*LibraryChange) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{13}
+	return file_types_jev_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *LibraryChange) GetState() string {
@@ -1134,7 +967,7 @@ type RuntimeEvent struct {
 
 func (x *RuntimeEvent) Reset() {
 	*x = RuntimeEvent{}
-	mi := &file_types_jev_proto_msgTypes[14]
+	mi := &file_types_jev_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1146,7 +979,7 @@ func (x *RuntimeEvent) String() string {
 func (*RuntimeEvent) ProtoMessage() {}
 
 func (x *RuntimeEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[14]
+	mi := &file_types_jev_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1159,7 +992,7 @@ func (x *RuntimeEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuntimeEvent.ProtoReflect.Descriptor instead.
 func (*RuntimeEvent) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{14}
+	return file_types_jev_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RuntimeEvent) GetTaskId() string {
@@ -1395,7 +1228,7 @@ type GetLibraryRequest struct {
 
 func (x *GetLibraryRequest) Reset() {
 	*x = GetLibraryRequest{}
-	mi := &file_types_jev_proto_msgTypes[15]
+	mi := &file_types_jev_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1407,7 +1240,7 @@ func (x *GetLibraryRequest) String() string {
 func (*GetLibraryRequest) ProtoMessage() {}
 
 func (x *GetLibraryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[15]
+	mi := &file_types_jev_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1420,7 +1253,7 @@ func (x *GetLibraryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLibraryRequest.ProtoReflect.Descriptor instead.
 func (*GetLibraryRequest) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{15}
+	return file_types_jev_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetLibraryRequest) GetSessionId() string {
@@ -1440,7 +1273,7 @@ type WaitIdleRequest struct {
 
 func (x *WaitIdleRequest) Reset() {
 	*x = WaitIdleRequest{}
-	mi := &file_types_jev_proto_msgTypes[16]
+	mi := &file_types_jev_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1452,7 +1285,7 @@ func (x *WaitIdleRequest) String() string {
 func (*WaitIdleRequest) ProtoMessage() {}
 
 func (x *WaitIdleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[16]
+	mi := &file_types_jev_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1465,7 +1298,7 @@ func (x *WaitIdleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitIdleRequest.ProtoReflect.Descriptor instead.
 func (*WaitIdleRequest) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{16}
+	return file_types_jev_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *WaitIdleRequest) GetSessionId() string {
@@ -1492,7 +1325,7 @@ type WaitIdleResponse struct {
 
 func (x *WaitIdleResponse) Reset() {
 	*x = WaitIdleResponse{}
-	mi := &file_types_jev_proto_msgTypes[17]
+	mi := &file_types_jev_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1504,7 +1337,7 @@ func (x *WaitIdleResponse) String() string {
 func (*WaitIdleResponse) ProtoMessage() {}
 
 func (x *WaitIdleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[17]
+	mi := &file_types_jev_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1517,7 +1350,7 @@ func (x *WaitIdleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitIdleResponse.ProtoReflect.Descriptor instead.
 func (*WaitIdleResponse) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{17}
+	return file_types_jev_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *WaitIdleResponse) GetSettled() bool {
@@ -1549,7 +1382,7 @@ type GetLibraryResponse struct {
 
 func (x *GetLibraryResponse) Reset() {
 	*x = GetLibraryResponse{}
-	mi := &file_types_jev_proto_msgTypes[18]
+	mi := &file_types_jev_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1561,7 +1394,7 @@ func (x *GetLibraryResponse) String() string {
 func (*GetLibraryResponse) ProtoMessage() {}
 
 func (x *GetLibraryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[18]
+	mi := &file_types_jev_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1574,7 +1407,7 @@ func (x *GetLibraryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLibraryResponse.ProtoReflect.Descriptor instead.
 func (*GetLibraryResponse) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{18}
+	return file_types_jev_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetLibraryResponse) GetMode() string {
@@ -1641,7 +1474,7 @@ type ProtocolMessage struct {
 
 func (x *ProtocolMessage) Reset() {
 	*x = ProtocolMessage{}
-	mi := &file_types_jev_proto_msgTypes[19]
+	mi := &file_types_jev_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1653,7 +1486,7 @@ func (x *ProtocolMessage) String() string {
 func (*ProtocolMessage) ProtoMessage() {}
 
 func (x *ProtocolMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_types_jev_proto_msgTypes[19]
+	mi := &file_types_jev_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1666,7 +1499,7 @@ func (x *ProtocolMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProtocolMessage.ProtoReflect.Descriptor instead.
 func (*ProtocolMessage) Descriptor() ([]byte, []int) {
-	return file_types_jev_proto_rawDescGZIP(), []int{19}
+	return file_types_jev_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ProtocolMessage) GetMessage() isProtocolMessage_Message {
@@ -1744,18 +1577,13 @@ var File_types_jev_proto protoreflect.FileDescriptor
 
 const file_types_jev_proto_rawDesc = "" +
 	"\n" +
-	"\x0ftypes/jev.proto\x12\tcyber.jev\x1a\x11aop/content.proto\x1a\x0faop/event.proto\"\xa6\x02\n" +
+	"\x0ftypes/jev.proto\x12\tcyber.jev\x1a\x11aop/content.proto\x1a\x0faop/event.proto\x1a\x14decision/claim.proto\"\xb0\x01\n" +
 	"\x0fClaimDefinition\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04when\x18\x02 \x01(\tR\x04when\x12\x1a\n" +
-	"\bquestion\x18\x03 \x01(\tR\bquestion\x12A\n" +
-	"\aoptions\x18\x04 \x03(\v2'.cyber.jev.ClaimDefinition.OptionsEntryR\aoptions\x12$\n" +
-	"\x0esource_task_id\x18\x05 \x01(\tR\fsourceTaskId\x12\x1a\n" +
-	"\bconsumed\x18\x06 \x01(\bR\bconsumed\x12\x12\n" +
-	"\x04text\x18\a \x01(\tR\x04text\x1a:\n" +
-	"\fOptionsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9c\x04\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
+	"\x04type\x18\x02 \x01(\x0e2\x13.decision.ClaimTypeR\x04type\x12\x18\n" +
+	"\acontext\x18\x03 \x01(\tR\acontext\x12\x18\n" +
+	"\aoptions\x18\x04 \x03(\tR\aoptions\x12$\n" +
+	"\x0esource_task_id\x18\x05 \x01(\tR\fsourceTaskIdJ\x04\b\x06\x10\aJ\x04\b\a\x10\b\"\x9c\x04\n" +
 	"\x10ReflexDefinition\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04when\x18\x02 \x01(\tR\x04when\x12\x16\n" +
@@ -1775,55 +1603,33 @@ const file_types_jev_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a<\n" +
 	"\x0eContractsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"p\n" +
-	"\bQuestion\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12+\n" +
-	"\x11instructions_json\x18\x02 \x01(\tR\x10instructionsJson\x12#\n" +
-	"\rcriteria_json\x18\x03 \x01(\tR\fcriteriaJson\"\x9b\x03\n" +
-	"\x06Answer\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12\x16\n" +
-	"\x06choice\x18\x02 \x01(\tR\x06choice\x12\x19\n" +
-	"\x05score\x18\x03 \x01(\x01H\x00R\x05score\x88\x01\x01\x12\x17\n" +
-	"\x04noul\x18\x04 \x01(\x01H\x01R\x04noul\x88\x01\x01\x125\n" +
-	"\x06legend\x18\x05 \x03(\v2\x1d.cyber.jev.Answer.LegendEntryR\x06legend\x12J\n" +
-	"\rprobabilities\x18\x06 \x03(\v2$.cyber.jev.Answer.ProbabilitiesEntryR\rprobabilities\x12\x1e\n" +
-	"\n" +
-	"confidence\x18\a \x01(\x01R\n" +
-	"confidence\x1a9\n" +
-	"\vLegendEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a@\n" +
-	"\x12ProbabilitiesEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01B\b\n" +
-	"\x06_scoreB\a\n" +
-	"\x05_noul\"\"\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\"\n" +
 	"\bBoundary\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\"U\n" +
 	"\vObservation\x12\x1d\n" +
 	"\n" +
 	"state_json\x18\x01 \x01(\tR\tstateJson\x12'\n" +
-	"\x0fcandidates_json\x18\x02 \x01(\tR\x0ecandidatesJson\"\xe6\x01\n" +
+	"\x0fcandidates_json\x18\x02 \x01(\tR\x0ecandidatesJson\"\xd6\x01\n" +
 	"\x0fDecisionRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x18\n" +
-	"\apurpose\x18\x02 \x01(\tR\apurpose\x12G\n" +
-	"\tquestions\x18\x03 \x03(\v2).cyber.jev.DecisionRequest.QuestionsEntryR\tquestions\x1aQ\n" +
-	"\x0eQuestionsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12)\n" +
-	"\x05value\x18\x02 \x01(\v2\x13.cyber.jev.QuestionR\x05value:\x028\x01\"\xb6\x02\n" +
+	"\apurpose\x18\x02 \x01(\tR\apurpose\x12>\n" +
+	"\x06claims\x18\x03 \x03(\v2&.cyber.jev.DecisionRequest.ClaimsEntryR\x06claims\x1aJ\n" +
+	"\vClaimsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12%\n" +
+	"\x05value\x18\x02 \x01(\v2\x0f.decision.ClaimR\x05value:\x028\x01\"\xc9\x02\n" +
 	"\x0eDecisionResult\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x18\n" +
-	"\apurpose\x18\x02 \x01(\tR\apurpose\x12@\n" +
-	"\aanswers\x18\x03 \x03(\v2&.cyber.jev.DecisionResult.AnswersEntryR\aanswers\x12\x1d\n" +
+	"\apurpose\x18\x02 \x01(\tR\apurpose\x12L\n" +
+	"\vevaluations\x18\x03 \x03(\v2*.cyber.jev.DecisionResult.EvaluationsEntryR\vevaluations\x12\x1d\n" +
 	"\n" +
 	"elapsed_ms\x18\x04 \x01(\x03R\telapsedMs\x12\x14\n" +
 	"\x05error\x18\x05 \x01(\tR\x05error\x12%\n" +
-	"\x05usage\x18\x06 \x01(\v2\x0f.aop.TokenUsageR\x05usage\x1aM\n" +
-	"\fAnswersEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
-	"\x05value\x18\x02 \x01(\v2\x11.cyber.jev.AnswerR\x05value:\x028\x01\"G\n" +
+	"\x05usage\x18\x06 \x01(\v2\x0f.aop.TokenUsageR\x05usage\x1aT\n" +
+	"\x10EvaluationsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12*\n" +
+	"\x05value\x18\x02 \x01(\v2\x14.decision.EvaluationR\x05value:\x028\x01\"G\n" +
 	"\bTakeover\x12;\n" +
 	"\n" +
 	"definition\x18\x01 \x01(\v2\x1b.cyber.jev.ReflexDefinitionR\n" +
@@ -1942,78 +1748,74 @@ func file_types_jev_proto_rawDescGZIP() []byte {
 	return file_types_jev_proto_rawDescData
 }
 
-var file_types_jev_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_types_jev_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_types_jev_proto_goTypes = []any{
-	(*ClaimDefinition)(nil),    // 0: cyber.jev.ClaimDefinition
-	(*ReflexDefinition)(nil),   // 1: cyber.jev.ReflexDefinition
-	(*Question)(nil),           // 2: cyber.jev.Question
-	(*Answer)(nil),             // 3: cyber.jev.Answer
-	(*Boundary)(nil),           // 4: cyber.jev.Boundary
-	(*Observation)(nil),        // 5: cyber.jev.Observation
-	(*DecisionRequest)(nil),    // 6: cyber.jev.DecisionRequest
-	(*DecisionResult)(nil),     // 7: cyber.jev.DecisionResult
-	(*Takeover)(nil),           // 8: cyber.jev.Takeover
-	(*Dispatch)(nil),           // 9: cyber.jev.Dispatch
-	(*Result)(nil),             // 10: cyber.jev.Result
-	(*Handoff)(nil),            // 11: cyber.jev.Handoff
-	(*Generation)(nil),         // 12: cyber.jev.Generation
-	(*LibraryChange)(nil),      // 13: cyber.jev.LibraryChange
-	(*RuntimeEvent)(nil),       // 14: cyber.jev.RuntimeEvent
-	(*GetLibraryRequest)(nil),  // 15: cyber.jev.GetLibraryRequest
-	(*WaitIdleRequest)(nil),    // 16: cyber.jev.WaitIdleRequest
-	(*WaitIdleResponse)(nil),   // 17: cyber.jev.WaitIdleResponse
-	(*GetLibraryResponse)(nil), // 18: cyber.jev.GetLibraryResponse
-	(*ProtocolMessage)(nil),    // 19: cyber.jev.ProtocolMessage
-	nil,                        // 20: cyber.jev.ClaimDefinition.OptionsEntry
-	nil,                        // 21: cyber.jev.ReflexDefinition.ReadersEntry
-	nil,                        // 22: cyber.jev.ReflexDefinition.ContractsEntry
-	nil,                        // 23: cyber.jev.Answer.LegendEntry
-	nil,                        // 24: cyber.jev.Answer.ProbabilitiesEntry
-	nil,                        // 25: cyber.jev.DecisionRequest.QuestionsEntry
-	nil,                        // 26: cyber.jev.DecisionResult.AnswersEntry
-	(*aop.TokenUsage)(nil),     // 27: aop.TokenUsage
-	(*aop.ToolCall)(nil),       // 28: aop.ToolCall
-	(*aop.ToolResult)(nil),     // 29: aop.ToolResult
+	(*ClaimDefinition)(nil),     // 0: cyber.jev.ClaimDefinition
+	(*ReflexDefinition)(nil),    // 1: cyber.jev.ReflexDefinition
+	(*Boundary)(nil),            // 2: cyber.jev.Boundary
+	(*Observation)(nil),         // 3: cyber.jev.Observation
+	(*DecisionRequest)(nil),     // 4: cyber.jev.DecisionRequest
+	(*DecisionResult)(nil),      // 5: cyber.jev.DecisionResult
+	(*Takeover)(nil),            // 6: cyber.jev.Takeover
+	(*Dispatch)(nil),            // 7: cyber.jev.Dispatch
+	(*Result)(nil),              // 8: cyber.jev.Result
+	(*Handoff)(nil),             // 9: cyber.jev.Handoff
+	(*Generation)(nil),          // 10: cyber.jev.Generation
+	(*LibraryChange)(nil),       // 11: cyber.jev.LibraryChange
+	(*RuntimeEvent)(nil),        // 12: cyber.jev.RuntimeEvent
+	(*GetLibraryRequest)(nil),   // 13: cyber.jev.GetLibraryRequest
+	(*WaitIdleRequest)(nil),     // 14: cyber.jev.WaitIdleRequest
+	(*WaitIdleResponse)(nil),    // 15: cyber.jev.WaitIdleResponse
+	(*GetLibraryResponse)(nil),  // 16: cyber.jev.GetLibraryResponse
+	(*ProtocolMessage)(nil),     // 17: cyber.jev.ProtocolMessage
+	nil,                         // 18: cyber.jev.ReflexDefinition.ReadersEntry
+	nil,                         // 19: cyber.jev.ReflexDefinition.ContractsEntry
+	nil,                         // 20: cyber.jev.DecisionRequest.ClaimsEntry
+	nil,                         // 21: cyber.jev.DecisionResult.EvaluationsEntry
+	(decision.ClaimType)(0),     // 22: decision.ClaimType
+	(*aop.TokenUsage)(nil),      // 23: aop.TokenUsage
+	(*aop.ToolCall)(nil),        // 24: aop.ToolCall
+	(*aop.ToolResult)(nil),      // 25: aop.ToolResult
+	(*decision.Claim)(nil),      // 26: decision.Claim
+	(*decision.Evaluation)(nil), // 27: decision.Evaluation
 }
 var file_types_jev_proto_depIdxs = []int32{
-	20, // 0: cyber.jev.ClaimDefinition.options:type_name -> cyber.jev.ClaimDefinition.OptionsEntry
-	21, // 1: cyber.jev.ReflexDefinition.readers:type_name -> cyber.jev.ReflexDefinition.ReadersEntry
-	22, // 2: cyber.jev.ReflexDefinition.contracts:type_name -> cyber.jev.ReflexDefinition.ContractsEntry
-	23, // 3: cyber.jev.Answer.legend:type_name -> cyber.jev.Answer.LegendEntry
-	24, // 4: cyber.jev.Answer.probabilities:type_name -> cyber.jev.Answer.ProbabilitiesEntry
-	25, // 5: cyber.jev.DecisionRequest.questions:type_name -> cyber.jev.DecisionRequest.QuestionsEntry
-	26, // 6: cyber.jev.DecisionResult.answers:type_name -> cyber.jev.DecisionResult.AnswersEntry
-	27, // 7: cyber.jev.DecisionResult.usage:type_name -> aop.TokenUsage
-	1,  // 8: cyber.jev.Takeover.definition:type_name -> cyber.jev.ReflexDefinition
-	28, // 9: cyber.jev.Dispatch.call:type_name -> aop.ToolCall
-	29, // 10: cyber.jev.Result.result:type_name -> aop.ToolResult
-	27, // 11: cyber.jev.Generation.usage:type_name -> aop.TokenUsage
-	0,  // 12: cyber.jev.LibraryChange.claim:type_name -> cyber.jev.ClaimDefinition
-	1,  // 13: cyber.jev.LibraryChange.reflex:type_name -> cyber.jev.ReflexDefinition
-	4,  // 14: cyber.jev.RuntimeEvent.boundary:type_name -> cyber.jev.Boundary
-	5,  // 15: cyber.jev.RuntimeEvent.observation:type_name -> cyber.jev.Observation
-	6,  // 16: cyber.jev.RuntimeEvent.decision_request:type_name -> cyber.jev.DecisionRequest
-	7,  // 17: cyber.jev.RuntimeEvent.decision_result:type_name -> cyber.jev.DecisionResult
-	8,  // 18: cyber.jev.RuntimeEvent.takeover:type_name -> cyber.jev.Takeover
-	9,  // 19: cyber.jev.RuntimeEvent.dispatch:type_name -> cyber.jev.Dispatch
-	10, // 20: cyber.jev.RuntimeEvent.result:type_name -> cyber.jev.Result
-	11, // 21: cyber.jev.RuntimeEvent.handoff:type_name -> cyber.jev.Handoff
-	12, // 22: cyber.jev.RuntimeEvent.generation:type_name -> cyber.jev.Generation
-	13, // 23: cyber.jev.RuntimeEvent.library_change:type_name -> cyber.jev.LibraryChange
-	0,  // 24: cyber.jev.GetLibraryResponse.claims:type_name -> cyber.jev.ClaimDefinition
-	1,  // 25: cyber.jev.GetLibraryResponse.reflexes:type_name -> cyber.jev.ReflexDefinition
-	1,  // 26: cyber.jev.GetLibraryResponse.candidates:type_name -> cyber.jev.ReflexDefinition
-	15, // 27: cyber.jev.ProtocolMessage.request:type_name -> cyber.jev.GetLibraryRequest
-	18, // 28: cyber.jev.ProtocolMessage.library:type_name -> cyber.jev.GetLibraryResponse
-	16, // 29: cyber.jev.ProtocolMessage.wait_idle:type_name -> cyber.jev.WaitIdleRequest
-	17, // 30: cyber.jev.ProtocolMessage.idle:type_name -> cyber.jev.WaitIdleResponse
-	2,  // 31: cyber.jev.DecisionRequest.QuestionsEntry.value:type_name -> cyber.jev.Question
-	3,  // 32: cyber.jev.DecisionResult.AnswersEntry.value:type_name -> cyber.jev.Answer
-	33, // [33:33] is the sub-list for method output_type
-	33, // [33:33] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	22, // 0: cyber.jev.ClaimDefinition.type:type_name -> decision.ClaimType
+	18, // 1: cyber.jev.ReflexDefinition.readers:type_name -> cyber.jev.ReflexDefinition.ReadersEntry
+	19, // 2: cyber.jev.ReflexDefinition.contracts:type_name -> cyber.jev.ReflexDefinition.ContractsEntry
+	20, // 3: cyber.jev.DecisionRequest.claims:type_name -> cyber.jev.DecisionRequest.ClaimsEntry
+	21, // 4: cyber.jev.DecisionResult.evaluations:type_name -> cyber.jev.DecisionResult.EvaluationsEntry
+	23, // 5: cyber.jev.DecisionResult.usage:type_name -> aop.TokenUsage
+	1,  // 6: cyber.jev.Takeover.definition:type_name -> cyber.jev.ReflexDefinition
+	24, // 7: cyber.jev.Dispatch.call:type_name -> aop.ToolCall
+	25, // 8: cyber.jev.Result.result:type_name -> aop.ToolResult
+	23, // 9: cyber.jev.Generation.usage:type_name -> aop.TokenUsage
+	0,  // 10: cyber.jev.LibraryChange.claim:type_name -> cyber.jev.ClaimDefinition
+	1,  // 11: cyber.jev.LibraryChange.reflex:type_name -> cyber.jev.ReflexDefinition
+	2,  // 12: cyber.jev.RuntimeEvent.boundary:type_name -> cyber.jev.Boundary
+	3,  // 13: cyber.jev.RuntimeEvent.observation:type_name -> cyber.jev.Observation
+	4,  // 14: cyber.jev.RuntimeEvent.decision_request:type_name -> cyber.jev.DecisionRequest
+	5,  // 15: cyber.jev.RuntimeEvent.decision_result:type_name -> cyber.jev.DecisionResult
+	6,  // 16: cyber.jev.RuntimeEvent.takeover:type_name -> cyber.jev.Takeover
+	7,  // 17: cyber.jev.RuntimeEvent.dispatch:type_name -> cyber.jev.Dispatch
+	8,  // 18: cyber.jev.RuntimeEvent.result:type_name -> cyber.jev.Result
+	9,  // 19: cyber.jev.RuntimeEvent.handoff:type_name -> cyber.jev.Handoff
+	10, // 20: cyber.jev.RuntimeEvent.generation:type_name -> cyber.jev.Generation
+	11, // 21: cyber.jev.RuntimeEvent.library_change:type_name -> cyber.jev.LibraryChange
+	0,  // 22: cyber.jev.GetLibraryResponse.claims:type_name -> cyber.jev.ClaimDefinition
+	1,  // 23: cyber.jev.GetLibraryResponse.reflexes:type_name -> cyber.jev.ReflexDefinition
+	1,  // 24: cyber.jev.GetLibraryResponse.candidates:type_name -> cyber.jev.ReflexDefinition
+	13, // 25: cyber.jev.ProtocolMessage.request:type_name -> cyber.jev.GetLibraryRequest
+	16, // 26: cyber.jev.ProtocolMessage.library:type_name -> cyber.jev.GetLibraryResponse
+	14, // 27: cyber.jev.ProtocolMessage.wait_idle:type_name -> cyber.jev.WaitIdleRequest
+	15, // 28: cyber.jev.ProtocolMessage.idle:type_name -> cyber.jev.WaitIdleResponse
+	26, // 29: cyber.jev.DecisionRequest.ClaimsEntry.value:type_name -> decision.Claim
+	27, // 30: cyber.jev.DecisionResult.EvaluationsEntry.value:type_name -> decision.Evaluation
+	31, // [31:31] is the sub-list for method output_type
+	31, // [31:31] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_types_jev_proto_init() }
@@ -2021,8 +1823,7 @@ func file_types_jev_proto_init() {
 	if File_types_jev_proto != nil {
 		return
 	}
-	file_types_jev_proto_msgTypes[3].OneofWrappers = []any{}
-	file_types_jev_proto_msgTypes[14].OneofWrappers = []any{
+	file_types_jev_proto_msgTypes[12].OneofWrappers = []any{
 		(*RuntimeEvent_Boundary)(nil),
 		(*RuntimeEvent_Observation)(nil),
 		(*RuntimeEvent_DecisionRequest)(nil),
@@ -2034,7 +1835,7 @@ func file_types_jev_proto_init() {
 		(*RuntimeEvent_Generation)(nil),
 		(*RuntimeEvent_LibraryChange)(nil),
 	}
-	file_types_jev_proto_msgTypes[19].OneofWrappers = []any{
+	file_types_jev_proto_msgTypes[17].OneofWrappers = []any{
 		(*ProtocolMessage_Request)(nil),
 		(*ProtocolMessage_Library)(nil),
 		(*ProtocolMessage_WaitIdle)(nil),
@@ -2046,7 +1847,7 @@ func file_types_jev_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_types_jev_proto_rawDesc), len(file_types_jev_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   27,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

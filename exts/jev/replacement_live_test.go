@@ -233,7 +233,7 @@ func usageDifference(after, before *aop.TokenUsage) *aop.TokenUsage {
 func llmFiniteJudge(t *testing.T, meter *paidMeter, model string) *jevapi.Client {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req jevapi.Request
+		var req inferenceRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request", 400)
 			return
@@ -247,7 +247,7 @@ func llmFiniteJudge(t *testing.T, meter *paidMeter, model string) *jevapi.Client
 			http.Error(w, "finite LLM judgment unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		var answer jevapi.Response
+		var answer inferenceResponse
 		if json.Unmarshal([]byte(provider.MessageText(response.Choices[0].Message)), &answer) != nil || len(answer.Answers) != len(req.Questions) {
 			http.Error(w, "invalid finite answer", http.StatusBadGateway)
 			return
@@ -286,7 +286,7 @@ func TestLiveReflexExecutionReplacement(t *testing.T) {
 	if base == "" {
 		base = "https://api.deepseek.com"
 	}
-	llm, err := provider.NewProvider(&provider.ProviderConfig{Provider: "deepseek", APIKey: key, Model: model, BaseURL: base, Timeout: 90})
+	llm, err := provider.NewProvider(&provider.ProviderConfig{Provider: "deepseek", APIKey: key, Model: model, BaseURL: base, Timeout: int(backgroundRequestTimeout / time.Second)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -351,7 +351,7 @@ func TestLiveReflexExecutionReplacement(t *testing.T) {
 			}
 			report["library_origin"] = origin
 		}
-		e, cfg, _ := testInstallationWithExtensions(t, Config{Mode: "auto", Directory: dir, CompilationTimeout: "10m"}, realJEV, browser, contribution)
+		e, cfg, _ := testInstallationWithExtensions(t, Config{Mode: "auto", Directory: dir}, realJEV, browser, contribution)
 		if origin := os.Getenv("JEV_REPLACEMENT_LIBRARY_FROM"); origin != "" {
 			lib := e.snapshot()
 			if len(lib.Reflexes) == 0 {
@@ -424,15 +424,11 @@ func TestLiveReflexExecutionReplacement(t *testing.T) {
 					return hooks.ModelPolicy{DisableTools: true}, nil
 				})
 			}
-			ctx, cancel := context.WithTimeout(t.Context(), 180*time.Second)
-			result, runErr := agent.NewAgent(runCfg).Run(ctx, agent.TextInput(prompt(group, actor)), agent.WithTurnID(fmt.Sprintf("%s-%d", arm, group)))
-			cancel()
+			result, runErr := agent.NewAgent(runCfg).Run(t.Context(), agent.TextInput(prompt(group, actor)), agent.WithTurnID(fmt.Sprintf("%s-%d", arm, group)))
 			if denyClose != nil {
 				_ = denyClose.Close(t.Context())
 			}
-			waitCtx, waitCancel := context.WithTimeout(t.Context(), 11*time.Minute)
-			idleErr := e.WaitIdle(waitCtx)
-			waitCancel()
+			idleErr := e.WaitIdle(t.Context())
 			_ = sub.Close(t.Context())
 			_ = liveFile.Close()
 			output := ""

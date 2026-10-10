@@ -153,6 +153,42 @@ func TestStreamAndNodeIdentityComeFromAOP(t *testing.T) {
 	}
 }
 
+func TestNamedShellOpenReusesOnlyItsOwnRunningSession(t *testing.T) {
+	for _, existing := range []runtimeproc.Info{
+		{ID: "existing", Kind: "shell", Name: "main-shell", State: runtimeproc.StateRunning},
+		{ID: "existing", Kind: "shell", Name: "task-shell", State: runtimeproc.StateRunning},
+		{ID: "existing", Kind: "shell", Name: "main-shell", State: runtimeproc.StateCompleted},
+		{ID: "existing", Kind: "repl", Name: "main-shell", State: runtimeproc.StateRunning},
+	} {
+		t.Run(existing.Kind+"/"+existing.Name+"/"+string(existing.State), func(t *testing.T) {
+			manager := &recordingManager{info: existing}
+			opened := 0
+			router := newRouter(manager, WithOpener("shell", func(_ context.Context, spec runtimeproc.OpenSpec) (runtimeproc.OpenResult, error) {
+				opened++
+				if spec.Kind != "shell" || spec.Name != "main-shell" || spec.Cols != 100 || spec.Rows != 30 {
+					t.Fatalf("open spec = %+v", spec)
+				}
+				return runtimeproc.OpenResult{Info: runtimeproc.Info{ID: "new-shell", Kind: spec.Kind, Name: spec.Name, State: runtimeproc.StateRunning}}, nil
+			}))
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			messages := make(chan *ptypb.ProtocolMessage, 8)
+			dispatch(t, router.Handler(), ctx, &ptypb.ProtocolMessage{Message: &ptypb.ProtocolMessage_Open{Open: &ptypb.Open{
+				StreamId: "browser", Kind: "shell", Name: "main-shell", Singleton: true, Cols: 100, Rows: 30,
+			}}}, collect(messages))
+			reply := readMessage(t, messages)
+			reuse := existing.Kind == "shell" && existing.Name == "main-shell" && existing.State == runtimeproc.StateRunning
+			if reuse {
+				if opened != 0 || reply.GetAttached().GetSession().GetId() != existing.ID {
+					t.Fatalf("existing shell was not reused: opened=%d, reply=%v", opened, reply)
+				}
+			} else if opened != 1 || reply.GetOpened().GetSession().GetId() != "new-shell" {
+				t.Fatalf("unrelated or closed session reused: opened=%d, reply=%v", opened, reply)
+			}
+		})
+	}
+}
+
 // dispatch drives one namespace handler the way a connection-owned mux does:
 // the request arrives wrapped in an Envelope and replies come back the same way.
 func dispatch(t *testing.T, handler aop.NamespaceHandler, ctx context.Context, message *ptypb.ProtocolMessage, send SendFunc) {

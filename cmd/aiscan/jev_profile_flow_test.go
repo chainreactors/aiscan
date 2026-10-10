@@ -33,17 +33,23 @@ func (profileJEVTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	if r.URL.String() != jevapi.Endpoint {
 		return nil, fmt.Errorf("fixture rejects external request")
 	}
-	var request jevapi.Request
+	var request struct {
+		State     json.RawMessage `json:"state"`
+		Questions map[string]struct {
+			Criteria json.RawMessage `json:"criteria"`
+		} `json:"questions"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		return nil, err
 	}
-	answers := map[string]jevapi.Answer{}
+	answers := map[string]map[string]string{}
 	for id, q := range request.Questions {
-		criteria, _ := q.Criteria.(map[string]any)
+		var options map[string]string
+		_ = json.Unmarshal(q.Criteria, &options)
 		choice := "defer"
 		switch {
 		case id == "entry":
-			for key := range criteria {
+			for key := range options {
 				if strings.HasPrefix(key, "r") {
 					choice = key
 					break
@@ -53,20 +59,20 @@ func (profileJEVTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 			choice = "accept"
 		case strings.HasPrefix(id, "claim"):
 			choice = "new"
-			for key := range criteria {
+			for key := range options {
 				if strings.HasPrefix(key, "c") {
 					choice = key
 					break
 				}
 			}
 		case strings.HasPrefix(id, "compile") || strings.HasPrefix(id, "coverage"):
-			if bytes.Contains(request.State, []byte(`"reflex":`)) || (bytes.Contains(request.State, []byte(`call_id`)) && bytes.Contains(request.State, []byte(`Current sessions verified`))) {
+			if bytes.Contains(request.State, []byte(`"reflex":`)) || (bytes.Contains(request.State, []byte(`call_id`)) && bytes.Contains(request.State, []byte(`"native_access":"read"`))) {
 				choice = "compile"
 			}
 		case strings.HasPrefix(id, "c"):
 			choice = "include"
 		}
-		answers[id] = jevapi.Answer{Type: "choice", Choice: choice}
+		answers[id] = map[string]string{"type": "choice", "choice": choice}
 	}
 	data, _ := json.Marshal(map[string]any{"answers": answers, "usage": map[string]int{"input_tokens": 10, "output_tokens": 1}})
 	return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(bytes.NewReader(data)), Request: r}, nil
@@ -90,10 +96,8 @@ func (p *profileFlowProvider) ChatCompletion(_ context.Context, req *provider.Ch
 	case req.Purpose == "compilation":
 		p.compiler++
 		message = provider.TextMessage("assistant", p.artifact)
-	case len(req.Messages) > 0 && strings.HasPrefix(provider.MessageText(req.Messages[0]), "Describe reusable scenes"):
-		message = provider.TextMessage("assistant", `{"claims":[{"text":"Inspect currently open browser sessions and report only the native evidence."}]}`)
-	case len(req.Messages) > 0 && strings.HasPrefix(provider.MessageText(req.Messages[0]), "Summarize the work record below"):
-		message = provider.TextMessage("assistant", "Listed browser sessions from current native results.")
+	case len(req.Messages) > 0 && strings.HasPrefix(provider.MessageText(req.Messages[0]), "Describe reusable semantic judgments as Claims"):
+		message = provider.TextMessage("assistant", `{"claims":[{"type":"noul","context":"Inspect currently open browser sessions and report only the current native evidence."}]}`)
 	case req.Purpose == "composition":
 		if len(req.Tools) != 0 {
 			return nil, fmt.Errorf("composition retained executable tools")
@@ -149,7 +153,7 @@ func TestJEVProfileStreamingCompilationRuntimeAndProtocolEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer p.Close(context.Background())
-	source := `js:function(context,args){const r=execute({name:"bash",arguments:{command:command("playwright",["sessions"])},read:true});if(r.is_error)return{defer:"native read failed"};return{report:{evidence:r.call_id,path:["text"]}};}`
+	source := `js:function(context,args){const seen=context.history.filter(function(r){return r.name==="bash"&&r.arguments&&r.arguments.command==="playwright sessions"&&!r.is_error;});const r=seen.length?seen[seen.length-1]:execute({name:"bash",arguments:{command:command("playwright",["sessions"])},read:true});if(r.is_error)return{defer:"native read failed"};return{report:{evidence:r.call_id,path:["text"]}};}`
 	artifact, _ := json.Marshal(map[string]any{"api_version": 2, "steps": map[string]any{}, "observe": source, "arguments": map[string]any{}})
 	model := &profileFlowProvider{ordinary: map[string]int{}, artifact: string(artifact)}
 	p.providers.Set(model, provider.ProviderConfig{Model: "fixture", MaxTokens: 1024})
@@ -196,18 +200,14 @@ func TestJEVProfileStreamingCompilationRuntimeAndProtocolEvents(t *testing.T) {
 			t.Fatalf("background unsettled: %v", idle)
 		}
 		library := query(&jevext.ProtocolMessage{Message: &jevext.ProtocolMessage_Request{Request: &jevext.GetLibraryRequest{SessionId: sessionID}}})
-		want := 1
-		if sessionID == "profile-training-1" {
-			want = 0
-		}
-		if len(library.GetLibrary().GetReflexes()) != want {
+		if len(library.GetLibrary().GetReflexes()) != 1 || len(library.GetLibrary().GetClaims()) != 1 {
 			data, _ := os.ReadFile(filepath.Join(directory, "decisions.jsonl"))
 			t.Logf("audit: %s", data)
 			t.Fatalf("compiled native source not published: %v", library)
 		}
 	}
 	model.mu.Lock()
-	if model.compiler != 1 || model.composition != 1 || model.streamed < 3 || model.ordinary["profile-reuse"] != 0 {
+	if model.compiler != 1 || model.composition != 2 || model.streamed < 3 || model.ordinary["profile-training-2"] != 0 || model.ordinary["profile-reuse"] != 0 {
 		t.Errorf("compiler=%d composer=%d streaming=%d ordinary reuse=%d", model.compiler, model.composition, model.streamed, model.ordinary["profile-reuse"])
 	}
 	model.mu.Unlock()
@@ -253,7 +253,7 @@ func TestJEVProfileStreamingCompilationRuntimeAndProtocolEvents(t *testing.T) {
 			}
 		}
 	}
-	if counts["publication"] != 1 || counts["dispatch"] != 1 || counts["report"] != 1 {
+	if counts["publication"] != 1 || counts["dispatch"] != 2 || counts["report"] != 2 {
 		t.Fatalf("missing mechanism flow: %v", counts)
 	}
 	if path := os.Getenv("JEV_PROFILE_FLOW_EVENTS"); path != "" {

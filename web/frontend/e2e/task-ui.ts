@@ -18,7 +18,7 @@ export async function openNodeTerminal(page: Page, nodeName = 'e2e-node') {
   await page.getByRole('button', { name: /agent.*connected/ }).click()
   const drawer = page.getByRole('dialog').filter({ hasText: 'Agent Console' })
   await expect(drawer).toBeVisible()
-  const node = drawer.getByRole('button', { name: new RegExp(nodeName) })
+  const node = drawer.getByRole('button').filter({ has: page.getByText(nodeName, { exact: true }) })
   if (await node.count()) await node.click()
   await expect(page.locator('.xterm')).toBeVisible({ timeout: 20_000 })
   return drawer

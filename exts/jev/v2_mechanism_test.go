@@ -12,7 +12,6 @@ import (
 
 	"github.com/chainreactors/cyber/agent/hooks"
 	"github.com/chainreactors/cyber/agent/provider"
-	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 	"github.com/chainreactors/cyber/aop"
 	coretool "github.com/chainreactors/cyber/core/tool"
 )
@@ -255,7 +254,7 @@ func TestReflexV2ClaimTriggerAndCandidate(t *testing.T) {
 	var claimID string
 	compileDecision := false
 	generations := 0
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		out := declarationAnswers(req, true)
 		if _, ok := req.Questions["claim0"]; ok {
 			if claimID != "" {
@@ -274,7 +273,7 @@ func TestReflexV2ClaimTriggerAndCandidate(t *testing.T) {
 	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client)
 	cfg.Provider = testProvider(func(_ context.Context, req *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 		if provider.MessageText(req.Messages[0]) == claimPrompt {
-			return reply(provider.TextMessage("assistant", `{"claims":[{"text":"When a queued order has an uncertain submission result, inspect its current status without resubmitting."}]}`)), nil
+			return reply(provider.TextMessage("assistant", `{"claims":[{"type":"noul","context":"When a queued order has an uncertain submission result, inspect its current status without resubmitting."}]}`)), nil
 		}
 		generations++
 		if generations > 1 {

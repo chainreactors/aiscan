@@ -4,9 +4,7 @@ package jev
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,7 +50,7 @@ func New(config Config) *Extension {
 	idle := make(chan struct{})
 	close(idle)
 	return &Extension{config: defaults(config), tasks: map[string]taskRecord{}, queued: map[string]declaration{}, queue: make(chan string, 64), idle: idle,
-		library: library{Claims: map[string]claimRecord{}, Reflexes: map[string]reflexRecord{}}}
+		library: library{Format: libraryFormat, Claims: map[string]claimRecord{}, Reflexes: map[string]reflexRecord{}}}
 }
 
 func (e *Extension) Load(scope *extension.Scope) error {
@@ -143,16 +141,10 @@ func (e *Extension) Load(scope *extension.Scope) error {
 	if e.commands == nil {
 		return nil
 	}
-	err = extension.Add(scope, coretool.Command{Name: "jev", Usage: "jev status", Run: func(_ context.Context, ex *coretool.Execution) (any, error) {
-		if len(ex.Args) != 1 || ex.Args[0] != "status" {
-			return nil, errors.New("usage: jev status")
-		}
-		data, err := json.MarshalIndent(e.snapshot(), "", "  ")
-		if err == nil {
-			_, err = fmt.Fprintln(ex.Stdout, string(data))
-		}
-		return nil, err
-	}})
+	err = extension.Add(scope, e.libraryCommand())
+	if err == nil {
+		err = extension.Add(scope, libraryContract())
+	}
 	// Documentation can be provided without a command registration point.
 	if errors.Is(err, resource.ErrTypeUnknown) {
 		return nil

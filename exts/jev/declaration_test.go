@@ -12,14 +12,13 @@ import (
 	"github.com/chainreactors/cyber/agent"
 	"github.com/chainreactors/cyber/agent/hooks"
 	"github.com/chainreactors/cyber/agent/provider"
-	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 	aop "github.com/chainreactors/cyber/aop"
 	coretool "github.com/chainreactors/cyber/core/tool"
 )
 
 func TestClaimOnlyFeedsCompilationAndNeverRunsWithoutReflex(t *testing.T) {
 	var judgments atomic.Int64
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		if runtimeRequest(req) {
 			judgments.Add(1)
 			return runtimeAnswers(req, "advance")
@@ -61,11 +60,6 @@ func TestClaimOnlyFeedsCompilationAndNeverRunsWithoutReflex(t *testing.T) {
 	if receipts != 0 || judgments.Load() != 0 {
 		t.Fatalf("receipts=%d judgments=%d", receipts, judgments.Load())
 	}
-	for _, c := range e.snapshot().Claims {
-		if c.Consumed {
-			t.Fatal("foreground consumed a compilation declaration")
-		}
-	}
 	cfg.SessionID = "second"
 	if _, err = agent.NewAgent(cfg).Run(t.Context(), agent.TextInput("Advance the task.")); err != nil {
 		t.Fatal(err)
@@ -85,7 +79,7 @@ func TestGeneratedDeclarationsRejectUnknownFieldsAndCapabilities(t *testing.T) {
 		`{"when":"x","decide":"y","observe":"ExecuteTool('bash', '{}')"}`,
 	} {
 		t.Run(output, func(t *testing.T) {
-			client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer { return declarationAnswers(req, true) })
+			client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer { return declarationAnswers(req, true) })
 			e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client)
 			requests := 0
 			cfg.Provider = testProvider(func(context.Context, *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
@@ -113,7 +107,7 @@ func TestGeneratedDeclarationsRejectUnknownFieldsAndCapabilities(t *testing.T) {
 
 func TestCloseCancelsBackgroundModelCall(t *testing.T) {
 	entered := make(chan struct{})
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer { return declarationAnswers(req, false) })
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer { return declarationAnswers(req, false) })
 	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client)
 	cfg.Provider = testProvider(func(ctx context.Context, _ *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 		close(entered)
@@ -149,14 +143,16 @@ func TestCloseCancelsBackgroundModelCall(t *testing.T) {
 
 func TestExistingSceneSkipsPageActionDeclarations(t *testing.T) {
 	var discovered atomic.Int64
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
-		out := map[string]jevapi.Answer{}
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
+		out := map[string]inferenceAnswer{}
 		for id, q := range req.Questions {
 			if !strings.HasPrefix(id, "claim") {
 				t.Errorf("unexpected compilation request %s", id)
 			}
 			out[id] = answer(Defer)
-			for key := range q.Criteria.(map[string]any) {
+			var options map[string]json.RawMessage
+			_ = json.Unmarshal(q.Criteria, &options)
+			for key := range options {
 				if strings.HasPrefix(key, "r") {
 					out[id] = answer(key)
 					discovered.Add(1)

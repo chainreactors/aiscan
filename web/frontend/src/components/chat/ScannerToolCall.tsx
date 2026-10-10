@@ -11,18 +11,8 @@ import FindingsPanel from '../FindingsPanel'
 
 export interface ScannerToolCallProps extends ToolResultDisplayProps { id: string }
 
-export default function ScannerToolCall({
-  id,
-  toolName,
-  toolArgs = '',
-  result,
-  pending = false,
-  error = false,
-  toolResult,
-  resultEventId,
-  observations,
-  observationLabels,
-}: ScannerToolCallProps) {
+export default function ScannerToolCall({ id, ...props }: ScannerToolCallProps) {
+  const { pending = false, error = false, content } = props
   const { t } = useTranslation('scan')
   const { t: tChat } = useTranslation('chat')
   const { t: tf } = useTranslation('findings')
@@ -33,7 +23,7 @@ export default function ScannerToolCall({
   const findings = useMemo(() => buildFindingsFromSCO(model), [model])
 
   useEffect(() => {
-    if (!id) {
+    if (!id || content === 'arguments') {
       setNodes(null)
       return
     }
@@ -62,7 +52,7 @@ export default function ScannerToolCall({
       disposed = true
       unsubscribe()
     }
-  }, [error, id, pending])
+  }, [content, error, id, pending])
 
   const labels = {
     arguments: tChat('toolCard.arguments'),
@@ -70,6 +60,7 @@ export default function ScannerToolCall({
     failed: tChat('toolCard.failed'),
     running: tChat('toolCard.running'),
     completed: tChat('toolCard.completed'),
+    ...props.labels,
   }
   const failureNotice = failure && (
     <div role="alert" className="px-3 py-2 text-xs text-warning">
@@ -82,15 +73,7 @@ export default function ScannerToolCall({
     return (
       <div>
       <ToolResultDisplay
-        toolName={toolName}
-        toolArgs={toolArgs}
-        result={result}
-        pending={pending}
-        error={error}
-        toolResult={toolResult}
-        resultEventId={resultEventId}
-        observations={observations}
-        observationLabels={observationLabels}
+        {...props}
         labels={labels}
       />
       {failureNotice}
@@ -98,9 +81,8 @@ export default function ScannerToolCall({
     )
   }
 
-  return <ToolResultDisplay toolName={toolName} toolArgs={toolArgs} result={result} pending={pending} error={error}
-    toolResult={toolResult} resultEventId={resultEventId} observations={observations} observationLabels={observationLabels} labels={{ ...labels, result: tChat('toolCard.rawOutput') }}
-    headerExtra={<Badge variant="muted" size="sm" className="shrink-0 rounded-full font-mono tabular-nums">{nodes.length} {t('assets')}</Badge>}>
+  return <ToolResultDisplay {...props} labels={{ ...labels, result: tChat('toolCard.rawOutput') }}
+    headerExtra={<>{props.headerExtra}<Badge variant="muted" size="sm" className="shrink-0 rounded-full font-mono tabular-nums">{nodes.length} {t('assets')}</Badge></>}>
     {failureNotice}
     <Tabs defaultValue="assets" className="p-3">
       <TabsList>
@@ -113,5 +95,6 @@ export default function ScannerToolCall({
     {loading && <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
       <Loader2 className="h-3 w-3 animate-spin" />{tChat('toolCard.loadingResults')}
     </div>}
+    {props.children}
   </ToolResultDisplay>
 }

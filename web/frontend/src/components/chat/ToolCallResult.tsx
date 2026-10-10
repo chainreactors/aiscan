@@ -17,24 +17,26 @@ export function useToolPresentation(session?: string | null, events?: readonly E
   const contextualSession = useContext(SessionContext)
   const sessionID = session === undefined ? contextualSession : session || ''
   const { t } = useTranslation('chat')
+  const mediaLabels = { download: t('record.download'), openImage: t('record.openImage'), unavailable: t('record.unavailable'), loadFailed: t('record.loadFailed') }
   return {
     resolveMedia: (_media, index, eventID, download) => sessionID && eventID && (!events || events.some(event => event.id === eventID && event.payload.case === 'toolResult' && event.payload.value.name === 'record'))
       ? recordMediaURL(sessionID, eventID, index, download) : undefined,
     labels: { arguments: t('toolCard.arguments'), result: t('toolCard.result'), completed: t('toolCard.completed'), failed: t('toolCard.failed'), running: t('toolCard.running') },
+    mediaLabels,
     recordLabels: {
       title: t('record.title'), desktop: t('record.desktop'), window: t('record.window'), empty: t('record.empty'),
-      download: t('record.download'), openImage: t('record.openImage'), unavailable: t('record.unavailable'), loadFailed: t('record.loadFailed'),
+      ...mediaLabels,
       rawOutput: t('toolCard.rawOutput'), duration: seconds => t('record.duration', { seconds }), frames: count => t('record.frames', { count }),
       actions: Object.fromEntries(['screenshot', 'record', 'start', 'stop', 'status'].map(action => [action, t(`record.actions.${action}`)])),
       states: Object.fromEntries(['starting', 'recording', 'stopping', 'completed', 'failed'].map(state => [state, t(`record.states.${state}`)])),
     },
-  } satisfies Pick<ScannerToolCallProps, 'resolveMedia' | 'labels' | 'recordLabels'>
+  } satisfies Pick<ScannerToolCallProps, 'resolveMedia' | 'labels' | 'mediaLabels' | 'recordLabels'>
 }
 
-export function ToolCallResult(props: ScannerToolCallProps) {
-  const presentation = useToolPresentation()
+export function ToolCallResult({ sessionId, events, ...props }: ScannerToolCallProps & { sessionId?: string | null; events?: readonly Event[] }) {
+  const presentation = useToolPresentation(sessionId, events)
   const observationLabels = useObservationLabels()
   return props.toolName === 'record'
-    ? <ToolResultDisplay {...props} {...presentation} observationLabels={observationLabels} />
-    : <ScannerToolCall {...props} observationLabels={observationLabels} />
+    ? <ToolResultDisplay {...presentation} {...props} observationLabels={observationLabels} />
+    : <ScannerToolCall {...presentation} {...props} observationLabels={observationLabels} />
 }

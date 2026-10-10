@@ -59,7 +59,7 @@ func (p *OpenAIProvider) ChatCompletion(ctx context.Context, req *ChatCompletion
 	}
 	captureFrame(ctx, RawFrame{Provider: p.Name(), Protocol: ProviderOpenAI, Direction: "request", Transport: "http", Payload: bodyBytes, MediaType: "application/json"})
 
-	data, err := (&apiRequest{client: p.client, timeout: timeoutFromConfig(p.config.Timeout)}).do(
+	data, err := (&apiRequest{client: p.client, timeout: req.timeout(p.config.Timeout)}).do(
 		ctx, "POST", p.completionEndpoint(), bodyBytes, p.setAuthHeaders,
 	)
 	if err != nil {
@@ -85,7 +85,7 @@ func (p *OpenAIProvider) ChatCompletionStream(ctx context.Context, req *ChatComp
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	events, err := streamSSE(ctx, p.client, timeoutFromConfig(p.config.Timeout),
+	events, err := streamSSE(ctx, p.client, req.timeout(p.config.Timeout),
 		p.completionEndpoint(), bodyBytes, p.setAuthHeaders, p.Name(), ProviderOpenAI,
 		true,
 		func(_ string, data []byte) ([]ChatCompletionStreamEvent, error) {

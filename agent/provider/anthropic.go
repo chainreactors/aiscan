@@ -65,7 +65,7 @@ func (p *AnthropicProvider) ChatCompletion(ctx context.Context, req *ChatComplet
 	}
 	captureFrame(ctx, RawFrame{Provider: p.Name(), Protocol: ProviderAnthropic, Direction: "request", Transport: "http", Payload: bodyBytes, MediaType: "application/json"})
 
-	data, err := (&apiRequest{client: p.client, timeout: timeoutFromConfig(p.config.Timeout)}).do(
+	data, err := (&apiRequest{client: p.client, timeout: req.timeout(p.config.Timeout)}).do(
 		ctx, "POST", p.completionEndpoint(), bodyBytes, p.setAuthHeaders,
 	)
 	if err != nil {
@@ -100,7 +100,7 @@ func (p *AnthropicProvider) ChatCompletionStream(ctx context.Context, req *ChatC
 	}
 
 	parser := &anthropicStreamParser{}
-	events, err := streamSSE(ctx, p.client, timeoutFromConfig(p.config.Timeout),
+	events, err := streamSSE(ctx, p.client, req.timeout(p.config.Timeout),
 		p.completionEndpoint(), bodyBytes, p.setAuthHeaders, p.Name(), ProviderAnthropic,
 		false,
 		func(eventType string, data []byte) ([]ChatCompletionStreamEvent, error) {

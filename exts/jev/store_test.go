@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	aop "github.com/chainreactors/cyber/aop"
@@ -21,7 +22,7 @@ func TestLibraryPublicationFailurePreservesMemory(t *testing.T) {
 	for _, saveFailure := range []bool{false, true} {
 		t.Run(map[bool]string{false: "change rejected", true: "save rejected"}[saveFailure], func(t *testing.T) {
 			e := New(Config{Directory: t.TempDir()})
-			claim := Claim{When: "Current workflow", Question: "Can it progress?", Options: map[string]string{"go": "Progress", Defer: "Missing facts"}}
+			claim := choiceClaim("Current workflow"+". "+"Can it progress?", map[string]string{"go": "Progress", Defer: "Missing facts"})
 			e.library.Claims["current"] = claimRecord{Claim: claim}
 			before := digest(e.snapshot())
 			if saveFailure {
@@ -31,7 +32,7 @@ func TestLibraryPublicationFailurePreservesMemory(t *testing.T) {
 			}
 			changed, err := e.updateLibrary(func(lib *library) (bool, error) {
 				c := lib.Claims["current"]
-				c.Options["go"], c.Consumed = "Changed", true
+				c.Options[0] = "Changed"
 				lib.Claims["current"] = c
 				if !saveFailure {
 					return false, errors.New("reject candidate library")
@@ -48,9 +49,9 @@ func TestLibraryPublicationFailurePreservesMemory(t *testing.T) {
 	}
 }
 
-func TestLibraryDerivesCompiledFromPublishedScenes(t *testing.T) {
+func TestLibraryDerivesCoverageWithoutPersistedCompilationIndex(t *testing.T) {
 	e := New(Config{Directory: t.TempDir()})
-	claim := Claim{When: "Current workflow", Question: "Can it progress?", Options: map[string]string{"go": "Progress", Defer: "Missing facts"}}
+	claim := choiceClaim("Current workflow"+". "+"Can it progress?", map[string]string{"go": "Progress", Defer: "Missing facts"})
 	cid := "c" + digest(claim)[:16]
 	r := observationReflex(t, `js:({state:{},candidates:{}})`)
 	rid := "r" + digest(r)[:16]
@@ -64,10 +65,10 @@ func TestLibraryDerivesCompiledFromPublishedScenes(t *testing.T) {
 	}
 	data, err := os.ReadFile(filepath.Join(e.config.Directory, "library.json"))
 	var saved library
-	if err != nil || json.Unmarshal(data, &saved) != nil || !saved.Compiled[group] || !e.snapshot().Compiled[group] || e.library.Compiled != nil {
-		t.Fatalf("derived compatibility field lost: saved=%+v error=%v", saved, err)
+	if err != nil || json.Unmarshal(data, &saved) != nil || !publishedGroups(saved)[group] || !publishedGroups(e.snapshot())[group] || strings.Contains(string(data), `"compiled"`) {
+		t.Fatalf("coverage must derive from published Reflexes: saved=%+v error=%v", saved, err)
 	}
-	if !e.retireReflex(t.Context(), rid, errors.New("retire test scene")) || len(e.snapshot().Compiled) != 0 {
+	if !e.retireReflex(t.Context(), rid, errors.New("retire test scene")) || len(publishedGroups(e.snapshot())) != 0 {
 		t.Fatal("retired scene still marks its declarations compiled")
 	}
 }

@@ -88,7 +88,7 @@ export default function ReflexPanel({ open, onClose, sessionID, events }: {
     return { ...edge, label: `${t(`edges.${key}`)} · ${edge.data?.count}` }
   })
   const definitions = [...(library?.reflexes || []), ...(library?.candidates || []), ...(library?.claims || [])]
-  const filtered = definitions.filter(value => `${value.id} ${value.when} ${'text' in value ? value.text || value.question : value.decide}`.toLowerCase().includes(query.toLowerCase()))
+  const filtered = definitions.filter(value => `${value.id} ${'context' in value ? value.context : value.when + ' ' + value.decide}`.toLowerCase().includes(query.toLowerCase()))
   const definition = filtered.find(value => value.id === selected) || filtered[0]
   const currentSegments = graph.segments || []
   const selectedNode = graph.nodes.find(n => n.id === node)
@@ -137,7 +137,7 @@ export default function ReflexPanel({ open, onClose, sessionID, events }: {
           {!loading && !error && connected && !filtered.length && <p className="p-4 text-xs text-muted-foreground">{t(!sessionID ? 'noSession' : query ? 'noMatches' : 'emptyLibrary')}</p>}
           {filtered.map(value => <button key={value.id} className={cn('block w-full border-b border-border/40 px-4 py-3 text-left hover:bg-accent/40', definition?.id === value.id && 'bg-accent/60')} onClick={() => setSelected(value.id)}>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">{'observe' in value ? <Repeat2 className="h-3 w-3" /> : <Layers className="h-3 w-3" />}<span>{'observe' in value ? library?.candidates?.some(candidate => candidate.id === value.id) ? t('candidate') : 'Reflex' : 'Claim'}</span><code className="truncate">{value.id}</code></div>
-            <p className="mt-1.5 line-clamp-2 break-words text-xs leading-relaxed">{'text' in value ? value.text || value.question : value.when}</p>
+            <p className="mt-1.5 line-clamp-2 break-words text-xs leading-relaxed">{'context' in value ? value.context : value.when}</p>
           </button>)}
         </div>
         <div className="min-h-0 min-w-0 flex-1 overflow-auto p-5">{definition && <JEVDefinition value={definition} />}</div>

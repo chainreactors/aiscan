@@ -377,21 +377,15 @@ func (r *Router) findReusableSession(kind, name string) (runtimeproc.Info, bool)
 	if r.mgr == nil {
 		return runtimeproc.Info{}, false
 	}
-	var fallback runtimeproc.Info
-	hasFallback := false
 	for _, info := range r.mgr.List() {
 		if info.State != runtimeproc.StateRunning || strings.ToLower(strings.TrimSpace(info.Kind)) != kind {
 			continue
 		}
-		if name != "" && info.Name == name {
+		if info.Name == name {
 			return info, true
 		}
-		if !hasFallback {
-			fallback = info
-			hasFallback = true
-		}
 	}
-	return fallback, hasFallback
+	return runtimeproc.Info{}, false
 }
 
 func (r *Router) sendError(send SendFunc, streamID, message string) {

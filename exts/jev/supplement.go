@@ -37,7 +37,7 @@ func (e *Extension) admitSupplement(ctx context.Context, event toolhooks.CallEve
 	call.Read = true
 	raw, _ := json.Marshal(record.Input)
 	capabilities := map[string]any{"tools": record.Input["tools"], "commands": record.Input["commands"], "native_contracts": e.contracts.Catalog()}
-	if err := e.judgeRuntime(ctx, "binding", raw, map[string]any{"arguments": record.Arguments, "call": call, "capabilities": capabilities, "effects": record.Ledger.summary()}); err != nil {
+	if err := e.judgeRuntime(ctx, "binding", raw, map[string]any{"arguments": record.Arguments, "call": call, "capabilities": bindingCapabilities(call, capabilities), "effects": record.Ledger.summary()}); err != nil {
 		return toolhooks.Admission{Deny: err}, nil //nolint:nilerr // The executor handles Deny.
 	}
 	return toolhooks.Admission{}, nil

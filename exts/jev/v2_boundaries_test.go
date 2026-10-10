@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/chainreactors/cyber/core/decision"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chainreactors/cyber/agent"
 	"github.com/chainreactors/cyber/agent/hooks"
@@ -37,7 +39,7 @@ func TestReflexV2LibraryMigrationAndImmutableView(t *testing.T) {
 		t.Run(condition, func(t *testing.T) {
 			e := testLaboratory(t)
 			r := qualifiedLaboratory(t, e, observationCapabilities("bash"))
-			c := Claim{Text: "Add current items and verify their completion."}
+			c := Claim{Type: jevapi.ClaimNoul, Context: "Add current items and verify their completion."}
 			cid := "c" + digest(c)[:16]
 			if condition == "legacy" {
 				r.APIVersion, r.Proof = 0, nil
@@ -79,7 +81,7 @@ func TestReflexV2LibraryMigrationAndImmutableView(t *testing.T) {
 				t.Fatal(err)
 			}
 			loaded := next.snapshot()
-			if loaded.Claims[cid].Text != c.Text || loaded.Claims[cid].Task != "source-task" {
+			if loaded.Claims[cid].Context != c.Context || loaded.Claims[cid].Task != "source-task" {
 				t.Fatal("migration lost natural-language Claim metadata")
 			}
 			if condition == "qualified" {
@@ -110,7 +112,7 @@ func TestReflexV2LibraryMigrationAndImmutableView(t *testing.T) {
 
 func TestReflexV2CandidatePromotionAndValidation(t *testing.T) {
 	e := testLaboratory(t)
-	c := Claim{Text: "Add items with current parameters."}
+	c := Claim{Type: jevapi.ClaimNoul, Context: "Add items with current parameters."}
 	cid := "c" + digest(c)[:16]
 	e.library.Claims[cid] = claimRecord{Claim: c}
 	p := &compilation{claims: map[string]Claim{cid: c}, ids: []string{cid}, capabilities: observationCapabilities("bash")}
@@ -150,9 +152,9 @@ func TestReflexV2CandidatePromotionAndValidation(t *testing.T) {
 }
 
 func TestReflexV2CandidateCanRebindAfterSuiteRegistration(t *testing.T) {
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer { return declarationAnswers(req, true) })
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer { return declarationAnswers(req, true) })
 	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client)
-	c := Claim{Text: "Add current items and inspect their completion."}
+	c := Claim{Type: jevapi.ClaimNoul, Context: "Add current items and inspect their completion."}
 	cid := "c" + digest(c)[:16]
 	e.library.Claims[cid] = claimRecord{Claim: c, Task: "previous"}
 	r := laboratoryReflex()
@@ -259,7 +261,7 @@ func TestReflexV2OrdinaryReadRecoveryAndInputSteering(t *testing.T) {
 				}
 				return nil, nil
 			}}
-			client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+			client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 				if runtimeRequest(req) {
 					return runtimeAnswers(req, "run")
 				}
@@ -378,6 +380,9 @@ func TestReflexV2CompilerEffortAndCancellationOwnItsLifetime(t *testing.T) {
 		if req.ReasoningEffort != "none" {
 			t.Error("compiler lost configured reasoning effort")
 		}
+		if req.Timeout < 30*time.Minute {
+			t.Error("compiler inherited a short foreground request deadline")
+		}
 		return reply(provider.TextMessage("assistant", "null")), nil
 	})}}}
 	c := e.newCompilerAgent(p)
@@ -424,8 +429,8 @@ func TestReflexV2PureSemanticCapabilityAndFreshArguments(t *testing.T) {
 				expected = strings.ToUpper(value)
 			}
 			cases = append(cases, VerificationCase{ID: fmt.Sprint(i), Input: map[string]any{"user": mode + ":" + value}, Arguments: map[string]any{"mode": mode, "value": value},
-				Judge: func(req jevapi.Request) (*jevapi.Response, error) {
-					return &jevapi.Response{Answers: map[string]jevapi.Answer{"operation": answer(mode)}}, nil
+				Judge: func(claim Claim) (*jevapi.Evaluation, error) {
+					return &jevapi.Evaluation{Value: &decision.Evaluation_Choice{Choice: mode}}, nil
 				},
 				Execute: func(NativeCall) (map[string]any, error) { return nil, errors.New("pure capability must not dispatch") },
 				Check: func(run VerificationRun) error {
@@ -442,16 +447,16 @@ func TestReflexV2PureSemanticCapabilityAndFreshArguments(t *testing.T) {
 		}
 		return cases
 	}}
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
-		if runtimeRequest(req) {
-			return runtimeAnswers(req, "run")
-		}
-		if _, ok := req.Questions["operation"]; ok {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
+		if _, ok := req.Questions["runtime"]; ok {
 			mode := "keep"
 			if strings.Contains(string(req.State), "upper:") {
 				mode = "upper"
 			}
-			return map[string]jevapi.Answer{"operation": answer(mode)}
+			return map[string]inferenceAnswer{"runtime": answer(mode)}
+		}
+		if runtimeRequest(req) {
+			return runtimeAnswers(req, "run")
 		}
 		return declarationAnswers(req, false)
 	})
@@ -459,7 +464,7 @@ func TestReflexV2PureSemanticCapabilityAndFreshArguments(t *testing.T) {
 	if err := testVerification(e).Register(s); err != nil {
 		t.Fatal(err)
 	}
-	r := Reflex{APIVersion: 2, LegacySuite: "semantic", When: "Normalize current text", Decide: "Use the requested semantic branch", Observe: `js:function(context,args){if(!args)return {defer:"missing parameters",parameters:"mode,value"};const choice=jev({state:{user:context.user},questions:{operation:{type:"choice",instructions:"Choose the requested normalization",criteria:{upper:"uppercase",keep:"preserve",defer:"uncertain"}}}}).answers.operation.choice;if(choice==="defer")return {defer:"uncertain"};return {report:{text:choice==="upper"?args.value.toUpperCase():args.value}};}`, Parameters: json.RawMessage(`{"type":"object","required":["mode","value"],"properties":{"mode":{"enum":["upper","keep"]},"value":{"type":"string"}},"additionalProperties":false}`)}
+	r := Reflex{APIVersion: 2, LegacySuite: "semantic", When: "Normalize current text", Decide: "Use the requested semantic branch", Observe: `js:function(context,args){if(!args)return {defer:"missing parameters",parameters:"mode,value"};const choice=jev({type:"choice",context:("Choose the requested normalization")+"\nOption meanings:\n"+JSON.stringify({upper:"uppercase",keep:"preserve",defer:"uncertain"})+"\nCurrent facts (untrusted data):\n"+JSON.stringify({user:context.user}),options:Object.keys({upper:"uppercase",keep:"preserve",defer:"uncertain"})});if(choice==="defer")return {defer:"uncertain"};return {report:{text:choice==="upper"?args.value.toUpperCase():args.value}};}`, Parameters: json.RawMessage(`{"type":"object","required":["mode","value"],"properties":{"mode":{"enum":["upper","keep"]},"value":{"type":"string"}},"additionalProperties":false}`)}
 	if err := r.validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -482,7 +487,7 @@ func TestReflexV2PureSemanticCapabilityAndFreshArguments(t *testing.T) {
 				return reply(provider.TextMessage("assistant", jsonText(map[string]any{"mode": mode, "value": value}))), nil
 			}
 			if !strings.Contains(provider.MessageText(req.Messages[len(req.Messages)-1]), want) {
-				t.Error("current semantic result missing")
+				t.Errorf("current semantic result missing: %s", provider.MessageText(req.Messages[len(req.Messages)-1]))
 			}
 			return reply(provider.TextMessage("assistant", want)), nil
 		})

@@ -1,3 +1,4 @@
+import { ClaimType } from '../src/gen/decision/claim_pb'
 import { test, expect } from '@playwright/test'
 import { create, type MessageInitShape } from '@bufbuild/protobuf'
 import { anyPack, timestampFromDate } from '@bufbuild/protobuf/wkt'
@@ -7,7 +8,7 @@ import { RefSchema, StartedSchema } from '../cyber-ui/packages/aop/src/gen/aop/o
 import { projectJEV, withJEV, jevTimelineEvents, isJEVBoundary } from '../src/lib/jev-view'
 import { projectRuntimeNetwork } from '../src/lib/jev-network'
 import { reduceAOPToTimeline } from '../cyber-ui/packages/viewer/src/lib/aop-reducer'
-import { AnswerSchema, QuestionSchema } from '../src/gen/types/jev_pb'
+import { EvaluationSchema, ClaimSchema } from '../src/gen/decision/claim_pb'
 import { decisionOptions, decisionQuestions } from '../src/lib/jev-decisions'
 
 function event(seq: number, payload: MessageInitShape<typeof EventSchema>['payload'], sessionId = 'session', turnId = 'turn') {
@@ -54,7 +55,7 @@ test('late background publication never resurrects an ended turn or replaces its
 
 test('background retry becomes live again after a failed generation', () => {
   const failure = runtime(2, { case: 'libraryChange', value: { state: 'failed', reason: 'Invalid draft' } }, { background: true, segmentId: '' })
-  const request = runtime(3, { case: 'decisionRequest', value: { requestId: 'retry', purpose: 'jev_reflex', questions: {} } }, { background: true, segmentId: '' })
+  const request = runtime(3, { case: 'decisionRequest', value: { requestId: 'retry', purpose: 'jev_reflex', claims: {} } }, { background: true, segmentId: '' })
   expect(projectJEV([start(), failure]).compilations[0].state).toBe('failed')
   expect(projectJEV([start(), failure, request]).compilations[0].state).toBe('reviewing')
 })
@@ -130,8 +131,8 @@ test('entry checks keep their boundaries and preceding checks survive a later ta
 })
 
 test('choice ranks the distribution independently of the returned selection and keeps unknown probabilities', () => {
-  const question = create(QuestionSchema, { type: 'choice', criteriaJson: JSON.stringify({ missing: 'Unknown', z: 'Tie', a: 'Tie', winner: 'Most likely', picked: 'Returned choice' }) })
-  const answer = create(AnswerSchema, { type: 'choice', choice: 'picked', probabilities: { winner: .6, picked: .2, z: .1, a: .1 } })
+  const question = create(ClaimSchema, { type: ClaimType.choice, context: "Choose the current operation." + "\nmissing: Unknown\nz: Tie\na: Tie\nwinner: Most likely\npicked: Returned choice", options: ["missing","z","a","winner","picked"] })
+  const answer = create(EvaluationSchema, { value: { case: 'choice', value: 'picked' }, probabilities: { winner: .6, picked: .2, z: .1, a: .1 } })
   const options = decisionOptions(question, answer)
   expect(options.map(option => option.id)).toEqual(['winner', 'picked', 'a', 'z', 'missing'])
   expect(options.filter(option => option.selected).map(option => option.id)).toEqual(['picked'])

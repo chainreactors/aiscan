@@ -9,12 +9,11 @@ import (
 
 	"github.com/chainreactors/cyber/agent"
 	"github.com/chainreactors/cyber/agent/provider"
-	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 )
 
 func TestIdleAutoPreservesOrdinaryModelPrompt(t *testing.T) {
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
-		out := map[string]jevapi.Answer{}
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
+		out := map[string]inferenceAnswer{}
 		for id := range req.Questions {
 			out[id] = answer(Defer)
 		}
@@ -44,7 +43,7 @@ func TestIdleAutoPreservesOrdinaryModelPrompt(t *testing.T) {
 
 func TestJEVDefersRepairBeforeAnyLLMGeneration(t *testing.T) {
 	judgments, generated := 0, 0
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		judgments++
 		if !strings.Contains(fmt.Sprint(req.Questions["compile"].Instructions), "recorded handoff BEFORE") || !strings.Contains(string(req.State), "redundant verification") {
 			t.Error("repair judgment lost its specific pre-supplementation evidence")
@@ -54,9 +53,9 @@ func TestJEVDefersRepairBeforeAnyLLMGeneration(t *testing.T) {
 		return out
 	})
 	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client)
-	c := Claim{When: "Current native workflow", Question: "Which operation advances it?", Options: map[string]string{"operate": "Use current bindings", Defer: "Missing facts"}}
+	c := choiceClaim("Current native workflow"+". "+"Which operation advances it?", map[string]string{"operate": "Use current bindings", Defer: "Missing facts"})
 	cid := "c" + digest(c)[:16]
-	r := Reflex{When: c.When, Decide: "Report actual evidence", Observe: normalizeFixture(`js:({state:{},candidates:{}})`)}
+	r := Reflex{When: c.Context, Decide: "Report actual evidence", Observe: normalizeFixture(`js:({state:{},candidates:{}})`)}
 	rid := "r" + digest(r)[:16]
 	e.library.Claims[cid] = claimRecord{Claim: c}
 	e.library.Reflexes[rid] = reflexRecord{Reflex: r, Claims: []string{cid}}

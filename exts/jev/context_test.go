@@ -81,7 +81,7 @@ func TestProjectionBudgetsStructuredResultsBeforeReaderEchoes(t *testing.T) {
 	for range 4 {
 		appendResult("ordinary inspect live", raw)
 	}
-	projection, ok := contextState(messages)
+	projection, ok := contextState(messages, 32<<10)
 	if !ok {
 		t.Fatal("structured native projection failed")
 	}
@@ -117,5 +117,49 @@ func TestProjectionBudgetsStructuredResultsBeforeReaderEchoes(t *testing.T) {
 	}
 	if coretool.ResultText(provider.MessageToolResult(messages[len(messages)-1])) != raw {
 		t.Fatal("private cache normalization modified original evidence")
+	}
+}
+
+func TestProjectionKeepsNativeJSONWithoutEncodingInflation(t *testing.T) {
+	constraint := strings.Repeat("current authorization ", 500)
+	value := "当前 'quoted' \\ path " + strings.Repeat("\"\\", 1000)
+	payload := jsonText(map[string]any{"value": value, "version": json.Number("9007199254740993")})
+	messages := []*aop.Message{provider.TextMessage("system", constraint), provider.TextMessage("user", "Read the current resource")}
+	for range 3 {
+		call := action("lab inspect")
+		result := coretool.TextResult(payload)
+		result.CallId = call.GetToolCall().Id
+		messages = append(messages, &aop.Message{Role: "assistant", Content: []*aop.Content{call}}, &aop.Message{Role: "tool", Content: []*aop.Content{{Value: &aop.Content_ToolResult{ToolResult: result}}}})
+	}
+	projection, ok := contextState(messages, 32<<10)
+	input, err := observeInput(projection, observationCapabilities("bash"))
+	if !ok || err != nil || input["omitted_evidence"] != 0 || len(input["history"].([]map[string]any)) != 3 {
+		t.Fatalf("JSON encoding displaced actual evidence: valid=%v err=%v size=%d", ok, err, len(projection))
+	}
+	for _, row := range input["history"].([]map[string]any) {
+		data := row["data"].(map[string]any)
+		if data["value"] != value || data["version"] != json.Number("9007199254740993") || row["text"] != payload {
+			t.Fatal("structured projection changed exact native values or JS text ABI")
+		}
+	}
+	replay, err := newObservationReplay(&Reflex{}, projection, observationCapabilities("bash"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := observeInput(replay.input(len(replay.messages), true), observationCapabilities("bash"))
+	if err != nil || replayed["history"].([]map[string]any)[0]["data"].(map[string]any)["version"] != json.Number("9007199254740993") {
+		t.Fatal("replay lost native numeric precision")
+	}
+	if coretool.ResultText(provider.MessageToolResult(messages[len(messages)-1])) != payload || strings.Count(string(projection), constraint) != 1 {
+		t.Fatal("projection changed original output or current constraints")
+	}
+	compiler, err := compilerInput(projection, observationCapabilities("bash"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range compiler["history"].([]map[string]any) {
+		if row["text"] != nil || row["data"].(map[string]any)["value"] != value {
+			t.Fatal("compiler evidence duplicated structured output or lost its value")
+		}
 	}
 }

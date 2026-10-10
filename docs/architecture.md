@@ -90,6 +90,8 @@ Runtime 在执行结束后发布 `TurnEnded`，包含最终用量与错误；取
 
 JEV 的 `choice`、`score`、`noul` 是 Provider 层的原生判断能力，Reflex 学习和执行由 `exts/jev` 管理，Guardrail 独立使用判断能力做工具准入。是否接管当前任务取决于已验证流程、当前输入、约束与实际证据。
 
+每次判断都使用 `type + context + options` 的 Claim；内容身份、临时求值、持久化、编译和普通 Reflex 自举见 [Claim 与 Reflex](jev.md)。
+
 ```mermaid
 flowchart LR
     Trace[实际任务轨迹] --> Claim[自然语言 Claim]

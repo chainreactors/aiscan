@@ -148,11 +148,11 @@ func newAgentConsole(ctx context.Context, rt *agentsession.Runtime, session *age
 		c.Shell().OnReadlineDone = func() {
 			bridge.SetReady(false)
 		}
-		if isLocalAgentTerminal(t) {
-			output.SetReadlineMode(bridge)
-			repl.stdout = bridge
-			repl.stderr = bridge
-		}
+		// Local and streamed TTYs share the same editor. Async output must
+		// commit through it so a remote draft keeps its text and cursor too.
+		output.SetReadlineMode(bridge)
+		repl.stdout = bridge
+		repl.stderr = bridge
 	}
 	menu.Prompt().Primary = func() string {
 		return agentComposerPrompt(output, repl.readlineBridge)
@@ -919,8 +919,7 @@ func (r *AgentConsole) interactivePickerEnabled() bool {
 		r.terminal != nil &&
 		r.terminal.Control != nil &&
 		r.terminal.Control.IsTerminal() &&
-		r.terminal.In == os.Stdin &&
-		r.terminal.Out == os.Stdout
+		isLocalAgentTerminal(r.terminal)
 }
 
 func (r *AgentConsole) pickerSize() (int, int) {

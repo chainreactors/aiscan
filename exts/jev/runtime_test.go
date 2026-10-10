@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/chainreactors/cyber/agent/provider"
-	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 )
 
 func TestRuntimeWaitDoesNotConsumeComputationBudget(t *testing.T) {
@@ -32,7 +31,7 @@ func TestRuntimeCancellationCannotBeCaughtByGeneratedCode(t *testing.T) {
 }
 
 func TestParameterResponseRejectsTrailingDataAndUnknownInput(t *testing.T) {
-	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer { return runtimeAnswers(req, Defer) }))
+	e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer { return runtimeAnswers(req, Defer) }))
 	for _, output := range []string{`null`, `{"actor":"bob"} broken`, `{"actor":"bob"} {}`} {
 		cfg.Provider = testProvider(func(context.Context, *provider.ChatCompletionRequest) (*provider.ChatCompletionResponse, error) {
 			return reply(provider.TextMessage("assistant", output)), nil

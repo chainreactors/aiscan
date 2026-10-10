@@ -1,0 +1,9 @@
+.jev-reference { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; padding: 5px 7px; border-radius: 5px; color: hsl(var(--primary)); text-align: left; vertical-align: middle; transition: background .15s; }
+.jev-reference > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 400; }
+.jev-reference > svg { width: 12px; height: 12px; flex-shrink: 0; }
+.rl-library .jev-reference > svg { width: 12px; height: 12px; }
+.jev-reference:enabled:hover, .jev-reference:focus-visible { background: hsl(var(--accent)); }
+.jev-reference:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.jev-reference:disabled { color: hsl(var(--muted-foreground)); }
+.jev-reference:disabled > svg:last-child { visibility: hidden; }
+@media (prefers-reduced-motion: reduce) { .jev-reference { transition: none; } }

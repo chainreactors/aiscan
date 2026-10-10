@@ -8,6 +8,7 @@ import (
 
 	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 	"github.com/chainreactors/cyber/aop"
+	"github.com/chainreactors/cyber/core/decision"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -85,7 +86,7 @@ func errorText(err error) string {
 }
 
 func claimDefinition(id string, c claimRecord) *ClaimDefinition {
-	return &ClaimDefinition{Id: id, When: c.When, Question: c.Question, Options: maps.Clone(c.Options), SourceTaskId: c.Task, Consumed: c.Consumed, Text: c.Text}
+	return &ClaimDefinition{Id: id, Type: c.Type, Context: c.Context, Options: append([]string(nil), c.Options...), SourceTaskId: c.Task}
 }
 func reflexDefinition(id string, r reflexRecord) *ReflexDefinition {
 	return &ReflexDefinition{Id: id, When: r.When, Decide: r.Decide, Observe: r.Observe, Readers: maps.Clone(r.Readers), Contracts: maps.Clone(r.Contracts), ClaimIds: append([]string(nil), r.Claims...), ApiVersion: uint32(r.APIVersion), QualificationJson: jsonText(r.Proof), Blocker: r.Blocker, ManifestJson: jsonText(map[string]any{"steps": r.Steps, "parameters_schema": r.Parameters})}
@@ -126,19 +127,18 @@ func (e *Extension) libraryView() *GetLibraryResponse {
 	return out
 }
 
-func traceQuestions(questions map[string]jevapi.Question) map[string]*Question {
-	out := map[string]*Question{}
-	for id, q := range questions {
-		out[id] = &Question{Type: q.Type, InstructionsJson: jsonText(q.Instructions), CriteriaJson: jsonText(q.Criteria)}
+func traceClaims(claims map[string]Claim) map[string]*decision.Claim {
+	out := map[string]*decision.Claim{}
+	for id, c := range claims {
+		out[id] = c.Proto()
 	}
 	return out
 }
-func traceAnswers(response *jevapi.Response) map[string]*Answer {
-	out := map[string]*Answer{}
+func traceEvaluations(response *jevapi.Evaluations) map[string]*decision.Evaluation {
+	out := map[string]*decision.Evaluation{}
 	if response != nil {
-		for id, a := range response.Answers {
-			out[id] = &Answer{Type: a.Type, Choice: a.Choice, Score: a.Score, Noul: a.Noul,
-				Legend: maps.Clone(a.Legend), Probabilities: maps.Clone(a.Probabilities), Confidence: a.Confidence}
+		for id, value := range response.Values {
+			out[id] = proto.CloneOf(value)
 		}
 	}
 	return out

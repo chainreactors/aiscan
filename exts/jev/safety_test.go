@@ -8,7 +8,6 @@ import (
 	"github.com/chainreactors/cyber/agent"
 	"github.com/chainreactors/cyber/agent/hooks"
 	"github.com/chainreactors/cyber/agent/provider"
-	jevapi "github.com/chainreactors/cyber/agent/provider/jev"
 	aop "github.com/chainreactors/cyber/aop"
 	coretool "github.com/chainreactors/cyber/core/tool"
 )
@@ -16,7 +15,7 @@ import (
 func TestContextRewriterLeavesDecisionWithModel(t *testing.T) {
 	for _, useHook := range []bool{false, true} {
 		t.Run(fmt.Sprint(useHook), func(t *testing.T) {
-			client := fakeJEV(t, func(jevapi.Request) map[string]jevapi.Answer {
+			client := fakeJEV(t, func(inferenceRequest) map[string]inferenceAnswer {
 				t.Error("controller must not act on a different request projection")
 				return nil
 			})
@@ -66,13 +65,13 @@ func TestEffectIdentityPreservesAllNativeJSONShapes(t *testing.T) {
 func TestMediaConstraintsCannotSilentlyBecomeTextOnly(t *testing.T) {
 	m := provider.TextMessage("user", "Use the target shown in this image")
 	m.Content = append(m.Content, &aop.Content{Value: &aop.Content_Media{Media: &aop.MediaContent{Kind: "image"}}})
-	if _, ok := contextState([]*aop.Message{m}); ok {
+	if _, ok := contextState([]*aop.Message{m}, 32<<10); ok {
 		t.Fatal("controller accepted task without its media constraints")
 	}
 }
 
 func TestObservationFailureDoesNotHideCompetingCapability(t *testing.T) {
-	client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 		if runtimeRequest(req) && req.Questions["entry"].Type == "" {
 			t.Error("unselected broken program reached runtime decision")
 		}

@@ -34,7 +34,7 @@ func TestOffNeedsNoCapabilitiesAndAddsNothing(t *testing.T) {
 
 func TestAutoLoadsWithoutObserverProtocol(t *testing.T) {
 	e := New(Config{Mode: "auto", Directory: t.TempDir()})
-	client := fakeJEV(t, func(jevapi.Request) map[string]jevapi.Answer {
+	client := fakeJEV(t, func(inferenceRequest) map[string]inferenceAnswer {
 		t.Error("inactive extension called JEV")
 		return nil
 	})
@@ -61,7 +61,7 @@ func TestLongContextProjectionPreservesConstraintsWithoutChangingHistory(t *test
 		messages = append(messages, provider.TextMessage("tool", strings.Repeat("evidence", 1000)))
 	}
 	copy := cloneMessages(messages)
-	data, ok := contextState(messages)
+	data, ok := contextState(messages, 32<<10)
 	if !ok || len(data) > 32<<10 || !strings.Contains(string(data), "Do not submit") || strings.Contains(string(data), `"omitted_evidence":0`) {
 		t.Fatalf("bad projection %d %v", len(data), ok)
 	}
@@ -70,7 +70,7 @@ func TestLongContextProjectionPreservesConstraintsWithoutChangingHistory(t *test
 			t.Fatal("history rewritten")
 		}
 	}
-	if _, ok = contextState([]*aop.Message{provider.TextMessage("user", strings.Repeat("constraint", 4000))}); ok {
+	if _, ok = contextState([]*aop.Message{provider.TextMessage("user", strings.Repeat("constraint", 4000))}, 32<<10); ok {
 		t.Fatal("oversized task constraints were silently truncated")
 	}
 }
@@ -81,7 +81,7 @@ func TestLongContextProjectionPreservesConstraintsWithoutChangingHistory(t *test
 func TestDeferAndInvalidAnswerLeaveHistoryUntouched(t *testing.T) {
 	for _, choice := range []string{Defer, "unbound"} {
 		t.Run(choice, func(t *testing.T) {
-			client := fakeJEV(t, func(req jevapi.Request) map[string]jevapi.Answer {
+			client := fakeJEV(t, func(req inferenceRequest) map[string]inferenceAnswer {
 				return runtimeAnswers(req, choice)
 			})
 			e, cfg, _ := testInstallation(t, Config{Mode: "auto"}, client, coretool.Command{Name: "step", Run: func(context.Context, *coretool.Execution) (any, error) { t.Error("unexpected action"); return nil, nil }})
