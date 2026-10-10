@@ -478,6 +478,9 @@ test('reduced motion keeps the complete recorded diagram static without playback
 })
 
 for (const width of [390, 1440]) test(`loop animation preserves manual scrolling and layout at ${width}px`, async ({ page }) => {
+  const now = new Date('2026-01-01T00:00:00Z')
+  await page.clock.install({ time: now })
+  await page.clock.pauseAt(now)
   await page.setViewportSize({ width, height: 1000 })
   await mount(page)
   await render(page, [...initial, answer, dispatch, result, next, ...returned])
@@ -495,9 +498,8 @@ for (const width of [390, 1440]) test(`loop animation preserves manual scrolling
   }
   await expect(workflow).toHaveAttribute('data-animating', 'true')
   await expect(page.getByRole('button', { name: /播放执行回放|暂停执行回放/ })).toHaveCount(0)
-  // Exercise every frame, including the last-to-first wrap, without waiting in real time.
-  await page.clock.install()
-  await page.clock.pauseAt(new Date())
+  // The clock is paused before rendering so the loop starts at a known frame.
+  // Exercise every transition, including the last-to-first wrap.
   const geometry = () => workflow.evaluate(element => {
     const viewport = element.querySelector('.control-viewport')!
     const horizontal = element.querySelector('.control-reflex-scroll') || viewport
@@ -508,16 +510,12 @@ for (const width of [390, 1440]) test(`loop animation preserves manual scrolling
   const before = await geometry()
   const progress = workflow.getByRole('slider')
   const last = Number(await progress.getAttribute('max'))
-  const visited = new Set<number>()
-  for (let i = 0; i <= last + 1; i++) {
-    const cursor = Number(await progress.inputValue())
-    visited.add(cursor)
-    await page.clock.runFor(cursor === last ? 1700 : 900)
-    await expect.poll(() => progress.inputValue()).not.toBe(String(cursor))
+  await expect(progress).toHaveValue('0')
+  for (let cursor = 0; cursor <= last; cursor++) {
+    await page.clock.runFor(cursor === last ? 1600 : 800)
+    await expect(progress).toHaveValue(String(cursor === last ? 0 : cursor + 1))
     expect(await geometry()).toEqual(before)
   }
-  expect(visited.has(0)).toBe(true)
-  expect(visited.has(last)).toBe(true)
   await expect(workflow).toHaveAttribute('data-animating', 'true')
 })
 

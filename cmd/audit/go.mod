@@ -34,7 +34,7 @@ require (
 	github.com/chainreactors/proxyclient v1.1.1-0.20260728110701-74504679dc47 // indirect
 	github.com/chainreactors/sdk v0.3.4-0.20260708104745-dcad8620f5e9 // indirect
 	github.com/chainreactors/tui/console v0.0.0-20260712082522-2ba36ad7841f // indirect
-	github.com/chainreactors/tui/readline v0.0.0-20261007150247-7e3db8329bc4 // indirect
+	github.com/chainreactors/tui/readline v0.0.0-20261010062516-bb32632d1a4e // indirect
 	github.com/chainreactors/utils v0.0.0-20260711153742-f3d210a5fa9d // indirect
 	github.com/chainreactors/utils/parsers v0.0.3 // indirect
 	github.com/chainreactors/utils/proc v0.0.0-20261002195803-fc9e07c4b4fd // indirect

@@ -11,6 +11,7 @@ async function clearEditor(page: Page) {
   await expect(page.getByRole('button', { name: /Main REPL/ })).toHaveAttribute('aria-current', 'true')
   await expect(page.locator('.xterm-rows')).toContainText('aiscan')
   const input = page.getByRole('textbox', { name: 'Terminal input' })
+  await input.press('Control+e')
   await input.press('Control+u')
   await input.press('Control+l')
   await expect.poll(async () => (await screen(page)).filter(line => line.trim())).toEqual(['aiscan ❯'])
@@ -85,6 +86,11 @@ test('resizing a wrapped REPL draft preserves its text and cursor', async ({ pag
   await expect.poll(compact).toBe(`aiscan❯!echo${word}`)
   for (const width of [390, 820, 1280]) {
     await page.setViewportSize({ width, height: 844 })
+    // Client reflow can already show the expected text before the remote
+    // redraw arrives. Finish an editor round trip before resizing again.
+    await input.pressSequentially('~')
+    await expect.poll(compact).toBe(`aiscan❯!echo${word}~`)
+    await input.press('Backspace')
     await expect.poll(compact).toBe(`aiscan❯!echo${word}`)
   }
   for (let i = 0; i < 3; i++) await input.press('ArrowLeft')
