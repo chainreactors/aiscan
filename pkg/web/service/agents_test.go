@@ -1183,10 +1183,10 @@ func runE2ETerminalOpenAndType(t *testing.T) { //nolint:unused // referenced by 
 		StreamId: replStreamID, Session: &ptypb.Session{Id: "e2e-sess-1", State: "completed"},
 	}}})
 	refresh := readMockAgentPTY(t, agentConn, "list").GetList()
-	writeMockAgentPTY(t, agentConn, &ptypb.ProtocolMessage{Message: &ptypb.ProtocolMessage_Sessions{Sessions: &ptypb.Sessions{StreamId: refresh.GetStreamId()}}})
 	if _, err := page.Timeout(5 * time.Second).Element(`[title='Console'], [title='控制台']`); err != nil {
 		t.Fatalf("terminal did not return to its idle console after close: %v", err)
 	}
+	writeMockAgentPTY(t, agentConn, &ptypb.ProtocolMessage{Message: &ptypb.ProtocolMessage_Sessions{Sessions: &ptypb.Sessions{StreamId: refresh.GetStreamId()}}})
 
 	t.Log("e2e terminal test: open → attach → input/output → close verified")
 }

@@ -136,6 +136,7 @@ export default function AgentTerminal({ agent }: { agent: AgentView }) {
           const session = sessionFromFrame(frame)
           if (session) rememberSession(session)
           activeRef.current = ''
+          setActiveID('')
           attachingRef.current = false
           setStatus('closed')
           sendList()
