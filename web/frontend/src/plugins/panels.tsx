@@ -154,7 +154,7 @@ function HeaderIconButton({ children, label, hint, guideTarget, onClick, active,
           aria-label={label}
           data-ui-guide={guideTarget}
           onClick={onClick}
-          className={cn('h-7 w-7 shrink-0 rounded-lg hover:text-foreground', !active && 'text-muted-foreground')}
+          className={cn('h-6 w-6 shrink-0 rounded-lg hover:text-foreground sm:h-7 sm:w-7', !active && 'text-muted-foreground')}
         >
           {children}
         </Button>

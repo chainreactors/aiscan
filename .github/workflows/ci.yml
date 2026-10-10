@@ -400,6 +400,12 @@ jobs:
     runs-on: ubuntu-22.04
     needs: test
     timeout-minutes: 20
+    env:
+      # Keep listeners outside Linux's default ephemeral client-port range.
+      CYBER_E2E_PORT: "18080"
+      CYBER_E2E_FIXTURE_PORT: "18082"
+      CYBER_JEV_UI_PORT: "18184"
+      CYBER_UI_TEST_PORT: "18185"
     steps:
       - name: Checkout
         uses: actions/checkout@v7

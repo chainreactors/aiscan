@@ -27,7 +27,7 @@ require (
 	github.com/chainreactors/sdk/zombie v0.0.0-20260708104745-dcad8620f5e9
 	github.com/chainreactors/spray v1.3.3-0.20260704194611-7ce7b850d447
 	github.com/chainreactors/tui/console v0.0.0-20260712082522-2ba36ad7841f
-	github.com/chainreactors/tui/readline v0.0.0-20261007150247-7e3db8329bc4
+	github.com/chainreactors/tui/readline v0.0.0-20261010053606-7c5ee233065a
 	github.com/chainreactors/utils v0.0.0-20260711153742-f3d210a5fa9d
 	github.com/chainreactors/utils/mitmproxy v0.0.0-20261002195803-fc9e07c4b4fd
 	github.com/chainreactors/utils/parsers v0.0.3

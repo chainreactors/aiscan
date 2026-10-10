@@ -232,8 +232,8 @@ export default function App({ services }: { services: HubServices }) {
     <ThemeProvider initial={getInitialTheme()} storageKey="cyber-theme" className="aspect-theme-root h-full text-foreground font-sans antialiased">
     <TooltipProvider delayDuration={300}>
       <div className="flex h-[100dvh] flex-col overflow-hidden" data-cyber-product={effectiveManifest?.product || 'cyber-harness'} data-cyber-capabilities={effectiveManifest?.capabilities.map(item => item.id).join(',') || 'core'}>
-        <header className="relative z-[60] flex min-h-12 shrink-0 items-center justify-between gap-1 border-b border-border/60 bg-background px-2 pt-safe sm:gap-2 sm:px-4">
-          <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+        <header className="relative z-[60] flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-1 border-b border-border/60 bg-background px-2 py-1 pt-safe sm:flex-nowrap sm:gap-2 sm:px-4 sm:py-0">
+          <div className="flex min-w-0 shrink-0 items-center gap-1 sm:shrink sm:gap-2">
             {/* Phone-only drawer opener — the collapsed sidebar is hidden below md,
                 so the session history opens from here (Doubao-style). */}
             <Button
@@ -256,7 +256,7 @@ export default function App({ services }: { services: HubServices }) {
               onChange={handleSwitchLLM}
             />
           </div>
-          <div className="flex items-center gap-0.5 sm:gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-2">
             <GuardrailToggle disabled={activeToolPanel === 'settings'} onConfigure={() => openSettings('jev')} />
             <WorkbenchSlots services={services} name="shell.header.actions" />
             <QuickConnect serverURL={serverStatus?.serverUrl} version={serverStatus?.version} profiles={effectiveManifest?.profiles} />

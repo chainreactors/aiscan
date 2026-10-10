@@ -11,6 +11,7 @@ async function clearEditor(page: Page) {
   await expect(page.getByRole('button', { name: /Main REPL/ })).toHaveAttribute('aria-current', 'true')
   await expect(page.locator('.xterm-rows')).toContainText('aiscan')
   const input = page.getByRole('textbox', { name: 'Terminal input' })
+  await input.press('Control+e')
   await input.press('Control+u')
   await input.press('Control+l')
   await expect.poll(async () => (await screen(page)).filter(line => line.trim())).toEqual(['aiscan ❯'])
