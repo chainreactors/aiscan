@@ -93,7 +93,7 @@ test('failed work can display its recap without changing the terminal error', ()
 })
 
 test('approved Goal rounds preserve feedback and compaction order through recap replay', async ({ page }) => {
-  await page.goto(`http://127.0.0.1:${process.env.CYBER_E2E_FIXTURE_PORT || '38082'}/e2e/fixtures/recap.html`)
+  await page.goto(`http://127.0.0.1:${process.env.CYBER_UI_TEST_PORT || '38185'}/e2e/fixtures/recap.html`)
   await page.waitForFunction(() => typeof (window as any).renderRecapEvents === 'function')
   const events = [...reviewedTask().slice(0, -1),
     event(6, { case: 'status', value: { state: 'eval_start' } }),
@@ -122,7 +122,7 @@ test('approved Goal rounds preserve feedback and compaction order through recap 
 })
 
 test('ChatPanel renders one plain-text footer after the answer and preserves composer input', async ({ page }) => {
-  await page.goto(`http://127.0.0.1:${process.env.CYBER_E2E_FIXTURE_PORT || '38082'}/e2e/fixtures/recap.html`)
+  await page.goto(`http://127.0.0.1:${process.env.CYBER_UI_TEST_PORT || '38185'}/e2e/fixtures/recap.html`)
   const show = async (events: Event[]) => {
     await page.waitForFunction(() => typeof (window as any).renderRecapEvents === 'function')
     await page.evaluate(values => (window as any).renderRecapEvents(values), events.map(value => Array.from(toBinary(EventSchema, value))))

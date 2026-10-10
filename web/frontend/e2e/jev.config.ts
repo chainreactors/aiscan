@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test'
+import { jevTestFiles } from './suites'
 import { fileURLToPath } from 'node:url'
 
 // These tests mount production components in a source fixture. The embedded
@@ -8,8 +9,7 @@ const baseURL = process.env.JEV_UI_BASE_URL || `http://127.0.0.1:${port}`
 
 export default defineConfig({
   testDir: '.',
-  testMatch: ['jev-motion.spec.ts', 'workflow.spec.ts', 'jev-ui.spec.ts', 'jev-decision-ui.spec.ts', 'jev-presentation.spec.ts',
-    'jev-replay.spec.ts', 'jev-live-replay.spec.ts', 'jev-robustness.spec.ts', 'jev-v2.spec.ts'],
+  testMatch: jevTestFiles,
   timeout: 60_000,
   expect: { timeout: 15_000 },
   workers: 1,

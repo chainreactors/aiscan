@@ -119,6 +119,9 @@ export default {
   // Mobile session drawer (opened from the header menu button)
   openSessions: 'Chat history',
   authChecking: 'Checking session…',
+  runtimeStartFailed: 'The workbench could not start',
+  runtimeStartFailedHint: 'Try again to reload the workbench.',
+  pluginViewFailed: 'This view could not load.',
   loginTitle: 'Access Cyber',
   loginDescription: 'Enter the access token generated at startup or configured on the command line.',
   loginTokenLabel: 'Access token',

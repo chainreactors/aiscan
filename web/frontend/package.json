@@ -8,9 +8,11 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test:bootstrap": "node --experimental-strip-types --test e2e/node-bootstrap.test.mjs",
-    "test:e2e": "playwright test && playwright test -c e2e/jev.config.ts",
+    "test:e2e": "playwright test && playwright test -c e2e/jev.config.ts && npm run test:ui && npm run test:runtime-hmr",
     "test:jev": "playwright test -c e2e/jev.config.ts",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "test:ui": "playwright test -c e2e/ui.config.ts",
+    "test:runtime-hmr": "node --test e2e/runtime-hmr.test.mjs"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.9.0",
@@ -48,7 +50,8 @@
     "recharts": "^2.15.4",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^2.6.0",
-    "yaml": "^2.8.1"
+    "yaml": "^2.8.1",
+    "cordis": "4.0.0-rc.10"
   },
   "devDependencies": {
     "@bufbuild/protoc-gen-es": "2.13.0",

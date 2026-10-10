@@ -27,10 +27,6 @@ export {
   summarizeArgs,
 } from '../../cyber-ui/packages/viewer/src/lib/tool-utils'
 
-export {
-  registerTimelineRenderer,
-  resolveTimelineRenderer,
-} from '../../cyber-ui/packages/viewer/src/components/chat/timeline-registry'
 
 export { default as MessageBubble, StreamingCursor } from '../../cyber-ui/packages/viewer/src/components/chat/MessageBubble'
 export { default as ToolCallDisplay, CodeCallDisplay, BlockingOutputDisplay, OutputSection } from '../../cyber-ui/packages/viewer/src/components/chat/ToolCallDisplay'

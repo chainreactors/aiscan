@@ -1,4 +1,5 @@
 import { ClaimType } from '../../src/gen/decision/claim_pb'
+import { startFixtureRuntime } from './runtime'
 import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { create, fromBinary } from '@bufbuild/protobuf'
@@ -13,6 +14,8 @@ import ReflexPanel from '../../src/components/ReflexPanel'
 import { aopClient } from '../../src/api'
 import '../../src/i18n'
 import '../../src/index.css'
+
+const runtime = await startFixtureRuntime()
 
 const definition = { id: 'reflex-browser-evidence', when: 'Inspect a requested page, retrieve current content and report from recorded evidence.',
   decide: 'Select supplied native bindings. Inspect after effects, report with actual content, defer for new reasoning.',
@@ -57,7 +60,7 @@ function Fixture() {
   return <TooltipProvider><div className="flex h-screen flex-col bg-background text-foreground">
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-5"><span className="text-sm font-semibold">aiscan</span>
       <button aria-label="Reflex" onClick={() => setOpen(v => !v)} data-tool-drawer-trigger className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent"><CircuitBoard className="h-4 w-4" /></button></header>
-    <div className="min-h-0 flex-1"><ChatPanel timeline={[]} aopEvents={events} guardrailReviews={[]} onResolveGuardrail={async () => {}} scanResults={new Map()}
+    <div className="min-h-0 flex-1"><ChatPanel resolveExtension={runtime.slots.resolve} extensionRevision={runtime.slots.revision.getSnapshot()} timeline={[]} aopEvents={events} guardrailReviews={[]} onResolveGuardrail={async () => {}} scanResults={new Map()}
       isThinking={false} isBusy={false} canPause={false} error="" hasActiveSession activeSessionID="session-1"
       onSend={async () => true} ensureSession={async () => 'session-1'} onPause={() => {}} onClearError={() => {}} /></div>
     <ReflexPanel open={open} onClose={() => setOpen(false)} sessionID="session-1" events={events} />

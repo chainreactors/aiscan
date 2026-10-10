@@ -1,3 +1,4 @@
+import { startFixtureRuntime } from './runtime'
 import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { create, fromBinary } from '@bufbuild/protobuf'
@@ -9,6 +10,7 @@ import ChatPanel from '../../src/components/ChatPanel'
 import '../../src/i18n'
 import '../../src/index.css'
 
+const runtime = await startFixtureRuntime()
 const base = { sessionId: 'session-1', turnId: 'turn-1', emitter: 'agent' }
 const initial = [
   create(EventSchema, { ...base, id: 'answer', seq: 1n, payload: { case: 'message', value: {
@@ -22,7 +24,7 @@ const initial = [
 function Fixture() {
   const [events, setEvents] = useState(initial)
   ;(window as any).renderRecapEvents = (values: number[][]) => setEvents(values.map(value => fromBinary(EventSchema, new Uint8Array(value))))
-  return <TooltipProvider><div className="h-screen"><ChatPanel timeline={[]} aopEvents={events}
+  return <TooltipProvider><div className="h-screen"><ChatPanel resolveExtension={runtime.slots.resolve} extensionRevision={runtime.slots.revision.getSnapshot()} timeline={[]} aopEvents={events}
     guardrailReviews={[]} onResolveGuardrail={async () => {}} scanResults={new Map()}
     isThinking={false} isBusy={false} canPause={false} error="" hasActiveSession activeSessionID={null}
     onSend={async () => true} ensureSession={async () => null} onPause={() => {}} onClearError={() => {}} />
