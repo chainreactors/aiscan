@@ -245,8 +245,8 @@ github.com/chainreactors/spray v1.3.3-0.20260704194611-7ce7b850d447 h1:4RawLZEJD
 github.com/chainreactors/spray v1.3.3-0.20260704194611-7ce7b850d447/go.mod h1:QT+vmYNPBmiemn+MJ5oNDNFSM/w0LNxtM5VhpI7RNNA=
 github.com/chainreactors/tui/console v0.0.0-20260712082522-2ba36ad7841f h1:QfP7iGquLIy8pkh4A+rvYCLa207FMCLhuMWQfMkyBS4=
 github.com/chainreactors/tui/console v0.0.0-20260712082522-2ba36ad7841f/go.mod h1:lVNsVwhAj7AqSiw53pbktHmDRp0KoZI7n1VMVaAn+GI=
-github.com/chainreactors/tui/readline v0.0.0-20261010053606-7c5ee233065a h1:0ymx3barNlirwO261/+O4EFYXLp/1Hw69ud/3kVuYOw=
-github.com/chainreactors/tui/readline v0.0.0-20261010053606-7c5ee233065a/go.mod h1:nEHRbLD/s2GWdAGbNVjz/KDF0ac7WZ3tPMgWmW8sZWA=
+github.com/chainreactors/tui/readline v0.0.0-20261010062516-bb32632d1a4e h1:vNTpjByJpWpjpT+PslzGR1kXUzHoZf/WiLYQN7xfgKU=
+github.com/chainreactors/tui/readline v0.0.0-20261010062516-bb32632d1a4e/go.mod h1:nEHRbLD/s2GWdAGbNVjz/KDF0ac7WZ3tPMgWmW8sZWA=
 github.com/chainreactors/utils v0.0.0-20240716182459-e85f2b01ee16/go.mod h1:LajXuvESQwP+qCMAvlcoSXppQCjuLlBrnQpu9XQ1HtU=
 github.com/chainreactors/utils v0.0.0-20260711153742-f3d210a5fa9d h1:wlJ6oMbVLKrpxHmaXGSxmJt1F8l3kvqily0N58FGfLM=
 github.com/chainreactors/utils v0.0.0-20260711153742-f3d210a5fa9d/go.mod h1:xwbUlFoSSxLHujyb8D48o1s2DqmEAxUNfxIy0DVUmcg=

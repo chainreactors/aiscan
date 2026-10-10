@@ -86,6 +86,11 @@ test('resizing a wrapped REPL draft preserves its text and cursor', async ({ pag
   await expect.poll(compact).toBe(`aiscan❯!echo${word}`)
   for (const width of [390, 820, 1280]) {
     await page.setViewportSize({ width, height: 844 })
+    // Client reflow can already show the expected text before the remote
+    // redraw arrives. Finish an editor round trip before resizing again.
+    await input.pressSequentially('~')
+    await expect.poll(compact).toBe(`aiscan❯!echo${word}~`)
+    await input.press('Backspace')
     await expect.poll(compact).toBe(`aiscan❯!echo${word}`)
   }
   for (let i = 0; i < 3; i++) await input.press('ArrowLeft')
